@@ -7,11 +7,12 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 
 ## Files
 - `__init__.py` — Package marker; no business behavior.
+- `assistance_queue.py` — diagnostic_queue caps current SQL/SAS warnings/errors at 100; diagnostic_context suggests stored statement or bounded nearby lines; request_review pins source hash through existing privacy-gated routed assistance.
 - `configuration.py` — ParsingSettings/VisualizationSettings/PortableSettings validate bounded non-network preferences; WorkspaceIdentity validates names/descriptions; export/import supports v1 and atomic v2 round trips.
 - `exports.py` — graph_data/graph_html share validated label/palette/edge appearance and fitted full names with live SVG JS/CSS; path_rows flattens paths/evidence; report_csv/html escape values; source_bundle preserves analyzed originals.
 - `graph.py` — LineageGraph provides bounded search/focus, SCC cycles, temporary contraction, logical rows, root_paths and ordered path_report with evidence and explicit depth/cycle/truncation boundaries.
 - `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Original blobs are SHA-256 named.
-- `llm.py` — Profile/Adapter implement protocols/discovery and explicit nonstreaming chat; response_object accepts one enclosing JSON fence only; assist/assist_task enforce privacy/routing, GroundedResponse/validate_response ground claims, merge_claims persists inferred facts.
+- `llm.py` — Profile/Adapter implement protocols/discovery/nonstreaming chat; response_object accepts one enclosing JSON fence; assist/assist_task enforce privacy/routing and optional preview hash pinning; strict grounded claims/quarantine and inferred merge.
 - `logging_config.py` — JsonFormatter/configure_logging emit application events with an explicit safe metadata allowlist; no raw source/key fields.
 - `maintenance.py` — history_plan protects current references/latest completed runs; bounded archive_history journals recovery with removal, writes an extra checksummed file; restore_history inserts missing IDs atomically, preferring the DB journal.
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.

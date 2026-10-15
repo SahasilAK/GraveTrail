@@ -32,7 +32,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
   and folder knowledge maps. Original user .gitignore edits are preserved separately.
 
 ## Verification evidence
-- Latest continuation: 120 tests pass in normal and separate clean Python 3.11 environments;
+- Latest continuation: 127 tests pass in normal and separate clean Python 3.11 environments;
   Ruff and lock checks clean. Wheel and source distribution rebuilt successfully.
 - uv lock --check passes; wheel installed without editable source and imported with Python -I;
   bundled prompt/schema assets verified. Sdist/wheel exclude local runtime data.
@@ -62,6 +62,8 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
   file: navigation, so opening the independent local file is not browser-tested. No workaround
   browser/server was used to bypass that policy.
 - Docker and remote CI matrix are configured but were not executed here.
+  A continuation Docker probe found the CLI installed but the Docker Desktop Linux engine
+  unavailable (named pipe absent); container build/run remains unverified.
 - Dynamic SQL/procedures, runtime SAS macros, arbitrary name literals, ranges/arrays and full
   SAS variable compilation remain unsupported or conservative. See SQL_PARSING/SAS_PARSING docs.
 - Temporary/WORK identities are workspace scoped. Runtime sessions and repeated-write execution
@@ -153,3 +155,31 @@ discovery, source/blob lifecycle, portable backups and auth if expanding beyond 
   pass in normal and clean environments; Ruff, lock and wheel/sdist build pass. No new migration.
   Actual full-label graph and selected original evidence captured in
   `.dataforge/verification/visualization-defaults.png`.
+- Unresolved review queue completed: up to 100 current SQL/SAS warning/error items, focused
+  deterministic statement or bounded nearby context, adjustable preview and explicit routed
+  request. CSV/info/pending sources are excluded. Preview hash pins through fallback/request
+  capture; stale UI clicks and imports after queue lookup cannot transmit changed code unseen.
+  Existing privacy/redaction/budgets/grounding/quarantine remain enforced. Separate merge stays
+  inferred and does not mark parser diagnostics resolved. Shared durable result presentation
+  holds record IDs in session state, including manual assistance. No new database migration.
+  127 tests pass in normal and clean environments; Ruff/lock/build pass. Independent review
+  found no material issues. Actual browser ZIP import/analysis and 1↔2-line preview passed;
+  screenshot `.dataforge/verification/unresolved-review.png`. Request/quarantine/merge tests
+  use synthetic HTTP, with no new live-pass claim or additional gateway requests.
+  Rebuilt wheel installed into the clean environment; Python -I imported new queue/maintenance
+  modules and validated bundled prompts independently of editable repository source.
+
+## Next session entry point
+
+Current committed core plus the continuation slices above are working; the full master remains
+incomplete. Resume with task-specific AI result contracts for direct-column analysis and source
+explanation: the current five prompts still share GroundedResponse, which only represents
+grounded relationships and advisory text. Add task-specific grounding and persistence without
+turning advisory output into lineage. Preserve explicit user invocation and provider privacy.
+Then address LLM concurrency/chunking controls, remaining parsing/confidence/logging settings,
+safe stale temporary-file maintenance, explicit job/session identity and target-vendor fixtures.
+Portable source/history bundles and blob garbage collection are optional operational follow-ups
+beyond the already implemented master-required metadata transfer. Real-project accuracy,
+Docker/remote CI and standalone HTML browser acceptance remain unverified as stated above.
+Do not re-run unreliable automatic gateway routes just to obtain a green result. Use a stable
+configured model when one becomes available. Preserve the user's unrelated `.gitignore` edit.

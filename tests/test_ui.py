@@ -198,6 +198,61 @@ def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(t
     assert len(app.code) == 2 and all(c.proto.show_line_numbers for c in app.code)
 
 
+def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path, monkeypatch):
+    import json
+
+    import httpx
+
+    from dataforge.assistance_queue import request_review
+    from dataforge.ingestion import Importer
+    from dataforge.llm import Profile
+    from dataforge.services import analyze
+    from dataforge.store import Store
+    from ui.common import get_store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    store = Store(tmp_path)
+    w = store.create_workspace("Queue UI")
+    code = "CREATE TABLE mart.x AS SELECT unknown.id FROM raw.a;"
+    Importer(store, w).files([("q.sql", code.encode())], {".sql"})
+    analyze(store, w)
+    profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="synthetic")
+    store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["p", w, "Synthetic", profile.model_dump_json()])
+    store.set_setting(w, "default_profile", "p")
+    store.close()
+    calls = []
+    def handler(request):
+        calls.append(request)
+        context = json.loads(json.loads(request.content)["messages"][1]["content"].split("\n", 1)[-1])
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({"claims": [{
+            "source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1,
+            "end_line": 1, "quote": context["source"], "explanation": "Bound read/write", "confidence": .9}]})}}]})
+    monkeypatch.setattr("ui.unresolved_review.request_review", lambda *args, **kwargs:
+        request_review(*args, **kwargs, transport=httpx.MockTransport(handler)))
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    app.switch_page("ui/pages/builder.py").run()
+    app.session_state["unresolved_review_panel"] = True
+    app.run()
+    assert not app.exception and not calls
+    assert any(n.label == "Diagnostic to review" for n in app.selectbox)
+    assert any(c.value == code for c in app.code)
+    # A click from a stale preview cannot send reimported/reanalyzed source unseen.
+    changed = code.replace("unknown.id", "unknown.changed")
+    active = get_store(str(tmp_path))
+    Importer(active, w).files([("q.sql", changed.encode())], {".sql"})
+    analyze(active, w)
+    next(b for b in app.button if b.label == "Request AI review of this range").click().run()
+    assert not app.exception and not calls
+    assert any(c.value == changed for c in app.code)
+    next(b for b in app.button if b.label == "Request AI review of this range").click().run()
+    assert not app.exception and len(calls) == 1
+    assert not [e for e in get_store(str(tmp_path)).edges(w) if e["method"] == "llm"]
+    assert isinstance(app.session_state["review_result_" + w], str)
+    next(b for b in app.button if b.label == "Merge grounded relationships as inferred").click().run()
+    assert not app.exception and len(calls) == 1
+    assert any(e["method"] == "llm" for e in get_store(str(tmp_path)).edges(w))
+
+
 @pytest.fixture(autouse=True)
 def clear_resources():
     yield

@@ -3,7 +3,7 @@
 Feature scripts registered by app.py through st.Page/st.navigation. Test each page with AppTest and custom graph behavior in the real browser.
 
 ## Files
-- `builder.py` — Input selection/import, filtered inventory, analyze/rebuild/validate, diagnostics/source viewer and optional AI.
+- `builder.py` — Input/import, inventory, analyze/rebuild/validate, diagnostics/source viewer and lazy unresolved-review/manual AI panels. No automatic provider requests.
 - `columns.py` — Direct-only column metrics/filter/grouping; labels inferred schema expansions and shows both declaration and query source evidence; report downloads include schema provenance.
 - `dashboard.py` — Inventory counts, health, hotspots and recent runs with useful empty states.
 - `explorer.py` — Exact asset search, lazy tree tab, workspace-scoped direction/collapse defaults, shared live/export appearance, evidence-linked source panel and bounded path CSV/JSON plus graph/source exports.

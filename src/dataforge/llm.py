@@ -271,7 +271,7 @@ def redact(text: str) -> str:
 
 
 def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
-           transport=None):
+           transport=None, expected_hash=None):
     if task not in TASKS:
         raise ValueError("Unsupported analysis task")
     if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
@@ -279,6 +279,8 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     source = store.file(file_id)
     if source["workspace_id"] != workspace:
         raise ValueError("Source does not belong to this workspace")
+    if expected_hash is not None and source["content_hash"] != expected_hash:
+        raise ValueError("Source changed; refresh the evidence preview before requesting assistance")
     lines = source["raw_content"].splitlines()
     if not 1 <= first <= last <= len(lines):
         raise ValueError("Select a valid source line range")
@@ -359,7 +361,7 @@ def merge_claims(store, workspace, record_id):
     return len(response.claims)
 
 
-def assist_task(store, workspace, file_id, first, last, task, transport=None):
+def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None):
     profiles = {r["profile_id"]: Profile.model_validate_json(r["config"])
                 for r in store.rows("SELECT * FROM llm_profiles WHERE workspace_id=?", [workspace])}
     assignments = store.setting(workspace, "task_models", {})
@@ -376,7 +378,8 @@ def assist_task(store, workspace, file_id, first, last, task, transport=None):
         # Fallback never silently changes the recipient host or authentication audience.
         if urlparse(profile.base_url).netloc != urlparse(first_profile.base_url).netloc:
             continue
-        result = assist(store, workspace, profile, file_id, first, last, task, pid, transport)
+        result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
+                        expected_hash=expected_hash)
         if not result["retryable"]:
             return result
     return result

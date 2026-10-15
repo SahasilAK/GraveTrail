@@ -41,3 +41,12 @@ safe configuration round trips, graph export parity, source expansion and worksp
 resets. Actual browser verification saved preferences, restarted the server, checked hidden
 labels with accessible full names, neutral fills and edge width, selected node evidence and
 downloaded matching graph JSON. Both normal and clean Python 3.11 environments pass 120 tests.
+
+Diagnostic review regressions cover SQL statement focus, bounded queue and SAS nearby context,
+informational/CSV/pending exclusion, isolation, privacy, invalid-output quarantine, explicit
+inferred merge and source changes after queue lookup. AppTest also presses a stale request
+button after reimport/reanalysis and proves zero network calls; a fresh request then validates
+and merges via synthetic HTTP transport. UI state holds a record ID. Actual browser uploaded
+synthetic unresolved SQL, analyzed it and adjusted the focused line preview without provider use.
+Latest complete result: 127 tests pass in both normal and clean Python 3.11 environments;
+Ruff, lock checks and wheel/source builds pass.

@@ -28,6 +28,10 @@ uses hash/config/path caches, parses with 1–8 workers, and atomically material
 journal plus local JSON copy, and restores missing records without changing materialized facts.
 `graph.py` derives traversal, SCC cycles, path views and temporary contraction.
 `llm.py` implements HTTP adapters, privacy, strict grounding, quarantine and inferred merges.
+`assistance_queue.py` derives bounded current diagnostics and statement/context suggestions;
+explicit review requests pin the preview hash through task routing before network transmission.
+The queue has no separate persisted job state or automatic worker. AI results use existing
+retained records, and UI session state holds result IDs rather than copied source claims.
 `exports.py` serves UI components and offline exports from the same renderer.
 
 Original bytes are immutable SHA-256-addressed blobs. Statements pin their source hash, so

@@ -56,14 +56,31 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
    checks pass. Actual browser saved preferences and verified persistence after restart,
    hidden labels/accessible names, neutral fills, 4px edges, evidence and downloaded JSON.
    Independent review cleared state/config/evidence handling after actual-text fitting fix.
+7. **Unresolved diagnostic review queue.** Derive up to 100 warning/error items from current
+   analyzed SQL/SAS inventory; exclude CSV, informational and pending/reimported files. Show
+   the diagnostic and suggest its containing stored statement or a bounded nearby range.
+   Let the user adjust the exact preview before requesting one routed assistance call.
+   Pin the preview hash through the provider request; changed files require refreshing.
+   Reuse existing privacy/context/redaction/grounding/quarantine and explicit inferred merge.
+   Keep only record IDs in UI state; read durable responses from existing AI history. No
+   automatic provider calls, hidden batch processing, new persistence or guessed dependencies.
+   Verify isolation, context scope, stale-source refusal, privacy, quarantine/merge and UI.
+   Implemented. Independent reviewer found no material issues; 33 focused tests pass. Actual
+   browser ZIP import/analysis and adjustable focused preview passed without provider use.
+   Synthetic HTTP/AppTest verifies request/quarantine, stale-click refusal and inferred merge.
+   Complete suite: 127 tests pass in normal and clean Python 3.11 environments; Ruff/lock/build
+   pass. No new live gateway call. Screenshot `.dataforge/verification/unresolved-review.png`.
 
 ## Remaining backlog beyond these slices
 
-- Controlled temporary-file cleanup, safe source/blob lifecycle and portable source/history
-  workspace bundles. Retained history archives are recoverable; there is no permanent purge.
+- Next: task-specific column/explanation result schemas beyond the shared grounded-lineage
+  schema. Extend prompt/schema versioning, deterministic quote/column validation and advisory
+  presentation; do not merge explanations or column suggestions as table relationships.
+- LLM concurrency/chunking controls, remaining parsing/confidence settings and logging verbosity.
+- Controlled stale temporary-file cleanup. Retained history archives are recoverable; there
+  is no permanent purge. Source/blob GC and full portable source/history workspace bundles
+  are optional operational improvements; master-required safe metadata transfer is delivered.
 - Explicit job/session identity and broader target-vendor SQL/SAS fixtures.
-- Integrated opt-in unresolved-assistance queues, task-specific result schemas,
-  LLM concurrency/chunking controls and remaining parsing settings.
 - Real large-project accuracy checks, Docker/remote CI execution, standalone HTML
   browser verification where file navigation is supported.
 

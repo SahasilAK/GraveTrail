@@ -45,3 +45,10 @@ The component mount root can be a ShadowRoot/DocumentFragment with no `.style`; 
 contained graph element. Full SVG label fitting uses actual rendered text measurement.
 Before reusing asset/source selectbox keys, clear selections absent from the current choices.
 Key-based widget identity can otherwise preserve an ID from another workspace or filter.
+
+`assistance_queue.py` owns current diagnostic eligibility, bounded context and `request_review`.
+Its request path passes `expected_hash` through `assist_task` into `assist`, which snapshots and
+checks the source before network use. Queue request button identity includes the preview hash
+so an old click cannot authorize a newly reanalyzed file. `ui/assistance_result.py` reads existing
+AI records by workspace/ID and owns shared explicit merge presentation. Keep future queues
+offline on render; do not use model confidence to clear deterministic diagnostics.

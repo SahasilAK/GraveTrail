@@ -58,3 +58,11 @@ targets the contained graph element, with a failing-then-passing Node regression
 exposed stale asset IDs under key-based selectbox identity; absent asset/source choices are
 cleared before constructing the widget. Graph appearance, source preferences, evidence and
 offline graph JSON were checked after a server restart. Full suite: 120 tests, Ruff clean.
+
+## Diagnostic queue review — 2026-10-15
+
+An independent read-only reviewer checked eligibility/bounds, workspace isolation, source hash
+propagation through routing, source-change races, privacy/grounding/quarantine, result-ID UI
+state and explicit inferred merging. No material findings; 33 focused tests passed. The author
+also imported/analyzed synthetic unresolved SQL and adjusted source ranges in the actual browser.
+Requests/merge were tested with synthetic HTTP transport; this is not a new live provider pass.

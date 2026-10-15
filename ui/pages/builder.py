@@ -80,11 +80,18 @@ if files:
     if diagnostics:
         with st.expander(f"Parsing diagnostics ({len(diagnostics)})", expanded=True):
             st.dataframe([{k: d[k] for k in ["relative_path", "line", "severity", "message"]} for d in diagnostics], hide_index=True)
+    review_panel = st.expander("Unresolved review queue", on_change="rerun", key="unresolved_review_panel")
+    if review_panel.open:
+        with review_panel:
+            from ui.unresolved_review import render as render_review
+            render_review(store, w)
     with st.expander("Inspect a source file"):
         source_viewer(store, list(paths), "inventory_source")
         fid = st.session_state.get("inventory_source_file")
         if fid:
             st.json(json.loads(store.file(fid)["metadata"]))
-    with st.expander("Optional AI assistance"):
-        from ui.assistance import render
-        render(store, w)
+    manual_panel = st.expander("Optional AI assistance", on_change="rerun", key="manual_assistance_panel")
+    if manual_panel.open:
+        with manual_panel:
+            from ui.assistance import render
+            render(store, w)

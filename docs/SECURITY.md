@@ -39,6 +39,11 @@ are redacted. Credentials are environment references, never key values in DuckDB
 Redirects and ambient proxy credentials are disabled. A loopback gateway can forward traffic;
 the operator controls its trust. Malformed, invented or cross-statement claims are quarantined.
 Minimal merged evidence persists; full AI interaction bodies are opt-in and subject to retention.
+Diagnostic-review and manual request buttons pin the displayed source version through routing.
+The queue omits stale pending-file diagnostics; a changed hash is refused before provider
+transmission even if an import occurs after queue lookup. Opening a panel never sends code.
+Only durable AI record IDs are kept in session state; source/response bodies stay in the
+owning data-home tables under the configured retention policy.
 
 Imported source itself may contain secrets. The local inventory intentionally preserves it;
 protect the storage directory using OS access controls and encryption where needed. Redaction

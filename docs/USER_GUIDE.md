@@ -13,6 +13,22 @@ Choose Analyze all files or select paths. Normal analysis reuses unchanged parse
 forces parsing. Diagnostics explain ambiguous/dynamic constructs. A failed run preserves
 the previous committed facts. A newer file imported during a run remains pending.
 
+**Review unresolved code:** Open **Unresolved review queue** in Builder after analysis. It
+lists up to 100 current SQL/SAS warnings and errors, with errors first. CSV, informational
+and pending-file diagnostics are excluded. Choose a diagnostic to preview its containing
+statement or bounded nearby context, then adjust original start/end lines if needed. A long
+range has a truncated preview and cannot be sent until it fits the workspace context budget.
+Previewing needs no provider. **Request AI review of this range** uses the SQL/SAS task route
+configured in Settings and all existing privacy, redaction and profile budgets. No background
+requests occur. If source changes after the preview, refresh it before requesting again.
+
+Validated responses can be merged separately as inferred relationships. Quarantined output
+changes no facts. A valid relationship does not resolve a parser warning about a column or
+runtime construct; diagnostics remain until deterministic analysis resolves them. The queue
+is a bounded manual review list, not an automatic batch agent. **Optional AI assistance**
+remains available for manual source-range/task selection. AI results are read from local
+retained activity records and can expire under the configured retention policy.
+
 **Explore:** Search and explicitly select an exact asset. Searching `orders` in the supplied
 fixture yields raw/staging/mart choices. Use upstream/downstream trees and graph direction,
 set depth and collapse temporary stages. Graph search highlights nodes; click nodes to highlight

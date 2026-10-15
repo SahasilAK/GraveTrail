@@ -1,5 +1,14 @@
 # LLM integration
 
+Builder's unresolved review queue derives at most 100 current SQL/SAS warning/error items.
+It excludes pending/reimported sources, informational and CSV diagnostics. Suggested context
+uses a containing deterministic statement or at most 40 nearby lines; users can adjust the
+exact range. Request buttons are tied to the displayed content hash, which is checked again
+inside the provider path before transmission, including same-host fallbacks. Previewing is
+offline. Every request is explicit, sequential and subject to existing privacy/context gates.
+Validated claims require a separate inferred merge; diagnostics are never automatically
+declared resolved. Queue request/merge tests use synthetic HTTP payloads, not a new live pass.
+
 The application is fully usable without an LLM. Settings → LLM providers stores multiple
 profiles, task overrides, same-host ordered fallbacks and environment variable names for keys.
 Set the actual variable before startup. Neither profile exports nor logs store key values.
