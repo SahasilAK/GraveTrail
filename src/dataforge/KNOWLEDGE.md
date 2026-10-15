@@ -6,6 +6,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).
 
 ## Files
+- `ai_results.py` — ColumnResponse/ExplanationResponse v2 contracts; full-source operation matching, exact citations and direct-column attribution. Advisory results never merge lineage.
 - `__init__.py` — Package marker; no business behavior.
 - `assistance_queue.py` — diagnostic_queue caps current SQL/SAS warnings/errors at 100; diagnostic_context suggests stored statement or bounded nearby lines; request_review pins source hash through existing privacy-gated routed assistance.
 - `configuration.py` — ParsingSettings/VisualizationSettings/PortableSettings validate bounded non-network preferences; WorkspaceIdentity validates names/descriptions; export/import supports v1 and atomic v2 round trips.

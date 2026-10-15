@@ -6,6 +6,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `fixtures/` — [fixtures/KNOWLEDGE.md](fixtures/KNOWLEDGE.md).
 
 ## Files
+- `test_ai_results.py` — Task schemas, invented/ambiguous/transitive/comment/string attribution, historical advisory merge exclusion, saved offline UI results and stale-source warnings.
 - `test_assistance_queue.py` — Current diagnostic eligibility/bounds, SQL/SAS focused context, isolation, privacy, quarantine/inferred merge and preview-hash race refusal using synthetic HTTP only.
 - `test_exports.py` — Escaped reports/original ZIPs, path evidence/order, live/offline appearance parity and Node syntax/DocumentFragment mount regression.
 - `test_graph.py` — Behavioral regression tests for graph. Run with pytest; temporary runtime data only.

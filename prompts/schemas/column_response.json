@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "ColumnClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "quote": {
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "column": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Column",
+          "type": "string"
+        },
+        "context": {
+          "maxLength": 50,
+          "minLength": 1,
+          "title": "Context",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 5000,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        }
+      },
+      "required": [
+        "start_line",
+        "end_line",
+        "quote",
+        "source",
+        "column",
+        "context",
+        "explanation",
+        "confidence"
+      ],
+      "title": "ColumnClaim",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "columns": {
+      "items": {
+        "$ref": "#/$defs/ColumnClaim"
+      },
+      "maxItems": 100,
+      "title": "Columns",
+      "type": "array"
+    },
+    "unresolved_symbols": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Unresolved Symbols",
+      "type": "array"
+    }
+  },
+  "title": "ColumnResponse",
+  "type": "object"
+}

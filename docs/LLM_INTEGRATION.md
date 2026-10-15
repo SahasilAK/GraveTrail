@@ -78,3 +78,14 @@ Compatible chat requests explicitly disable streaming. Some gateways/models retu
 Markdown JSON fence even with JSON mode requested. The application accepts that enclosing
 fence only; surrounding prose, multiple blocks and non-object JSON remain invalid. Schema and
 source grounding checks still apply. Provider HTTP envelopes must be JSON objects.
+
+## Task-specific advisory results
+
+Column usage v2 returns cited direct-column suggestions, validated against complete original
+parser operations and explicit unambiguous usage. Suggestions remain AI-inferred and do not
+modify deterministic column reports. Code explanation v2 returns individually cited advisory
+items; exact citations and listed assets are checked, not the semantic truth of model prose.
+Neither task may merge lineage, and historical advisory merges are excluded from reanalysis.
+Builder → Optional AI assistance → Saved AI result reopens retained results without an active
+provider profile. Changed-source results display a warning and retain their original quote/hash.
+Advisory JSON downloads include provenance. The existing retention policy applies.

@@ -38,3 +38,9 @@
   rename durability is not portable across Windows/POSIX. Keep an extra checksummed JSON file,
   prefer the database copy for restore and preserve existing IDs. Protect current references
   and the latest completed analysis. No permanent purge, source GC or automatic retention.
+
+- ADR 015: AI advisory task v2 schemas are distinct from lineage claims. Direct columns must
+  match complete operations parsed in original file context; quote fragments cannot remove
+  ambiguity or turn comments/string literals into code. Explanations retain cited advisory
+  prose. Existing JSON AI records persist both without a migration. All non-lineage tasks,
+  including previously merged historical records, are excluded from graph merging/refresh.

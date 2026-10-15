@@ -98,3 +98,7 @@ user validates appearance. Keep the user's `.streamlit/config.toml` edit out of 
 Each completed group needs regression tests, actual UI exercise, status/knowledge updates,
 and a local Conventional Commit. New findings may adjust order; no full-completion claim
 until mandatory requirements and their acceptance checks are accounted for.
+
+Task-specific advisory slice implemented in completion execution: v2 contracts, complete-operation
+source grounding, offline saved result selection and hard exclusion from lineage merges/refresh.
+See COMPLETION_PLAN.md and latest IMPLEMENTATION_STATUS entry. Next: AI resource controls.

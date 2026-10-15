@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "Explanation": {
+      "additionalProperties": false,
+      "properties": {
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "quote": {
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "assets": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Assets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "start_line",
+        "end_line",
+        "quote",
+        "text"
+      ],
+      "title": "Explanation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "explanations": {
+      "items": {
+        "$ref": "#/$defs/Explanation"
+      },
+      "maxItems": 100,
+      "title": "Explanations",
+      "type": "array"
+    },
+    "unresolved_symbols": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Unresolved Symbols",
+      "type": "array"
+    }
+  },
+  "title": "ExplanationResponse",
+  "type": "object"
+}

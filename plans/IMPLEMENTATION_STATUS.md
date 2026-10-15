@@ -252,3 +252,22 @@ configured model when one becomes available. Preserve the user's unrelated `.git
   of the obsolete theme segmented control. User guide documents restart after stale upgrades.
 - Verification: full suite 136 passed in 14.12s; Ruff clean. Live server emits all fourteen
   options. Appearance validation remains with the user; the restart did not change the theme.
+
+## Completion execution: task-specific AI results — 2026-10-15
+
+- Read supplied continuation request and complete master; existing code and themes preserved.
+  Detailed remaining work is tracked in COMPLETION_PLAN.md.
+- ColumnResponse/ExplanationResponse v2, generated schemas, task prompts and schema-inclusive
+  prompt hashes replace shared lineage contracts for advisory tasks. Existing JSON AI records
+  persist results without migration; saved results reopen offline without a provider profile.
+- Columns must match complete original parser operations and explicit direct usage. Independent
+  review exposed abbreviated JOIN/comment/string grounding bypasses and historical advisory
+  merge restoration; all fixed with regressions. Non-lineage tasks cannot merge or restore edges.
+- Shared UI shows AI-inferred column tables, cited advisory explanations, source-change warnings
+  and JSON downloads. Saved source quotes/hashes remain separate from deterministic reports.
+- Full153 tests passed in16.57s; Ruff clean. Actual isolated Streamlit Builder reopened a stored
+  column result and displayed its inferred table/evidence controls. Synthetic HTTP results only;
+  no new live-provider claim. Final request-result rerun adjustment receives final suite below.
+- Next: bounded AI concurrency and explicit statement chunk previews, then settings/cleanup.
+- Final slice verification after review fixes: 155 tests passed in17.25s; Ruff clean. SAS
+  original formatting and immediate result rerender are covered.

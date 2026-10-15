@@ -6,6 +6,7 @@ from ui.assistance_result import render_result
 
 
 def render(store, workspace):
+    _saved_results(store, workspace)
     profiles = store.rows("SELECT profile_id FROM llm_profiles WHERE workspace_id=?", [workspace])
     if not profiles:
         st.info("Configure an LLM profile in Settings to request optional assistance. Deterministic analysis needs no provider.")
@@ -31,8 +32,18 @@ def render(store, workspace):
                 response = assist_task(store, workspace, fid, int(first), int(last), task,
                                        expected_hash=source["content_hash"])
             st.session_state["ai_record_" + workspace] = response["record_id"]
+            st.rerun()
         except Exception as exc:
             st.error(f"Assistance failed: {exc}")
-    render_result(store, workspace, "ai_record_" + workspace)
     st.subheader("AI activity")
     st.dataframe(store.rows("SELECT created_at,task,provider,model,outcome,duration,usage FROM llm_records WHERE workspace_id=? ORDER BY created_at DESC LIMIT 50", [workspace]), hide_index=True)
+
+
+def _saved_results(store, workspace):
+    saved = store.rows("SELECT record_id,task,created_at,outcome FROM llm_records WHERE workspace_id=? ORDER BY created_at DESC LIMIT 50", [workspace])
+    if saved:
+        labels = {r["record_id"]: f"{r['created_at']} · {r['task']} · {r['outcome']}" for r in saved}
+        history = st.selectbox("Saved AI result", list(labels), index=None, format_func=labels.get)
+        if st.button("Open saved result", disabled=history is None):
+            st.session_state["ai_record_" + workspace] = history
+    render_result(store, workspace, "ai_record_" + workspace)

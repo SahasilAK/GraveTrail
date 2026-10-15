@@ -23,7 +23,35 @@ def render_result(store, workspace, state_key):
     if record["outcome"] == "quarantined":
         st.warning(f"Response quarantined ({details.get('reason', 'validation failed')}); no relationships were added.")
     else:
-        st.json(details["result"])
+        result = details["result"]
+        if record["task"] in {"column_usage", "code_explanation"}:
+            st.caption("AI advisory result. Exact citations are checked; prose is not independently verified. These results never change deterministic column reports or lineage.")
+            source = store.file(record["file_id"])
+            if source["content_hash"] != details["content_hash"]:
+                st.warning("Source changed since this result. Citations refer to its saved source version; request a new analysis for current code.")
+            if "claims" in result:
+                st.info("Legacy advisory format. Request a new analysis for task-specific results; this record cannot be merged.")
+                st.json(result)
+            else:
+                items = result.get("columns", result.get("explanations", []))
+                if "columns" in result:
+                    st.subheader("AI-inferred direct column suggestions")
+                    st.dataframe([{**{k: v for k, v in item.items() if k != "quote"}, "status": "AI-inferred"}
+                                  for item in items], hide_index=True)
+                for i, item in enumerate(items):
+                    label = f"{source['relative_path']}:{item['start_line']}–{item['end_line']} · evidence {i + 1}"
+                    with st.expander(label):
+                        st.text(item.get("text", item.get("explanation", "")))
+                        st.code(item["quote"], language="sql" if source["extension"] == ".sql" else "sas")
+                if result.get("unresolved_symbols"):
+                    st.write("Unresolved:", result["unresolved_symbols"])
+                if not items:
+                    st.info("No supported task findings were returned.")
+            st.download_button("Download advisory result JSON", json.dumps(details, indent=2),
+                               "ai-result.json", "application/json", key=state_key + "_download_" + record_id)
+            st.json(json.loads(record["usage"]))
+            return
+        st.json(result)
         st.caption("Validated quotes do not establish runtime correctness. Merged relationships remain inferred; diagnostics are not automatically marked resolved.")
         if record["outcome"] == "validated" and details["result"]["claims"]:
             if st.button("Merge grounded relationships as inferred", key=state_key + "_merge_" + record_id):

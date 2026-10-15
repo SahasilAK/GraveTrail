@@ -15,6 +15,8 @@ from urllib.parse import quote, urlparse
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
+from dataforge.configuration import ParsingSettings
 from dataforge.models import canonical, stable_id, statements
 from dataforge.parsers.sas import parse_sas, strip_comments
 
@@ -295,11 +297,14 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     system_path = PROMPTS / task / "system.md"
     system = system_path.read_text(encoding="utf-8")
     template = (PROMPTS / task / "user_template.md").read_text(encoding="utf-8")
-    prompt_hash = hashlib.sha256((system + template).encode()).hexdigest()
+    response_model = TASK_SCHEMAS.get(task, GroundedResponse)
+    schema = response_model.model_json_schema()
+    version = "2" if task in TASK_SCHEMAS else "1"
+    prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
     known = {a["name"] for a in store.assets(workspace)}
     user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
                 "start_line": first, "end_line": last, "known_assets": sorted(known), "source": focused,
-                "schema": GroundedResponse.model_json_schema()}))
+                "schema": schema}))
     if len(system) + len(user) > profile.context_chars:
         raise ValueError("Request exceeds the profile context budget; select fewer lines or increase its limit")
     start = time.perf_counter()
@@ -308,18 +313,24 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     try:
         with Adapter(profile, transport) as adapter:
             raw, usage = adapter.complete(system, user)
-        validated = GroundedResponse.model_validate(response_object(raw))
-        validate_response(validated, source["raw_content"], known, first, last)
+        validated = response_model.model_validate(response_object(raw))
+        if task in TASK_SCHEMAS:
+            settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
+            from dataforge.services import source_dialect
+            settings["dialect"] = source_dialect(source, settings)
+            validate_advisory(validated, source, known, first, last, settings)
+        else:
+            validate_response(validated, source["raw_content"], known, first, last)
     except (ValueError, ProviderError) as exc:
         outcome, reason = "quarantined", type(exc).__name__
         retryable = isinstance(exc, ProviderError) and exc.retryable
-    details = {"content_hash": source["content_hash"], "reason": reason,
+    details = {"content_hash": source["content_hash"], "reason": reason, "schema_version": version,
                "result": validated.model_dump() if outcome == "validated" else None}
     if store.setting(workspace, "llm_history", False):
         details.update(context=focused, response=raw)
     record_id = uuid.uuid4().hex
     with store.transaction():
-        store.execute("INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING", [prompt_hash, task, "1"])
+        store.execute("INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING", [prompt_hash, task, version])
         store.execute("INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       [record_id, workspace, profile_id, task, file_id, first, prompt_hash, profile.provider,
                        profile.model, outcome, time.perf_counter() - start, json.dumps(usage), json.dumps(details)])
@@ -341,6 +352,8 @@ def merge_claims(store, workspace, record_id):
     if not records:
         raise ValueError("Only validated AI records can be merged")
     record = records[0]
+    if record["task"] not in {"sas_lineage", "sql_lineage", "lineage_validation"}:
+        raise ValueError("Only lineage task records can be merged; advisory results cannot create relationships")
     source = store.file(record["file_id"])
     details = json.loads(record["details"])
     if source["content_hash"] != details["content_hash"]:

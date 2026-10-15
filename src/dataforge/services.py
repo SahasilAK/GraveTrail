@@ -72,15 +72,19 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
         raise
 
 
+def source_dialect(metadata, config):
+    dialect = config["dialect"]
+    for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
+        if metadata["relative_path"].startswith(prefix):
+            dialect = override
+    return dialect
+
+
 def _parse_inventory(store, metadata, config):
     content = store.snapshot_content(metadata)
     ext = metadata["extension"]
     if ext == ".sql":
-        dialect = config["dialect"]
-        for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
-            if metadata["relative_path"].startswith(prefix):
-                dialect = override
-        return parse_sql(content, dialect)
+        return parse_sql(content, source_dialect(metadata, config))
     if ext == ".sas":
         return parse_sas(content, config["library_mappings"], config["macros"])
     return parse_csv(content, metadata["relative_path"])
@@ -225,6 +229,8 @@ def _restore_ai_results(store, workspace, results):
              *(ref for op in parsed.operations for ref in [*op.sources, *op.targets])]}
     by_file = {m["file_id"]: (m, parsed) for m, parsed in results}
     for record in store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND outcome='merged'", [workspace]):
+        if record["task"] not in {"sas_lineage", "sql_lineage", "lineage_validation"}:
+            continue
         details = json.loads(record["details"])
         if record["file_id"] not in by_file:
             continue
