@@ -129,3 +129,10 @@ warnings/errors. Analyze can reuse unchanged results or reparse selected/all fil
 configuration changes, previously analyzed incompatible files refresh to keep the workspace
 coherent; newly imported unselected files remain pending. Logging level in Security and privacy
 is app-wide for the data home, persists across restart and is not transferred with workspaces.
+
+Settings → Storage and workspaces → Clean stale temporary files previews application-created
+history staging files at least24 hours old. Select files explicitly before cleaning. A retained
+compressed recovery copy is committed first; choose it to restore without overwriting an
+existing file. Restored files are fresh and not immediately eligible again. Sources, databases,
+JSON history archives and arbitrary temporary files are excluded. This clears staging files;
+retained recovery bytes mean total disk usage may not shrink. No automatic cleanup runs.

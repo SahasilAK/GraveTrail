@@ -6,6 +6,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).
 
 ## Files
+- `temporary_cleanup.py` — Scoped stale UUID.tmp preview, bounded journal-before-removal, full file identity checks, retained recovery and atomic no-overwrite restore. Uses maintenance idle lock and schema4.
 - `llm_resources.py` — Immediate workspace/process request admission with release; offline bounded original-line SQL/SAS/macro/interactive-PROC chunks, never silent truncation.
 - `ai_results.py` — ColumnResponse/ExplanationResponse v2 contracts; full-source operation matching, exact citations and direct-column attribution. Advisory results never merge lineage.
 - `__init__.py` — Package marker; no business behavior.
@@ -20,7 +21,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.
 - `schemas.py` — collect_schemas reconciles typed DDL through the lineage identity resolver, retaining immutable declaration evidence; conflicting/incomplete/schema-changing declarations disable expansion without guessing execution order.
 - `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; schema-backed plain wildcard expansion is inferred and re-materialized on schema refresh; column_report, compare_runs and retained AI provenance use stored facts. Parser version 5.
-- `store.py` — Store owns locked DuckDB access, migrations v1–v3 (history recovery journal), validated workspace creation/editing, settings, source versions, immutable snapshots and transactional boundaries.
+- `store.py` — Store owns locked DuckDB access, migrations v1–v4 (history and temporary recovery journals), validated workspace creation/editing, settings, source versions, immutable snapshots and transactional boundaries.
 
 ## Invariants
 Every edge has exact statement/file/version evidence. UI never executes imported code. Cache changes require a parser-version bump. New migrations preserve facts. External AI is opt-in; unknown references remain diagnostics.

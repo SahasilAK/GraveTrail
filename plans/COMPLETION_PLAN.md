@@ -27,9 +27,9 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
 - [x] Test precedence, cache invalidation, persistence, portability and privacy. Commit.
 
 ## 4. Temporary cleanup
-- [ ] Bound preview/cleanup to explicitly application-owned stale temporary files. Protect
+- [x] Bound preview/cleanup to explicitly application-owned stale temporary files. Protect
   symlinks, active operations, originals, databases and retained recovery journals.
-- [ ] Test path races, age/size/count bounds and active guards; actual UI and commit.
+- [x] Test path races, age/size/count bounds and active guards; actual UI and commit.
 
 ## 5. Session identity and coverage
 - [ ] Explicit supplied job/session boundaries for temporary identities, compatibility and

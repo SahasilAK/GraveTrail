@@ -56,3 +56,8 @@
   facts. Extension SQL dialect applies to SAS PROC SQL only. Cache-incompatible previously
   analyzed files reparse on selected refresh so full materialization cannot silently drop them.
   App-wide log level uses reserved __application__ settings scope (no migration, no export).
+
+- ADR 020: Cleanup eligibility is an explicit app-owned UUID.tmp staging namespace, not a
+  general file browser or blob garbage collector. Migration4 journals compressed bytes before
+  removal; restore uses atomic create-if-absent publication. Retain recovery and make no disk
+  reclamation claim. Age, count, byte and scan budgets bound work; analysis excludes maintenance.

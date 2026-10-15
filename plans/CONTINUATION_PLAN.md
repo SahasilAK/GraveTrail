@@ -114,3 +114,7 @@ Remaining settings implemented: extension dialect/PROC SQL precedence, confidenc
 filters, diagnostic display and reparse defaults, safe app-wide logging. Parser cache version5.
 Selected refresh reparses previously analyzed incompatible files rather than dropping facts.
 Next: temporary cleanup, job/session boundaries, vendor fixtures and final acceptance.
+
+Safe staging cleanup completed with migration4 recovery journal, explicit selection, bounded
+preview/identity checks and no-overwrite restore. Sources and history JSON stay protected.
+Next: explicit job/session scope and vendor fixtures, then final acceptance/verification.

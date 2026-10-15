@@ -46,3 +46,8 @@ completed analysis, current edge/inventory references and running analyses. Reco
 a canonical SHA-256 integrity check; a compressed copy is journaled in the same DuckDB transaction
 as removal. Local JSON files provide an additional recovery copy. Restore inserts missing IDs
 transactionally without replacing current facts or existing history. Both copies are retained.
+
+Migration4 adds temporary_recovery (workspace, file name, compressed bytes, original size,
+SHA256 and created/restored timestamps). Bytes commit before stale staging-file removal.
+Recovery journals are not metadata-transfer payloads and are deleted only with explicit
+workspace deletion. This table never authorizes cleanup outside its application namespace.

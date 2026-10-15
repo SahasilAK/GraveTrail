@@ -90,6 +90,8 @@ elif tab == "Storage and workspaces":
     st.dataframe(store.rows("SELECT created_at,source,report FROM ingestion_runs WHERE workspace_id=? ORDER BY created_at DESC", [w]), hide_index=True)
     from ui.workspace_history import render as render_history
     render_history(store, w)
+    from ui.temporary_cleanup import render as render_temporary_cleanup
+    render_temporary_cleanup(store, w)
     with st.expander("Delete active workspace"):
         confirmation = st.text_input("Type the active workspace name to delete its inventory and analysis")
         if st.button("Delete workspace", disabled=confirmation != workspace["name"]):

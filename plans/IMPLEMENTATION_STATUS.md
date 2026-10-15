@@ -172,8 +172,7 @@ discovery, source/blob lifecycle, portable backups and auth if expanding beyond 
 ## Next session entry point
 
 Task-specific AI contracts, bounded resources, and remaining settings are now implemented.
-Resume with safe stale application-owned temporary-file cleanup, then explicit job/session
-identity, broader vendor fixtures and requirement-by-requirement acceptance accounting.
+Resume with explicit job/session identity, broader vendor fixtures and requirement-by-requirement acceptance accounting.
 Keep new work in tested commits; preserve all fourteen themes and active configuration.
 Current parser cache version5. Previously analyzed cache-incompatible files reparse on selected
 refresh to retain coherent facts. OmniRoute tests must use model auto; its latest connection
@@ -319,3 +318,24 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Final settings verification:171 tests passed in22.71s; Ruff clean. Actual isolated Settings
   saved extension dialect and inferred-visibility preferences with immediate success; screenshot
   .dataforge/verification/parsing-preferences.png. Primary theme/configuration was untouched.
+
+## Completion execution: recoverable temporary cleanup — 2026-10-15
+
+- Migration4 adds temporary_recovery journal. Preview only current workspace UUID.tmp history
+  staging files aged24h or more; no recursion, sources, database files, JSON recovery archives,
+  arbitrary names or other workspaces. Limits100 files/25MB per batch,10000 entries per scan.
+- Explicit selection and fresh identity checks; busy-analysis guard. Recovery bytes/checksum
+  commit before unlink. Restore is bounded/integrity checked and atomically publishes without
+  overwriting existing files. Recovery remains retained, so no total disk-shrink claim.
+- Windows DirEntry.stat lacks inode/link information; actual lstat identity is used. Changed
+  previews and journal/publication failures are tested. Symlink-creation test skipped because
+  this Windows account lacks permission; production symlink/reparse checks remain enforced.
+- Full178 tests passed,1 skipped in19.13s; Ruff clean. Wheel/sdist built. Review found no issues.
+  Actual isolated Settings selected/cleaned/restored a66-byte staging fixture with success;
+  screenshot .dataforge/verification/temporary-recovery.png. No primary files were cleaned.
+- Stopped verified primary process for a consistent pre-migration backup under
+  .dataforge/verification/schema4-backup-20261015T235733. Primary schema3→4 preserved1 workspace,
+  7 source files,9 assets,7 edges and2 analysis runs. Restarted primary8501; config hash identical.
+- Next: explicit supplied job/session identity for temporary assets, vendor fixtures and final
+  requirement accounting/clean package/UI/benchmark checks. Auto-only live gateway check remains
+  failed as recorded; no fixed-model substitution or relaxed validation.

@@ -59,6 +59,12 @@ class Store:
                     archive_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, recovery_body BLOB,
                     archive_bytes BIGINT, created_at TIMESTAMP DEFAULT current_timestamp)""")
                 self.db.execute("INSERT INTO schema_migrations(version) VALUES (3)")
+            if (4,) not in versions:
+                self.db.execute("""CREATE TABLE temporary_recovery(
+                    recovery_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, file_name VARCHAR,
+                    recovery_body BLOB, byte_count BIGINT, sha256 VARCHAR,
+                    created_at TIMESTAMP DEFAULT current_timestamp, restored_at TIMESTAMP)""")
+                self.db.execute("INSERT INTO schema_migrations(version) VALUES (4)")
 
     @contextmanager
     def transaction(self):
@@ -156,7 +162,7 @@ class Store:
         # Immutable blobs may be shared. Garbage collection is a separate, explicit operation.
         tables = ["settings", "ingestion_runs", "source_files", "analysis_runs", "assets", "asset_aliases",
                   "statements", "operations", "operation_assets", "edges", "column_usages", "diagnostics",
-                  "llm_profiles", "llm_records", "history_archives", "workspaces"]
+                  "llm_profiles", "llm_records", "history_archives", "temporary_recovery", "workspaces"]
         with self.transaction():
             for table in tables:
                 self.execute(f"DELETE FROM {table} WHERE workspace_id=?", [workspace])

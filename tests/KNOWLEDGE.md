@@ -6,6 +6,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `fixtures/` — [fixtures/KNOWLEDGE.md](fixtures/KNOWLEDGE.md).
 
 ## Files
+- `test_temporary_cleanup.py` — Scope/age/count bounds, changed preview/journal failures, idle guard, recovery after restart/no overwrite, atomic publication failure, v3 migration and UI cleanup/restore. Windows symlink privilege may skip one test.
 - `test_remaining_settings.py` — Extension/folder precedence, PROC SQL dialect, non-destructive graph filtering, safe log level, portable/UI preferences and selected cache-upgrade preservation.
 - `test_llm_resources.py` — Chunk coordinates/statement/SAS context, concurrent admission/release, cancellation/no transmission, connection gate and explicit single-chunk UI request.
 - `test_ai_results.py` — Task schemas, invented/ambiguous/transitive/comment/string attribution, historical advisory merge exclusion, saved offline UI results and stale-source warnings.
