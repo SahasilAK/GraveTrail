@@ -14,12 +14,13 @@ if tab == "Parsing and lineage":
         dialects = [""] + sorted(k for k in sqlglot.Dialect.classes if k)
         dialect = st.selectbox("Default SQL dialect", dialects, index=dialects.index(store.setting(w, "dialect", "")), format_func=lambda x: x or "Generic SQL")
         case = st.checkbox("Case-sensitive asset identities", value=store.setting(w, "case_sensitive", False))
+        expand = st.checkbox("Expand plain SQL wildcards using consistent declared schemas", value=store.setting(w, "expand_wildcards", True))
         mappings = st.text_area("SAS library mappings (JSON)", json.dumps(store.setting(w, "library_mappings", {}), indent=2), help='Example: {"src": "catalog.raw"}')
         macros = st.text_area("Static SAS macro values (JSON)", json.dumps(store.setting(w, "macros", {}), indent=2))
         folders = st.text_area("SQL dialect by folder prefix (JSON)", json.dumps(store.setting(w, "dialect_by_folder", {}), indent=2))
         if st.form_submit_button("Save parsing settings"):
             try:
-                data = {"dialect": dialect, "case_sensitive": case}
+                data = {"dialect": dialect, "case_sensitive": case, "expand_wildcards": expand}
                 for key, value in [("library_mappings", mappings), ("macros", macros), ("dialect_by_folder", folders)]:
                     obj = json.loads(value)
                     if not isinstance(obj, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):

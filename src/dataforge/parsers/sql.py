@@ -38,6 +38,40 @@ def usage_context(column) -> str:
     return "EXPRESSION"
 
 
+def declared_schema(tree, start, end, operation_index):
+    """Explicit typed DDL only; schema-changing statements invalidate earlier declarations."""
+    if not isinstance(tree, (exp.Create, exp.Alter, exp.Drop)):
+        return []
+    if str(tree.args.get("kind", "")).upper() not in {"TABLE", "VIEW"}:
+        return []
+    if isinstance(tree, exp.Drop):
+        return [{"table": table_name(target), "columns": None, "start_line": start,
+                 "end_line": end, "operation_index": operation_index}
+                for target in tree.args.get("tables", []) if isinstance(target, exp.Table)]
+    target = tree.this.this if isinstance(tree.this, exp.Schema) else tree.this
+    if not isinstance(target, exp.Table):
+        return []
+    columns = None
+    if isinstance(tree, exp.Create) and isinstance(tree.this, exp.Schema):
+        definitions = [c for c in tree.this.expressions if isinstance(c, exp.ColumnDef)]
+        constraints = (exp.ColumnDef, exp.Constraint, exp.PrimaryKey, exp.ForeignKey,
+                       exp.UniqueColumnConstraint, exp.CheckColumnConstraint)
+        simple_schema = all(isinstance(c, constraints) for c in tree.this.expressions)
+        properties = tree.args.get("properties")
+        simple_properties = properties is None or all(isinstance(p, exp.TemporaryProperty)
+                                                      for p in properties.expressions)
+        if (simple_schema and simple_properties and definitions and len(definitions) <= 4096
+                and all(c.args.get("kind") is not None for c in definitions)):
+            columns = [{"name": c.name, "type": c.args["kind"].sql()} for c in definitions]
+    records = [{"table": table_name(target), "columns": columns, "start_line": start,
+                "end_line": end, "operation_index": operation_index}]
+    if isinstance(tree, exp.Alter):
+        for action in tree.args.get("actions", []):
+            if isinstance(action, (exp.SwapTable, exp.AlterRename)) and isinstance(action.this, exp.Table):
+                records.append({**records[0], "table": table_name(action.this), "columns": None})
+    return records
+
+
 def parse_sql(content: str, dialect: str = "") -> ParseResult:
     result = ParseResult()
     for code, start, end in statements(content):
@@ -95,6 +129,8 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                 handled.add(id(column))
                 alias = column.table if isinstance(column, exp.Column) else ""
                 name = column.name if isinstance(column, exp.Column) else "*"
+                star = column.this if isinstance(column, exp.Column) else column
+                wildcard_safe = isinstance(star, exp.Star) and not any(star.args.values())
                 source = None
                 if alias:
                     source = mapping.get(alias.casefold())
@@ -109,7 +145,8 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                 elif name == "*":
                     for item in mapping.values():
                         if isinstance(item, exp.Table):
-                            usages.append(Usage(table_name(item), "*", "SELECT", "", "*", "unresolved"))
+                            usages.append(Usage(table_name(item), "*", "SELECT", "", "*", "unresolved",
+                                                wildcard_safe=wildcard_safe))
                     return
                 else:
                     # Do not attribute unqualified ORDER BY aliases to a source column.
@@ -121,7 +158,7 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                 if isinstance(source, exp.Table):
                     usages.append(Usage(table_name(source), name, usage_context(column), alias,
                                         column.parent.sql() if column.parent else column.sql(),
-                                        "unresolved" if name == "*" else "verified"))
+                                        "unresolved" if name == "*" else "verified", wildcard_safe=wildcard_safe))
                 elif source is None and alias:
                     result.diagnostics.append(Diagnostic(f"Unresolved column alias {alias}", start, symbol=alias))
                 # Scope sources are CTEs/subqueries. Their inner references are counted once.
@@ -157,6 +194,9 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                 result.operations.append(Operation(kind, sources, targets, code, start, end, usages=usages))
             elif not isinstance(tree, (exp.Set, exp.Use)):
                 result.diagnostics.append(Diagnostic("No statically analyzable table references", start, severity="info"))
+            declarations = declared_schema(tree, start, end, len(result.operations) - 1)
+            if declarations:
+                result.metadata.setdefault("declared_schemas", []).extend(declarations)
         except (ParseError, TokenError, OptimizeError, ValueError, RecursionError) as exc:
             # SQL errors may quote imported secrets; store only the type and source location.
             log.info("sql_parse_failed", extra={"line": start, "error_type": type(exc).__name__})

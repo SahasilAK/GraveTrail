@@ -13,8 +13,9 @@ from dataforge.models import AssetRef, Diagnostic, ParseResult, canonical, stabl
 from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
+from dataforge.schemas import collect_schemas
 
-PARSER_VERSION = "3"
+PARSER_VERSION = "4"
 log = logging.getLogger(__name__)
 
 
@@ -32,9 +33,8 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
     """
     start = time.perf_counter()
     run_id = uuid.uuid4().hex
-    config = ParsingSettings.model_validate({k: store.setting(workspace, k, default) for k, default in [
-        ("dialect", ""), ("dialect_by_folder", {}), ("library_mappings", {}), ("macros", {}),
-        ("case_sensitive", False)]}).model_dump()
+    config = ParsingSettings.model_validate({k: store.setting(workspace, k, default)
+        for k, default in ParsingSettings().model_dump().items()}).model_dump()
     store.execute("INSERT INTO analysis_runs(run_id,workspace_id,status,configuration) VALUES (?,?,?,?)",
                   [run_id, workspace, "running", json.dumps(config)])
     analyzed = cached = 0
@@ -137,6 +137,7 @@ def _materialize(store, workspace, run_id, results, config):
             registry[aid][5] |= temporary
         return aid, changed
 
+    schemas = collect_schemas(results, workspace, norm, resolve)
     rows = {"assets": [], "statements": [], "operations": [], "operation_assets": [], "edges": [],
             "column_usages": [], "diagnostics": [], "asset_aliases": []}
     statuses = []
@@ -164,14 +165,23 @@ def _materialize(store, workspace, run_id, results, config):
                                           "inferred" if inferred else "verified", run_id])
             for j, u in enumerate(op.usages):
                 aid, inferred = resolve(AssetRef(u.table), metadata, parsed)
-                rows["column_usages"].append([stable_id(oid, str(j)), workspace, aid, u.column, u.context,
-                    u.alias, u.expression, "inferred" if inferred else u.status, sid, fid, oid])
+                schema = schemas.get(aid, {})
+                expanded = (u.column == "*" and u.wildcard_safe and config["expand_wildcards"]
+                            and schema.get("schema_status") == "declared")
+                columns = [c["name"] for c in schema["columns"]] if expanded else [u.column]
+                for column in columns:
+                    rows["column_usages"].append([stable_id(oid, str(j), column), workspace, aid, column,
+                        u.context + " (schema expansion)" if expanded else u.context, u.alias, u.expression,
+                        "inferred" if inferred or expanded else u.status, sid, fid, oid])
         for i, d in enumerate(parsed.diagnostics):
             rows["diagnostics"].append([stable_id(fid, str(i)), workspace, fid, d.line, d.severity, d.message, d.symbol])
         errors = any(d.severity == "error" for d in parsed.diagnostics)
         status = "failed" if errors and not parsed.operations and not parsed.assets else (
             "partial" if any(d.severity != "info" for d in parsed.diagnostics) else "success")
         statuses.append([status, json.dumps(parsed.metadata), "\n".join(d.message for d in parsed.diagnostics), fid, metadata["content_hash"]])
+    for aid, schema in schemas.items():
+        if aid in registry:
+            registry[aid][6] = json.dumps(schema)
     rows["assets"] = list(registry.values())
     rows["asset_aliases"] = list(aliases)
     for table, values in rows.items():
@@ -186,11 +196,16 @@ def _materialize(store, workspace, run_id, results, config):
 
 
 def column_report(store, workspace: str, asset_id: str) -> list[dict]:
-    return store.rows("""SELECT u.*,a.name AS source_table,f.file_name,f.relative_path,s.start_line,s.end_line,s.code,s.content_hash AS source_hash,
+    rows = store.rows("""SELECT u.*,a.name AS source_table,a.metadata AS schema_metadata,f.file_name,f.relative_path,s.start_line,s.end_line,s.code,s.content_hash AS source_hash,
         o.kind AS operation_type FROM column_usages u JOIN assets a ON u.asset_id=a.asset_id
         JOIN source_files f ON u.file_id=f.file_id JOIN statements s ON u.statement_id=s.statement_id
         JOIN operations o ON u.operation_id=o.operation_id WHERE u.workspace_id=? AND u.asset_id=?
         ORDER BY u.column_name,f.relative_path,s.start_line""", [workspace, asset_id])
+    for row in rows:
+        metadata = json.loads(row.pop("schema_metadata"))
+        row["schema_source"] = "; ".join(f"{e['relative_path']}:{e['start_line']}–{e['end_line']}"
+            for e in metadata.get("schema_evidence", [])) if "(schema expansion)" in row["context"] else ""
+    return rows
 
 
 def compare_runs(first: dict, second: dict) -> dict:

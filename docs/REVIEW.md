@@ -17,3 +17,19 @@ The author added regression tests, reproduced each material finding, and fixed t
 Validation after fixes and final regression expansion: 62 automated tests pass, Ruff clean. Injected post-write failure proves
 DuckDB materialization rollback. No live provider test was judged without endpoint/credentials.
 Packaging/docs/performance were still in progress during review and are verified separately.
+
+## Continuation review — 2026-10-15
+
+A fresh read-only reviewer checked gateway JSON, workspace configuration, lazy trees/path
+exports and the new schema processing. Three material findings were independently reproduced:
+
+- Unqualified ALTER declarations used a different identity from qualified lineage assets.
+  Reconciliation now uses the same resolver; ambiguous DDL invalidates possible candidates.
+- Snowflake SWAP invalidated only its first operand. SWAP/RENAME now invalidates both.
+- Deep JSON could raise RecursionError outside quarantine. Both model content and HTTP
+  envelopes now normalize decoding recursion failures into handled errors.
+
+Failing regressions preceded fixes. The complete suite then passed 100 tests with Ruff clean.
+Tests include unique/ambiguous unqualified changes, SWAP/RENAME, deep HTTP JSON and persisted
+quarantine records. Live automatic model routes still occasionally return invalid output;
+that is rejected and is not reported as a fully green live integration.

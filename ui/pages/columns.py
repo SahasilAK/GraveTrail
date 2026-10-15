@@ -1,3 +1,5 @@
+import json
+
 import streamlit as st
 
 from dataforge.services import column_report
@@ -12,14 +14,25 @@ if asset:
     needle = st.text_input("Filter columns", placeholder="Column name")
     rows = [r for r in rows if needle.casefold() in r["column_name"].casefold()]
     with st.container(horizontal=True):
-        st.metric("Unique explicit columns", len({r["column_name"] for r in rows if r["column_name"] != "*"}), border=True)
+        st.metric("Known direct columns", len({r["column_name"] for r in rows if r["column_name"] != "*"}), border=True)
         st.metric("Direct references", len(rows), border=True)
         st.metric("Referencing files", len({r["file_id"] for r in rows}), border=True)
     if any(r["column_name"] == "*" for r in rows):
         st.warning("Wildcard coverage is unknown. No columns are invented without a trustworthy schema.")
+    metadata = json.loads(graph.nodes[asset].get("metadata", "{}"))
+    if metadata.get("schema_status") == "declared":
+        st.caption("A consistent imported SQL declaration supplies the schema. Wildcard expansions are labeled inferred; they do not verify the live database schema.")
+        panel = st.expander("Declared schema and evidence", on_change="rerun", key="column_schema_panel")
+        if panel.open:
+            with panel:
+                st.dataframe(metadata["columns"], hide_index=True)
+                refs = metadata["schema_evidence"]
+                ids = [e["statement_id"] for e in refs]
+                evidence = store.rows("SELECT s.*,f.relative_path,s.content_hash AS source_hash,'SCHEMA' AS kind FROM statements s JOIN source_files f USING(file_id) WHERE s.workspace_id=? AND s.statement_id IN (" + ",".join("?" for _ in ids) + ")", [w, *ids])
+                source_viewer(store, [e["file_id"] for e in evidence], "schema_source", evidence)
     if rows:
         group = st.segmented_control("Group by", ["All references", "Source file", "Usage type"], default="All references")
-        display = [{k: r[k] for k in ["source_table", "column_name", "context", "alias", "relative_path", "start_line", "status", "expression"]} for r in rows]
+        display = [{k: r[k] for k in ["source_table", "column_name", "context", "alias", "relative_path", "start_line", "status", "expression", "schema_source"]} for r in rows]
         if group == "All references":
             st.dataframe(display, hide_index=True)
         else:

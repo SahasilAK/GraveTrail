@@ -28,3 +28,8 @@
 - ADR 014: Workspace configuration transfers use an explicit typed allowlist, never opaque
   settings dictionaries. Validate before transactional creation; support legacy v1 safely.
   Configuration transfer is separate from source/history backup. Name edits preserve IDs.
+- ADR 015: Expand only plain direct SQL wildcards from mutually consistent explicit typed DDL.
+  Reconcile using the lineage identity resolver on every materialization, not in file-only parse
+  caches, so schema refresh invalidates derived coverage even when query ASTs are reused.
+  Label expansions inferred and retain query/declaration provenance. Unknown/schema-changing
+  inputs disable expansion; ambiguous unqualified changes invalidate possible candidates.

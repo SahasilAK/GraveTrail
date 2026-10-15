@@ -13,6 +13,7 @@ class ParsingSettings(BaseModel):
     library_mappings: dict[str, str] = Field(default_factory=dict)
     macros: dict[str, str] = Field(default_factory=dict)
     case_sensitive: bool = False
+    expand_wildcards: bool = True
 
     @field_validator("dialect")
     @classmethod

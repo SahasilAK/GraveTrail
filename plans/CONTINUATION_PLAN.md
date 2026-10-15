@@ -29,6 +29,9 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
    downloaded five-step JSON checked for ordered steps, source hashes and statement IDs.
 4. **Schema-aware direct column coverage.** Reuse trustworthy schemas; preserve unknown
    wildcard/ambiguous diagnostics. Do not treat transitive usage as direct usage.
+   Implemented typed SQL DDL reconciliation, inferred plain wildcard expansion, dual query/DDL
+   provenance and a parsing switch. 100 tests/Ruff pass after review fixes; real column/schema/
+   dictionary browser checks passed. Parser cache version4.
 
 ## Remaining backlog beyond these slices
 

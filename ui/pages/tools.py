@@ -36,7 +36,8 @@ elif mode == "Data dictionary":
         metadata = json.loads(a["metadata"])
         columns = metadata.get("columns", [])
         if columns:
-            rows.extend({"asset": a["name"], "column": c["name"], "type": c["type"], "provenance": "CSV header / sampled type"} for c in columns)
+            provenance = "SQL DDL declaration" if metadata.get("schema_status") == "declared" else "CSV header / sampled type"
+            rows.extend({"asset": a["name"], "column": c["name"], "type": c["type"], "provenance": provenance} for c in columns)
         else:
             usages = store.rows("SELECT DISTINCT column_name FROM column_usages WHERE workspace_id=? AND asset_id=?", [w, a["asset_id"]])
             rows.extend({"asset": a["name"], "column": u["column_name"], "type": "unknown", "provenance": "direct code reference; incomplete schema"} for u in usages)

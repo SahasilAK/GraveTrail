@@ -79,6 +79,40 @@ def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path
     assert get_store(str(tmp_path)).workspaces()[0]["name"] == "Renamed workspace"
 
 
+def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp_path, monkeypatch):
+    from dataforge.ingestion import Importer
+    from dataforge.services import analyze
+    from dataforge.store import Store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    store = Store(tmp_path)
+    w = store.create_workspace("Schema UI")
+    Importer(store, w).files([("schema.sql", b"CREATE TABLE raw.a (id INT, name TEXT);"),
+        ("query.sql", b"SELECT a.* FROM raw.a a;")], {".sql"})
+    analyze(store, w)
+    store.close()
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    app.switch_page("ui/pages/columns.py").run()
+    app.text_input(key="asset_search_columns").set_value("raw.a").run()
+    choice = app.selectbox(key="asset_choice_columns")
+    choice.select(choice.options[0]).run()
+    assert not app.exception
+    assert app.metric[0].value == "2"
+    usages = app.dataframe[0].value
+    assert set(usages["column_name"]) == {"id", "name"}
+    assert set(usages["status"]) == {"inferred"}
+    assert all("schema.sql" in s for s in usages["schema_source"])
+    app.session_state["column_schema_panel"] = True
+    app.run()
+    assert not app.exception
+    assert "schema.sql" in app.selectbox(key="schema_source_file").options
+    app.switch_page("ui/pages/tools.py").run()
+    app.segmented_control[0].set_value("Data dictionary").run()
+    next(f for f in app.text_input if f.label == "Filter dictionary").set_value("raw.a").run()
+    assert not app.exception
+    assert set(app.dataframe[0].value["provenance"]) == {"SQL DDL declaration"}
+
+
 @pytest.fixture(autouse=True)
 def clear_resources():
     yield

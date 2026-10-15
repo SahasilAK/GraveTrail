@@ -41,6 +41,7 @@ class Usage:
     alias: str = ""
     expression: str = ""
     status: str = "verified"
+    wildcard_safe: bool = False
 
 
 @dataclass

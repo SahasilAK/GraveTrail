@@ -14,7 +14,10 @@ Only reachable CTE scopes contribute source assets/direct columns; unused CTEs a
 CTEs and subqueries do not become persistent tables. Inner base-table column uses are counted;
 outer CTE/derived-column uses are not counted again as transitive base references.
 Qualified aliases bind within scopes, including supported correlated parents. Ambiguous
-unqualified references are diagnosed. Wildcards are unknown instead of fabricated names.
+unqualified references are diagnosed. Plain wildcards expand only from consistent imported
+typed SQL DDL declarations when enabled in Parsing and lineage settings. Expanded references
+are labeled inferred and retain their query evidence and schema declaration provenance.
+Unknown or modified wildcards remain unresolved instead of fabricating names.
 
 Display names preserve spelling. Dotted quoted components retain their boundaries. Lookup
 defaults to case-insensitive normalization; configure case sensitivity for your environment.
@@ -24,7 +27,17 @@ Statements retain the original snippet and original one-based line range. Semico
 honors comments, quoted strings, quoted identifiers and dollar strings. Procedural blocks with
 internal statement syntax may remain unsupported rather than producing misleading evidence.
 
+Explicit typed CREATE TABLE declarations are reconciled workspace-wide through the same asset
+identity resolver as lineage, without assuming script execution order. Identical declarations
+retain each source reference. Conflicting declarations, duplicate normalized column names,
+ALTER/DROP/replacement declarations and incomplete schemas disable expansion. Ambiguous
+unqualified DDL invalidates all possible declared candidates. SWAP/RENAME invalidates both
+operands. LIKE, inheritance, unsupported table properties and wildcard modifiers
+(EXCEPT/REPLACE/RENAME) are conservative unknowns. Schemas are not propagated through CTAS,
+CTEs or CSV filename guesses. CSV headers describe the CSV asset alone. The data dictionary
+distinguishes DDL-declared types from sampled CSV types and incomplete direct references.
+
 Current exclusions: database-catalog/schema discovery, full stored procedures, dynamic templating,
-schema-driven wildcard expansion, arbitrary table-valued functions and runtime temporary-session
+general schema evolution, arbitrary table-valued functions and runtime temporary-session
 isolation. WORK/temporary identity is workspace scoped. Repeated writes expose possible static
 dependencies; static code alone does not determine which write executed last.

@@ -39,6 +39,11 @@ Step numbers are logical dependency order, not runtime execution order.
 **Columns:** Select a source asset, filter names and group by file or usage context. This report
 contains direct references only. Wildcards show unknown coverage when no trusted schema exists.
 Ambiguous unqualified columns are diagnostics rather than assigned arbitrarily.
+For a consistent imported SQL CREATE TABLE schema, plain wildcards expand to known columns
+as inferred references. The declaration viewer shows the original DDL and its analyzed file
+version alongside the query evidence. Reports include the schema source location. Schema
+changes/conflicts and wildcard modifiers retain uncertainty. Disable expansion in Parsing and
+lineage settings if desired. No database connection or CSV-to-table name guess is involved.
 
 **Export:** Download lineage/report CSV/JSON, an offline interactive HTML graph and relevant
 original source ZIP. Exports contain selected source evidence, so share them according to your

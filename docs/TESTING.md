@@ -20,3 +20,15 @@ live account permissions/model availability. Do not call them a live integration
 The CI matrix is configured for Windows/Linux and Python 3.11/3.12. Only the current local
 environment results are claimed until remote CI actually executes. Docker is optional and
 unverified unless a container build/run is explicitly recorded in implementation status.
+
+Continuation checks include safe fenced JSON and malformed/deep provider envelopes, transactional
+v1/v2 configuration round trips, workspace editing, closed-tree rendering/expand/collapse,
+bounded ordered path exports, schema conflict/change/refresh handling and declaration evidence.
+AppTest exercises schema-expanded columns, DDL source viewing and dictionary provenance.
+Actual browser tests also downloaded and checked five-step path JSON/CSV with original hashes.
+
+`scripts/verify_llm.py` is an explicit live test using synthetic SQL/SAS only. OmniRoute model
+discovery, UI connection and separate grounded SQL/SAS responses have passed; automatic model
+routes have also produced quarantined invalid output, so a full live check is not yet claimed
+green. A listed fixed model was not callable. See plans/LLM_LIVE_RESULTS.json and the
+implementation status rather than treating model-list membership as availability.

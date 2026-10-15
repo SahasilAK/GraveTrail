@@ -74,7 +74,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 ## Continuation
 Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
 uv run ruff check .; uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json.
-Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 3; increment
+Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 4; increment
 for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
 to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
 Keep future work in tested Conventional Commits, as requested. No push was requested.
@@ -111,3 +111,21 @@ optional schema discovery, history/blob lifecycle and auth if expanding beyond l
   Downloaded JSON asserted five ordered steps, exact original hashes and statement references.
 - Next: schema-backed direct-column expansion and data dictionary schema provenance. Unknown
   or conflicting schemas must keep wildcard uncertainty. Portable history/cleanup remains later.
+- Schema continuation implemented: consistent explicit typed SQL DDL supplies inferred plain
+  wildcard columns, with original query plus declaration evidence and a parsing toggle.
+  Conflicting/schema-changing declarations, LIKE/inheritance/properties/modifiers and unknown
+  schemas retain wildcard uncertainty. Schema changes re-materialize cached query results;
+  direct references remain separate from transitive usage. Dictionary labels SQL DDL types.
+  Cache version4. 100 tests pass; Ruff clean after independent review fixes. Actual browser
+  showed three inferred columns and original DDL evidence; declaration types/provenance visible
+  in dictionary. Screenshot: `.dataforge/verification/schema-columns.png`.
+- Independent review reproduced unqualified schema invalidation, second-operand SWAP and deep
+  provider JSON quarantine defects. Regression tests cover each; schema reconciliation now
+  uses the lineage identity resolver, ambiguous changes invalidate possible candidates, SWAP/
+  RENAME invalidates both operands, and JSON nesting failures become controlled errors.
+- Repeated 500-file benchmark with schema processing: import11.8012s, cold1.9592s,
+  warm0.6950s (500 cache hits), focused traversal0.0907ms. Fixture precision/recall/evidence100%.
+  Evidence file: `.dataforge/verification/benchmark-v4.json`; synthetic results only.
+- Additional live routes: fixed `dva/claude-sonnet-4-6` was listed but not callable;
+  `auto/best-coding` connected but produced an invalid SQL response that was quarantined.
+  No further gateway retries or full live-pass claim. Other providers remain unverified live.

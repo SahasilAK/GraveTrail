@@ -14,7 +14,8 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `llm.py` — Profile/Adapter implement protocols/discovery and explicit nonstreaming chat; response_object accepts one enclosing JSON fence only; assist/assist_task enforce privacy/routing, GroundedResponse/validate_response ground claims, merge_claims persists inferred facts.
 - `logging_config.py` — JsonFormatter/configure_logging emit application events with an explicit safe metadata allowlist; no raw source/key fields.
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.
-- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; column_report, compare_runs and retained AI provenance use stored facts. Parser version 3.
+- `schemas.py` — collect_schemas reconciles typed DDL through the lineage identity resolver, retaining immutable declaration evidence; conflicting/incomplete/schema-changing declarations disable expansion without guessing execution order.
+- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; schema-backed plain wildcard expansion is inferred and re-materialized on schema refresh; column_report, compare_runs and retained AI provenance use stored facts. Parser version 4.
 - `store.py` — Store owns locked DuckDB access, migrations v1/v2, validated workspace creation/editing, settings, source versions, immutable snapshots and transactional boundaries.
 
 ## Invariants
