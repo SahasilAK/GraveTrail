@@ -14,10 +14,14 @@ Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23
 - SQL AST operations, CTE/subquery scopes, direct columns, wildcards and parse diagnostics.
 - SAS DATA/procedure rules, static macros, library maps and unresolved dynamic warnings.
 - CSV streaming metadata; never evaluates data values as instructions.
-- Validation: 23 tests pass across store, ingestion, SQL and SAS/CSV.
+- Transactional analysis runs and snapshots, hash-based incremental cache, conservative
+  cross-file resolution, explicit operation memberships and stored direct column usages.
+- Cycle-safe graph traversal, evidence-preserving temporary contraction, logical ordering.
+- Validation: 27 tests pass, including all required deterministic fixture scenarios; the
+  invalid-LLM scenario awaits the provider slice. Restart and changed-source replacement tested.
 
 ## In progress
-- Transactional analysis integration, incremental cache, graph and application shell.
+- Application shell, Builder and Explorer UI plus offline graph exports.
 
 ## Pending
 - Graph, columns persistence, provider integration, exports, UI verification,
@@ -26,6 +30,6 @@ Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23
 ## Decisions / handoff
 See MASTER_PLAN and ARCHITECTURE_DECISIONS. Run `.venv\Scripts\python.exe -m pytest`.
 Local runtime path `.dataforge/`. No LLM credentials detected or needed for core features.
-Next concrete action: implement services and graph against tests/test_workflow.py and
-tests/test_graph.py, then integrate actual UI. Full slices remain pending UI verification.
+Next concrete action: integrate UI against the tested services/graph. Backend slices are tested;
+full end-to-end slice completion remains pending UI verification.
 Commit policy (user steering): commit each feature/group only after its tests pass.

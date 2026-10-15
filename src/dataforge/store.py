@@ -102,7 +102,7 @@ class Store:
         return self.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY name", [workspace])
 
     def edges(self, workspace: str):
-        return self.rows("SELECT e.*,s.start_line,s.end_line,s.code,f.relative_path FROM edges e JOIN statements s USING(statement_id) JOIN source_files f USING(file_id) WHERE e.workspace_id=?", [workspace])
+        return self.rows("SELECT e.*,s.start_line,s.end_line,s.code,f.relative_path FROM edges e JOIN statements s ON e.statement_id=s.statement_id JOIN source_files f ON e.file_id=f.file_id WHERE e.workspace_id=?", [workspace])
 
     def diagnostics(self, workspace: str):
         return self.rows("SELECT d.*,f.relative_path FROM diagnostics d LEFT JOIN source_files f USING(file_id) WHERE d.workspace_id=? ORDER BY relative_path,line", [workspace])
