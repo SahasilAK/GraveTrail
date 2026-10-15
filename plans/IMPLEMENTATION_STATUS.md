@@ -183,3 +183,24 @@ beyond the already implemented master-required metadata transfer. Real-project a
 Docker/remote CI and standalone HTML browser acceptance remain unverified as stated above.
 Do not re-run unreliable automatic gateway routes just to obtain a green result. Use a stable
 configured model when one becomes available. Preserve the user's unrelated `.gitignore` edit.
+
+## Final runtime and packaging handoff — 2026-10-15
+
+- Feature commits this resumption: `3d2aa54` history archive/recovery, `f2f51eb` visualization/
+  source defaults, `4928e76` explicit diagnostic review queue. Earlier continuation commits
+  remain in Git; no functionality was restarted and no push was requested.
+- Normal application is running in a hidden background Python process on loopback
+  `http://127.0.0.1:8501`, using the primary `.dataforge` home. Health endpoint returned 200;
+  actual browser reopened the existing 7-file / 9-asset / 7-dependency workspace with its
+  original analysis history. No verification fixture was imported into the primary home.
+- Before startup/migration, primary application files/blobs were copied while stopped to
+  `.dataforge/verification/primary-backup-20261015T134433Z`; the separate synthetic verification
+  tree was excluded. The port8502 synthetic server was stopped. Verify current listener/process
+  ownership before stopping or replacing a server in a future session.
+- Background startup logs: `.dataforge/verification/app-8501.out.log` and `app-8501.err.log`.
+  Credential values remain environment-only; the process inherited the named user variable.
+- Built wheel contains new domain modules and bundled schemas; sdist contains new UI/tests.
+  Archive contents exclude runtime/virtual-environment data. Installed wheel imports passed
+  with Python -I in the clean environment. 127 tests passed in both environments; Ruff/lock
+  checks clean. Docker CLI probe failed because its engine is unavailable; no container claim.
+- Git is clean apart from the user's preexisting `.gitignore` edit, which remains uncommitted.
