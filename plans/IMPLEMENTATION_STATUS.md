@@ -10,7 +10,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 
 ## Implemented
 - Foundation: Python 3.11+, Streamlit 1.66 navigation/light-dark themes, modular layers,
-  safe structured logs, DuckDB migrations v1/v2, isolated persistent workspaces.
+  safe structured logs, DuckDB migrations v1–v3, isolated persistent workspaces.
 - Secure nested ZIP/browser-folder/allowed-root import, selected extensions, hashes, byte-exact
   originals, complete decoded inventory, encoding/binary/duplicate diagnostics, batch writes,
   path/symlink/size/count/ratio safeguards and import history.
@@ -32,7 +32,8 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
   and folder knowledge maps. Original user .gitignore edits are preserved separately.
 
 ## Verification evidence
-- 62 tests pass in both normal and separately created clean Python 3.11 environments; Ruff clean.
+- Latest continuation: 110 tests pass in the normal environment; Ruff and lock checks clean.
+  The initial 62-test release also passed in a separately created clean Python 3.11 environment.
 - uv lock --check passes; wheel installed without editable source and imported with Python -I;
   bundled prompt/schema assets verified. Sdist/wheel exclude local runtime data.
 - Clean-environment Streamlit server launched at http://127.0.0.1:8501; health endpoint 200.
@@ -68,8 +69,9 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 - Unknown wildcards do not invent columns. Resource budgets bound large imports and graphs.
   Analysis is synchronous with cooperative between-file cancellation; parsers are not preempted.
 - Local single-user/single-process use; no public authentication or shared multiprocess DuckDB.
-- Imports are additive. Blobs and non-AI run history are retained; lifecycle controls remain an
-  operational follow-up for long-lived high-churn workspaces.
+- Imports are additive. Unreferenced analysis/import history can be archived and restored in
+  bounded manual batches. Recovery copies and source blobs remain retained; source GC,
+  permanent purge and complete portable workspace backup remain follow-ups.
 
 ## Continuation
 Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
@@ -78,8 +80,8 @@ Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is
 for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
 to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
 Keep future work in tested Conventional Commits, as requested. No push was requested.
-Follow-up priorities: live endpoints, target-vendor fixtures, explicit job/session identity,
-optional schema discovery, history/blob lifecycle and auth if expanding beyond local use.
+Follow-up priorities: target-vendor fixtures, explicit job/session identity, richer schema
+discovery, source/blob lifecycle, portable backups and auth if expanding beyond local use.
 
 ## Continuation execution — 2026-10-15
 
@@ -129,3 +131,14 @@ optional schema discovery, history/blob lifecycle and auth if expanding beyond l
 - Additional live routes: fixed `dva/claude-sonnet-4-6` was listed but not callable;
   `auto/best-coding` connected but produced an invalid SQL response that was quarantined.
   No further gateway retries or full live-pass claim. Other providers remain unverified live.
+- Recoverable history slice completed: eligibility preview, bounded archive/restore controls,
+  active-reference/latest-completed protection and idle-analysis guard. Migration3 adds a
+  compressed recovery journal committed in the same transaction as metadata removal, plus an
+  extra checksummed local JSON file. Restore is workspace-bound, atomic and idempotent.
+  Independent review found a cross-platform file-publication durability gap; the database
+  journal removes that dependency. Missing-file/restart, migration preservation, size bounds
+  and injected archive/restore failures are tested; no physical power-loss test was performed.
+  110 tests pass; Ruff and lock checks clean. Actual Settings browser archived/restored three
+  analysis records while imports referenced by active inventory stayed protected. Screenshot:
+  `.dataforge/verification/history-recovery.png`. Recovery is retained; no source GC or disk
+  shrink claim. Next: controlled temporary-file cleanup and remaining storage portability.

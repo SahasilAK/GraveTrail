@@ -33,3 +33,8 @@
   caches, so schema refresh invalidates derived coverage even when query ASTs are reused.
   Label expansions inferred and retain query/declaration provenance. Unknown/schema-changing
   inputs disable expansion; ambiguous unqualified changes invalidate possible candidates.
+- ADR 016: History maintenance moves only bounded unreferenced analysis/import metadata.
+  Journal compressed recovery bytes in the same DuckDB transaction as removal; filesystem
+  rename durability is not portable across Windows/POSIX. Keep an extra checksummed JSON file,
+  prefer the database copy for restore and preserve existing IDs. Protect current references
+  and the latest completed analysis. No permanent purge, source GC or automatic retention.

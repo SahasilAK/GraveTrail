@@ -61,3 +61,15 @@ types, SQL dialects and numeric limits and are transactional. Earlier v1 configu
 supported. Profiles, credentials, privacy permissions, sources and analysis history are excluded;
 this is a configuration transfer, not a workspace backup. Deletion requires typing the current
 workspace name.
+
+**History maintenance:** In Settings → Storage and workspaces, open **Archive and restore old
+history**. Choose recent analysis/import counts to retain and a batch limit (up to 100 records
+per type). Preview shows eligible records; the latest completed analysis, active edge/inventory
+references and running analyses are protected, so more than the requested count may remain.
+**Archive eligible history** removes those metadata rows transactionally after preparing local
+recovery, with a compressed database copy committed in the same transaction. Select a recovery
+archive and **Restore selected history** to insert missing records without replacing existing
+history. Restore prefers the database copy and works after restart even if the JSON file is lost.
+Recovery copies remain retained; this reorganizes history and does not reclaim source-file disk
+space or guarantee that DuckDB immediately shrinks. Original blobs, current facts and AI evidence
+are untouched. This is a manual operation, not a scheduled retention policy or a full backup.

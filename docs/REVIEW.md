@@ -33,3 +33,15 @@ Failing regressions preceded fixes. The complete suite then passed 100 tests wit
 Tests include unique/ambiguous unqualified changes, SWAP/RENAME, deep HTTP JSON and persisted
 quarantine records. Live automatic model routes still occasionally return invalid output;
 that is rejected and is not reported as a fully green live integration.
+
+## History maintenance review — 2026-10-15
+
+A separate read-only reviewer identified that file fsync followed by rename alone did not
+guarantee durable directory publication before database removal on all supported platforms.
+Recovery now has a compressed database journal committed atomically with the metadata removal.
+The local JSON copy is additional recovery rather than the sole durability dependency.
+Regression tests remove the published file, restart the Store and restore from the journal.
+Physical power-loss behavior was not exercised. Other tests cover migration preservation,
+workspace isolation, active-reference protection, bounded batches, integrity validation,
+idempotent restore and injected archive/restore transaction failures. Actual Settings browser
+verification archived and restored three analysis records while active imports stayed protected.

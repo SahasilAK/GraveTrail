@@ -13,6 +13,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_ingestion.py` — Behavioral regression tests for ingestion. Run with pytest; temporary runtime data only.
 - `test_llm.py` — Provider protocols, grounding/privacy, fenced JSON rejection boundaries, malformed HTTP envelopes and inferred merge retention. Temporary runtime data only.
 - `test_logging.py` — Behavioral regression tests for logging. Run with pytest; temporary runtime data only.
+- `test_maintenance.py` — History archive/restore bounds, workspace/reference protection, idempotence, tamper rejection, transaction rollback, v3 migration and journal recovery after lost file/restart.
 - `test_sas.py` — Behavioral regression tests for sas. Run with pytest; temporary runtime data only.
 - `test_schemas.py` — Typed DDL/wildcard eligibility, conflicts/changes/inheritance, cache refresh, disabled extraction, identical declarations, unqualified invalidations, SWAP/RENAME and no CSV name guessing.
 - `test_sql.py` — Behavioral regression tests for sql. Run with pytest; temporary runtime data only.

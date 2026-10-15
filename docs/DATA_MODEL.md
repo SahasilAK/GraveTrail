@@ -1,7 +1,8 @@
 # Data model
 
 DuckDB lives at `DATAFORGE_HOME/dataforge.duckdb`. Schema migrations are additive and execute
-inside a transaction. Version 1 creates tables; version 2 adds statement source content hashes.
+inside a transaction. Version 1 creates tables; version 2 adds statement source content hashes;
+version 3 adds the compressed history recovery journal.
 Do not edit schema destructively or delete runtime data to resolve a migration error.
 
 ```mermaid
@@ -25,6 +26,7 @@ erDiagram
 | source_files | Stable path IDs, full decoded text, byte hash, blob reference, encoding, status, metadata |
 | parse_cache | Parser version + hash + path + config results; safely disposable |
 | analysis_runs | Status, duration, counts, config and comparison snapshots |
+| history_archives | Workspace-bound compressed recovery bodies, original byte size and creation time; committed atomically with history removal |
 | assets, asset_aliases | Stable canonical identities, display names, kind, temporary flags and resolution notes |
 | statements | Exact statement snippet, original line range, file ID and source version hash |
 | operations, operation_assets | Explicit transformation nodes with many-to-many input/output memberships |
@@ -38,3 +40,9 @@ IDs derive from workspace/path, normalized asset identity or operation identity.
 filter by workspace. Original blobs may be shared by hash; workspace deletion leaves blobs
 intact to avoid deleting content referenced elsewhere. There are no destructive FK cascades;
 the materialization service owns cross-table transaction integrity.
+
+History maintenance archives only unreferenced analysis/import records, preserving the latest
+completed analysis, current edge/inventory references and running analyses. Recovery JSON has
+a canonical SHA-256 integrity check; a compressed copy is journaled in the same DuckDB transaction
+as removal. Local JSON files provide an additional recovery copy. Restore inserts missing IDs
+transactionally without replacing current facts or existing history. Both copies are retained.

@@ -54,6 +54,11 @@ class Store:
                 self.db.execute("ALTER TABLE statements ADD COLUMN IF NOT EXISTS content_hash VARCHAR DEFAULT ''")
                 self.db.execute("UPDATE statements SET content_hash=f.content_hash FROM source_files f WHERE statements.file_id=f.file_id AND statements.content_hash=''")
                 self.db.execute("INSERT INTO schema_migrations(version) VALUES (2)")
+            if (3,) not in versions:
+                self.db.execute("""CREATE TABLE history_archives(
+                    archive_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, recovery_body BLOB,
+                    archive_bytes BIGINT, created_at TIMESTAMP DEFAULT current_timestamp)""")
+                self.db.execute("INSERT INTO schema_migrations(version) VALUES (3)")
 
     @contextmanager
     def transaction(self):
@@ -151,7 +156,7 @@ class Store:
         # Immutable blobs may be shared. Garbage collection is a separate, explicit operation.
         tables = ["settings", "ingestion_runs", "source_files", "analysis_runs", "assets", "asset_aliases",
                   "statements", "operations", "operation_assets", "edges", "column_usages", "diagnostics",
-                  "llm_profiles", "llm_records", "workspaces"]
+                  "llm_profiles", "llm_records", "history_archives", "workspaces"]
         with self.transaction():
             for table in tables:
                 self.execute(f"DELETE FROM {table} WHERE workspace_id=?", [workspace])

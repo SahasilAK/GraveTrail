@@ -24,6 +24,8 @@ flowchart LR
 `parsers/` returns facts and diagnostics without DB/UI access. `services.py` snapshots input,
 uses hash/config/path caches, parses with 1–8 workers, and atomically materializes facts.
 `store.py` serializes connection access and applies versioned transactional schema migrations.
+`maintenance.py` previews bounded unreferenced history, archives with a transactional recovery
+journal plus local JSON copy, and restores missing records without changing materialized facts.
 `graph.py` derives traversal, SCC cycles, path views and temporary contraction.
 `llm.py` implements HTTP adapters, privacy, strict grounding, quarantine and inferred merges.
 `exports.py` serves UI components and offline exports from the same renderer.

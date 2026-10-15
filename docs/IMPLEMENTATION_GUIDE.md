@@ -16,6 +16,13 @@ Add new migrations in `Store.__init__`, preserving existing rows and original bl
 transaction and a new migration version. Stop the app and back up the entire data home before
 deployment updates. Restore that backup with the prior code to roll back an incompatible migration.
 
+Migration 3 adds `history_archives` without rewriting existing facts. History archiving journals
+the compressed recovery body in the same transaction as metadata removal, so recovery remains
+available if the filesystem publication is lost. Do not drop the journal when archived records
+are absent. Before downgrading, restore archived history with the current version, or restore the
+complete pre-upgrade data-home backup with its matching code. Recovery files alone are not a
+complete workspace backup. Automated tests simulate filename loss and restart, not physical power loss.
+
 Do not put imported code, API keys, rendered trees or complete inventories in session state.
 Use file IDs and lazy source retrieval. New graph code must preserve evidence and cap work on
 cycles/dense graphs. New provider code must honor privacy before any network request.

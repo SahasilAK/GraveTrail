@@ -33,9 +33,21 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
    provenance and a parsing switch. 100 tests/Ruff pass after review fixes; real column/schema/
    dictionary browser checks passed. Parser cache version4.
 
+5. **Recoverable history maintenance.** Add a bounded preview/archive/restore workflow in
+   Storage and workspaces for old analysis/import records. Protect the latest completed run,
+   records referenced by active edges/inventory, and running analyses. Archive before any
+   transactional removal; restore without overwriting newer records. Keep originals, current
+   lineage and AI provenance untouched. Use fixed table allowlists, workspace/path checks,
+   archive integrity/size limits and an idle-analysis guard. Test rollback/isolation/restart
+   and exercise the actual UI before committing. No permanent deletion or blob GC in this slice.
+   Implemented with migration3 transactional compressed recovery journal plus JSON copy;
+   missing-file restart recovery and failure rollback tested. 110 tests/Ruff/lock checks pass.
+   Actual Settings browser archived and restored three records; active imports protected.
+
 ## Remaining backlog beyond these slices
 
-- Safe history/blob cleanup; portable source/history workspace bundles.
+- Controlled temporary-file cleanup, safe source/blob lifecycle and portable source/history
+  workspace bundles. Retained history archives are recoverable; there is no permanent purge.
 - Explicit job/session identity and broader target-vendor SQL/SAS fixtures.
 - Integrated opt-in unresolved-assistance queues, task-specific result schemas,
   LLM concurrency/chunking controls, remaining parsing/visualization settings.

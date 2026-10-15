@@ -21,6 +21,14 @@ Statements pin source hashes. Analysis is transactional and rollback-tested. Sou
 retained across reimports and workspace deletion because they may support evidence elsewhere.
 Back up the entire data home while the application is stopped; restore together with compatible code.
 
+History recovery is limited to fixed analysis/import columns, at most 100 records per type and
+25 MiB per archive. Workspace and archive identities are checked; resolved paths stay under the
+data home, archive symlinks are rejected, and checksum/format/workspace validation precedes
+transactional restore. Recovery checks detect accidental modification, not a malicious writer
+who controls the database or can recompute hashes. Recovery bodies can contain configuration,
+snapshots and diagnostics; protect them with the rest of the data home. Maintenance serializes
+with analysis and preserves referenced records. No source blob garbage collection is performed.
+
 HTML exports encode embedded JSON and render names/code through textContent. HTML tables escape
 content. Source text uses Streamlit code widgets. CSV exports escape formula-leading values.
 The graph has no CDN dependency and sends no telemetry.

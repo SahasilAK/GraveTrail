@@ -113,6 +113,36 @@ def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp
     assert set(app.dataframe[0].value["provenance"]) == {"SQL DDL declaration"}
 
 
+def test_history_archive_and_restore_through_settings(tmp_path, monkeypatch):
+    from dataforge.ingestion import Importer
+    from dataforge.services import analyze
+    from dataforge.store import Store
+    from ui.common import get_store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    store = Store(tmp_path)
+    w = store.create_workspace("History UI")
+    for i in range(3):
+        Importer(store, w).files([("q.sql", f"CREATE TABLE mart.x AS SELECT id FROM raw.a WHERE id>{i};".encode())], {".sql"})
+        analyze(store, w)
+    store.close()
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    app.switch_page("ui/pages/settings.py").run()
+    app.segmented_control[0].set_value("Storage and workspaces").run()
+    app.session_state["history_maintenance"] = True
+    app.run()
+    assert not app.exception
+    next(n for n in app.number_input if n.label == "Keep recent analysis records").set_value(1)
+    next(n for n in app.number_input if n.label == "Keep recent import records").set_value(1)
+    app.run()
+    next(b for b in app.button if b.label == "Archive eligible history").click().run()
+    assert not app.exception
+    assert len(get_store(str(tmp_path)).runs(w)) == 1
+    next(b for b in app.button if b.label == "Restore selected history").click().run()
+    assert not app.exception
+    assert len(get_store(str(tmp_path)).runs(w)) == 3
+
+
 @pytest.fixture(autouse=True)
 def clear_resources():
     yield
