@@ -1,0 +1,124 @@
+"""Versioned DuckDB persistence with serialized, transactional access."""
+from __future__ import annotations
+
+import json
+import threading
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+
+import duckdb
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT current_timestamp);
+CREATE TABLE IF NOT EXISTS workspaces(workspace_id VARCHAR PRIMARY KEY, name VARCHAR, description VARCHAR, created_at TIMESTAMP DEFAULT current_timestamp);
+CREATE TABLE IF NOT EXISTS settings(workspace_id VARCHAR, key VARCHAR, value VARCHAR, PRIMARY KEY(workspace_id, key));
+CREATE TABLE IF NOT EXISTS ingestion_runs(ingestion_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, source VARCHAR, report VARCHAR, created_at TIMESTAMP DEFAULT current_timestamp);
+CREATE TABLE IF NOT EXISTS source_files(file_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, ingestion_id VARCHAR, file_name VARCHAR, extension VARCHAR, relative_path VARCHAR, source_path VARCHAR, storage_path VARCHAR, raw_content VARCHAR, content_hash VARCHAR, file_size BIGINT, encoding VARCHAR, line_count INTEGER, parsing_status VARCHAR, error_details VARCHAR, metadata VARCHAR, imported_at TIMESTAMP DEFAULT current_timestamp);
+CREATE INDEX IF NOT EXISTS files_workspace ON source_files(workspace_id);
+CREATE TABLE IF NOT EXISTS parse_cache(cache_key VARCHAR PRIMARY KEY, result VARCHAR);
+CREATE TABLE IF NOT EXISTS analysis_runs(run_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, status VARCHAR, analyzed INTEGER, cached INTEGER, duration DOUBLE, configuration VARCHAR, snapshot VARCHAR, error VARCHAR, created_at TIMESTAMP DEFAULT current_timestamp);
+CREATE TABLE IF NOT EXISTS assets(asset_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, name VARCHAR, canonical_name VARCHAR, kind VARCHAR, temporary BOOLEAN, metadata VARCHAR);
+CREATE INDEX IF NOT EXISTS assets_workspace ON assets(workspace_id);
+CREATE TABLE IF NOT EXISTS asset_aliases(workspace_id VARCHAR, alias VARCHAR, asset_id VARCHAR, method VARCHAR);
+CREATE TABLE IF NOT EXISTS statements(statement_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, file_id VARCHAR, start_line INTEGER, end_line INTEGER, code VARCHAR);
+CREATE TABLE IF NOT EXISTS operations(operation_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, statement_id VARCHAR, kind VARCHAR, method VARCHAR, confidence DOUBLE, warnings VARCHAR);
+CREATE TABLE IF NOT EXISTS operation_assets(workspace_id VARCHAR, operation_id VARCHAR, asset_id VARCHAR, role VARCHAR);
+CREATE TABLE IF NOT EXISTS edges(edge_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, source_id VARCHAR, target_id VARCHAR, operation_id VARCHAR, statement_id VARCHAR, file_id VARCHAR, kind VARCHAR, method VARCHAR, confidence DOUBLE, status VARCHAR, run_id VARCHAR);
+CREATE INDEX IF NOT EXISTS edges_workspace ON edges(workspace_id);
+CREATE TABLE IF NOT EXISTS column_usages(usage_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, asset_id VARCHAR, column_name VARCHAR, context VARCHAR, alias VARCHAR, expression VARCHAR, status VARCHAR, statement_id VARCHAR, file_id VARCHAR, operation_id VARCHAR);
+CREATE TABLE IF NOT EXISTS diagnostics(diagnostic_id VARCHAR, workspace_id VARCHAR, file_id VARCHAR, line INTEGER, severity VARCHAR, message VARCHAR, symbol VARCHAR);
+CREATE TABLE IF NOT EXISTS llm_profiles(profile_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, name VARCHAR, config VARCHAR);
+CREATE TABLE IF NOT EXISTS llm_records(record_id VARCHAR PRIMARY KEY, workspace_id VARCHAR, profile_id VARCHAR, task VARCHAR, file_id VARCHAR, start_line INTEGER, prompt_hash VARCHAR, provider VARCHAR, model VARCHAR, outcome VARCHAR, duration DOUBLE, usage VARCHAR, details VARCHAR, created_at TIMESTAMP DEFAULT current_timestamp);
+CREATE TABLE IF NOT EXISTS prompt_versions(prompt_hash VARCHAR PRIMARY KEY, task VARCHAR, version VARCHAR);
+"""
+
+
+class Store:
+    def __init__(self, home: str | Path):
+        self.home = Path(home).resolve()
+        self.home.mkdir(parents=True, exist_ok=True)
+        (self.home / "blobs").mkdir(exist_ok=True)
+        self.lock = threading.RLock()
+        self.db = duckdb.connect(str(self.home / "dataforge.duckdb"))
+        with self.transaction():
+            self.db.execute(SCHEMA)
+            self.db.execute("INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING")
+
+    @contextmanager
+    def transaction(self):
+        with self.lock:
+            self.db.execute("BEGIN TRANSACTION")
+            try:
+                yield self
+                self.db.execute("COMMIT")
+            except BaseException:
+                self.db.execute("ROLLBACK")
+                raise
+
+    def execute(self, sql: str, params=None):
+        with self.lock:
+            self.db.execute(sql, params or [])
+
+    def rows(self, sql: str, params=None) -> list[dict]:
+        with self.lock:
+            cursor = self.db.execute(sql, params or [])
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    def create_workspace(self, name: str, description: str = "") -> str:
+        if not name.strip() or len(name) > 200:
+            raise ValueError("Workspace name must contain 1–200 characters")
+        wid = uuid.uuid4().hex
+        self.execute("INSERT INTO workspaces(workspace_id,name,description) VALUES (?,?,?)",
+                     [wid, name.strip(), description[:2000]])
+        return wid
+
+    def workspaces(self):
+        return self.rows("SELECT * FROM workspaces ORDER BY created_at")
+
+    def setting(self, workspace: str, key: str, default=None):
+        rows = self.rows("SELECT value FROM settings WHERE workspace_id=? AND key=?", [workspace, key])
+        return json.loads(rows[0]["value"]) if rows else default
+
+    def set_setting(self, workspace: str, key: str, value):
+        self.execute("INSERT INTO settings VALUES (?,?,?) ON CONFLICT(workspace_id,key) DO UPDATE SET value=excluded.value",
+                     [workspace, key, json.dumps(value)])
+
+    def files(self, workspace: str):
+        return self.rows("SELECT * EXCLUDE(raw_content) FROM source_files WHERE workspace_id=? ORDER BY relative_path",
+                         [workspace])
+
+    def file(self, file_id: str):
+        rows = self.rows("SELECT * FROM source_files WHERE file_id=?", [file_id])
+        if not rows:
+            raise ValueError("Source file no longer exists")
+        return rows[0]
+
+    def original(self, file_id: str) -> bytes:
+        return (self.home / "blobs" / self.file(file_id)["content_hash"]).read_bytes()
+
+    def assets(self, workspace: str):
+        return self.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY name", [workspace])
+
+    def edges(self, workspace: str):
+        return self.rows("SELECT e.*,s.start_line,s.end_line,s.code,f.relative_path FROM edges e JOIN statements s USING(statement_id) JOIN source_files f USING(file_id) WHERE e.workspace_id=?", [workspace])
+
+    def diagnostics(self, workspace: str):
+        return self.rows("SELECT d.*,f.relative_path FROM diagnostics d LEFT JOIN source_files f USING(file_id) WHERE d.workspace_id=? ORDER BY relative_path,line", [workspace])
+
+    def runs(self, workspace: str):
+        return self.rows("SELECT * FROM analysis_runs WHERE workspace_id=? ORDER BY created_at DESC", [workspace])
+
+    def delete_workspace(self, workspace: str):
+        # Immutable blobs may be shared. Garbage collection is a separate, explicit operation.
+        tables = ["settings", "ingestion_runs", "source_files", "analysis_runs", "assets", "asset_aliases",
+                  "statements", "operations", "operation_assets", "edges", "column_usages", "diagnostics",
+                  "llm_profiles", "llm_records", "workspaces"]
+        with self.transaction():
+            for table in tables:
+                self.execute(f"DELETE FROM {table} WHERE workspace_id=?", [workspace])
+
+    def close(self):
+        with self.lock:
+            self.db.close()
