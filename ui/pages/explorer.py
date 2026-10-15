@@ -28,21 +28,28 @@ if asset:
         st.warning(f"Graph limited to {limit} assets. Reduce depth or focus another asset.")
     if focused.cycles():
         st.warning("Cyclic dependencies are present in this view. Tree expansion stops at repeated nodes.")
-    result = graph_view(focused, "lineage_graph_" + w, appearance)
+    default_tab = "Downstream dependencies" if appearance.graph_direction == "downstream" else "Upstream dependencies"
+    active_tab = st.session_state.get("lineage_direction_tabs", default_tab)
+    evidence_direction = "downstream" if active_tab == "Downstream dependencies" else "upstream"
+    result = graph_view(focused, "lineage_graph_" + w + "_" + evidence_direction, appearance)
     rows = focused.lineage_rows()
     selection = result.selection
-    evidence = [e for _, _, a in focused.graph.edges(data=True) for e in a["evidence"]]
+    source_scope = active_tab
+    tree_focus = view_graph.focus(asset, evidence_direction, depth, limit)
+    evidence = [e for _, _, a in tree_focus.graph.edges(data=True) for e in a["evidence"]]
     if selection and "edge" in selection:
         edge_list = list(focused.graph.edges(data=True))
         if 0 <= selection["edge"] < len(edge_list):
             evidence = edge_list[selection["edge"]][2]["evidence"]
+            source_scope = "Selected graph relationship"
     elif selection and selection.get("node") in focused.nodes:
         node = selection["node"]
         evidence = [e for s, t, a in focused.graph.edges(data=True) if node in {s, t} for e in a["evidence"]]
+        source_scope = "Selected graph asset"
     left, right = st.columns([1, 1])
     with left:
         upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
-                                      on_change="rerun", key="lineage_direction_tabs")
+                                      default=default_tab, on_change="rerun", key="lineage_direction_tabs")
         for tab, d in [(upstream, "upstream"), (downstream, "downstream")]:
             if tab.open:
                 with tab:
@@ -77,4 +84,5 @@ if asset:
                 st.download_button("Download relevant sources", source_bundle(store, ids, {e["file_id"]: e.get("source_hash") for e in evidence}), "sources.zip", "application/zip")
     with right:
         st.subheader("Source evidence")
+        st.caption("Source scope: " + source_scope)
         source_viewer(store, list(dict.fromkeys(e["file_id"] for e in evidence)), "lineage_source", evidence)

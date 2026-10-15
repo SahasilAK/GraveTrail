@@ -2,88 +2,78 @@
 
 Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
-## Delivery state
-Working six-page local application. All supported core workflows are implemented and tested.
-This is conservative static analysis, not a SQL/SAS runtime or a universal language compiler.
-The complete master specification is **not yet finished**. Stage completion in MASTER_PLAN
-means the core was delivered; detailed remaining requirements are in CONTINUATION_PLAN.md.
+## Current delivery state
 
-## Implemented
-- Foundation: Python 3.11+, Streamlit 1.66 navigation/light-dark themes, modular layers,
-  safe structured logs, DuckDB migrations v1–v4, isolated persistent workspaces.
-- Secure nested ZIP/browser-folder/allowed-root import, selected extensions, hashes, byte-exact
-  originals, complete decoded inventory, encoding/binary/duplicate diagnostics, batch writes,
-  path/symlink/size/count/ratio safeguards and import history.
-- SQLGlot read/write ASTs, aliases, reachable CTEs/subqueries/unions, temporary targets,
-  quoted component identities, direct column contexts, exact statement evidence and diagnostics.
-- SAS DATA and common PROC rules, PROC SQL, explicit CSV/file links, WORK, static macros/library
-  maps, unresolved dynamic warnings, inline-data exclusion; bounded CSV schema/sample/row metadata.
-- Atomic analysis replacement, run snapshots/comparison, immutable source-hash evidence,
-  conservative cross-file linking, operation memberships, incremental cache, 1-8 parsing workers,
-  revision-cached graphs, cycle-safe traversal and evidence-preserving temporary contraction.
-- Explorer exact asset choice, upstream/downstream trees, combined/path/depth/node controls,
-  interactive edge/node evidence, source viewer/search/copy and original-version downloads.
-- Direct columns with grouping/filtering/context and wildcard uncertainty; CSV/JSON/HTML reports.
-- Provider profiles, env-only keys, discovery/manual models, task routing, same-host transient
-  fallback, privacy/context/redaction gates, versioned prompts/schema/hash, grounded validation,
-  quarantine, inferred merge and source-change invalidation. AI retention preserves merged claims.
-- Offline embedded HTML graph, JSON, original ZIP bundles; dictionary, code search and impact tools.
-- Lockfile, tested wheel/sdist, clean install, CI configuration, Docker definition, required guides
-  and folder knowledge maps. Original user .gitignore edits are preserved separately.
+Six-page working local application. Planned implementation slices and the final audit fixes
+are implemented, with conservative static-analysis boundaries. See REQUIREMENT_MATRIX.md for
+section-by-section acceptance. External release acceptance remains open; no universal parser
+accuracy or production deployment certification is claimed.
 
-## Verification evidence
-- Latest continuation: 127 tests pass in normal and separate clean Python 3.11 environments;
-  Ruff and lock checks clean. Wheel and source distribution rebuilt successfully.
-- uv lock --check passes; wheel installed without editable source and imported with Python -I;
-  bundled prompt/schema assets verified. Sdist/wheel exclude local runtime data.
-- Clean-environment Streamlit server launched at http://127.0.0.1:8501; health endpoint 200.
-- Actual browser: host directory and ZIP upload/import; skip/duplicate reporting; analysis creates
-  9 assets / 7 dependencies; exact search; graph edge selection retains both WORK-stage evidence
-  statements; source inspection; three direct columns; successful HTML graph download.
-- Workspace reopening tested after restart in integration tests and the browser server.
-- Browser-detected JS newline escaping defect fixed with a JavaScript syntax regression test.
-- Independent read-only review findings fixed with regression tests: unused/DML CTEs, macro
-  conditions, name literals/DATALINES, quoted names, cross-statement AI claims, immutable concurrent
-  imports, CSV width/header/quote bounds and AI retention. See docs/REVIEW.md.
-- Injected post-write failure proves transactional rollback and failed-run tracking.
-- Labeled 500-file SQL chain: import 12.532 s, cold analysis 1.9221 s, warm refresh 0.6712 s,
-  500 unchanged parses skipped; focused traversal mean 0.0849 ms. Fixture precision/recall and
-  evidence coverage 100%. These are synthetic workload results, not general-language claims.
+## Delivered capabilities
 
-## Explicit limitations and unverified integrations
-- OmniRoute at localhost:20128/v1 is reachable. Live discovery, connection (also through the
-  actual Settings UI) and grounded SQL assistance passed. The initial complete SQL/SAS check
-  failed before merge/restart; see LLM_LIVE_RESULTS.json. A separate SAS request validated,
-  but the repeated full check rejected a non-JSON SQL response from the automatic model route.
-  The adapter works; live model output is not consistently compliant. Other providers retain
-  mock-backed verification only. Subscription sign-in is
-  not repurposed. Databricks Genie remains a distinct unsupported query-agent integration.
-- HTML downloaded and checked for embedded assets/no CDN and valid JS. Browser policy rejected
-  file: navigation, so opening the independent local file is not browser-tested. No workaround
-  browser/server was used to bypass that policy.
-- Docker and remote CI matrix are configured but were not executed here.
-  A continuation Docker probe found the CLI installed but the Docker Desktop Linux engine
-  unavailable (named pipe absent); container build/run remains unverified.
-- Dynamic SQL/procedures, runtime SAS macros, arbitrary name literals, ranges/arrays and full
-  SAS variable compilation remain unsupported or conservative. See SQL_PARSING/SAS_PARSING docs.
-- Temporary/WORK identities are workspace scoped. Runtime sessions and repeated-write execution
-  order cannot be inferred. Separate unrelated jobs into different workspaces.
-- Unknown wildcards do not invent columns. Resource budgets bound large imports and graphs.
-  Analysis is synchronous with cooperative between-file cancellation; parsers are not preempted.
-- Local single-user/single-process use; no public authentication or shared multiprocess DuckDB.
-- Imports are additive. Unreferenced analysis/import history can be archived and restored in
-  bounded manual batches. Recovery copies and source blobs remain retained; source GC,
-  permanent purge and complete portable workspace backup remain follow-ups.
+- Secure nested ZIP/browser-folder/allowed-root imports, SQL/SAS/CSV selection, immutable
+  complete originals and decoded inventory, diagnostics, status counts and CSV/JSON exports.
+- SQL AST lineage/direct columns, reachable CTEs/subqueries/unions, common DML/views, explicit
+  dialect precedence, SQL Server SELECT INTO/#/## and Teradata volatile CTAS fixture coverage.
+- Dedicated SAS DATA/PROC rules, exact original evidence, static macros/library maps,
+  explicit file links and unresolved dynamic diagnostics. Configurable CSV sampled metadata.
+- Conservative cross-file resolution, supplied temporary job/session IDs, persistent shared
+  identities, mixed-lifetime unresolved reads, declared-schema wildcard evidence and provenance.
+- Atomic/incremental analysis, selected refresh, run comparison, rollback/source-version safety,
+  cycle-safe graphs, bounded progressive trees, temporary contraction and path evidence.
+- Exact asset selection, upstream/downstream/combined exploration, tree/source panels,
+  searchable original code, direct columns/grouping, offline HTML/JSON/CSV/ZIP downloads.
+- Optional provider protocols/task routing, bounded focused/chunked AI requests, privacy gates,
+  strict grounded validation/quarantine, inferred merges and separately cited advisory results.
+- Portable safe workspace settings, naming/descriptions, explicit startup-allowed per-session
+  storage selection, recoverable history/staging cleanup, database migrations1–4 and safe logs.
+- Fourteen preserved themes, graph/source defaults, dashboard/dictionary/impact/code search;
+  documented architecture, module knowledge, setup, extension guides, tests and coherent commits.
 
-## Continuation
-Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
-uv run ruff check .; uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json.
-Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 7; increment
-for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
-to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
-Keep future work in tested Conventional Commits, as requested. No push was requested.
-Follow-up priorities: target-vendor fixtures, explicit job/session identity, richer schema
-discovery, source/blob lifecycle, portable backups and auth if expanding beyond local use.
+## Current verification
+
+- Main implementation suite:220 passed,1 skipped in25.21s; Ruff/lock checks pass. The earlier
+  clean-source219-test gate passed before the final direction fix; updated clean/package gates
+  are recorded in the final entry below.
+- Actual isolated running UI verified settings, advisory reopening, cleanup/restore, storage
+  switch/back, vendor import/analysis, exact selectors, graph evidence and tree/source panels.
+  Primary home, imported source data and active theme/configuration were preserved.
+- Final500-file labeled synthetic chain:501 assets/500 edges, import15.8705s, cold2.1065s,
+  warm0.8708s, all500 cached, focused traversal0.0969ms. Fixture precision/recall/evidence1.0;
+  these are synthetic measurements, not a real-client accuracy guarantee.
+
+## External gates and intentional boundaries
+
+- OmniRoute literal model auto failed its latest connection check before source assistance;
+  discovery advertised964 IDs including auto/... aliases but no literal auto. Do not substitute
+  fixed models. Historical fixed-route success predates the user's auto-only instruction.
+  Re-run scripts/verify_llm.py after gateway routing changes; use OMNIROUTE_API_KEY, never
+  persist/print its value. Task-specific new advisory schemas remain synthetic-HTTP verified.
+- Docker CLI is installed, but the Linux engine pipe is unavailable. Container execution and
+  remote CI remain unverified. No push or service startup requiring elevation was requested.
+- Self-contained HTML export/JS/downloads are verified. Direct file-browser interaction remains
+  unverified because this browser environment blocked file navigation. No server workaround claim.
+- Windows file-symlink test skips without creation privilege. Runtime path protections remain.
+- Dynamic SQL/full procedures, runtime SAS macros/name literals/ranges/arrays and execution
+  ordering remain conservative unsupported cases with diagnostics. Supplied jobs scope genuine
+  temporary assets; runtime sessions are not discovered. No invented wildcard/transitive columns.
+- Local single-user process; cooperative cancellation cannot preempt a parser or blocked HTTP
+  read. Dense/large real projects need their own labeled accuracy/performance acceptance.
+- Optional: full source/history portable backups, blob GC, SVG/PNG exports, general assistant,
+  transitive column transformation lineage, scheduled retention and multi-user authentication.
+
+## Resume instructions
+
+Read AGENTS.md, REQUIREMENT_MATRIX.md and the latest entry below. Parser cache version7;
+retain migration4 recovery journals and original blobs. DATAFORGE_HOME defaults to .dataforge;
+DATAFORGE_ALLOWED_ROOTS controls host imports; DATAFORGE_STORAGE_LOCATIONS names additional
+absolute session storage choices (maximum8 total). No data migration occurs on selection.
+
+Commands: uv sync --locked --extra dev; uv run pytest -q; uv run ruff check .;
+uv run streamlit run app.py --server.address 127.0.0.1.
+Commit each tested coherent group. Preserve user .gitignore/theme edits and the master prompt.
+Next work is external acceptance (auto routing, Docker/CI/offline browser) or a new demonstrated
+project-specific parser case, not restarting completed implementation slices.
 
 ## Continuation execution — 2026-10-15
 
@@ -429,3 +419,19 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Running isolated UI imported/formatted SAS, analyzed4 files (10 assets/7 edges), immediately
   showed4 successful/0 pending and displayed exact DATA evidence lines1–3 including blank
   line/spacing. Screenshot .dataforge/verification/exact-sas-evidence.png.
+
+
+## Completion execution: active direction evidence — 2026-10-16
+
+- Final accounting review caught a mandatory source-panel mismatch: the dependency tabs
+  changed the tree, while source files followed the independent graph direction. Base evidence
+  now follows the active tree tab; explicit graph asset/relationship selection overrides it.
+  Source scope is labeled. Tab changes reset graph selection, and initial tab follows the
+  saved direction default. No source facts are modified.
+- Regression uses different upstream/downstream files while graph stays upstream, then proves
+  explicit graph selection still wins. Existing default-visualization tests remain green.
+- Actual isolated UI selected downstream for #stage while graph remained upstream; the tree
+  showed mart.orders and source evidence changed to INSERT lines3–4. Screenshot:
+  .dataforge/verification/downstream-source-scope.png. Final full test result follows.
+- Final source-direction verification:220 tests passed,1 skipped in25.21s; Ruff clean; reviewer
+  cleared the fix after11 focused tests.

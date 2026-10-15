@@ -157,3 +157,7 @@ CSV sample rows in Parsing and lineage controls retained preview and sampled typ
 (0–100; default25). Zero retains no sample and leaves inferred types unknown. Reanalyze after
 changes. Inventory counters and extension breakdown refresh immediately after analysis.
 Explorer displays dependency trees beside their source evidence beneath the focused graph.
+
+The source selector follows the active Upstream/Downstream dependency tab. Clicking a graph
+asset or edge shows that selection's evidence instead; Source scope labels the current context.
+Graph direction remains independently configurable. Switching tabs clears graph selection.
