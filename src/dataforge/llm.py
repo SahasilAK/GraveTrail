@@ -113,7 +113,10 @@ def response_object(text: str) -> dict:
     fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text, re.DOTALL | re.IGNORECASE)
     if fenced:
         text = fenced[1]
-    obj = json.loads(text)
+    try:
+        obj = json.loads(text)
+    except RecursionError:
+        raise ValueError("Provider JSON exceeds nesting limits") from None
     if not isinstance(obj, dict):
         raise ValueError("Provider content must be a JSON object")
     return obj
@@ -164,7 +167,7 @@ class Adapter:
                         chunks.append(chunk)
                     try:
                         data = json.loads(b"".join(chunks))
-                    except (ValueError, UnicodeError):
+                    except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
                     if not isinstance(data, dict):
                         raise ProviderError("Provider response must be a JSON object")

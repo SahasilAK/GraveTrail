@@ -57,7 +57,8 @@ def test_grounding_rejects_hallucinations_and_invalid_lines():
         validate_response(response, code, {"raw.a", "mart.x"}, 1, 1)
 
 
-def test_privacy_gate_and_malformed_quarantine(tmp_path):
+@pytest.mark.parametrize("content", ["not JSON", '{"explanation":' + '[' * 1100 + '0' + ']' * 1100 + '}'])
+def test_privacy_gate_and_malformed_quarantine(tmp_path, content):
     store = Store(tmp_path)
     w = store.create_workspace("A")
     Importer(store, w).files([("q.sql", b"create table mart.x as select id from raw.a;")], {".sql"})
@@ -67,7 +68,7 @@ def test_privacy_gate_and_malformed_quarantine(tmp_path):
     with pytest.raises(ValueError, match="disabled"):
         assist(store, w, remote, fid, 1, 1)
     local = Profile(provider="Ollama", base_url="http://localhost:11434", model="manual")
-    transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": "not JSON"}}))
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": content}}))
     result = assist(store, w, local, fid, 1, 1, transport=transport)
     assert result["outcome"] == "quarantined"
     assert store.rows("SELECT outcome FROM llm_records")[0]["outcome"] == "quarantined"
@@ -126,7 +127,7 @@ def test_single_json_fence_keeps_strict_object_validation():
     assert response_object('```json\n{"status":"connected"}\n```') == {"status": "connected"}
     assert response_object(' {"claims":[]} ') == {"claims": []}
     for raw in ['Before\n```json\n{}\n```', '```json\n{}\n```\nAfter', '[]', 'null', '',
-                '```json\n{}\n```\n```json\n{}\n```']:
+                '```json\n{}\n```\n```json\n{}\n```', '[' * 1100 + '0' + ']' * 1100]:
         with pytest.raises(ValueError):
             response_object(raw)
 
@@ -157,7 +158,7 @@ def test_fenced_grounded_response_validates_without_accepting_invented_assets(tm
         store.close()
 
 
-@pytest.mark.parametrize("body", [b"not json", b"[]", b"null"])
+@pytest.mark.parametrize("body", [b"not json", b"[]", b"null", b'{"data":' + b'[' * 1100 + b'0' + b']' * 1100 + b'}'])
 def test_provider_invalid_envelope_raises_controlled_error(body):
     from dataforge.llm import ProviderError
 
