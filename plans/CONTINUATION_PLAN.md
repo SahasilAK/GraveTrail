@@ -25,6 +25,8 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
 3. **Progressive lineage trees and dependency-path exports.** Render only open branches,
    provide expand-to-depth/collapse controls, keep cycle/node limits, and export complete
    displayed paths with evidence and explicit bounded-search boundaries. Test and commit.
+   Implemented. 82 tests/Ruff pass; actual browser branch expansion, expand/collapse and
+   downloaded five-step JSON checked for ordered steps, source hashes and statement IDs.
 4. **Schema-aware direct column coverage.** Reuse trustworthy schemas; preserve unknown
    wildcard/ambiguous diagnostics. Do not treat transitive usage as direct usage.
 

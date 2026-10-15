@@ -86,9 +86,11 @@ elif tab == "Visualization":
     with st.form("visualization"):
         limit = st.number_input("Maximum graph nodes", 10, 1000, int(store.setting(w, "graph_limit", 150)))
         depth = st.slider("Default traversal depth", 1, 30, int(store.setting(w, "traversal_depth", 5)))
+        tree_depth = st.slider("Default tree expansion depth", 0, 30, int(store.setting(w, "tree_expansion_depth", 1)))
         if st.form_submit_button("Save visualization settings"):
             store.set_setting(w, "graph_limit", limit)
             store.set_setting(w, "traversal_depth", depth)
+            store.set_setting(w, "tree_expansion_depth", tree_depth)
             st.success("Visualization settings saved")
     st.caption("Switch light/dark appearance from the application menu. Graphs support fit, zoom, pan, search and evidence selection.")
 elif tab == "Security and privacy":

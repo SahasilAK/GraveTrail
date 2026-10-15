@@ -19,7 +19,7 @@ deployment updates. Restore that backup with the prior code to roll back an inco
 Do not put imported code, API keys, rendered trees or complete inventories in session state.
 Use file IDs and lazy source retrieval. New graph code must preserve evidence and cap work on
 cycles/dense graphs. New provider code must honor privacy before any network request.
-# Configuration transfer boundary
+## Configuration transfer boundary
 
 `configuration.py` owns `WorkspaceIdentity`, `PortableSettings`, `WorkspaceConfiguration`
 and the export/import functions. The v2 allowlist includes parsing, import limits, parse workers,

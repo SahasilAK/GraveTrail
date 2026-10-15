@@ -103,3 +103,11 @@ optional schema discovery, history/blob lifecycle and auth if expanding beyond l
   workspace successfully. Screenshot: `.dataforge/verification/workspace-settings.png`.
 - Next active slice: lazy tree branches, expand/collapse controls and bounded dependency-path
   exports. Full portable source/history bundles and cleanup remain pending.
+- Explorer continuation completed: active-tab-only lazy branches, expand-to-depth/collapse,
+  configurable initial expansion, depth/visible-entry/cycle bounds. Ordered path CSV/JSON
+  retains intermediate evidence references and explicit root/terminal/depth/cycle markers.
+  Graph/path reports distinguish truncation from true roots. 82 tests pass; Ruff clean.
+  Actual browser exercised lazy branch, expand to five levels, collapse and JSON download.
+  Downloaded JSON asserted five ordered steps, exact original hashes and statement references.
+- Next: schema-backed direct-column expansion and data dictionary schema provenance. Unknown
+  or conflicting schemas must keep wildcard uncertainty. Portable history/cleanup remains later.

@@ -19,3 +19,14 @@ Ambiguity is a diagnostic and remains a separate node. CSV linking requires an e
 has depth/node budgets. Strongly connected components report cycles without enumerating every
 cycle. Temporary contraction combines evidence and intermediate names with a fanout budget.
 Endpoints and self-cyclic temporary nodes are retained to avoid losing information.
+
+`path_report` traverses the selected full/simplified graph with a bounded pending queue
+(1–500 paths, 1–30 edges deep). Results mark root/terminal/depth/cycle boundaries and global
+truncation; they do not pretend a depth cutoff is a true root. Ordered steps retain immutable
+source hash, statement/file IDs, original line ranges and intermediate evidence references.
+CSV flattens paths/steps/evidence; JSON retains the path hierarchy. Full source bodies are
+not duplicated for every path. `root_paths` remains available for existing callers.
+
+`ui.lineage_tree.render_tree` tracks native expander state and renders only open branches
+in the active direction tab. Expand/collapse controls change a widget generation counter;
+only control state, never a rendered tree or source content, lives in session state.

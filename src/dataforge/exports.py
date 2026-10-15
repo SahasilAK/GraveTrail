@@ -11,6 +11,23 @@ import networkx as nx
 
 from dataforge.ingestion import safe_relative
 
+
+def path_rows(report):
+    """One ordered CSV row per path/step/evidence, retaining incomplete-path markers."""
+    rows = []
+    for path in report["paths"]:
+        common = {"path_id": path["path_id"], "path": " -> ".join(path["nodes"]),
+                  "direction": report["direction"], "boundary": path["boundary"],
+                  "report_truncated": report["truncated"]}
+        if not path["steps"]:
+            rows.append({**common, "step": 0, "source": path["nodes"][0], "target": ""})
+        for i, step in enumerate(path["steps"], 1):
+            for evidence in step["evidence"] or [{}]:
+                rows.append({**common, "step": i, "source": step["source"], "target": step["target"],
+                             "intermediates": ", ".join(step["intermediates"]), **evidence})
+    return rows
+
+
 GRAPH_CSS = """
 .df-graph{font:14px system-ui,sans-serif;color:var(--st-text-color,#17324d);background:var(--st-background-color,#fff)}
 .df-graph .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 0}

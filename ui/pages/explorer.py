@@ -2,15 +2,17 @@ import json
 
 import streamlit as st
 
-from dataforge.exports import graph_data, graph_html, source_bundle
+from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
+from ui.lineage_tree import render_tree
 
 title("Lineage explorer", "Trace upstream inputs, downstream impact and the source evidence behind each relationship.")
 store, w = context()
 graph = load_graph(store, w)
 asset = choose_asset(graph, "lineage")
 if asset:
-    upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"])
+    upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
+                                  on_change="rerun", key="lineage_direction_tabs")
     # Selection also allows a combined graph without losing either principal tab.
     direction = st.segmented_control("Graph direction", ["upstream", "downstream", "combined"], default="upstream")
     with st.container(horizontal=True):
@@ -19,30 +21,12 @@ if asset:
     view_graph = graph.simplified(keep=[asset]) if simplified else graph
     limit = int(store.setting(w, "graph_limit", 150))
 
-    def tree(node, direction, level=0, seen=None, budget=None):
-        seen, budget = set() if seen is None else seen, [60] if budget is None else budget
-        if budget[0] <= 0:
-            st.caption("Tree display limit reached. Use focused graph or a smaller depth.")
-            return
-        if node in seen:
-            st.caption(f"Cycle returns to {view_graph.nodes[node]['name']}")
-            return
-        seen = seen | {node}
-        neighbors = list(view_graph.graph.predecessors(node) if direction == "upstream" else view_graph.graph.successors(node))
-        for n in neighbors:
-            if budget[0] <= 0:
-                break
-            budget[0] -= 1
-            edge = view_graph.graph[n][node] if direction == "upstream" else view_graph.graph[node][n]
-            label = view_graph.nodes[n]["name"]
-            with st.expander(f"{label} • {len(edge['evidence'])} evidence records", expanded=level < 1):
-                st.caption(", ".join(dict.fromkeys(e.get("kind", "") + " [" + e.get("status", "") + "]" for e in edge["evidence"])))
-                if level + 1 < min(depth, 8):
-                    tree(n, direction, level + 1, seen, budget)
-
     for tab, d in [(upstream, "upstream"), (downstream, "downstream")]:
-        with tab:
-            tree(asset, d)
+        if tab.open:
+            with tab:
+                render_tree(view_graph, asset, d, depth, limit,
+                            key=f"tree_{w}_{asset}_{d}_{simplified}",
+                            default_expansion=int(store.setting(w, "tree_expansion_depth", 1)))
     focused = view_graph.focus(asset, direction, depth, limit)
     if focused.truncated:
         st.warning(f"Graph limited to {limit} assets. Reduce depth or focus another asset.")
@@ -65,9 +49,22 @@ if asset:
         st.caption("Dependency-based logical ordering. Source execution order is unknown.")
         st.dataframe([{k: v for k, v in r.items() if k not in {"file_id", "statement_id"}} for r in rows], hide_index=True)
         downloads(rows, "lineage_" + direction, include_html=False)
-        with st.expander("Root-to-target paths"):
-            for path in focused.root_paths(asset):
-                st.text(" → ".join(focused.nodes[n]["name"] for n in path))
+        paths_panel = st.expander("Dependency paths and exports", on_change="rerun", key="lineage_path_panel")
+        if paths_panel.open:
+            with paths_panel:
+                path_direction = st.segmented_control("Path direction", ["upstream", "downstream"], default="upstream")
+                path_limit = st.number_input("Maximum paths", 1, 500, 50)
+                report = view_graph.path_report(asset, path_direction, path_limit, depth)
+                st.caption("Paths use the selected temporary-step view and traversal depth. Roots/terminals reflect known static dependencies; unresolved constructs may remain. Evidence references original file versions.")
+                if report["truncated"]:
+                    st.warning("Path/depth limits omit dependencies. This export is a bounded report, not exhaustive lineage.")
+                for path in report["paths"]:
+                    st.text(" → ".join(path["nodes"]) + " [" + path["boundary"] + "]")
+                with st.container(horizontal=True):
+                    st.download_button("Download paths JSON", json.dumps(report, default=str, indent=2),
+                                       "dependency-paths.json", "application/json")
+                    st.download_button("Download paths CSV", report_csv(path_rows(report)),
+                                       "dependency-paths.csv", "text/csv")
         with st.container(horizontal=True):
             st.download_button("Download offline graph", graph_html(focused), "lineage.html", "text/html")
             st.download_button("Download graph JSON", json.dumps(graph_data(focused), default=str, indent=2), "graph.json", "application/json")

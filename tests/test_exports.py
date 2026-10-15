@@ -37,3 +37,15 @@ def test_graph_javascript_is_valid():
     if node := shutil.which("node"):
         result = subprocess.run([node, "--check"], input=GRAPH_JS, text=True, encoding="utf-8", capture_output=True)
         assert result.returncode == 0, result.stderr
+
+
+def test_path_csv_rows_keep_order_evidence_and_boundary():
+    from dataforge.exports import path_rows
+
+    graph = LineageGraph([{"asset_id": n, "name": n} for n in ["a", "b", "c"]], [
+        {"source_id": "a", "target_id": "b", "edge_id": "ab", "statement_id": "s1", "start_line": 3},
+        {"source_id": "b", "target_id": "c", "edge_id": "bc", "statement_id": "s2", "start_line": 7}])
+    rows = path_rows(graph.path_report("c"))
+    assert [(r["step"], r["source"], r["target"], r["statement_id"]) for r in rows] == [
+        (1, "a", "b", "s1"), (2, "b", "c", "s2")]
+    assert all(r["boundary"] == "root" and r["path"] == "a -> b -> c" for r in rows)

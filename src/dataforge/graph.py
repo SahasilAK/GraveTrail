@@ -114,3 +114,43 @@ class LineageGraph:
                 for parent in parents[:max(0, limit - len(queue) - len(paths))]:
                     queue.append([parent, *path])
         return paths
+
+    def path_report(self, asset, direction="upstream", limit=50, depth=15):
+        """Bounded ordered paths over this topology, with evidence and explicit boundaries."""
+        if direction not in {"upstream", "downstream"} or not 1 <= limit <= 500 or not 1 <= depth <= 30:
+            raise ValueError("Use upstream/downstream, 1–500 paths and 1–30 depth")
+        report = {"selected_asset": asset, "direction": direction, "max_paths": limit,
+                  "max_depth": depth, "truncated": self.truncated, "paths": []}
+        if asset not in self.graph:
+            return report
+        pending = deque([([asset], None)])
+        fields = {"edge_id", "operation_id", "statement_id", "file_id", "relative_path", "source_hash",
+                  "start_line", "end_line", "kind", "method", "status", "confidence"}
+        while pending:
+            path, boundary = pending.popleft()
+            node = path[0] if direction == "upstream" else path[-1]
+            neighbors = sorted(self.graph.predecessors(node) if direction == "upstream"
+                               else self.graph.successors(node))
+            if boundary is None:
+                if not neighbors:
+                    boundary = "root" if direction == "upstream" else "terminal"
+                elif len(path) - 1 >= depth:
+                    boundary = "depth"
+                    report["truncated"] = True
+            if boundary is not None:
+                steps = []
+                for source, target in zip(path, path[1:]):
+                    edge = self.graph[source][target]
+                    steps.append({"source": self.nodes[source]["name"], "target": self.nodes[target]["name"],
+                        "source_id": source, "target_id": target, "intermediates": edge.get("intermediates", []),
+                        "evidence": [{k: v for k, v in e.items() if k in fields} for e in edge["evidence"]]})
+                report["paths"].append({"path_id": len(report["paths"]) + 1, "node_ids": path,
+                    "nodes": [self.nodes[n]["name"] for n in path], "boundary": boundary, "steps": steps})
+            else:
+                for neighbor in neighbors:
+                    if len(report["paths"]) + len(pending) >= limit:
+                        report["truncated"] = True
+                        break
+                    candidate = [neighbor, *path] if direction == "upstream" else [*path, neighbor]
+                    pending.append((candidate, "cycle" if neighbor in path else None))
+        return report

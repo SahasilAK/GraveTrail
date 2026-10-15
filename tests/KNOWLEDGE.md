@@ -8,6 +8,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 ## Files
 - `test_exports.py` — Behavioral regression tests for exports. Run with pytest; temporary runtime data only.
 - `test_graph.py` — Behavioral regression tests for graph. Run with pytest; temporary runtime data only.
+- `test_lineage_tree.py` — AppTest proves closed descendants are absent and expand/collapse controls change rendered branches.
 - `test_hardening.py` — Behavioral regression tests for hardening. Run with pytest; temporary runtime data only.
 - `test_ingestion.py` — Behavioral regression tests for ingestion. Run with pytest; temporary runtime data only.
 - `test_llm.py` — Provider protocols, grounding/privacy, fenced JSON rejection boundaries, malformed HTTP envelopes and inferred merge retention. Temporary runtime data only.

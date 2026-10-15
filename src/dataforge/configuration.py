@@ -47,6 +47,7 @@ class PortableSettings(ParsingSettings):
     parse_workers: int = Field(default=1, ge=1, le=8)
     graph_limit: int = Field(default=150, ge=10, le=1000)
     traversal_depth: int = Field(default=5, ge=1, le=30)
+    tree_expansion_depth: int = Field(default=1, ge=0, le=30)
 
 
 class WorkspaceConfiguration(WorkspaceIdentity):

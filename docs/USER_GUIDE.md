@@ -19,6 +19,18 @@ set depth and collapse temporary stages. Graph search highlights nodes; click no
 their upstream path, or edges to inspect operation evidence. Fit/zoom/pan controls are keyboard
 and mouse accessible. Cycles are reported and traversal terminates.
 
+Tree tabs render only the active direction. Opening a branch loads its immediate descendants;
+closed descendants are not rendered. Use **Expand tree to depth** and **Expand to depth** to
+open several levels, or **Collapse tree** to close all branches. The graph-node limit also
+bounds visible tree entries. Settings → Visualization sets the initial tree expansion depth.
+
+**Dependency paths and exports** provides upstream root-to-target and downstream target-to-
+terminal paths with ordered CSV/JSON downloads. Each step references its original file hash,
+statement, line range, extraction method and verification status. Collapsed temporary steps
+retain all intermediate evidence. Depth boundaries and cycle boundaries are explicit, and
+path-limit truncation is reported. These reports describe the known static graph, not runtime
+execution order or proof that unresolved source constructs do not exist.
+
 The source panel filters to relevant files. It shows original line ranges, statement snippets,
 complete syntax-highlighted source, source search and byte-exact downloads. Code blocks have a
 copy button. Old facts show the corresponding analyzed original version when newer code is pending.

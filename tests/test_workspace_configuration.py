@@ -40,7 +40,8 @@ def test_safe_configuration_round_trip_preserves_supported_settings(tmp_path):
         original = store.create_workspace("Portable", "Description")
         values = {"dialect": "snowflake", "dialect_by_folder": {"jobs/": "tsql"},
                   "macros": {"year": "2026"}, "case_sensitive": True, "max_file_mb": 42,
-                  "max_files": 90, "parse_workers": 3, "graph_limit": 60, "traversal_depth": 9}
+                  "max_files": 90, "parse_workers": 3, "graph_limit": 60, "traversal_depth": 9,
+                  "tree_expansion_depth": 2}
         for k, v in values.items():
             store.set_setting(original, k, v)
         store.set_setting(original, "external_llm", True)
