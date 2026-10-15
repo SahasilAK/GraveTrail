@@ -6,6 +6,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `fixtures/` — [fixtures/KNOWLEDGE.md](fixtures/KNOWLEDGE.md).
 
 ## Files
+- `test_storage_locations.py` — Explicit/bounded path choices, two-session switching/back with retained sources and failed-open preservation.
 - `test_vendor_fixtures.py` — Exact labeled dependency/direct-column/temporary sets for six SQL dialects and SAS, original evidence and warm-cache preservation.
 - `test_job_identity.py` — Cross-job temporary/schema/column isolation, global persistent paths, mixed-lifetime diagnostics, AI refresh, history/exports and Settings/chooser UI regressions.
 - `test_temporary_cleanup.py` — Scope/age/count bounds, changed preview/journal failures, idle guard, recovery after restart/no overwrite, atomic publication failure, v3 migration and UI cleanup/restore. Windows symlink privilege may skip one test.

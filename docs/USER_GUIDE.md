@@ -136,3 +136,19 @@ compressed recovery copy is committed first; choose it to restore without overwr
 existing file. Restored files are fresh and not immediately eligible again. Sources, databases,
 JSON history archives and arbitrary temporary files are excluded. This clears staging files;
 retained recovery bytes mean total disk usage may not shrink. No automatic cleanup runs.
+
+
+**Storage locations:** Configure `DATAFORGE_HOME` for the default directory and optionally
+`DATAFORGE_STORAGE_LOCATIONS` with additional absolute directories before startup (Windows
+separator `;`, Linux/macOS `:`, maximum eight total). Settings → Storage and workspaces lists
+these allowed locations. Select one and press **Open storage location**. This browser session
+opens that independent database and resets its workspace controls; other sessions stay where
+they are. Files are never migrated by this action. Open the previous location to return to its
+persisted workspaces. A failed open keeps the current workspace. New browser sessions start in
+the default location. Storage locations and permissions are excluded from workspace transfers.
+
+**Job/session identity:** Parsing and lineage accepts a default ID and folder-prefix map.
+Use supplied IDs to separate temporary datasets belonging to different jobs; the longest folder
+prefix wins. Reanalyze after changes. Persistent tables remain shared. Mixed temporary and
+persistent writes to the same name in a job leave reads unresolved. Static source cannot
+establish runtime execution order. Exact selectors and graph labels show nondefault job IDs.

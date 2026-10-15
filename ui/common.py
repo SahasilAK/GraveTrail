@@ -4,12 +4,14 @@ import json
 import os
 from pathlib import Path
 
+import duckdb
 import streamlit as st
 
 from dataforge.asset_identity import asset_label
 from dataforge.configuration import AnalysisPreferences, VisualizationSettings
 from dataforge.exports import GRAPH_BODY, GRAPH_CSS, GRAPH_JS, graph_data, report_csv, report_html
 from dataforge.graph import LineageGraph
+from dataforge.storage_locations import allowed_homes, validate_home
 from dataforge.store import Store
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +23,35 @@ def get_store(home: str) -> Store:
 
 
 def context():
-    return get_store(os.environ.get("DATAFORGE_HOME", str(ROOT / ".dataforge"))), st.session_state["workspace"]
+    return get_store(current_home()), st.session_state["workspace"]
+
+
+def storage_homes():
+    return allowed_homes(os.environ.get("DATAFORGE_HOME", str(ROOT / ".dataforge")),
+                         os.environ.get("DATAFORGE_STORAGE_LOCATIONS", ""))
+
+
+def current_home():
+    homes = storage_homes()
+    selected = st.session_state.get("dataforge_home", homes[0])
+    if selected not in homes:
+        st.session_state.clear()
+        st.session_state["storage_notice"] = "Previous storage location is no longer allowed. Opened the default location."
+        selected = homes[0]
+    return validate_home(selected, homes)
+
+
+def open_storage_home(selected):
+    """Widget callback: validate/open first, then clear this session's old workspace controls."""
+    try:
+        home = validate_home(selected, storage_homes())
+        get_store(home)
+    except (ValueError, OSError, duckdb.Error):
+        st.session_state["storage_error"] = "Cannot open this storage location. Check directory access and whether another process owns its database."
+        return
+    st.session_state.clear()
+    st.session_state["dataforge_home"] = home
+    st.session_state["storage_notice"] = "Storage location opened. Each location keeps its own workspaces and source files."
 
 
 def allowed_roots():

@@ -10,7 +10,7 @@ from dataforge.configuration import (
     export_workspace_configuration,
     import_workspace_configuration,
 )
-from ui.common import allowed_roots, context, title
+from ui.common import allowed_roots, context, open_storage_home, storage_homes, title
 
 title("Settings", "Configure analysis, storage, resource budgets and source-code privacy.")
 store, w = context()
@@ -66,7 +66,13 @@ elif tab == "Storage and workspaces":
     st.code(str(store.home), language=None)
     size = (store.home / "dataforge.duckdb").stat().st_size
     st.metric("Database size", f"{size / 1024 / 1024:.2f} MB")
-    st.caption("Set DATAFORGE_HOME before startup to select a different storage directory. Each home has an independent database.")
+    homes = storage_homes()
+    selected_home = st.selectbox("Storage location", homes, index=homes.index(str(store.home)))
+    st.button("Open storage location", disabled=selected_home == str(store.home),
+              on_click=open_storage_home, args=(selected_home,))
+    if error := st.session_state.pop("storage_error", None):
+        st.error(error)
+    st.caption("Startup allowlist: DATAFORGE_HOME plus DATAFORGE_STORAGE_LOCATIONS (absolute directories separated by the OS path separator, maximum eight). Opening a location changes this browser session; workspaces and source files stay in their existing directories.")
     workspace = next(a for a in store.workspaces() if a["workspace_id"] == w)
     if notice := st.session_state.pop("workspace_notice", None):
         st.success(notice)

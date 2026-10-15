@@ -48,3 +48,9 @@ owning data-home tables under the configured retention policy.
 Imported source itself may contain secrets. The local inventory intentionally preserves it;
 protect the storage directory using OS access controls and encryption where needed. Redaction
 is best effort. Do not expose storage or exported code to untrusted users.
+
+Storage selection is constrained to explicit startup configuration, with no free-text host-path
+input. Both app bootstrap and the switch callback validate the selected resolved directory.
+A target store opens before session controls reset; failures retain the active workspace.
+This local filesystem allowlist is operator configuration, not an authentication boundary for
+untrusted users or a defense against a local account that can mutate configured directories.

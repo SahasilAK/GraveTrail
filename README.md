@@ -49,10 +49,14 @@ unresolved macro diagnostic. Results are parsed from the files; no sample graph 
 ```powershell
 $env:DATAFORGE_HOME = 'D:\DataForge\workspaces'
 $env:DATAFORGE_ALLOWED_ROOTS = 'D:\Engineering\jobs;D:\Engineering\exports'
+$env:DATAFORGE_STORAGE_LOCATIONS = 'D:\DataForge\archive;D:\DataForge\sandbox'
 uv run streamlit run app.py
 ```
 
-On Linux/macOS, separate allowed roots with `:`. Runtime defaults to `.dataforge/` and is
+Settings → Storage and workspaces can open one of the startup-allowed storage locations
+for the current browser session. This preserves each directory independently. At most eight
+locations including DATAFORGE_HOME are accepted; additional locations must be absolute paths.
+On Linux/macOS, separate allowed roots and storage locations with `:`. Runtime defaults to `.dataforge/` and is
 excluded from Git. Settings → LLM providers stores credential **environment variable names**,
 never secret values. Configure an API endpoint/model or a loopback Ollama/LM Studio instance.
 Remote requests are disabled by default. See [LLM configuration](docs/LLM_INTEGRATION.md).

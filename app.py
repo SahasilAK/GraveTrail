@@ -1,14 +1,19 @@
 """Run with: streamlit run app.py"""
-import os
-
+import duckdb
 import streamlit as st
 
 from dataforge.logging_config import configure_logging
-from ui.common import ROOT, get_store
+from ui.common import current_home, get_store
 
 configure_logging()
 st.set_page_config(page_title="DataForge | Engineering workspace", page_icon=":material/account_tree:", layout="wide")
-store = get_store(os.environ.get("DATAFORGE_HOME", str(ROOT / ".dataforge")))
+try:
+    store = get_store(current_home())
+except (ValueError, OSError, duckdb.Error):
+    st.error("Cannot open configured storage. Check DATAFORGE_HOME, DATAFORGE_STORAGE_LOCATIONS and database access.")
+    st.stop()
+if notice := st.session_state.pop("storage_notice", None):
+    st.success(notice)
 configure_logging(store.setting("__application__", "log_level", "INFO"))
 workspaces = store.workspaces()
 if not workspaces:

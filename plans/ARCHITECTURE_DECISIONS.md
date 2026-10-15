@@ -66,3 +66,9 @@
   assets remain global. Preserve legacy default-job IDs only when no global persistent name
   collides. Same-job mixed-lifetime reads remain unresolved because static files establish no
   reliable runtime order. Schema reconciliation and restored AI claims share job visibility.
+
+- ADR 022: Storage selection opens an explicit startup-allowed directory (maximum8) for this
+  Streamlit session. Validate/open before clearing old widget/workspace state; keep shared
+  cached stores alive for other sessions. No global environment mutation, file migration or
+  arbitrary-path input. A new session starts with DATAFORGE_HOME. Locations are not portable
+  workspace preferences; operator configuration remains authoritative.

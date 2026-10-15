@@ -37,7 +37,7 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
 - [x] Add target-vendor fixture cases and resolve demonstrated defects. Commit tested groups.
 
 ## 6. Acceptance and delivery
-- [ ] Close audited storage-location selection gap: explicit startup-allowed locations,
+- [x] Close audited storage-location selection gap: explicit startup-allowed locations,
   session-scoped selection, no data migration, isolated/reopened stores and safe failures.
 - [ ] Requirement-by-requirement accounting with code/tests and external verification status.
 - [ ] Clean install, package, UI workflows, benchmark, standalone HTML, Docker/CI where available.

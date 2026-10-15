@@ -380,3 +380,18 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Final vendor verification:204 tests passed,1 skipped in21.82s; Ruff clean. Actual UI
   selected #stage [job: tsql], clicked SELECT_INTO edge and displayed exact lines1–2. Proof:
   .dataforge/verification/vendor-lineage.png.
+
+
+## Completion execution: allowed storage selection — 2026-10-16
+
+- Closed audited master Settings gap with an explicit startup-allowed storage dropdown:
+  DATAFORGE_HOME plus absolute DATAFORGE_STORAGE_LOCATIONS, maximum8. Selection is per
+  browser session. Open/validate target before resetting workspace/widget state; other
+  sessions keep existing stores. Failed opens keep the current workspace. No file migration.
+- Unit/AppTest proves bounded/no-side-effect choices, unauthorized-path refusal, two sessions,
+  switch-back retaining original source and failed-open preservation. Review found no issues.
+- Actual isolated UI verification and final full-suite results follow below. Primary home and
+  theme configuration remain untouched. Next: final requirement matrix/package/runtime gates.
+- Final storage verification:207 tests passed,1 skipped in23.15s; Ruff clean. Actual isolated
+  UI opened alternate-ui (new My workspace), then returned to Completion verification with
+  its 10.26MB database and history intact. Screenshot .dataforge/verification/storage-location.png.

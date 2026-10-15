@@ -23,3 +23,6 @@ rerun with notices to establish current widget identities before the next edit.
 
 Temporary asset choices and tree labels use shared job/session labels; persisted AI results
 show their job and warn when the source assignment changed.
+
+common.current_home validates startup-allowed session storage; open_storage_home callback
+opens before resetting current-session controls. Other sessions retain their stores.
