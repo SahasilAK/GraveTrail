@@ -21,7 +21,21 @@ Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23
   invalid-LLM scenario awaits the provider slice. Restart and changed-source replacement tested.
 
 ## In progress
-- Application shell, Builder and Explorer UI plus offline graph exports.
+- Provider profiles, privacy-gated assistance, schema validation and prompt repository.
+
+## UI / export verification
+- Multipage Streamlit shell, dashboard, ZIP/folder/allowed-root Builder, filtered inventory,
+  analysis/rebuild/validation controls and original source viewer implemented.
+- Explorer: exact selection, upstream/downstream trees, combined focused graph, depth/node
+  limits, temporary collapse, interactive edge/node evidence, path and source exports.
+- Column page: direct-reference metrics, filters/grouping, evidence and CSV/JSON/HTML.
+- Tools: literal code search, data dictionary, impact analysis, run comparison.
+- Settings: parsing, workspace metadata, limits, graph, privacy. Provider UI is next.
+- Standalone HTML graph embeds all JS/CSS/data; source bundles preserve original bytes.
+- 32 tests pass (including AppTest all pages and graph JS syntax); Ruff clean; health 200.
+- Actual browser: imported 7-file host directory, generated 9 assets / 7 dependencies,
+  searched summary, selected an edge and verified its two intermediate SAS evidence records.
+- Browser found a JS newline escaping defect; regression added and fixed before commit.
 
 ## Pending
 - Graph, columns persistence, provider integration, exports, UI verification,
@@ -30,6 +44,6 @@ Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23
 ## Decisions / handoff
 See MASTER_PLAN and ARCHITECTURE_DECISIONS. Run `.venv\Scripts\python.exe -m pytest`.
 Local runtime path `.dataforge/`. No LLM credentials detected or needed for core features.
-Next concrete action: integrate UI against the tested services/graph. Backend slices are tested;
-full end-to-end slice completion remains pending UI verification.
+Next concrete action: implement provider adapters against tests/test_llm.py (currently red).
+Live LLM tests require a reachable endpoint/credentials; do not claim them without evidence.
 Commit policy (user steering): commit each feature/group only after its tests pass.
