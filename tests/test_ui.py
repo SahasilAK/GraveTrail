@@ -15,7 +15,7 @@ def test_empty_dashboard_and_builder(tmp_path, monkeypatch):
 
 
 def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, monkeypatch):
-    from ui.themes import current_preset
+    from ui.themes import PRESETS, current_preset
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "home"))
     config = tmp_path / "config.toml"
@@ -27,6 +27,9 @@ def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, 
     app.switch_page("ui/pages/settings.py").run()
     app.segmented_control[0].set_value("Visualization").run()
     palette = next(c for c in app.selectbox if c.label == "Theme preset")
+    assert palette.options == list(PRESETS)
+    assert len(palette.options) == 14
+    assert not any(c.label == "Theme preset" for c in app.segmented_control)
     assert all(name + " dark" in palette.options for name in ["Ocean", "Forest", "Amethyst", "Graphite"])
     palette.set_value("Forest dark").run()
     next(b for b in app.button if b.label == "Apply theme").click().run()

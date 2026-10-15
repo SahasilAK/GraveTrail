@@ -100,6 +100,10 @@ The orange choices are inspired by Claude's warm palette. Existing theme names a
 are preserved. Adding these options does not apply a different theme; choose **Apply theme**
 only when you want to change the current appearance.
 
+The selector is a dropdown with fourteen named options (five dark and nine light).
+If an older running server still shows four theme buttons after an upgrade, restart
+the Streamlit server from the updated checkout, then refresh the browser page.
+
 Choose complete source expanded or relevant statements first, and whether code displays line
 numbers. Relevant-first mode keeps the **Complete source** panel closed when evidence snippets
 are available; open it to load the full display. Files without focused evidence default to full

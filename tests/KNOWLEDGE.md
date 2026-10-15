@@ -20,6 +20,6 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_sql.py` — Behavioral regression tests for sql. Run with pytest; temporary runtime data only.
 - `test_store.py` — Behavioral regression tests for store. Run with pytest; temporary runtime data only.
 - `test_themes.py` — Frozen original-eight palette/order preservation, exactly six additions; native mode/config/TOML preservation, atomic rollback and AA contrast across all fourteen themes.
-- `test_ui.py` — Page/workspace/provider flows, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
+- `test_ui.py` — Page/workspace/provider flows, complete fourteen-theme dropdown, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
 - `test_workflow.py` — Behavioral regression tests for workflow. Run with pytest; temporary runtime data only.
 - `test_workspace_configuration.py` — Workspace edits preserve identity/data; safe v1/v2 configuration portability, resource validation, isolation and injected-failure rollback.

@@ -237,3 +237,18 @@ configured model when one becomes available. Preserve the user's unrelated `.git
   were not written by this task and are excluded from its commit.
 - Verification: 136 tests passed; Ruff clean. All fourteen presets pass configuration
   round-trips and text/link/button contrast checks. Independent review found no issues.
+
+## Running theme selector correction — 2026-10-15
+
+- User screenshot showed the obsolete four-button selector despite the committed fourteen-
+  option dropdown. The long-running server had not loaded the latest selector code.
+- Restarted the verified app process on port 8501 from this checkout, retaining the primary
+  DATAFORGE_HOME and named gateway environment variables. Active config SHA256 was identical
+  before/after restart; no theme was applied or config written. Browser was not opened.
+- Read-only live WebSocket session selected the Visualization section and confirmed the
+  server emitted a selectbox with all fourteen exact names, including five dark choices.
+  No Apply action was sent; the probe is ignored under .dataforge/verification/.
+- AppTest now asserts the complete dropdown options/order, fourteen choices, and absence
+  of the obsolete theme segmented control. User guide documents restart after stale upgrades.
+- Verification: full suite 136 passed in 14.12s; Ruff clean. Live server emits all fourteen
+  options. Appearance validation remains with the user; the restart did not change the theme.
