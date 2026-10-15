@@ -179,3 +179,8 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# DataForge local runtime and analysis artifacts
+.dataforge/
+.venv-clean/
+.knowledge-base/

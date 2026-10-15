@@ -90,3 +90,21 @@ def test_analysis_snapshot_does_not_mix_concurrent_import_content(workspace):
     assert edge["code"] == old.decode()
     assert s.original(edge["file_id"], edge["source_hash"]) == old
     assert next(f for f in s.files(w) if f["relative_path"] == "b.sql")["parsing_status"] == "pending"
+
+
+def test_parallel_parsing_matches_sequential_and_config_validation(workspace):
+    from pydantic import ValidationError
+
+    from dataforge.configuration import ParsingSettings
+    s, w = workspace
+    Importer(s, w).files([(f"q{i}.sql", f"create table mart.t{i} as select id from raw.t{i};".encode()) for i in range(12)], {".sql"})
+    analyze(s, w)
+    expected = {(e["source_id"], e["target_id"]) for e in s.edges(w)}
+    s.set_setting(w, "parse_workers", 4)
+    result = analyze(s, w, force=True)
+    assert result["analyzed"] == 12
+    assert {(e["source_id"], e["target_id"]) for e in s.edges(w)} == expected
+    with pytest.raises(ValidationError):
+        ParsingSettings.model_validate({"dialect": ["invalid"]})
+    with pytest.raises(ValidationError):
+        ParsingSettings.model_validate({"dialect_by_folder": {"folder/": "unknown_vendor"}})

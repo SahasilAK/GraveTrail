@@ -11,7 +11,7 @@ from dataforge.models import AssetRef, Diagnostic, ParseResult, file_asset
 
 def bounded_records(content, dialect, max_columns=4096, max_record_chars=1_000_000):
     """Reject excessive width before csv.reader allocates a field list."""
-    quoted, fields, chars = False, 1, 0
+    quoted, field_start, fields, chars = False, True, 1, 0
     for line in io.StringIO(content):
         chars += len(line)
         if chars > max_record_chars:
@@ -19,18 +19,23 @@ def bounded_records(content, dialect, max_columns=4096, max_record_chars=1_000_0
         i = 0
         while i < len(line):
             c = line[i]
-            if c == dialect.quotechar:
-                if quoted and i + 1 < len(line) and line[i + 1] == c:
+            if quoted:
+                if c == dialect.quotechar and i + 1 < len(line) and line[i + 1] == c:
                     i += 1
-                else:
-                    quoted = not quoted
-            elif c == dialect.delimiter and not quoted:
+                elif c == dialect.quotechar:
+                    quoted = False
+            elif c == dialect.quotechar and field_start:
+                quoted, field_start = True, False
+            elif c == dialect.delimiter:
                 fields += 1
+                field_start = True
                 if fields > max_columns:
                     raise ValueError("CSV exceeds 4,096 column limit")
+            elif not (field_start and dialect.skipinitialspace and c == ' '):
+                field_start = False
             i += 1
         if not quoted:
-            fields, chars = 1, 0
+            field_start, fields, chars = True, 1, 0
         yield line
 
 

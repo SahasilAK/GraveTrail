@@ -75,3 +75,24 @@ def test_quoted_dotted_identifier_keeps_component_boundaries():
     r = parse_sql('create table mart.x as select * from "raw.orders"; create table mart.y as select * from raw.orders;')
     a, b = [o.sources[0].name for o in r.operations]
     assert canonical(a) != canonical(b)
+
+
+def test_unused_cte_in_update_is_not_a_read_dependency():
+    r = parse_sql('WITH unused AS (SELECT id FROM raw.secret) UPDATE mart.x SET v=b.v FROM raw.b b WHERE mart.x.id=b.id')
+    assert names(r.operations[0].sources) == {"raw.b"}
+
+
+def test_used_cte_in_update_resolves_base_source():
+    r = parse_sql('WITH c AS (SELECT id,v FROM raw.a) UPDATE mart.x SET v=c.v FROM c WHERE mart.x.id=c.id')
+    assert names(r.operations[0].sources) == {"raw.a"}
+    assert not any(d.symbol == "c" for d in r.diagnostics)
+
+
+def test_order_alias_is_not_fabricated_as_a_base_column():
+    r = parse_sql('SELECT amount*2 AS doubled FROM raw.a ORDER BY doubled')
+    assert {u.column for u in r.operations[0].usages} == {"amount"}
+
+
+def test_single_target_update_reads_unqualified_rhs_columns():
+    r = parse_sql('UPDATE mart.employee SET salary=salary*1.1 WHERE active=1')
+    assert {u.column for u in r.operations[0].usages} == {"salary", "active"}

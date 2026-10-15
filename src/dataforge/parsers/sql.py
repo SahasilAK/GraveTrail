@@ -64,7 +64,14 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
             for scope in all_scopes:
                 if scope.parent is None:
                     visit(scope)
+            cte_scopes = {s.expression.parent.alias_or_name.casefold(): s for s in all_scopes
+                          if isinstance(s.expression.parent, exp.CTE)}
+            if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
+                for table in tree.find_all(exp.Table):
+                    if table.find_ancestor(exp.CTE) is None and table.name.casefold() in cte_scopes:
+                        visit(cte_scopes[table.name.casefold()])
             scopes = [s for s in all_scopes if id(s) in active]
+            inactive_nodes = {id(n) for s in all_scopes if id(s) not in active for n in s.expression.walk()}
             target = target_table(tree)
             temp = bool(tree.find(exp.TemporaryProperty)) or (target is not None and target.name.startswith("#"))
             targets = [AssetRef(table_name(target), temp)] if target is not None else []
@@ -77,7 +84,7 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
             # DML owns table references outside query scopes (UPDATE FROM / MERGE USING).
             if not isinstance(tree, (exp.Select, exp.Union, exp.Create, exp.Insert)):
                 for table in tree.find_all(exp.Table):
-                    if table is not target and table.name.casefold() not in cte_names:
+                    if table is not target and table.name.casefold() not in cte_names and id(table) not in inactive_nodes:
                         if isinstance(table.this, exp.Identifier):
                             base_tables[id(table)] = table
             sources = list({table_name(t): AssetRef(table_name(t)) for t in base_tables.values()}.values())
@@ -97,7 +104,7 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                         parent_mapping = {k.casefold(): v[1] for k, v in parent.selected_sources.items()}
                         source = parent_mapping.get(alias.casefold())
                         parent = parent.parent
-                elif len(mapping) == 1:
+                elif len({id(v) for v in mapping.values()}) == 1:
                     source = next(iter(mapping.values()))
                 elif name == "*":
                     for item in mapping.values():
@@ -130,11 +137,14 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                             attribute(projection, mapping, scope)
             if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
                 mapping = {t.alias_or_name.casefold(): t for t in tree.find_all(exp.Table)
-                           if isinstance(t.this, exp.Identifier) and t.name.casefold() not in cte_names}
+                           if isinstance(t.this, exp.Identifier) and t.name.casefold() not in cte_names and id(t) not in inactive_nodes}
+                for table in tree.find_all(exp.Table):
+                    if table.name.casefold() in cte_scopes and id(table) not in inactive_nodes:
+                        mapping[table.alias_or_name.casefold()] = cte_scopes[table.name.casefold()]
                 if target is not None:
                     mapping[table_name(target).casefold()] = target
                 for col in tree.find_all(exp.Column):
-                    if id(col) not in handled:
+                    if id(col) not in handled and id(col) not in inactive_nodes:
                         # Assignment LHS is a write, not a read of the old target value.
                         if isinstance(col.parent, exp.EQ) and col.parent.this is col and col.parent.parent is tree:
                             continue

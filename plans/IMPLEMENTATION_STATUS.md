@@ -1,71 +1,77 @@
 # DataForge implementation status
 
-Updated: 2026-10-15. Specification fully read (1,597 lines).
+Updated: 2026-10-15. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
-## Current stage
-Core workflows implemented; final packaging/docs/benchmark in progress. Repository initially contained only docs,
-README, LICENSE and git configuration. User's existing `.gitignore` change preserved.
-Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23.0.
+## Delivery state
+Working six-page local application. All supported core workflows are implemented and tested.
+This is conservative static analysis, not a SQL/SAS runtime or a universal language compiler.
 
-## Completed and tested backend groups
-- Specification review, architecture, design direction, AGENTS and implementation plan.
-- Secure ZIP/browser/allowed-root directory ingestion, original blobs, duplicate hashes,
-  encodings, size/count/ratio budgets, workspace settings and inventory persistence.
-- SQL AST operations, CTE/subquery scopes, direct columns, wildcards and parse diagnostics.
-- SAS DATA/procedure rules, static macros, library maps and unresolved dynamic warnings.
-- CSV streaming metadata; never evaluates data values as instructions.
-- Transactional analysis runs and snapshots, hash-based incremental cache, conservative
-  cross-file resolution, explicit operation memberships and stored direct column usages.
-- Cycle-safe graph traversal, evidence-preserving temporary contraction, logical ordering.
-- Validation: 27 tests pass, including all required deterministic fixture scenarios; the
-  invalid-LLM scenario awaits the provider slice. Restart and changed-source replacement tested.
+## Implemented
+- Foundation: Python 3.11+, Streamlit 1.66 navigation/light-dark themes, modular layers,
+  safe structured logs, DuckDB migrations v1/v2, isolated persistent workspaces.
+- Secure nested ZIP/browser-folder/allowed-root import, selected extensions, hashes, byte-exact
+  originals, complete decoded inventory, encoding/binary/duplicate diagnostics, batch writes,
+  path/symlink/size/count/ratio safeguards and import history.
+- SQLGlot read/write ASTs, aliases, reachable CTEs/subqueries/unions, temporary targets,
+  quoted component identities, direct column contexts, exact statement evidence and diagnostics.
+- SAS DATA and common PROC rules, PROC SQL, explicit CSV/file links, WORK, static macros/library
+  maps, unresolved dynamic warnings, inline-data exclusion; bounded CSV schema/sample/row metadata.
+- Atomic analysis replacement, run snapshots/comparison, immutable source-hash evidence,
+  conservative cross-file linking, operation memberships, incremental cache, 1-8 parsing workers,
+  revision-cached graphs, cycle-safe traversal and evidence-preserving temporary contraction.
+- Explorer exact asset choice, upstream/downstream trees, combined/path/depth/node controls,
+  interactive edge/node evidence, source viewer/search/copy and original-version downloads.
+- Direct columns with grouping/filtering/context and wildcard uncertainty; CSV/JSON/HTML reports.
+- Provider profiles, env-only keys, discovery/manual models, task routing, same-host transient
+  fallback, privacy/context/redaction gates, versioned prompts/schema/hash, grounded validation,
+  quarantine, inferred merge and source-change invalidation. AI retention preserves merged claims.
+- Offline embedded HTML graph, JSON, original ZIP bundles; dictionary, code search and impact tools.
+- Lockfile, tested wheel/sdist, clean install, CI configuration, Docker definition, required guides
+  and folder knowledge maps. Original user .gitignore edits are preserved separately.
 
-## In progress
-- Final hardening, parser edge cases, benchmark, packaging and required documentation.
+## Verification evidence
+- 62 tests pass in both normal and separately created clean Python 3.11 environments; Ruff clean.
+- uv lock --check passes; wheel installed without editable source and imported with Python -I;
+  bundled prompt/schema assets verified. Sdist/wheel exclude local runtime data.
+- Clean-environment Streamlit server launched at http://127.0.0.1:8501; health endpoint 200.
+- Actual browser: host directory and ZIP upload/import; skip/duplicate reporting; analysis creates
+  9 assets / 7 dependencies; exact search; graph edge selection retains both WORK-stage evidence
+  statements; source inspection; three direct columns; successful HTML graph download.
+- Workspace reopening tested after restart in integration tests and the browser server.
+- Browser-detected JS newline escaping defect fixed with a JavaScript syntax regression test.
+- Independent read-only review findings fixed with regression tests: unused/DML CTEs, macro
+  conditions, name literals/DATALINES, quoted names, cross-statement AI claims, immutable concurrent
+  imports, CSV width/header/quote bounds and AI retention. See docs/REVIEW.md.
+- Injected post-write failure proves transactional rollback and failed-run tracking.
+- Labeled 500-file SQL chain: import 12.532 s, cold analysis 1.9221 s, warm refresh 0.6712 s,
+  500 unchanged parses skipped; focused traversal mean 0.0849 ms. Fixture precision/recall and
+  evidence coverage 100%. These are synthetic workload results, not general-language claims.
 
-## Provider slice
-- Profile UI and HTTP adapters for OpenAI-compatible services, Anthropic, Ollama, Gemini,
-  Azure OpenAI and Databricks; manual models, discovery, connection checks and task routing.
-- Focused AI assistance in Builder, versioned prompts/schema/hash, env-only credentials,
-  privacy/context gates, redaction, retention, bounded retries and recipient-host fallback.
-- Strict evidence validation/quarantine; explicit inferred merge with hash-based invalidation.
-- 43 tests pass and Ruff clean before provider UI regression expansion. Live provider calls
-  have not been verified; protocol tests use HTTPX MockTransport.
+## Explicit limitations and unverified integrations
+- No live LLM verification: credential-variable presence checks were false; localhost Ollama
+  11434 and LM Studio 1234 were unreachable. Protocol tests use HTTPX MockTransport. Configure
+  an endpoint and use Settings connection validation when available. Subscription sign-in is
+  not repurposed. Databricks Genie remains a distinct unsupported query-agent integration.
+- HTML downloaded and checked for embedded assets/no CDN and valid JS. Browser policy rejected
+  file: navigation, so opening the independent local file is not browser-tested. No workaround
+  browser/server was used to bypass that policy.
+- Docker and remote CI matrix are configured but were not executed here.
+- Dynamic SQL/procedures, runtime SAS macros, arbitrary name literals, ranges/arrays and full
+  SAS variable compilation remain unsupported or conservative. See SQL_PARSING/SAS_PARSING docs.
+- Temporary/WORK identities are workspace scoped. Runtime sessions and repeated-write execution
+  order cannot be inferred. Separate unrelated jobs into different workspaces.
+- Unknown wildcards do not invent columns. Resource budgets bound large imports and graphs.
+  Analysis is synchronous with cooperative between-file cancellation; parsers are not preempted.
+- Local single-user/single-process use; no public authentication or shared multiprocess DuckDB.
+- Imports are additive. Blobs and non-AI run history are retained; lifecycle controls remain an
+  operational follow-up for long-lived high-churn workspaces.
 
-## UI / export verification
-- Multipage Streamlit shell, dashboard, ZIP/folder/allowed-root Builder, filtered inventory,
-  analysis/rebuild/validation controls and original source viewer implemented.
-- Explorer: exact selection, upstream/downstream trees, combined focused graph, depth/node
-  limits, temporary collapse, interactive edge/node evidence, path and source exports.
-- Column page: direct-reference metrics, filters/grouping, evidence and CSV/JSON/HTML.
-- Tools: literal code search, data dictionary, impact analysis, run comparison.
-- Settings: parsing, workspace metadata, limits, graph, privacy. Provider UI is next.
-- Standalone HTML graph embeds all JS/CSS/data; source bundles preserve original bytes.
-- 32 tests pass (including AppTest all pages and graph JS syntax); Ruff clean; health 200.
-- Actual browser: imported 7-file host directory, generated 9 assets / 7 dependencies,
-  searched summary, selected an edge and verified its two intermediate SAS evidence records.
-- Browser found a JS newline escaping defect; regression added and fixed before commit.
-
-## Pending
-- Clean install/package validation, final benchmark, complete required documentation,
-  browser ZIP/export/column workflow and folder knowledge synchronization.
-
-## Hardening / independent review
-- Added transactional schema migration v2 to pin statement content hashes; versioned original
-  views and downloads remain accurate after reimport. Immutable blob snapshot parsing also
-  prevents concurrent-import cache poisoning; newer files remain pending.
-- Fixed unused CTE dependencies, macro conditional false positives, DATALINES payload parsing,
-  unsupported SAS name literal guessing and quoted dotted SQL identifier collisions.
-- Bound CSV width/record resources and caught header failures per file; stopped imports after
-  total-byte exhaustion; tested symlink ZIPs and expansion bombs.
-- Bound AI source/target claims within one statement/block; retained merged claims beyond AI
-  interaction retention while pruning context bodies. AI relationships remain inferred.
-- 56 tests pass; Ruff clean. Read-only independent review findings and fixes: docs/REVIEW.md.
-- Parser cache version bumped to 2 so prior analyses do not reuse pre-fix parser output.
-
-## Decisions / handoff
-See MASTER_PLAN and ARCHITECTURE_DECISIONS. Run `.venv\Scripts\python.exe -m pytest`.
-Local runtime path `.dataforge/`. No LLM credentials detected or needed for core features.
-Next concrete action: finish hardening and review, benchmark, clean install, browser ZIP/export
-and column workflows, required docs and folder knowledge; commit each tested group.
-Commit policy (user steering): commit each feature/group only after its tests pass.
+## Continuation
+Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
+uv run ruff check .; uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json.
+Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 3; increment
+for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
+to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
+Keep future work in tested Conventional Commits, as requested. No push was requested.
+Follow-up priorities: live endpoints, target-vendor fixtures, explicit job/session identity,
+optional schema discovery, history/blob lifecycle and auth if expanding beyond local use.

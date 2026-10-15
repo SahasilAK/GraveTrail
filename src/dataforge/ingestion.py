@@ -15,6 +15,15 @@ from charset_normalizer import from_bytes
 
 from dataforge.models import stable_id
 
+UPSERT_SOURCE = """INSERT INTO source_files(file_id,workspace_id,ingestion_id,file_name,
+    extension,relative_path,source_path,storage_path,raw_content,content_hash,file_size,
+    encoding,line_count,parsing_status,error_details,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(file_id) DO UPDATE SET ingestion_id=excluded.ingestion_id,
+    raw_content=excluded.raw_content,content_hash=excluded.content_hash,
+    storage_path=excluded.storage_path,file_size=excluded.file_size,encoding=excluded.encoding,
+    line_count=excluded.line_count,parsing_status='pending',error_details=excluded.error_details,
+    metadata='{}',imported_at=excluded.imported_at"""
+
 
 @dataclass
 class Limits:
@@ -126,6 +135,7 @@ class Importer:
         total = 0
         known = {f["content_hash"] for f in self.store.files(self.workspace)}
         paths = set()
+        records = []
         with self.store.transaction():
             for name, reader in entries:
                 if total >= self.limits.max_total_bytes:
@@ -160,15 +170,7 @@ class Importer:
                     if not blob.exists():
                         blob.write_bytes(data)
                     fid = stable_id(self.workspace, relative)
-                    self.store.execute("""INSERT INTO source_files(file_id,workspace_id,ingestion_id,file_name,
-                        extension,relative_path,source_path,storage_path,raw_content,content_hash,file_size,
-                        encoding,line_count,parsing_status,error_details,metadata) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                        ON CONFLICT(file_id) DO UPDATE SET ingestion_id=excluded.ingestion_id,
-                        raw_content=excluded.raw_content,content_hash=excluded.content_hash,
-                        storage_path=excluded.storage_path,file_size=excluded.file_size,encoding=excluded.encoding,
-                        line_count=excluded.line_count,parsing_status='pending',error_details=excluded.error_details,
-                        metadata='{}',imported_at=excluded.imported_at""",
-                        [fid, self.workspace, ingestion, PurePosixPath(relative).name, ext, relative,
+                    records.append([fid, self.workspace, ingestion, PurePosixPath(relative).name, ext, relative,
                          source + "/" + relative, "blobs/" + digest, text, digest, len(data), encoding,
                          len(text.splitlines()), "pending", warning, "{}"])
                     report.accepted += 1
@@ -179,6 +181,8 @@ class Importer:
                     report.diagnostics.append(f"{name}: {exc}")
                 if progress:
                     progress(report)
+            if records:
+                self.store.db.executemany(UPSERT_SOURCE, records)
             self.store.execute("INSERT INTO ingestion_runs(ingestion_id,workspace_id,source,report) VALUES (?,?,?,?)",
                                [ingestion, self.workspace, source, json.dumps(asdict(report))])
         return report

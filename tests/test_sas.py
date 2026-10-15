@@ -92,3 +92,5 @@ def test_csv_extreme_width_and_header_errors_are_diagnostics():
     assert r.diagnostics and len(r.metadata.get("columns", [])) <= 4096
     r = parse_csv("a" * 140000 + "\n1\n", "long.csv")
     assert any(d.severity == "error" for d in r.diagnostics)
+    r = parse_csv('unquoted"' + "," * 20000 + "\n", "quote_bypass.csv")
+    assert r.diagnostics and len(r.metadata.get("columns", [])) <= 4096

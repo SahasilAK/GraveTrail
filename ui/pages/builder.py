@@ -37,6 +37,7 @@ if st.button("Import into inventory", type="primary", disabled=not extensions):
             report = importer.directory(directory, extensions, progress)
         else:
             raise ValueError("Choose source files first")
+        progress(report)
         st.session_state["import_report_" + w] = asdict(report)
         st.success(f"Imported {report.accepted} files. Analyze the inventory below.")
     except Exception as exc:

@@ -1,12 +1,12 @@
 """Run with: streamlit run app.py"""
-import logging
 import os
 
 import streamlit as st
 
+from dataforge.logging_config import configure_logging
 from ui.common import ROOT, get_store
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
+configure_logging()
 st.set_page_config(page_title="DataForge | Engineering workspace", page_icon=":material/account_tree:", layout="wide")
 store = get_store(os.environ.get("DATAFORGE_HOME", str(ROOT / ".dataforge")))
 workspaces = store.workspaces()

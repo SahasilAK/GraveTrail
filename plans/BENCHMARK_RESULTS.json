@@ -1,0 +1,20 @@
+{
+  "workload": "labeled synthetic SQL chain, one CTAS per file",
+  "files": 500,
+  "assets": 501,
+  "edges": 500,
+  "import_seconds": 12.532,
+  "cold_analysis_seconds": 1.9221,
+  "warm_analysis_seconds": 0.6712,
+  "unchanged_parses_skipped": 500,
+  "focused_traversal_mean_ms": 0.0849,
+  "focused_nodes": 21,
+  "fixture_precision": 1.0,
+  "fixture_recall": 1.0,
+  "evidence_coverage": 1.0,
+  "python": "3.11.16",
+  "platform": "Windows",
+  "streamlit": "1.66.0",
+  "duckdb": "1.5.6",
+  "sqlglot": "30.23.0"
+}

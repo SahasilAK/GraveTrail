@@ -32,8 +32,15 @@ def title(name: str, description: str):
 
 
 def load_graph(store, workspace):
-    # Parsing is cached in DuckDB; graph construction touches metadata and evidence only.
-    return LineageGraph(store.assets(workspace), store.edges(workspace))
+    latest = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+    return _cached_graph(str(store.home), workspace, latest[0]["run_id"] if latest else "empty")
+
+
+@st.cache_resource(max_entries=32, ttl=300)
+def _cached_graph(home, workspace, revision):
+    store = get_store(home)
+    with store.lock:
+        return LineageGraph(store.assets(workspace), store.edges(workspace))
 
 
 def choose_asset(graph, key):
@@ -62,7 +69,9 @@ def source_viewer(store, file_ids, key="source", evidence=None):
     if not file_ids:
         st.info("No source evidence in this selection.")
         return
-    choices = {fid: store.file(fid)["relative_path"] for fid in dict.fromkeys(file_ids)}
+    ids = list(dict.fromkeys(file_ids))
+    choices = {r["file_id"]: r["relative_path"] for r in store.rows(
+        "SELECT file_id,relative_path FROM source_files WHERE file_id IN (" + ",".join("?" for _ in ids) + ") ORDER BY relative_path", ids)}
     fid = st.selectbox("Source file", list(choices), format_func=choices.get, key=key + "_file")
     relevant = [e for e in evidence or [] if e.get("file_id") == fid]
     source_hash = relevant[0].get("source_hash") if relevant else None

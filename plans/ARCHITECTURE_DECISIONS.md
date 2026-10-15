@@ -16,4 +16,12 @@
   transmission is disabled by default. Model claims remain inferred until validated.
 - ADR 008: Native Streamlit multipage navigation and native themes minimize fragile CSS.
 - ADR 009: The user's autonomous execution instruction overrides interactive approval steps
-  in skills. Use persistent status as execution ledger; no unsolicited commits or pushes.
+  in skills. Use persistent status as execution ledger. User later requested commits after each
+  tested feature group; commits are local and no push is authorized.
+- ADR 010: Statement evidence pins immutable byte hashes, independently of the active inventory
+  version. Read captured blob snapshots during analysis; preserve newer pending imports.
+- ADR 011: Parsing is bounded to 1–8 threads; analyses serialize. Graph cache revisions use
+  completed runs and read assets/edges under one connection lock.
+- ADR 012: CSV width is checked before field allocation; quote handling follows field boundaries.
+  AI retention prunes interaction bodies while retaining minimal durable merged evidence.
+- ADR 013: Source-distribution inputs use an allowlist to exclude runtime user data.

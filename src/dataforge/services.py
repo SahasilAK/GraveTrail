@@ -6,13 +6,15 @@ import logging
 import posixpath
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
+from dataforge.configuration import ParsingSettings
 from dataforge.models import AssetRef, Diagnostic, ParseResult, canonical, stable_id
 from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 
-PARSER_VERSION = "2"
+PARSER_VERSION = "3"
 log = logging.getLogger(__name__)
 
 
@@ -30,47 +32,30 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
     """
     start = time.perf_counter()
     run_id = uuid.uuid4().hex
-    config = {k: store.setting(workspace, k, default) for k, default in [
+    config = ParsingSettings.model_validate({k: store.setting(workspace, k, default) for k, default in [
         ("dialect", ""), ("dialect_by_folder", {}), ("library_mappings", {}), ("macros", {}),
-        ("case_sensitive", False)]}
+        ("case_sensitive", False)]}).model_dump()
     store.execute("INSERT INTO analysis_runs(run_id,workspace_id,status,configuration) VALUES (?,?,?,?)",
                   [run_id, workspace, "running", json.dumps(config)])
     analyzed = cached = 0
     results = []
     files = store.files(workspace)
     try:
-        for i, metadata in enumerate(files):
-            if cancelled and cancelled():
-                raise InterruptedError("Analysis cancelled; previous lineage retained")
-            fid = metadata["file_id"]
-            key = stable_id(PARSER_VERSION, metadata["content_hash"], metadata["relative_path"], json.dumps(config, sort_keys=True))
-            existing = store.rows("SELECT result FROM parse_cache WHERE cache_key=?", [key])
-            selected = file_ids is None or fid in file_ids
-            if existing and (not force or not selected):
-                parsed = ParseResult.from_dict(json.loads(existing[0]["result"]))
-                cached += 1
-            elif not selected:
-                continue
-            else:
-                content = store.snapshot_content(metadata)
-                ext = metadata["extension"]
-                if ext == ".sql":
-                    dialect = config["dialect"]
-                    # Most specific path prefix wins, independent of dictionary ordering.
-                    for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
-                        if metadata["relative_path"].startswith(prefix):
-                            dialect = override
-                    parsed = parse_sql(content, dialect)
-                elif ext == ".sas":
-                    parsed = parse_sas(content, config["library_mappings"], config["macros"])
-                else:
-                    parsed = parse_csv(content, metadata["relative_path"])
-                store.execute("INSERT INTO parse_cache VALUES (?,?) ON CONFLICT(cache_key) DO UPDATE SET result=excluded.result",
-                              [key, json.dumps(parsed.to_dict())])
-                analyzed += 1
-            results.append((metadata, parsed))
-            if progress:
-                progress((i + 1) / max(len(files), 1), metadata["relative_path"])
+        workers = min(8, max(1, int(store.setting(workspace, "parse_workers", 1))))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            jobs = []
+            for metadata in files:
+                fid = metadata["file_id"]
+                key = stable_id(PARSER_VERSION, metadata["content_hash"], metadata["relative_path"], json.dumps(config, sort_keys=True))
+                existing = store.rows("SELECT result FROM parse_cache WHERE cache_key=?", [key])
+                selected = file_ids is None or fid in file_ids
+                if existing and (not force or not selected):
+                    jobs.append((metadata, key, ParseResult.from_dict(json.loads(existing[0]["result"])), None))
+                elif selected:
+                    jobs.append((metadata, key, None, pool.submit(_parse_inventory, store, metadata, config)))
+            _collect_jobs(store, jobs, results, progress, cancelled)
+        analyzed = sum(job[3] is not None for job in jobs)
+        cached = len(jobs) - analyzed
         _restore_ai_results(store, workspace, results)
         with store.transaction():
             snapshot = _materialize(store, workspace, run_id, results, config)
@@ -85,6 +70,33 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
                        type(exc).__name__, time.perf_counter() - start, run_id])
         log.exception("analysis_failed", extra={"run_id": run_id})
         raise
+
+
+def _parse_inventory(store, metadata, config):
+    content = store.snapshot_content(metadata)
+    ext = metadata["extension"]
+    if ext == ".sql":
+        dialect = config["dialect"]
+        for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
+            if metadata["relative_path"].startswith(prefix):
+                dialect = override
+        return parse_sql(content, dialect)
+    if ext == ".sas":
+        return parse_sas(content, config["library_mappings"], config["macros"])
+    return parse_csv(content, metadata["relative_path"])
+
+
+def _collect_jobs(store, jobs, results, progress, cancelled):
+    for i, (metadata, key, parsed, future) in enumerate(jobs):
+        if cancelled and cancelled():
+            raise InterruptedError("Analysis cancelled; previous lineage retained")
+        if future is not None:
+            parsed = future.result()
+            store.execute("INSERT INTO parse_cache VALUES (?,?) ON CONFLICT(cache_key) DO UPDATE SET result=excluded.result",
+                          [key, json.dumps(parsed.to_dict())])
+        results.append((metadata, parsed))
+        if progress:
+            progress((i + 1) / max(len(jobs), 1), metadata["relative_path"])
 
 
 def _materialize(store, workspace, run_id, results, config):

@@ -14,6 +14,6 @@ The author added regression tests, reproduced each material finding, and fixed t
 - LLM claims must bind reads and writes within one statement or a supported SAS block.
 - Import stops reading after the total byte budget; ZIP symlink/ratio tests pass.
 
-Validation after fixes: 56 automated tests pass, Ruff clean. Injected post-write failure proves
+Validation after fixes and final regression expansion: 62 automated tests pass, Ruff clean. Injected post-write failure proves
 DuckDB materialization rollback. No live provider test was judged without endpoint/credentials.
 Packaging/docs/performance were still in progress during review and are verified separately.

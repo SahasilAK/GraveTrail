@@ -3,6 +3,7 @@ import json
 import sqlglot
 import streamlit as st
 
+from dataforge.configuration import ParsingSettings
 from ui.common import allowed_roots, context, title
 
 title("Settings", "Configure analysis, storage, resource budgets and source-code privacy.")
@@ -48,11 +49,12 @@ elif tab == "Storage and workspaces":
             obj = json.loads(config_file.getvalue())
             if obj.get("format") != "dataforge-metadata-v1":
                 raise ValueError("Unsupported workspace configuration format")
+            parsing = ParsingSettings.model_validate({k: v for k, v in obj.get("settings", {}).items()
+                if k in ParsingSettings.model_fields}).model_dump()
             new_id = store.create_workspace(str(obj["name"]) + " (imported)", str(obj.get("description", "")))
             # Parsing settings only. Never import privacy gates, storage paths or network endpoints.
-            for key in {"dialect", "library_mappings", "macros", "dialect_by_folder", "case_sensitive"}:
-                if key in obj.get("settings", {}):
-                    store.set_setting(new_id, key, obj["settings"][key])
+            for key, value in parsing.items():
+                store.set_setting(new_id, key, value)
             st.success("Workspace created. Select it in the sidebar.")
         except (ValueError, KeyError, TypeError) as exc:
             st.error(f"Configuration import failed: {exc}")
@@ -68,9 +70,11 @@ elif tab == "Performance":
     with st.form("performance"):
         max_file = st.number_input("Maximum file size (MB)", 1, 100, int(store.setting(w, "max_file_mb", 20)))
         max_files = st.number_input("Maximum files per import", 1, 100000, int(store.setting(w, "max_files", 10000)))
+        workers = st.number_input("Parsing workers", 1, 8, int(store.setting(w, "parse_workers", 1)))
         if st.form_submit_button("Save resource limits"):
             store.set_setting(w, "max_file_mb", max_file)
             store.set_setting(w, "max_files", max_files)
+            store.set_setting(w, "parse_workers", workers)
             st.success("Resource limits saved")
     st.caption("Imports also enforce 100 MB compressed / 200 MB total and a 200:1 ZIP expansion ratio. Analysis reuses content hashes on every refresh.")
     if st.button("Clear parser cache"):
