@@ -1,0 +1,34 @@
+{
+  "provider": "OmniRoute",
+  "endpoint": "http://localhost:20128/v1",
+  "model": "auto/best-fast",
+  "credential_variable": "OMNIROUTE_API_KEY",
+  "synthetic_sources_only": true,
+  "checks": [
+    {
+      "name": "connection",
+      "status": "passed",
+      "usage": {
+        "prompt_tokens": 172,
+        "completion_tokens": 36,
+        "total_tokens": 208
+      }
+    },
+    {
+      "name": ".sql",
+      "status": "failed",
+      "outcome": "quarantined",
+      "reason": "JSONDecodeError",
+      "usage": {
+        "prompt_tokens": 999,
+        "completion_tokens": 5,
+        "total_tokens": 1004,
+        "prompt_tokens_details": null
+      }
+    }
+  ],
+  "discovered_models": 966,
+  "status": "failed",
+  "error_type": "ValueError",
+  "duration_seconds": 31.41
+}

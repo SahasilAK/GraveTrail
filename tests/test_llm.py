@@ -118,3 +118,50 @@ def test_llm_cannot_splice_unrelated_statements_into_a_dependency():
         "explanation": "Unsupported splice", "confidence": .99}]})
     with pytest.raises(ValueError, match="same|bound|statement"):
         validate_response(response, code, {"raw.x", "raw.y", "mart.a", "mart.b"}, 1, 2)
+
+
+def test_single_json_fence_keeps_strict_object_validation():
+    from dataforge.llm import response_object
+
+    assert response_object('```json\n{"status":"connected"}\n```') == {"status": "connected"}
+    assert response_object(' {"claims":[]} ') == {"claims": []}
+    for raw in ['Before\n```json\n{}\n```', '```json\n{}\n```\nAfter', '[]', 'null', '',
+                '```json\n{}\n```\n```json\n{}\n```']:
+        with pytest.raises(ValueError):
+            response_object(raw)
+
+
+def test_fenced_grounded_response_validates_without_accepting_invented_assets(tmp_path):
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("Fenced response")
+        code = "create table mart.x as select id from raw.a;"
+        Importer(store, w).files([("q.sql", code.encode())], {".sql"})
+        analyze(store, w)
+        fid = store.files(w)[0]["file_id"]
+        profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
+        claim = {"source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1,
+                 "end_line": 1, "quote": code, "explanation": "Explicit dependency", "confidence": .9}
+
+        def handler(request):
+            payload = json.loads(request.content)
+            assert payload["stream"] is False
+            return httpx.Response(200, json={"choices": [{"message": {
+                "content": "```json\n" + json.dumps({"claims": [claim]}) + "\n```"}}]})
+
+        transport = httpx.MockTransport(handler)
+        assert assist(store, w, profile, fid, 1, 1, transport=transport)["outcome"] == "validated"
+        claim["source"] = "invented.table"
+        assert assist(store, w, profile, fid, 1, 1, transport=transport)["outcome"] == "quarantined"
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("body", [b"not json", b"[]", b"null"])
+def test_provider_invalid_envelope_raises_controlled_error(body):
+    from dataforge.llm import ProviderError
+
+    profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
+    with Adapter(profile, httpx.MockTransport(lambda request: httpx.Response(200, content=body))) as adapter:
+        with pytest.raises(ProviderError, match="JSON|object"):
+            adapter.models()

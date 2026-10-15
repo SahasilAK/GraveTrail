@@ -105,6 +105,20 @@ class ProviderError(Exception):
         self.retryable = retryable
 
 
+def response_object(text: str) -> dict:
+    """Accept JSON or one enclosing JSON fence, never prose or extracted fragments."""
+    if not isinstance(text, str):
+        raise ValueError("Provider content must be a JSON object")
+    text = text.strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text, re.DOTALL | re.IGNORECASE)
+    if fenced:
+        text = fenced[1]
+    obj = json.loads(text)
+    if not isinstance(obj, dict):
+        raise ValueError("Provider content must be a JSON object")
+    return obj
+
+
 class Adapter:
     def __init__(self, profile: Profile, transport=None):
         self.profile = profile
@@ -148,7 +162,13 @@ class Adapter:
                         if total > 2 * 1024 * 1024:
                             raise ProviderError("Provider response exceeds 2 MB limit")
                         chunks.append(chunk)
-                    return json.loads(b"".join(chunks))
+                    try:
+                        data = json.loads(b"".join(chunks))
+                    except (ValueError, UnicodeError):
+                        raise ProviderError("Provider returned invalid JSON") from None
+                    if not isinstance(data, dict):
+                        raise ProviderError("Provider response must be a JSON object")
+                    return data
             except httpx.TransportError:
                 if attempt >= self.profile.retries:
                     raise ProviderError("Provider connection failed or timed out", True) from None
@@ -180,7 +200,8 @@ class Adapter:
         else:
             path = "/chat/completions"
             payload = {"model": p.model, "messages": messages,
-                       "max_completion_tokens" if p.provider == "OpenAI" else "max_tokens": p.max_tokens}
+                       "max_completion_tokens" if p.provider == "OpenAI" else "max_tokens": p.max_tokens,
+                       "stream": False}
             if p.provider == "Databricks":
                 path = "/serving-endpoints/" + quote(p.model, safe="-._") + "/invocations"
                 payload.pop("model")
@@ -282,7 +303,7 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     try:
         with Adapter(profile, transport) as adapter:
             raw, usage = adapter.complete(system, user)
-        validated = GroundedResponse.model_validate_json(raw)
+        validated = GroundedResponse.model_validate(response_object(raw))
         validate_response(validated, source["raw_content"], known, first, last)
     except (ValueError, ProviderError) as exc:
         outcome, reason = "quarantined", type(exc).__name__

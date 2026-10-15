@@ -6,6 +6,8 @@ Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current t
 - `ACCEPTANCE_CRITERIA.md` — Acceptance criteria. Maintained documentation; consult implementation status for verification boundaries.
 - `ARCHITECTURE_DECISIONS.md` — Architecture decisions. Maintained documentation; consult implementation status for verification boundaries.
 - `BENCHMARK_RESULTS.json` — Measured 500-file synthetic workload and environment versions; not a general-language accuracy claim.
+- `CONTINUATION_PLAN.md` — Remaining master requirements and bounded next slices; preserves delivered core instead of restarting.
+- `LLM_LIVE_RESULTS.json` — Actual opt-in synthetic endpoint check outcomes; inspect status/checks before claiming live success.
 - `IMPLEMENTATION_STATUS.md` — Current delivered features, actual validation, unsupported cases and concrete continuation priorities.
 - `MASTER_PLAN.md` — DataForge Implementation Plan. Maintained documentation; consult implementation status for verification boundaries.
 - `RISKS_AND_ASSUMPTIONS.md` — Risks and assumptions. Maintained documentation; consult implementation status for verification boundaries.

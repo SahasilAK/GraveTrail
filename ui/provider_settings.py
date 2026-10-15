@@ -5,7 +5,7 @@ import uuid
 
 import streamlit as st
 
-from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local
+from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
 
 
 def render(store, workspace):
@@ -63,7 +63,7 @@ def render(store, workspace):
                         st.write(adapter.models())
                     else:
                         response, usage = adapter.complete('Return a JSON object with key "status".', 'Return {"status":"connected"}.')
-                        obj = json.loads(response)
+                        obj = response_object(response)
                         if obj.get("status") != "connected":
                             raise ValueError("Endpoint responded but did not follow the connection-test JSON contract")
                         st.success("Model connection validated")

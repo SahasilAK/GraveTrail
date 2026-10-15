@@ -43,3 +43,29 @@ Protocol documentation checked during development:
 
 Tests use HTTPX MockTransport to verify payloads, privacy, quarantine, grounding and merging.
 No live provider test is claimed without a reachable configured endpoint and credentials.
+
+## OmniRoute live verification
+
+The configured local test gateway is `http://localhost:20128/v1`. Its credential is referenced
+as `OMNIROUTE_API_KEY`; its value is never stored in project files. On this Windows machine the
+user explicitly requested remembering the credential, so it is a Windows user environment
+variable. Existing terminals and app processes need the variable injected or a fresh launch
+after their parent environment refreshes. `OMNIROUTE_BASE_URL` stores the non-secret endpoint.
+
+Run an opt-in check with an available model identifier:
+
+```powershell
+$env:OMNIROUTE_API_KEY = [Environment]::GetEnvironmentVariable('OMNIROUTE_API_KEY', 'User')
+uv run python scripts/verify_llm.py --model auto/best-fast --output plans/LLM_LIVE_RESULTS.json
+```
+
+This uses synthetic SQL/SAS in an isolated temporary database, checks discovery, connection,
+grounded claims, inferred merge, refresh and restart. It exits nonzero on any failure; it does
+not scan the user's imported projects. The model route is a gateway alias and may change its
+upstream model. The report records the requested route, not an independently verified model
+identity. A listed model is not necessarily callable.
+
+Compatible chat requests explicitly disable streaming. Some gateways/models return a single
+Markdown JSON fence even with JSON mode requested. The application accepts that enclosing
+fence only; surrounding prose, multiple blocks and non-object JSON remain invalid. Schema and
+source grounding checks still apply. Provider HTTP envelopes must be JSON objects.

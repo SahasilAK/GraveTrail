@@ -5,6 +5,8 @@ Updated: 2026-10-15. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 ## Delivery state
 Working six-page local application. All supported core workflows are implemented and tested.
 This is conservative static analysis, not a SQL/SAS runtime or a universal language compiler.
+The complete master specification is **not yet finished**. Stage completion in MASTER_PLAN
+means the core was delivered; detailed remaining requirements are in CONTINUATION_PLAN.md.
 
 ## Implemented
 - Foundation: Python 3.11+, Streamlit 1.66 navigation/light-dark themes, modular layers,
@@ -48,9 +50,12 @@ This is conservative static analysis, not a SQL/SAS runtime or a universal langu
   evidence coverage 100%. These are synthetic workload results, not general-language claims.
 
 ## Explicit limitations and unverified integrations
-- No live LLM verification: credential-variable presence checks were false; localhost Ollama
-  11434 and LM Studio 1234 were unreachable. Protocol tests use HTTPX MockTransport. Configure
-  an endpoint and use Settings connection validation when available. Subscription sign-in is
+- OmniRoute at localhost:20128/v1 is reachable. Live discovery, connection (also through the
+  actual Settings UI) and grounded SQL assistance passed. The initial complete SQL/SAS check
+  failed before merge/restart; see LLM_LIVE_RESULTS.json. A separate SAS request validated,
+  but the repeated full check rejected a non-JSON SQL response from the automatic model route.
+  The adapter works; live model output is not consistently compliant. Other providers retain
+  mock-backed verification only. Subscription sign-in is
   not repurposed. Databricks Genie remains a distinct unsupported query-agent integration.
 - HTML downloaded and checked for embedded assets/no CDN and valid JS. Browser policy rejected
   file: navigation, so opening the independent local file is not browser-tested. No workaround
@@ -75,3 +80,17 @@ to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for
 Keep future work in tested Conventional Commits, as requested. No push was requested.
 Follow-up priorities: live endpoints, target-vendor fixtures, explicit job/session identity,
 optional schema discovery, history/blob lifecycle and auth if expanding beyond local use.
+
+## Continuation execution — 2026-10-15
+
+- Re-read all 1,597 master lines, guidance, status, implementation and existing Git changes.
+  Preserved the user's `.gitignore` changes; did not recreate completed modules.
+- Added bounded single-fence JSON acceptance, explicit nonstreaming compatible requests and
+  controlled errors for malformed provider envelopes. Added repeatable synthetic live checker.
+- Verification: 67 tests pass; Ruff clean. Actual Settings connection test shows "Model
+  connection validated" against OmniRoute with usage tokens. No secret values in repo files.
+- Windows user environment contains OMNIROUTE_API_KEY and OMNIROUTE_BASE_URL at the user's
+  explicit request. Future test shells must inherit/inject those variables; do not print them.
+- Isolated synthetic UI verification home: `.dataforge/verification/live-ui`, loopback port8502.
+- Next: workspace name/description editing and safe validated configuration round trips,
+  then progressive trees/path export. See CONTINUATION_PLAN.md for the outstanding backlog.

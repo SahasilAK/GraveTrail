@@ -20,6 +20,10 @@ columns; atomic recovery after failures; cycles and large graph rendering.
 
 ## Vertical slices
 
+These stage checkboxes track the delivered core. They do not assert that every detailed
+master requirement is complete. See `CONTINUATION_PLAN.md` and `IMPLEMENTATION_STATUS.md`
+for incomplete requirements and current work.
+
 ### 1. Foundation and persistent import
 - [x] Create `pyproject.toml`, `app.py`, `src/dataforge/models.py`, `store.py`, `ingestion.py`.
 - [x] Test ZIP traversal, allowed roots, extension filters, duplicate hashes, persistence.
