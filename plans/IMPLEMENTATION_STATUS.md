@@ -1,6 +1,6 @@
 # DataForge implementation status
 
-Updated: 2026-10-15. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
+Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Delivery state
 Working six-page local application. All supported core workflows are implemented and tested.
@@ -10,7 +10,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 
 ## Implemented
 - Foundation: Python 3.11+, Streamlit 1.66 navigation/light-dark themes, modular layers,
-  safe structured logs, DuckDB migrations v1–v3, isolated persistent workspaces.
+  safe structured logs, DuckDB migrations v1–v4, isolated persistent workspaces.
 - Secure nested ZIP/browser-folder/allowed-root import, selected extensions, hashes, byte-exact
   originals, complete decoded inventory, encoding/binary/duplicate diagnostics, batch writes,
   path/symlink/size/count/ratio safeguards and import history.
@@ -339,3 +339,24 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Next: explicit supplied job/session identity for temporary assets, vendor fixtures and final
   requirement accounting/clean package/UI/benchmark checks. Auto-only live gateway check remains
   failed as recorded; no fixed-model substitution or relaxed validation.
+
+
+## Completion execution: explicit job/session identity — 2026-10-16
+
+- Portable default job/session ID and longest-folder-prefix assignments separate genuine
+  temporary datasets across supplied jobs. Persistent tables remain workspace-global. No
+  runtime ordering, execution boundaries or macro values are inferred. Default workspace
+  identities remain compatible unless a global persistent identity would collide.
+- Extracted conservative identity resolution into asset_identity.py. Same-job temporary and
+  persistent writes retain separate concrete outputs; ambiguous reads remain unresolved,
+  diagnostic-backed and ineligible for wildcard expansion. Qualified schema candidates respect
+  job visibility. AI context/merge/refresh use source job and reject changed assignments.
+- Exact asset selectors, tree/graph labels, JSON/CSV lineage, collapsed intermediate names and
+  run comparisons expose job IDs. Existing snapshots without job IDs remain readable.
+- Independent review reproduced four scope failures (default-ID collisions, foreign schema
+  candidates, external persistent reads and hidden persistent outputs). Added failing tests
+  before fixing each; focused job/schema checks pass. Final full-suite result follows below.
+- Actual isolated Settings saved default daily and one/two folder mappings with immediate
+  success. Primary workspace/settings/themes untouched. Screenshot: job-session-settings.png
+  under .dataforge/verification. Next: target-vendor fixtures and final acceptance accounting.
+- Final job/session verification:190 tests passed,1 skipped in21.58s; Ruff clean.

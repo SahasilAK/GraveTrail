@@ -6,6 +6,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).
 
 ## Files
+- `asset_identity.py` — AssetResolver separates supplied temporary job/session namespaces, preserves global persistent outputs and rejects mixed-lifetime reads; shared labels/AI visibility helpers.
 - `temporary_cleanup.py` — Scoped stale UUID.tmp preview, bounded journal-before-removal, full file identity checks, retained recovery and atomic no-overwrite restore. Uses maintenance idle lock and schema4.
 - `llm_resources.py` — Immediate workspace/process request admission with release; offline bounded original-line SQL/SAS/macro/interactive-PROC chunks, never silent truncation.
 - `ai_results.py` — ColumnResponse/ExplanationResponse v2 contracts; full-source operation matching, exact citations and direct-column attribution. Advisory results never merge lineage.

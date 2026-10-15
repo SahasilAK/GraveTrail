@@ -3,6 +3,7 @@ import json
 
 import streamlit as st
 
+from dataforge.asset_identity import source_job
 from dataforge.llm import merge_claims
 from dataforge.services import analyze
 
@@ -20,6 +21,12 @@ def render_result(store, workspace, state_key):
         return
     record = records[0]
     details = json.loads(record["details"])
+    job = details.get("job_id", "workspace")
+    st.caption(f"Source job/session: {job}")
+    config = {"default_job": store.setting(workspace, "default_job", "workspace"),
+              "job_by_folder": store.setting(workspace, "job_by_folder", {})}
+    if job != source_job(store.file(record["file_id"]), config):
+        st.warning("Source job/session assignment changed since this result. Request assistance again for the current context.")
     if record["outcome"] == "quarantined":
         st.warning(f"Response quarantined ({details.get('reason', 'validation failed')}); no relationships were added.")
     else:

@@ -16,6 +16,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
+from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
 from dataforge.llm_resources import request_slot
 from dataforge.models import canonical, stable_id, statements
@@ -309,10 +310,12 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     schema = response_model.model_json_schema()
     version = "2" if task in TASK_SCHEMAS else "1"
     prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
-    known = {a["name"] for a in store.assets(workspace)}
+    settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
+    job = source_job(source, settings)
+    known = {a["name"] for a in unambiguous_job_assets(store.assets(workspace), job).values()}
     user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
                 "start_line": first, "end_line": last, "known_assets": sorted(known), "source": focused,
-                "schema": schema}))
+                "schema": schema, "job_id": job}))
     if len(system) + len(user) > profile.context_chars:
         raise ValueError("Request exceeds the profile context budget; select fewer lines or increase its limit")
     start = time.perf_counter()
@@ -329,7 +332,6 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
             raise ProviderError("AI request cancelled after response; result quarantined")
         validated = response_model.model_validate(response_object(raw))
         if task in TASK_SCHEMAS:
-            settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
             from dataforge.services import source_dialect
             settings["dialect"] = source_dialect(source, settings)
             validate_advisory(validated, source, known, first, last, settings)
@@ -338,7 +340,7 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     except (ValueError, ProviderError) as exc:
         outcome, reason = "quarantined", type(exc).__name__
         retryable = isinstance(exc, ProviderError) and exc.retryable
-    details = {"content_hash": source["content_hash"], "reason": reason, "schema_version": version,
+    details = {"content_hash": source["content_hash"], "reason": reason, "schema_version": version, "job_id": job,
                "result": validated.model_dump() if outcome == "validated" else None}
     if store.setting(workspace, "llm_history", False):
         details.update(context=focused, response=raw)
@@ -373,7 +375,11 @@ def merge_claims(store, workspace, record_id):
     if source["content_hash"] != details["content_hash"]:
         raise ValueError("Source changed; run assistance again before merging")
     response = GroundedResponse.model_validate(details["result"])
-    assets = {canonical(a["name"]): a["asset_id"] for a in store.assets(workspace)}
+    config = {key: store.setting(workspace, key, value) for key, value in ParsingSettings().model_dump().items()}
+    job = source_job(source, config)
+    if details.get("job_id", "workspace") != job:
+        raise ValueError("Source job/session assignment changed; request assistance again before merging")
+    assets = {name: asset["asset_id"] for name, asset in unambiguous_job_assets(store.assets(workspace), job).items()}
     validate_response(response, source["raw_content"], set(assets), 1, len(source["raw_content"].splitlines()))
     with store.transaction():
         for i, c in enumerate(response.claims):

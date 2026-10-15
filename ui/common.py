@@ -6,6 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from dataforge.asset_identity import asset_label
 from dataforge.configuration import AnalysisPreferences, VisualizationSettings
 from dataforge.exports import GRAPH_BODY, GRAPH_CSS, GRAPH_JS, graph_data, report_csv, report_html
 from dataforge.graph import LineageGraph
@@ -62,7 +63,7 @@ def choose_asset(graph, key):
     if st.session_state.get(choice_key) not in mapping:
         st.session_state.pop(choice_key, None)
     return st.selectbox("Choose an exact asset", list(mapping), index=None,
-        format_func=lambda k: f'{mapping[k]["name"]}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
+        format_func=lambda k: f'{asset_label(mapping[k])}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
         key=choice_key)
 
 

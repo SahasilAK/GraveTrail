@@ -9,6 +9,7 @@ import zipfile
 
 import networkx as nx
 
+from dataforge.asset_identity import asset_job
 from dataforge.configuration import VisualizationSettings
 from dataforge.ingestion import safe_relative
 
@@ -52,6 +53,7 @@ function mountGraph(root, data, notify) {
  const make=(tag,attrs,parent)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));parent.appendChild(e);return e};
  stage.replaceChildren();
  const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
+ const nodeLabel=n=>n.job_id&&n.job_id!=='workspace'?n.name+' [job: '+n.job_id+']':n.name;
  let width=Math.max(700,...data.nodes.map(n=>n.x+n.width+35)),height=Math.max(360,...data.nodes.map(n=>n.y+90));
  let box=[0,0,width,height];
  const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
@@ -60,28 +62,28 @@ function mountGraph(root, data, notify) {
    let related=new Set([n.asset_id]),pending=[n.asset_id];
    while(pending.length){let id=pending.pop();data.edges.forEach(e=>{if(e.target===id&&!related.has(e.source)){related.add(e.source);pending.push(e.source)}})}
    highlight(related);stage.querySelectorAll('[data-edge]').forEach(p=>{let e=data.edges[Number(p.dataset.edge)];if(related.has(e.source)&&related.has(e.target))p.classList.add('chosen')});
-   details.textContent=n.name+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodes.get(e.source).name+' → '+nodes.get(e.target).name+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n');
+   details.textContent=nodeLabel(n)+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodeLabel(nodes.get(e.source))+' → '+nodeLabel(nodes.get(e.target))+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n');
    if(notify)notify({node:n.asset_id});
  };
  data.edges.forEach((edge,i)=>{
    const a=nodes.get(edge.source),b=nodes.get(edge.target);
    let x1=a.x+a.width,y1=a.y+24,x2=b.x,y2=b.y+24;
    const d=edge.source===edge.target?`M ${x1} ${y1} c 70 -80 ${-a.width-25} -80 ${5-a.width} 0`:`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`;
-   const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':a.name+' to '+b.name},stage);
+   const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':nodeLabel(a)+' to '+nodeLabel(b)},stage);
    p.style.strokeWidth=edgeWidth;
-   const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=a.name+' → '+b.name+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
+   const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
    p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter')show()};
  });
  data.nodes.forEach(n=>{
-   const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':n.name},stage);
+   const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':nodeLabel(n)},stage);
    const color=appearance.graph_palette==='neutral'?'#e8edf1':n.kind==='unresolved'?'#fff1d6':n.temporary?'#e5e1f8':n.source?'#d6eeed':'#dfebfc';
    make('rect',{width:n.width,height:48,rx:6,fill:color,stroke:'#6c8bab','data-node':n.asset_id},g);
    if(labels!=='hidden'){
      const text=make('text',{x:12,y:29,fill:'#17324d','font-size':13},g);
-     text.textContent=labels==='compact'&&n.name.length>27?n.name.slice(0,26)+'…':n.name;
+     const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>27?label.slice(0,26)+'…':label;
      if(labels==='full'&&text.getComputedTextLength()>n.width-24){text.setAttribute('textLength',n.width-24);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
    }
-   make('title',{},g).textContent=n.name;
+   make('title',{},g).textContent=nodeLabel(n);
    g.onclick=()=>inspectNode(n);g.onkeydown=e=>{if(e.key==='Enter')inspectNode(n)};
  });
  root.querySelector('.fit').onclick=()=>{box=[0,0,width,height];view()};
@@ -92,7 +94,7 @@ function mountGraph(root, data, notify) {
  svg.onpointerdown=e=>{if(e.target===svg){drag=[e.clientX,e.clientY,...box];svg.setPointerCapture(e.pointerId)}};
  svg.onpointermove=e=>{if(drag){box=[drag[2]-(e.clientX-drag[0])*drag[4]/svg.clientWidth,drag[3]-(e.clientY-drag[1])*drag[5]/svg.clientHeight,drag[4],drag[5]];view()}};
  svg.onpointerup=()=>drag=null;
- root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&n.name.toLowerCase().includes(value)).map(n=>n.asset_id)))};
+ root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
 }
 """
 
@@ -110,7 +112,7 @@ def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
         for row, node in enumerate(ids):
             attrs = dict(graph.nodes[node])
             attrs.update(x=20 + level * (width + 85), y=20 + row * 85, width=width,
-                         source=graph.graph.in_degree(node) == 0)
+                         source=graph.graph.in_degree(node) == 0, job_id=asset_job(attrs))
             nodes.append(attrs)
     edges = [{"source": s, "target": t, "evidence": a["evidence"], "intermediates": a.get("intermediates", [])}
              for s, t, a in graph.graph.edges(data=True)]

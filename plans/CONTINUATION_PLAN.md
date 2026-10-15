@@ -118,3 +118,6 @@ Next: temporary cleanup, job/session boundaries, vendor fixtures and final accep
 Safe staging cleanup completed with migration4 recovery journal, explicit selection, bounded
 preview/identity checks and no-overwrite restore. Sources and history JSON stay protected.
 Next: explicit job/session scope and vendor fixtures, then final acceptance/verification.
+
+2026-10-16: explicit supplied job/session identity implemented with regression and UI checks;
+next vendor fixtures and final acceptance/package accounting. See IMPLEMENTATION_STATUS.

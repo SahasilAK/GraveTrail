@@ -32,7 +32,7 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
 - [x] Test path races, age/size/count bounds and active guards; actual UI and commit.
 
 ## 5. Session identity and coverage
-- [ ] Explicit supplied job/session boundaries for temporary identities, compatibility and
+- [x] Explicit supplied job/session boundaries for temporary identities, compatibility and
   provenance preservation. Do not infer temporal execution semantics.
 - [ ] Add target-vendor fixture cases and resolve demonstrated defects. Commit tested groups.
 

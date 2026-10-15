@@ -3,7 +3,7 @@
 Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current truth; MASTER_PLAN and acceptance/test/risk docs preserve intent.
 
 ## Files
-- `COMPLETION_PLAN.md` — Remaining master slices, checked only with full tests and UI evidence; next cleanup/session/fixture/acceptance work.
+- `COMPLETION_PLAN.md` — Remaining master slices, checked only with full tests and UI evidence; next vendor-fixture/acceptance work.
 - `ACCEPTANCE_CRITERIA.md` — Acceptance criteria. Maintained documentation; consult implementation status for verification boundaries.
 - `ARCHITECTURE_DECISIONS.md` — Architecture decisions. Maintained documentation; consult implementation status for verification boundaries.
 - `BENCHMARK_RESULTS.json` — Measured 500-file synthetic workload and environment versions; not a general-language accuracy claim.

@@ -9,3 +9,6 @@ Feature scripts registered by app.py through st.Page/st.navigation. Test each pa
 - `explorer.py` — Exact asset search, lazy tree tab, workspace-scoped direction/collapse defaults, shared live/export appearance, evidence-linked source panel and bounded path CSV/JSON plus graph/source exports.
 - `settings.py` — Parsing/storage/performance/privacy settings; app-wide native theme picker, workspace visualization/source defaults, configuration transfer, recoverable history and provider forms. Host roots/storage are startup environment settings.
 - `tools.py` — Code search, dictionary distinguishing declared SQL schema/sampled CSV/incomplete references, downstream impact and run comparison.
+
+Parsing Settings accepts validated default job/session IDs and relative-folder assignments;
+reanalyze to apply new identity boundaries. Persistent assets remain shared.

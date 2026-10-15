@@ -20,3 +20,6 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 Settings graph confidence/status filters participate in common.load_graph cache keys before
 temporary contraction; app-wide log level is excluded from workspace transfers. Saved settings
 rerun with notices to establish current widget identities before the next edit.
+
+Temporary asset choices and tree labels use shared job/session labels; persisted AI results
+show their job and warn when the source assignment changed.

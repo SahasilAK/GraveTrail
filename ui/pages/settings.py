@@ -29,6 +29,9 @@ if tab == "Parsing and lineage":
         macros = st.text_area("Static SAS macro values (JSON)", json.dumps(store.setting(w, "macros", {}), indent=2))
         folders = st.text_area("SQL dialect by folder prefix (JSON)", json.dumps(store.setting(w, "dialect_by_folder", {}), indent=2))
         extension_dialects = st.text_area("SQL dialect by extension (JSON)", json.dumps(store.setting(w, "dialect_by_extension", {}), indent=2), help="Use .sql or .sas keys. SAS overrides apply to PROC SQL only. Folder overrides take precedence.")
+        default_job = st.text_input("Default job/session ID", store.setting(w, "default_job", "workspace"), max_chars=64)
+        job_folders = st.text_area("Job/session by folder prefix (JSON)", json.dumps(store.setting(w, "job_by_folder", {}), indent=2),
+            help='Example: {"jobs/one/":"one", "jobs/two/":"two"}. Only genuine temporary assets are separated; persistent tables remain shared. This does not infer runtime order.')
         confidence = st.slider("Minimum lineage confidence in graph views", 0., 1., float(store.setting(w, "min_lineage_confidence", 0.)), step=.05)
         inferred = st.checkbox("Include inferred relationships in graph views", store.setting(w, "include_inferred", True))
         diagnostic_modes = ["all", "warnings_errors", "errors"]
@@ -41,8 +44,8 @@ if tab == "Parsing and lineage":
         st.caption("Filters affect displayed graphs and their exports; stored evidence and diagnostics are retained. Inferred relationships never become verified through a threshold.")
         if st.form_submit_button("Save parsing settings"):
             try:
-                data = {"dialect": dialect, "case_sensitive": case, "expand_wildcards": expand}
-                for key, value in [("library_mappings", mappings), ("macros", macros), ("dialect_by_folder", folders), ("dialect_by_extension", extension_dialects)]:
+                data = {"dialect": dialect, "case_sensitive": case, "expand_wildcards": expand, "default_job": default_job}
+                for key, value in [("library_mappings", mappings), ("macros", macros), ("dialect_by_folder", folders), ("dialect_by_extension", extension_dialects), ("job_by_folder", job_folders)]:
                     obj = json.loads(value)
                     if not isinstance(obj, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):
                         raise ValueError("Mappings must be JSON objects with string keys and values")

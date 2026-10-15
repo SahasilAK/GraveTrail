@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import json
 import logging
-import posixpath
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from dataforge.asset_identity import AssetResolver, asset_label, source_job
 from dataforge.configuration import ParsingSettings
-from dataforge.models import AssetRef, Diagnostic, ParseResult, canonical, stable_id
+from dataforge.models import AssetRef, ParseResult, stable_id
 from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
@@ -57,7 +57,7 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
             _collect_jobs(store, jobs, results, progress, cancelled)
         analyzed = sum(job[3] is not None for job in jobs)
         cached = len(jobs) - analyzed
-        _restore_ai_results(store, workspace, results)
+        _restore_ai_results(store, workspace, results, config)
         with store.transaction():
             snapshot = _materialize(store, workspace, run_id, results, config)
             duration = time.perf_counter() - start
@@ -105,59 +105,28 @@ def _collect_jobs(store, jobs, results, progress, cancelled):
 
 
 def _materialize(store, workspace, run_id, results, config):
-    norm = (lambda n: n.strip()) if config["case_sensitive"] else canonical
-    known = {}
-    for metadata, parsed in results:
-        for ref in [*parsed.assets, *(r for op in parsed.operations for r in [*op.sources, *op.targets])]:
-            known[norm(ref.name)] = ref
-    registry, aliases = {}, set()
+    resolver = AssetResolver(workspace, results, config)
+    resolve = resolver.resolve
+    registry, aliases = resolver.registry, resolver.aliases
 
-    def resolve(ref: AssetRef, metadata, parsed):
-        name = ref.name
-        key = norm(name)
-        changed = False
-        if ref.kind == "file":
-            path = name.removeprefix("file:")
-            relative = "file:" + posixpath.normpath(posixpath.join(posixpath.dirname(metadata["relative_path"]), path))
-            if key not in known and norm(relative) in known:
-                key = norm(relative)
-                name = known[key].name
-        elif "." not in key:
-            candidates = [k for k, r in known.items() if r.kind != "file" and "." in k and k.rsplit(".", 1)[-1] == key]
-            if len(candidates) == 1:
-                old = key
-                key, name = candidates[0], known[candidates[0]].name
-                changed = True
-                aliases.add((workspace, old, stable_id(workspace, key), "unique-qualified-match"))
-            elif len(candidates) > 1:
-                d = Diagnostic(f"Ambiguous table {name}; candidates: {', '.join(candidates)}", symbol=name)
-                if not any(x.message == d.message for x in parsed.diagnostics):
-                    parsed.diagnostics.append(d)
-        aid = stable_id(workspace, key)
-        existing_ref = known.get(key, ref)
-        temporary = ref.temporary or existing_ref.temporary
-        if aid not in registry:
-            registry[aid] = [aid, workspace, name, key, ref.kind, temporary, "{}"]
-        else:
-            registry[aid][5] |= temporary
-        return aid, changed
-
-    schemas = collect_schemas(results, workspace, norm, resolve)
+    schemas = collect_schemas(results, workspace, resolver)
     rows = {"assets": [], "statements": [], "operations": [], "operation_assets": [], "edges": [],
             "column_usages": [], "diagnostics": [], "asset_aliases": []}
     statuses = []
     for metadata, parsed in results:
         fid = metadata["file_id"]
+        parsed.metadata["job_id"] = source_job(metadata, config)
         for ref in parsed.assets:
             aid, _ = resolve(ref, metadata, parsed)
-            registry[aid][6] = json.dumps(parsed.metadata)
+            registry[aid][6] = json.dumps({**{k: v for k, v in parsed.metadata.items() if k != "job_id"},
+                                         **json.loads(registry[aid][6])})
         for i, op in enumerate(parsed.operations):
             sid = stable_id(workspace, fid, str(i), metadata["content_hash"])
             oid = stable_id(sid, op.kind)
             rows["statements"].append([sid, workspace, fid, op.start, op.end, op.code, metadata["content_hash"]])
             rows["operations"].append([oid, workspace, sid, op.kind, op.method, op.confidence, json.dumps(op.warnings)])
-            inputs = [resolve(s, metadata, parsed) for s in op.sources]
-            outputs = [resolve(t, metadata, parsed) for t in op.targets]
+            inputs = [resolve(s, metadata, parsed, "input") for s in op.sources]
+            outputs = [resolve(t, metadata, parsed, "output" if op.method != "llm" else "reference") for t in op.targets]
             for role, refs in [("input", inputs), ("output", outputs)]:
                 for aid, _ in set(refs):
                     rows["operation_assets"].append([workspace, oid, aid, role])
@@ -167,17 +136,17 @@ def _materialize(store, workspace, run_id, results, config):
                     eid = stable_id(oid, source, target)
                     rows["edges"].append([eid, workspace, source, target, oid, sid, fid, op.kind,
                                           op.method, min(op.confidence, .85) if inferred else op.confidence,
-                                          "inferred" if inferred else "verified", run_id])
+                                          "unresolved" if registry[source][4] == "unresolved" else "inferred" if inferred else "verified", run_id])
             for j, u in enumerate(op.usages):
                 aid, inferred = resolve(AssetRef(u.table), metadata, parsed)
                 schema = schemas.get(aid, {})
-                expanded = (u.column == "*" and u.wildcard_safe and config["expand_wildcards"]
+                expanded = (registry[aid][4] != "unresolved" and u.column == "*" and u.wildcard_safe and config["expand_wildcards"]
                             and schema.get("schema_status") == "declared")
                 columns = [c["name"] for c in schema["columns"]] if expanded else [u.column]
                 for column in columns:
                     rows["column_usages"].append([stable_id(oid, str(j), column), workspace, aid, column,
                         u.context + " (schema expansion)" if expanded else u.context, u.alias, u.expression,
-                        "inferred" if inferred or expanded else u.status, sid, fid, oid])
+                        "unresolved" if registry[aid][4] == "unresolved" else "inferred" if inferred or expanded else u.status, sid, fid, oid])
         for i, d in enumerate(parsed.diagnostics):
             rows["diagnostics"].append([stable_id(fid, str(i)), workspace, fid, d.line, d.severity, d.message, d.symbol])
         errors = any(d.severity == "error" for d in parsed.diagnostics)
@@ -185,8 +154,8 @@ def _materialize(store, workspace, run_id, results, config):
             "partial" if any(d.severity != "info" for d in parsed.diagnostics) else "success")
         statuses.append([status, json.dumps(parsed.metadata), "\n".join(d.message for d in parsed.diagnostics), fid, metadata["content_hash"]])
     for aid, schema in schemas.items():
-        if aid in registry:
-            registry[aid][6] = json.dumps(schema)
+        if aid in registry and registry[aid][4] != "unresolved":
+            registry[aid][6] = json.dumps({**schema, **json.loads(registry[aid][6])})
     rows["assets"] = list(registry.values())
     rows["asset_aliases"] = list(aliases)
     for table, values in rows.items():
@@ -195,7 +164,7 @@ def _materialize(store, workspace, run_id, results, config):
             store.db.executemany(f"INSERT INTO {table} VALUES ({','.join('?' for _ in values[0])})", values)
     if statuses:
         store.db.executemany("UPDATE source_files SET parsing_status=?,metadata=?,error_details=? WHERE file_id=? AND content_hash=?", statuses)
-    return {"assets": [{"name": a[3], "kind": a[4]} for a in registry.values()],
+    return {"assets": [{"name": a[3], "kind": a[4], "job_id": json.loads(a[6]).get("job_id")} for a in registry.values()],
             "edges": sorted({(e[2], e[3]) for e in rows["edges"]}),
             "files": {m["relative_path"]: m["content_hash"] for m, _ in results}}
 
@@ -215,19 +184,18 @@ def column_report(store, workspace: str, asset_id: str) -> list[dict]:
 
 def compare_runs(first: dict, second: dict) -> dict:
     a, b = json.loads(first["snapshot"]), json.loads(second["snapshot"])
-    aset, bset = {x["name"] for x in a["assets"]}, {x["name"] for x in b["assets"]}
+    aset, bset = {asset_label(x) for x in a["assets"]}, {asset_label(x) for x in b["assets"]}
     ae, be = {tuple(e) for e in a["edges"]}, {tuple(e) for e in b["edges"]}
     return {"added_assets": sorted(bset - aset), "removed_assets": sorted(aset - bset),
             "added_edges": sorted(be - ae), "removed_edges": sorted(ae - be),
             "changed_files": sorted(k for k in set(a["files"]) | set(b["files"]) if a["files"].get(k) != b["files"].get(k))}
 
 
-def _restore_ai_results(store, workspace, results):
+def _restore_ai_results(store, workspace, results, config):
     from dataforge.llm import GroundedResponse, validate_response
     from dataforge.models import Operation
 
-    known = {r.name for _, parsed in results for r in [*parsed.assets,
-             *(ref for op in parsed.operations for ref in [*op.sources, *op.targets])]}
+    resolver = AssetResolver(workspace, results, config)
     by_file = {m["file_id"]: (m, parsed) for m, parsed in results}
     for record in store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND outcome='merged'", [workspace]):
         if record["task"] not in {"sas_lineage", "sql_lineage", "lineage_validation"}:
@@ -238,10 +206,12 @@ def _restore_ai_results(store, workspace, results):
         metadata, parsed = by_file[record["file_id"]]
         if metadata["content_hash"] != details["content_hash"]:
             continue
+        if details.get("job_id", "workspace") != source_job(metadata, config):
+            continue
         response = GroundedResponse.model_validate(details["result"])
         content = store.snapshot_content(metadata)
         try:
-            validate_response(response, content, known, 1, len(content.splitlines()))
+            validate_response(response, content, resolver.known_names(metadata), 1, len(content.splitlines()))
         except ValueError:
             continue
         for c in response.claims:

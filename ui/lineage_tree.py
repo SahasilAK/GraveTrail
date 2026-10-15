@@ -2,6 +2,7 @@
 import streamlit as st
 
 from dataforge.models import stable_id
+from ui.common import asset_label
 
 
 def render_tree(graph, asset, direction, depth=5, limit=150, key="tree", default_expansion=1):
@@ -33,7 +34,7 @@ def render_tree(graph, asset, direction, depth=5, limit=150, key="tree", default
                 continue
             edge = graph.graph[neighbor][node] if direction == "upstream" else graph.graph[node][neighbor]
             count = graph.graph.in_degree(neighbor) if direction == "upstream" else graph.graph.out_degree(neighbor)
-            label = f"{attrs['name']} • {count} dependencies • {attrs.get('kind', 'asset')}"
+            label = f"{asset_label(attrs)} • {count} dependencies • {attrs.get('kind', 'asset')}"
             container = st.expander(label, expanded=level < initial, on_change="rerun",
                                     key=f"{key}_{generation}_{stable_id(*trail, neighbor)}")
             if not container.open:

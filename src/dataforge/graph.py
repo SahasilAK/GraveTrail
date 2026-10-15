@@ -5,6 +5,8 @@ from collections import deque
 
 import networkx as nx
 
+from dataforge.asset_identity import asset_job, asset_label
+
 
 class LineageGraph:
     def __init__(self, assets: list[dict], edges: list[dict], min_confidence=0., include_inferred=True):
@@ -81,7 +83,7 @@ class LineageGraph:
                     existing = graph[source][target] if graph.has_edge(source, target) else {}
                     evidence = {e["edge_id"]: e for e in [*existing.get("evidence", []), *left["evidence"], *right["evidence"]]}
                     intermediate = list(dict.fromkeys([*existing.get("intermediates", []),
-                        *left.get("intermediates", []), attrs["name"], *right.get("intermediates", [])]))
+                        *left.get("intermediates", []), asset_label(attrs), *right.get("intermediates", [])]))
                     graph.add_edge(source, target, evidence=list(evidence.values()), intermediates=intermediate)
             graph.remove_node(node)
         return self._from_graph(graph)
@@ -95,6 +97,7 @@ class LineageGraph:
         for source, target, attrs in self.graph.edges(data=True):
             for evidence in attrs["evidence"]:
                 rows.append({"source": self.nodes[source]["name"], "target": self.nodes[target]["name"],
+                    "source_job": asset_job(self.nodes[source]) or "", "target_job": asset_job(self.nodes[target]) or "",
                     "logical_step": generations[mapping[target]], "operation": evidence.get("kind", ""),
                     "file": evidence.get("relative_path", ""), "start_line": evidence.get("start_line", 1),
                     "end_line": evidence.get("end_line", 1), "confidence": evidence.get("confidence", 1),

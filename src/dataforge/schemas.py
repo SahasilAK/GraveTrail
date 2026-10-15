@@ -4,14 +4,15 @@ import json
 from dataforge.models import AssetRef, Diagnostic, stable_id
 
 
-def collect_schemas(results, workspace, normalize, resolve):
+def collect_schemas(results, workspace, resolver):
+    normalize, resolve = resolver.norm, resolver.resolve
     records = [(source, parsed, record) for source, parsed in results
                for record in parsed.metadata.get("declared_schemas", [])]
     qualified = {}
-    for _, _, record in records:
+    for source, _, record in records:
         name = normalize(record["table"])
         if "." in name:
-            qualified.setdefault(name.rsplit(".", 1)[-1], {})[name] = record["table"]
+            qualified.setdefault(name.rsplit(".", 1)[-1], []).append((record["table"], source))
     declarations = {}
     for source, parsed, record in records:
         aid, _ = resolve(AssetRef(record["table"]), source, parsed)
@@ -19,7 +20,9 @@ def collect_schemas(results, workspace, normalize, resolve):
         name = normalize(record["table"])
         if "." not in name:
             # Ambiguous unqualified DDL may affect any qualified candidate; never choose one.
-            for candidate in qualified.get(name, {}).values():
+            for candidate, declaration_source in qualified.get(name, []):
+                if not resolver.visible_from(candidate, declaration_source, source):
+                    continue
                 possible, _ = resolve(AssetRef(candidate), source, parsed)
                 if possible != aid:
                     declarations.setdefault(possible, []).append((source, parsed, {**record, "columns": None}))

@@ -61,3 +61,8 @@
   general file browser or blob garbage collector. Migration4 journals compressed bytes before
   removal; restore uses atomic create-if-absent publication. Retain recovery and make no disk
   reclamation claim. Age, count, byte and scan budgets bound work; analysis excludes maintenance.
+
+- ADR 021: Supplied job/session IDs scope temporary and unresolved asset identities; persistent
+  assets remain global. Preserve legacy default-job IDs only when no global persistent name
+  collides. Same-job mixed-lifetime reads remain unresolved because static files establish no
+  reliable runtime order. Schema reconciliation and restored AI claims share job visibility.

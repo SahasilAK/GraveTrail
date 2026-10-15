@@ -1,5 +1,6 @@
 """Validated workspace identity and safe, versioned configuration portability."""
 import json
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -15,6 +16,24 @@ class ParsingSettings(BaseModel):
     macros: dict[str, str] = Field(default_factory=dict)
     case_sensitive: bool = False
     expand_wildcards: bool = True
+    default_job: str = "workspace"
+    job_by_folder: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("default_job")
+    @classmethod
+    def job_identifier(cls, value):
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", value):
+            raise ValueError("Job IDs require 1–64 letters, digits, dots, underscores or hyphens")
+        return value
+
+    @field_validator("job_by_folder")
+    @classmethod
+    def folder_jobs(cls, value):
+        for prefix, job in value.items():
+            if not prefix or prefix.startswith("/") or "\\" in prefix or ".." in prefix.split("/") or not prefix.endswith("/"):
+                raise ValueError("Job folder prefixes must be relative folders ending with /")
+            cls.job_identifier(job)
+        return value
 
     @field_validator("dialect")
     @classmethod
