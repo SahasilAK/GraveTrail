@@ -204,3 +204,24 @@ configured model when one becomes available. Preserve the user's unrelated `.git
   with Python -I in the clean environment. 127 tests passed in both environments; Ruff/lock
   checks clean. Docker CLI probe failed because its engine is unavailable; no container claim.
 - Git is clean apart from the user's preexisting `.gitignore` edit, which remains uncommitted.
+
+## User-requested theme options — 2026-10-15
+
+- Added eight explicit native presets: Ocean, Forest, Amethyst and Graphite, each dark/light.
+  Settings → Visualization → Theme preset → Apply theme. Dark choices set native dark base
+  directly, including when the browser previously selected Light. Current config: Graphite dark.
+- Presets update native app-wide deployment configuration, separate from workspace transfers.
+  TOML-aware atomic replacement preserves server/browser settings, comments and layout/sidebar
+  overrides. Added locked TOML Kit dependency to handle valid multiline/quoted TOML safely.
+  Docker config directory ownership permits this operation as the existing nonroot app user;
+  Docker remains unexecuted because the engine is unavailable.
+- Native configuration watching is asynchronous; a bounded fragment waits for loaded values
+  before success/rerun, with a refresh hint if startup overrides prevent convergence.
+- Initial native paired-palette browser checks exposed appearance ambiguity and config reload
+  lag, which led to explicit named mode choices and reload acknowledgement. The user then
+  requested to validate the final dark appearances personally; no final browser inspection
+  is claimed. Automated config, mode, contrast and AppTest checks cover the final behavior.
+- Final automated result: 135 tests pass; Ruff and lock checks clean. Independent re-review
+  found no material remaining findings. Final appearance validation is intentionally with
+  the user; no additional browser interaction was performed after that request.
+- The original master backlog remains unchanged by this focused theme request.

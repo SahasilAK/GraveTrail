@@ -8,7 +8,7 @@ COPY app.py ./
 COPY ui ./ui
 COPY .streamlit ./.streamlit
 COPY tests/fixtures ./tests/fixtures
-RUN useradd --create-home dataforge && mkdir /data && chown dataforge:dataforge /data
+RUN useradd --create-home dataforge && mkdir /data && chown dataforge:dataforge /data /app/.streamlit /app/.streamlit/config.toml
 USER dataforge
 ENV DATAFORGE_HOME=/data
 EXPOSE 8501

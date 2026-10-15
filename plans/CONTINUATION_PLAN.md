@@ -73,6 +73,12 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
 
 ## Remaining backlog beyond these slices
 
+User-requested theme slice: add eight explicit Ocean/Forest/Amethyst/Graphite dark/light
+presets in Settings Visualization. Dark choices set native appearance directly rather than
+depending on the browser's Light/Dark menu. Preserve unrelated config, use atomic TOML-aware
+updates and bounded native reload acknowledgement. User will validate final appearance;
+no further browser inspection after that instruction.
+
 - Next: task-specific column/explanation result schemas beyond the shared grounded-lineage
   schema. Extend prompt/schema versioning, deterministic quote/column validation and advisory
   presentation; do not merge explanations or column suggestions as table relationships.

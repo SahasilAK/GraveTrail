@@ -90,6 +90,9 @@ elif tab == "Performance":
         store.execute("DELETE FROM parse_cache")
         st.success("Parser cache cleared; stored lineage and source inventory retained")
 elif tab == "Visualization":
+    from ui.themes import render_theme_picker
+    render_theme_picker()
+    st.subheader("Graph and source defaults")
     appearance = VisualizationSettings.from_store(store, w)
     with st.form("visualization_" + w):
         limit = st.number_input("Maximum graph nodes", 10, 1000, int(store.setting(w, "graph_limit", 150)))

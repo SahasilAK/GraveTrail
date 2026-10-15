@@ -14,6 +14,31 @@ def test_empty_dashboard_and_builder(tmp_path, monkeypatch):
     assert any("Import" in b.label for b in app.button)
 
 
+def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, monkeypatch):
+    from ui.themes import current_preset
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "home"))
+    config = tmp_path / "config.toml"
+    config.write_bytes(Path(".streamlit/config.toml").read_bytes())
+    monkeypatch.setattr("ui.themes.CONFIG_PATH", config)
+    monkeypatch.setattr("ui.themes._loaded_preset", lambda: None)
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    workspace = app.session_state["workspace"]
+    app.switch_page("ui/pages/settings.py").run()
+    app.segmented_control[0].set_value("Visualization").run()
+    palette = next(c for c in app.selectbox if c.label == "Theme preset")
+    assert all(name + " dark" in palette.options for name in ["Ocean", "Forest", "Amethyst", "Graphite"])
+    palette.set_value("Forest dark").run()
+    next(b for b in app.button if b.label == "Apply theme").click().run()
+    assert not app.exception and current_preset(config) == "Forest dark"
+    assert app.session_state["workspace"] == workspace
+    assert app.session_state["theme_pending"][0] == "Forest dark"
+    assert not app.success
+    monkeypatch.setattr("ui.themes._loaded_preset", lambda: "Forest dark")
+    app.run()
+    assert any("Forest dark theme applied" in s.value for s in app.success)
+
+
 def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):
     from dataforge.ingestion import Importer
     from dataforge.services import analyze

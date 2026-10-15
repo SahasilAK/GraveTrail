@@ -19,6 +19,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_schemas.py` — Typed DDL/wildcard eligibility, conflicts/changes/inheritance, cache refresh, disabled extraction, identical declarations, unqualified invalidations, SWAP/RENAME and no CSV name guessing.
 - `test_sql.py` — Behavioral regression tests for sql. Run with pytest; temporary runtime data only.
 - `test_store.py` — Behavioral regression tests for store. Run with pytest; temporary runtime data only.
+- `test_themes.py` — Native preset/root appearance application, unrelated config and custom TOML preservation, atomic failure rollback and AA text/link/button contrast checks.
 - `test_ui.py` — Page/workspace/provider flows, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
 - `test_workflow.py` — Behavioral regression tests for workflow. Run with pytest; temporary runtime data only.
 - `test_workspace_configuration.py` — Workspace edits preserve identity/data; safe v1/v2 configuration portability, resource validation, isolation and injected-failure rollback.

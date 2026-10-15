@@ -84,7 +84,15 @@ full names fit inside wider nodes; hidden labels still expose exact names in key
 nodes, tooltips and evidence. Semantic colors distinguish asset kinds; the neutral palette uses
 one fill. Live Explorer and offline graph HTML/JSON share these settings. Direction and collapse
 remain adjustable for the current exploration. Preferences belong to each workspace and are
-included in safe configuration transfers. Theme remains in the application menu.
+included in safe configuration transfers.
+
+**Color themes:** In Settings → Visualization choose **Ocean dark**, **Forest dark**,
+**Amethyst dark** or **Graphite dark**, or one of their four light equivalents, then click
+**Apply theme**. Dark presets apply dark appearance directly, including native forms, tables,
+charts and sidebar. Presets apply across the local app and all workspaces and persist in its
+native `.streamlit/config.toml`, separately from workspace configuration transfers. The picker
+waits briefly for native configuration reload; refresh the page if a reload hint appears.
+The configuration must be writable. Custom layout/sidebar overrides are retained.
 
 Choose complete source expanded or relevant statements first, and whether code displays line
 numbers. Relevant-first mode keeps the **Complete source** panel closed when evidence snippets
