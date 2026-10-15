@@ -25,3 +25,6 @@
 - ADR 012: CSV width is checked before field allocation; quote handling follows field boundaries.
   AI retention prunes interaction bodies while retaining minimal durable merged evidence.
 - ADR 013: Source-distribution inputs use an allowlist to exclude runtime user data.
+- ADR 014: Workspace configuration transfers use an explicit typed allowlist, never opaque
+  settings dictionaries. Validate before transactional creation; support legacy v1 safely.
+  Configuration transfer is separate from source/history backup. Name edits preserve IDs.

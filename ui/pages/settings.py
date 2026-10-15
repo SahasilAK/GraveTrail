@@ -3,7 +3,7 @@ import json
 import sqlglot
 import streamlit as st
 
-from dataforge.configuration import ParsingSettings
+from dataforge.configuration import export_workspace_configuration, import_workspace_configuration
 from ui.common import allowed_roots, context, title
 
 title("Settings", "Configure analysis, storage, resource budgets and source-code privacy.")
@@ -39,22 +39,24 @@ elif tab == "Storage and workspaces":
     st.metric("Database size", f"{size / 1024 / 1024:.2f} MB")
     st.caption("Set DATAFORGE_HOME before startup to select a different storage directory. Each home has an independent database.")
     workspace = next(a for a in store.workspaces() if a["workspace_id"] == w)
-    settings = {r["key"]: json.loads(r["value"]) for r in store.rows("SELECT key,value FROM settings WHERE workspace_id=?", [w]) if r["key"] not in {"external_llm", "allow_full_source", "task_models"}}
-    metadata = {"format": "dataforge-metadata-v1", "name": workspace["name"], "description": workspace["description"], "settings": settings}
-    st.download_button("Export workspace configuration", json.dumps(metadata, indent=2), "workspace.json", "application/json")
-    st.caption("Configuration exports exclude credentials, provider profiles and external-transmission permissions. Use Builder/source bundles to transfer source files.")
+    if notice := st.session_state.pop("workspace_notice", None):
+        st.success(notice)
+    with st.form("workspace_details_" + w):
+        name = st.text_input("Active workspace name", workspace["name"], max_chars=200)
+        description = st.text_area("Workspace description", workspace["description"], max_chars=2000)
+        if st.form_submit_button("Save workspace details"):
+            try:
+                store.update_workspace(w, name, description)
+                st.session_state["workspace_notice"] = "Workspace details saved"
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+    st.download_button("Export workspace configuration", export_workspace_configuration(store, w), "workspace.json", "application/json")
+    st.caption("Transfers parsing, resource and graph settings. Excludes provider profiles, credentials, privacy permissions, source files and analysis history. Use Builder/source bundles to transfer source files.")
     config_file = st.file_uploader("Import workspace configuration", type=["json"])
     if config_file and st.button("Create workspace from configuration"):
         try:
-            obj = json.loads(config_file.getvalue())
-            if obj.get("format") != "dataforge-metadata-v1":
-                raise ValueError("Unsupported workspace configuration format")
-            parsing = ParsingSettings.model_validate({k: v for k, v in obj.get("settings", {}).items()
-                if k in ParsingSettings.model_fields}).model_dump()
-            new_id = store.create_workspace(str(obj["name"]) + " (imported)", str(obj.get("description", "")))
-            # Parsing settings only. Never import privacy gates, storage paths or network endpoints.
-            for key, value in parsing.items():
-                store.set_setting(new_id, key, value)
+            import_workspace_configuration(store, config_file.getvalue())
             st.success("Workspace created. Select it in the sidebar.")
         except (ValueError, KeyError, TypeError) as exc:
             st.error(f"Configuration import failed: {exc}")

@@ -17,3 +17,4 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_store.py` — Behavioral regression tests for store. Run with pytest; temporary runtime data only.
 - `test_ui.py` — Behavioral regression tests for ui. Run with pytest; temporary runtime data only.
 - `test_workflow.py` — Behavioral regression tests for workflow. Run with pytest; temporary runtime data only.
+- `test_workspace_configuration.py` — Workspace edits preserve identity/data; safe v1/v2 configuration portability, resource validation, isolation and injected-failure rollback.

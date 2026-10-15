@@ -7,5 +7,5 @@ Feature scripts registered by app.py through st.Page/st.navigation. Test each pa
 - `columns.py` — Direct-only column usage metrics, filters, grouping, evidence and report downloads.
 - `dashboard.py` — Inventory counts, health, hotspots and recent runs with useful empty states.
 - `explorer.py` — Exact asset search, dependency trees, focused graph, evidence-linked source panel and graph/path/source exports.
-- `settings.py` — Parsing/storage/performance/visualization/privacy settings and provider form routing. Host roots/storage are startup environment settings.
+- `settings.py` — Parsing/storage/performance/visualization/privacy settings, validated workspace editing/configuration transfer and provider form routing. Host roots/storage are startup environment settings.
 - `tools.py` — Code search, provenance-labeled dictionary, downstream impact and run snapshot comparison.

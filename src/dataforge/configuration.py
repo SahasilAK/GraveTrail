@@ -1,4 +1,7 @@
-"""Typed trust boundary for imported workspace parsing settings."""
+"""Validated workspace identity and safe, versioned configuration portability."""
+import json
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlglot import Dialect
 
@@ -24,3 +27,61 @@ class ParsingSettings(BaseModel):
         if any(d not in Dialect.classes for d in value.values()):
             raise ValueError("Unknown SQL dialect in folder mappings")
         return value
+
+
+class WorkspaceIdentity(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def clean_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class PortableSettings(ParsingSettings):
+    """Explicit allowlist: no network, secrets, AI retention, or transmission permissions."""
+    max_file_mb: int = Field(default=20, ge=1, le=100)
+    max_files: int = Field(default=10000, ge=1, le=100000)
+    parse_workers: int = Field(default=1, ge=1, le=8)
+    graph_limit: int = Field(default=150, ge=10, le=1000)
+    traversal_depth: int = Field(default=5, ge=1, le=30)
+
+
+class WorkspaceConfiguration(WorkspaceIdentity):
+    format: Literal["dataforge-metadata-v2"] = "dataforge-metadata-v2"
+    settings: PortableSettings = Field(default_factory=PortableSettings)
+
+
+def export_workspace_configuration(store, workspace: str) -> str:
+    with store.lock:
+        identities = store.rows("SELECT name,description FROM workspaces WHERE workspace_id=?", [workspace])
+        if not identities:
+            raise ValueError("Workspace does not exist")
+        settings = {r["key"]: json.loads(r["value"]) for r in store.rows(
+            "SELECT key,value FROM settings WHERE workspace_id=?", [workspace])
+            if r["key"] in PortableSettings.model_fields}
+        config = WorkspaceConfiguration(**identities[0], settings=PortableSettings.model_validate(settings))
+    return config.model_dump_json(indent=2)
+
+
+def import_workspace_configuration(store, payload: str | bytes) -> str:
+    if len(payload) > 1024 * 1024:
+        raise ValueError("Workspace configuration exceeds 1 MB")
+    obj = json.loads(payload)
+    if not isinstance(obj, dict):
+        raise ValueError("Workspace configuration must be a JSON object")
+    if obj.get("format") == "dataforge-metadata-v1":
+        old_settings = obj.get("settings", {})
+        if not isinstance(old_settings, dict):
+            raise ValueError("Workspace settings must be a JSON object")
+        # Earlier exports included privacy/opaque settings. Never restore those permissions.
+        obj = {**obj, "format": "dataforge-metadata-v2", "settings": {
+            k: v for k, v in old_settings.items() if k in PortableSettings.model_fields}}
+    config = WorkspaceConfiguration.model_validate(obj)
+    with store.transaction():
+        workspace = store.create_workspace(config.name[:189] + " (imported)", config.description)
+        for key, value in config.settings.model_dump().items():
+            store.set_setting(workspace, key, value)
+    return workspace

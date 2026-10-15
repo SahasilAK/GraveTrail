@@ -20,6 +20,8 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
    with one validated schema and transactional creation. Do not import network endpoints,
    credentials, source-transmission permissions, or opaque arbitrary settings. Keep v1
    configuration compatibility. Exercise through Settings and commit after tests.
+   Implemented validated identity editing and safe v1/v2 round trips including resource/graph
+   settings. 78 tests and Ruff pass; actual browser rename/export/upload/import passed.
 3. **Progressive lineage trees and dependency-path exports.** Render only open branches,
    provide expand-to-depth/collapse controls, keep cycle/node limits, and export complete
    displayed paths with evidence and explicit bounded-search boundaries. Test and commit.

@@ -11,6 +11,8 @@ from pathlib import Path
 
 import duckdb
 
+from dataforge.configuration import WorkspaceIdentity
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT current_timestamp);
 CREATE TABLE IF NOT EXISTS workspaces(workspace_id VARCHAR PRIMARY KEY, name VARCHAR, description VARCHAR, created_at TIMESTAMP DEFAULT current_timestamp);
@@ -75,12 +77,19 @@ class Store:
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def create_workspace(self, name: str, description: str = "") -> str:
-        if not name.strip() or len(name) > 200:
-            raise ValueError("Workspace name must contain 1–200 characters")
+        identity = WorkspaceIdentity(name=name, description=description)
         wid = uuid.uuid4().hex
         self.execute("INSERT INTO workspaces(workspace_id,name,description) VALUES (?,?,?)",
-                     [wid, name.strip(), description[:2000]])
+                     [wid, identity.name, identity.description])
         return wid
+
+    def update_workspace(self, workspace: str, name: str, description: str = ""):
+        identity = WorkspaceIdentity(name=name, description=description)
+        with self.transaction():
+            if not self.rows("SELECT 1 FROM workspaces WHERE workspace_id=?", [workspace]):
+                raise ValueError("Workspace does not exist")
+            self.execute("UPDATE workspaces SET name=?,description=? WHERE workspace_id=?",
+                         [identity.name, identity.description, workspace])
 
     def workspaces(self):
         return self.rows("SELECT * FROM workspaces ORDER BY created_at")

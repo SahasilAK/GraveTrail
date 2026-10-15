@@ -94,3 +94,12 @@ optional schema discovery, history/blob lifecycle and auth if expanding beyond l
 - Isolated synthetic UI verification home: `.dataforge/verification/live-ui`, loopback port8502.
 - Next: workspace name/description editing and safe validated configuration round trips,
   then progressive trees/path export. See CONTINUATION_PLAN.md for the outstanding backlog.
+- Workspace editing/configuration slice: validated name/description updates preserve IDs,
+  inventory and analysis. Versioned v2 transfers parsing, bounded resource and graph settings;
+  v1 compatibility retained. Credentials/profiles/privacy gates/opaque settings excluded.
+  Configuration creation is transactional; malformed input creates no partial workspace.
+  Full suite: 78 tests pass; Ruff clean. Added AppTest save/invalid-name/sidebar coverage.
+  Actual browser: renamed workspace/description, exported JSON, uploaded it and created a new
+  workspace successfully. Screenshot: `.dataforge/verification/workspace-settings.png`.
+- Next active slice: lazy tree branches, expand/collapse controls and bounded dependency-path
+  exports. Full portable source/history bundles and cleanup remain pending.

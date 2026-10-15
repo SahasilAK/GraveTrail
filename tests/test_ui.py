@@ -57,6 +57,28 @@ def test_provider_profile_form_and_settings_sections(tmp_path, monkeypatch):
     assert any(s.label == "Default profile" for s in app.selectbox)
 
 
+def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path, monkeypatch):
+    from ui.common import get_store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    identity = app.session_state["workspace"]
+    app.switch_page("ui/pages/settings.py").run()
+    app.segmented_control[0].set_value("Storage and workspaces").run()
+    next(f for f in app.text_input if f.label == "Active workspace name").set_value("Renamed workspace")
+    next(f for f in app.text_area if f.label == "Workspace description").set_value("Retained description")
+    next(b for b in app.button if b.label == "Save workspace details").click().run()
+    assert not app.exception
+    assert app.session_state["workspace"] == identity
+    assert "Renamed workspace" in app.selectbox(key="workspace").options
+    row = get_store(str(tmp_path)).workspaces()[0]
+    assert row["description"] == "Retained description"
+    next(f for f in app.text_input if f.label == "Active workspace name").set_value("  ")
+    next(b for b in app.button if b.label == "Save workspace details").click().run()
+    assert app.error and not app.exception
+    assert get_store(str(tmp_path)).workspaces()[0]["name"] == "Renamed workspace"
+
+
 @pytest.fixture(autouse=True)
 def clear_resources():
     yield

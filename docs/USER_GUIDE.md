@@ -37,5 +37,10 @@ dictionary, assess static downstream impact or compare completed analysis runs.
 
 **Settings:** Set SQL dialect/folder overrides, SAS libraries/static macros, case policy, import
 limits, parsing workers, graph depth/node limits and optional AI privacy/profiles. Storage home
-and host roots are startup environment settings. Configuration import validates parsing settings
-and never enables remote transmission automatically. Deletion requires typing the workspace name.
+and host roots are startup environment settings. Storage and workspaces lets you edit the active
+workspace name and description without changing its identity or imported files. Configuration
+export/import preserves parsing, resource and graph settings in a new workspace. Imports validate
+types, SQL dialects and numeric limits and are transactional. Earlier v1 configurations remain
+supported. Profiles, credentials, privacy permissions, sources and analysis history are excluded;
+this is a configuration transfer, not a workspace backup. Deletion requires typing the current
+workspace name.
