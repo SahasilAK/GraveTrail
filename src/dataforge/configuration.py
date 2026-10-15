@@ -57,7 +57,13 @@ class VisualizationSettings(BaseModel):
                                    for key, field in cls.model_fields.items()})
 
 
-class PortableSettings(ParsingSettings, VisualizationSettings):
+class LLMResourceSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    llm_concurrency: int = Field(default=1, ge=1, le=4)
+    llm_chunk_chars: int = Field(default=4000, ge=500, le=100000)
+
+
+class PortableSettings(ParsingSettings, VisualizationSettings, LLMResourceSettings):
     """Explicit allowlist: no network, secrets, AI retention, or transmission permissions."""
     max_file_mb: int = Field(default=20, ge=1, le=100)
     max_files: int = Field(default=10000, ge=1, le=100000)

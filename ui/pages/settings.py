@@ -80,12 +80,17 @@ elif tab == "Performance":
         max_file = st.number_input("Maximum file size (MB)", 1, 100, int(store.setting(w, "max_file_mb", 20)))
         max_files = st.number_input("Maximum files per import", 1, 100000, int(store.setting(w, "max_files", 10000)))
         workers = st.number_input("Parsing workers", 1, 8, int(store.setting(w, "parse_workers", 1)))
+        llm_workers = st.number_input("Maximum concurrent AI requests per workspace", 1, 4, int(store.setting(w, "llm_concurrency", 1)))
+        chunk_chars = st.number_input("AI context chunk size (characters)", 500, 100000, int(store.setting(w, "llm_chunk_chars", 4000)), step=500)
         if st.form_submit_button("Save resource limits"):
             store.set_setting(w, "max_file_mb", max_file)
             store.set_setting(w, "max_files", max_files)
             store.set_setting(w, "parse_workers", workers)
+            store.set_setting(w, "llm_concurrency", llm_workers)
+            store.set_setting(w, "llm_chunk_chars", chunk_chars)
             st.success("Resource limits saved")
     st.caption("Imports also enforce 100 MB compressed / 200 MB total and a 200:1 ZIP expansion ratio. Analysis reuses content hashes on every refresh.")
+    st.caption("AI requests are also capped at eight across this app process. Busy requests are refused immediately. Chunking is an offline preview; each selected chunk requires its own explicit request. Provider budgets still apply.")
     if st.button("Clear parser cache"):
         store.execute("DELETE FROM parse_cache")
         st.success("Parser cache cleared; stored lineage and source inventory retained")

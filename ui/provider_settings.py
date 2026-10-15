@@ -5,7 +5,9 @@ import uuid
 
 import streamlit as st
 
+from dataforge.configuration import LLMResourceSettings
 from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
+from dataforge.llm_resources import request_slot
 
 
 def render(store, workspace):
@@ -58,7 +60,9 @@ def render(store, workspace):
             try:
                 if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
                     raise ValueError("Enable external requests in Security and privacy first")
-                with Adapter(profile) as adapter:
+                resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
+                    for k, v in LLMResourceSettings().model_dump().items()})
+                with request_slot(store.home, workspace, resources.llm_concurrency), Adapter(profile) as adapter:
                     if discover:
                         st.write(adapter.models())
                     else:

@@ -271,3 +271,29 @@ configured model when one becomes available. Preserve the user's unrelated `.git
 - Next: bounded AI concurrency and explicit statement chunk previews, then settings/cleanup.
 - Final slice verification after review fixes: 155 tests passed in17.25s; Ruff clean. SAS
   original formatting and immediate result rerender are covered.
+
+## Completion execution: AI resource controls — 2026-10-15
+
+- Added portable validated workspace AI concurrency1–4 and chunk-size500–100000 character
+  controls. App-wide maximum8 applies to assistance and provider connection/discovery checks.
+  Busy requests refuse without transmission; capacity releases on errors. Cooperative cancel
+  stops new requests/retries/response processing, not a currently blocked HTTP read.
+- Offline statement chunk previews preserve original line coordinates, SQL quoted semicolons,
+  SAS DATA/macros and interactive PROC through QUIT. Whole oversized units fail explicitly;
+  selection is limited to50 chunks and each request requires an explicit user click. No batch
+  transmission, source truncation or weakening of context/privacy/hash checks.
+- Actual isolated Settings UI saved concurrency2/chunk1500; screenshot under
+  .dataforge/verification/ai-resource-settings.png. AppTest selects chunk2 and proves only its
+  exact source/range is sent; previews make no request. Review findings fixed with regressions.
+- Live OmniRoute fixed discovered model cx/gpt-5.6-luna-low passed discovery, connection,
+  SQL/SAS grounding, explicit inferred merges, refresh and reopened persistence in19.87s.
+  Synthetic sources only; report plans/LLM_LIVE_RESULTS.json. Prior unreliable-route failures
+  remain historical evidence, not adapter success. New advisory schemas remain HTTP-test backed.
+- Restarted primary8501 and isolated8502 after previous processes ended. Startup enables native
+  runOnSave so code updates load; config hash preserved and no theme was applied. Runtime data
+  stays under the same primary home. Next: remaining settings then safe temporary cleanup.
+- Final AI-resource slice verification:166 tests passed in18.75s; Ruff clean.
+- User then requested holding OmniRoute calls while it starts, and specified that all future
+  OmniRoute testing must use model auto. No further gateway request was made after the hold.
+  AGENTS.md and live-check command default record this policy. Fixed-route success above is
+  historical evidence obtained before the new instruction, not a current route recommendation.

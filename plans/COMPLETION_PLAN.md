@@ -16,9 +16,9 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
 - [x] Full pytest/Ruff, running UI exercise, docs/knowledge/status update and commit.
 
 ## 2. Bounded AI resources
-- [ ] Add validated concurrency and statement-aware context chunk settings. Explicit preview
+- [x] Add validated concurrency and statement-aware context chunk settings. Explicit preview
   and one user-triggered request per chunk; preserve hashes, source positions and privacy.
-- [ ] Test concurrent requests, context limits, oversized statements, cancellation and no
+- [x] Test concurrent requests, context limits, oversized statements, cancellation and no
   implicit transmission. Wire settings/config transfer and UI, verify and commit.
 
 ## 3. Remaining settings

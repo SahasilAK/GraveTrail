@@ -10,6 +10,8 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
 - Prefer unresolved diagnostics to guessed dependencies. Never merge ambiguous names.
 - Runtime data belongs under `DATAFORGE_HOME` (default `.dataforge/`, ignored).
 - Credentials come from named environment variables; never persist their values.
+- OmniRoute testing must use model `auto`, endpoint `http://localhost:20128/v1`, and the
+  existing `OMNIROUTE_API_KEY` environment variable. Do not substitute fixed models/routes.
 - Use parameterized SQL, safe relative paths, allowed import roots, bounded resources.
 - Verify each vertical slice with pytest and the running UI. Update status and knowledge.
 - Commands: `uv sync --extra dev`; `uv run pytest`; `uv run ruff check .`;

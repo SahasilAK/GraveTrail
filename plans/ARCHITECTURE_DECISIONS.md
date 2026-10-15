@@ -39,8 +39,15 @@
   prefer the database copy for restore and preserve existing IDs. Protect current references
   and the latest completed analysis. No permanent purge, source GC or automatic retention.
 
-- ADR 015: AI advisory task v2 schemas are distinct from lineage claims. Direct columns must
+- ADR 017: AI advisory task v2 schemas are distinct from lineage claims. Direct columns must
   match complete operations parsed in original file context; quote fragments cannot remove
   ambiguity or turn comments/string literals into code. Explanations retain cited advisory
   prose. Existing JSON AI records persist both without a migration. All non-lineage tasks,
   including previously merged historical records, are excluded from graph merging/refresh.
+
+- ADR 018: AI admission is process-local (workspace1–4, app maximum8), with immediate busy
+  refusal and guaranteed release rather than queued source payloads. Connection checks and
+  discovery share the gate. Statement chunking is offline and explicitly one request at a
+  time; preserve whole SAS macro/interactive PROC contexts and original source coordinates.
+  Oversized blocks are refused, never truncated. Cancellation is cooperative; an in-flight
+  HTTP wait remains bounded by its configured timeout.

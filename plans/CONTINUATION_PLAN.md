@@ -102,3 +102,10 @@ until mandatory requirements and their acceptance checks are accounted for.
 Task-specific advisory slice implemented in completion execution: v2 contracts, complete-operation
 source grounding, offline saved result selection and hard exclusion from lineage merges/refresh.
 See COMPLETION_PLAN.md and latest IMPLEMENTATION_STATUS entry. Next: AI resource controls.
+
+AI resource controls implemented: bounded admission, offline complete-statement chunk previews,
+one explicit request per chunk, portable settings and cooperative cancellation. Fixed-route
+synthetic live SQL/SAS merge/refresh/reopen passed. Next: remaining settings and cleanup.
+
+Current live-test constraint: OmniRoute model must be auto (user instruction). Provider calls
+are on hold while the user starts OmniRoute; continue independent local work only.

@@ -2,6 +2,7 @@
 import streamlit as st
 
 from dataforge.llm import TASKS, assist_task
+from dataforge.llm_resources import context_chunks
 from ui.assistance_result import render_result
 
 
@@ -24,6 +25,17 @@ def render(store, workspace):
     first = st.number_input("Evidence start line", 1, count, 1)
     last = st.number_input("Evidence end line", int(first), count, min(count, int(first) + 20))
     task = st.selectbox("Analysis task", TASKS, format_func=lambda x: x.replace("_", " ").capitalize())
+    if st.checkbox("Preview selection as statement chunks", key="ai_chunks_" + workspace):
+        try:
+            chunks = context_chunks(source["raw_content"], source["extension"], int(first), int(last),
+                                    int(store.setting(workspace, "llm_chunk_chars", 4000)))
+        except ValueError as exc:
+            st.warning(str(exc))
+            return
+        index = st.selectbox("Context chunk", range(len(chunks)),
+                             format_func=lambda i: f"{i + 1}/{len(chunks)} · lines {chunks[i]['first']}–{chunks[i]['last']}")
+        first, last = chunks[index]["first"], chunks[index]["last"]
+        st.caption("Only this chunk is requested. Uncheck chunk preview to cancel this selection; no remaining chunks run automatically.")
     st.code("\n".join(source["raw_content"].splitlines()[int(first) - 1:int(last)]), language="sql" if source["extension"] == ".sql" else "sas")
     st.caption("Only the selected code range is sent, subject to your privacy gates, redaction and context budget. AI explanations remain advisory; relationships require exact source quotes and explicit read/write evidence.")
     if st.button("Analyze selected evidence with AI", key=f"manual_ai_request_{workspace}_{fid}_{source['content_hash']}"):

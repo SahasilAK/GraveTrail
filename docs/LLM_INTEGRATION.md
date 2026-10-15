@@ -65,7 +65,7 @@ Run an opt-in check with an available model identifier:
 
 ```powershell
 $env:OMNIROUTE_API_KEY = [Environment]::GetEnvironmentVariable('OMNIROUTE_API_KEY', 'User')
-uv run python scripts/verify_llm.py --model auto/best-fast --output plans/LLM_LIVE_RESULTS.json
+uv run python scripts/verify_llm.py --model auto --output plans/LLM_LIVE_RESULTS.json
 ```
 
 This uses synthetic SQL/SAS in an isolated temporary database, checks discovery, connection,
@@ -89,3 +89,22 @@ Neither task may merge lineage, and historical advisory merges are excluded from
 Builder → Optional AI assistance → Saved AI result reopens retained results without an active
 provider profile. Changed-source results display a warning and retain their original quote/hash.
 Advisory JSON downloads include provenance. The existing retention policy applies.
+
+## Resource controls
+
+Settings → Performance configures1–4 concurrent requests per workspace (also maximum8 across
+this app process) and statement chunk size. Assistance, model connection tests and discovery
+share admission. Busy calls refuse rather than queue. Builder's chunk preview is offline:
+choose one complete statement/SAS block chunk and explicitly request it. No next chunk runs
+automatically. Unknown or interactive SAS procedures retain context through QUIT; oversized
+units require a larger budget or different selection. Source/profile budgets still apply.
+Cancellation callbacks stop retries and response processing cooperatively; blocking network
+waits finish within their configured timeout. There is no preemptive HTTP cancellation claim.
+
+Fixed-route live verification on2026-10-15 passed with cx/gpt-5.6-luna-low, including grounded
+SQL/SAS inferred merge and restart. See plans/LLM_LIVE_RESULTS.json; this proves that configured
+route at test time, not all discovered models or advisory-task output compliance.
+
+Current user testing policy: always use OmniRoute model `auto`; the live-check script defaults
+accordingly. Fixed-model results above predate that instruction. Preserve quarantine if auto
+returns invalid output; do not substitute another route or weaken validation to force success.

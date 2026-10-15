@@ -16,7 +16,8 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
-from dataforge.configuration import ParsingSettings
+from dataforge.configuration import LLMResourceSettings, ParsingSettings
+from dataforge.llm_resources import request_slot
 from dataforge.models import canonical, stable_id, statements
 from dataforge.parsers.sas import parse_sas, strip_comments
 
@@ -125,8 +126,9 @@ def response_object(text: str) -> dict:
 
 
 class Adapter:
-    def __init__(self, profile: Profile, transport=None):
+    def __init__(self, profile: Profile, transport=None, cancelled=None):
         self.profile = profile
+        self.cancelled = cancelled
         self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
 
     def __enter__(self):
@@ -152,6 +154,8 @@ class Adapter:
 
     def _request(self, method, path, payload=None):
         for attempt in range(self.profile.retries + 1):
+            if self.cancelled and self.cancelled():
+                raise ProviderError("AI request cancelled; no further retries")
             try:
                 with self.client.stream(method, self.profile.base_url + path, headers=self._headers(), json=payload) as response:
                     if response.status_code == 429 or response.status_code >= 500:
@@ -163,6 +167,8 @@ class Adapter:
                                             response.status_code == 429 or response.status_code >= 500)
                     chunks, total = [], 0
                     for chunk in response.iter_bytes():
+                        if self.cancelled and self.cancelled():
+                            raise ProviderError("AI request cancelled while receiving response")
                         total += len(chunk)
                         if total > 2 * 1024 * 1024:
                             raise ProviderError("Provider response exceeds 2 MB limit")
@@ -273,7 +279,9 @@ def redact(text: str) -> str:
 
 
 def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
-           transport=None, expected_hash=None):
+           transport=None, expected_hash=None, cancelled=None):
+    if cancelled and cancelled():
+        raise InterruptedError("AI request cancelled before transmission")
     if task not in TASKS:
         raise ValueError("Unsupported analysis task")
     if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
@@ -311,8 +319,14 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     usage, raw, validated = {}, "", None
     outcome, reason, retryable = "validated", "", False
     try:
-        with Adapter(profile, transport) as adapter:
+        resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
+            for k, v in LLMResourceSettings().model_dump().items()})
+        with request_slot(store.home, workspace, resources.llm_concurrency), Adapter(profile, transport, cancelled) as adapter:
+            if cancelled and cancelled():
+                raise InterruptedError("AI request cancelled before transmission")
             raw, usage = adapter.complete(system, user)
+        if cancelled and cancelled():
+            raise ProviderError("AI request cancelled after response; result quarantined")
         validated = response_model.model_validate(response_object(raw))
         if task in TASK_SCHEMAS:
             settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
@@ -374,7 +388,7 @@ def merge_claims(store, workspace, record_id):
     return len(response.claims)
 
 
-def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None):
+def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None, cancelled=None):
     profiles = {r["profile_id"]: Profile.model_validate_json(r["config"])
                 for r in store.rows("SELECT * FROM llm_profiles WHERE workspace_id=?", [workspace])}
     assignments = store.setting(workspace, "task_models", {})
@@ -392,7 +406,7 @@ def assist_task(store, workspace, file_id, first, last, task, transport=None, ex
         if urlparse(profile.base_url).netloc != urlparse(first_profile.base_url).netloc:
             continue
         result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
-                        expected_hash=expected_hash)
+                        expected_hash=expected_hash, cancelled=cancelled)
         if not result["retryable"]:
             return result
     return result

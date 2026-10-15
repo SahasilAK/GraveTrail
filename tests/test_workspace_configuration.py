@@ -43,7 +43,8 @@ def test_safe_configuration_round_trip_preserves_supported_settings(tmp_path):
                   "max_files": 90, "parse_workers": 3, "graph_limit": 60, "traversal_depth": 9,
                   "tree_expansion_depth": 2, "graph_direction": "combined", "collapse_temporary": False,
                   "graph_labels": "full", "graph_palette": "neutral", "graph_edge_width": 4,
-                  "source_view_mode": "relevant", "source_line_numbers": False}
+                  "source_view_mode": "relevant", "source_line_numbers": False,
+                  "llm_concurrency": 2, "llm_chunk_chars": 1500}
         for k, v in values.items():
             store.set_setting(original, k, v)
         store.set_setting(original, "external_llm", True)
@@ -69,7 +70,8 @@ def test_safe_configuration_round_trip_preserves_supported_settings(tmp_path):
                                      {"graph_direction": "sideways"}, {"graph_labels": "script"},
                                      {"graph_palette": "#bad"}, {"graph_edge_width": 99},
                                      {"collapse_temporary": "false"}, {"source_line_numbers": 1},
-                                     {"source_view_mode": "execute"}])
+                                     {"source_view_mode": "execute"}, {"llm_concurrency": 0},
+                                     {"llm_concurrency": 5}, {"llm_chunk_chars": 499}])
 def test_invalid_configuration_cannot_create_a_partial_workspace(tmp_path, settings):
     from dataforge.configuration import import_workspace_configuration
 
