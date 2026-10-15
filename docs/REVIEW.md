@@ -45,3 +45,16 @@ Physical power-loss behavior was not exercised. Other tests cover migration pres
 workspace isolation, active-reference protection, bounded batches, integrity validation,
 idempotent restore and injected archive/restore transaction failures. Actual Settings browser
 verification archived and restored three analysis records while active imports stayed protected.
+
+## Visualization review — 2026-10-15
+
+Independent read-only review found that estimating SVG text width from character count could
+let wide glyphs spill out of full-name nodes. Rendering now measures the actual text and fits
+it to the available width. No material findings remained after that fix; extra temporary-home
+checks verified unsaved preferences and selected source IDs across workspace switches.
+
+Author browser verification also caught a ShadowRoot mount without `.style`; styling now
+targets the contained graph element, with a failing-then-passing Node regression. AppTest
+exposed stale asset IDs under key-based selectbox identity; absent asset/source choices are
+cleared before constructing the widget. Graph appearance, source preferences, evidence and
+offline graph JSON were checked after a server restart. Full suite: 120 tests, Ruff clean.

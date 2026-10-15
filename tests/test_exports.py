@@ -49,3 +49,42 @@ def test_path_csv_rows_keep_order_evidence_and_boundary():
     assert [(r["step"], r["source"], r["target"], r["statement_id"]) for r in rows] == [
         (1, "a", "b", "s1"), (2, "b", "c", "s2")]
     assert all(r["boundary"] == "root" and r["path"] == "a -> b -> c" for r in rows)
+
+
+def test_graph_appearance_is_shared_with_offline_export_and_keeps_full_identity():
+    from dataforge.configuration import VisualizationSettings
+
+    name = 'catalog.schema.a_very_long_table_name_for_a_real_engineering_job'
+    graph = LineageGraph([{"asset_id": "a", "name": name, "kind": "table", "temporary": False}], [])
+    appearance = VisualizationSettings(graph_labels="full", graph_palette="neutral", graph_edge_width=4)
+    data = graph_data(graph, appearance)
+    assert data["appearance"] == {"graph_labels": "full", "graph_palette": "neutral", "graph_edge_width": 4}
+    assert data["nodes"][0]["width"] > graph_data(graph)["nodes"][0]["width"]
+    assert data["nodes"][0]["name"] == name
+    output = graph_html(graph, appearance)
+    exported = json.loads(output.split('mountGraph(document.body,', 1)[1].rsplit(',null);', 1)[0])
+    assert exported == data
+    hidden = graph_data(graph, VisualizationSettings(graph_labels="hidden"))
+    assert hidden["nodes"][0]["name"] == name
+
+
+def test_graph_mount_supports_component_document_fragment_without_style():
+    from dataforge.exports import GRAPH_JS
+
+    if node := shutil.which("node"):
+        # Streamlit supplies a ShadowRoot/DocumentFragment, not a styled HTML element.
+        script = GRAPH_JS + r'''
+const attributes={},properties={};
+const elements={
+  'svg':{setAttribute:(k,v)=>attributes[k]=v},
+  '.stage':{replaceChildren:()=>{}}, '.detail':{},
+  '.df-graph':{style:{setProperty:(k,v)=>properties[k]=v}},
+  '.fit':{}, '.plus':{}, '.minus':{}, '.find':{}
+};
+mountGraph({querySelector:s=>elements[s]},
+  {nodes:[],edges:[],appearance:{graph_edge_width:4}},null);
+console.log(JSON.stringify({attributes,properties}));
+'''
+        result = subprocess.run([node], input=script, text=True, encoding="utf-8", capture_output=True)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)["properties"]["--df-selected-edge-width"] == 6

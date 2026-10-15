@@ -3,7 +3,11 @@ import json
 import sqlglot
 import streamlit as st
 
-from dataforge.configuration import export_workspace_configuration, import_workspace_configuration
+from dataforge.configuration import (
+    VisualizationSettings,
+    export_workspace_configuration,
+    import_workspace_configuration,
+)
 from ui.common import allowed_roots, context, title
 
 title("Settings", "Configure analysis, storage, resource budgets and source-code privacy.")
@@ -86,16 +90,37 @@ elif tab == "Performance":
         store.execute("DELETE FROM parse_cache")
         st.success("Parser cache cleared; stored lineage and source inventory retained")
 elif tab == "Visualization":
-    with st.form("visualization"):
+    appearance = VisualizationSettings.from_store(store, w)
+    with st.form("visualization_" + w):
         limit = st.number_input("Maximum graph nodes", 10, 1000, int(store.setting(w, "graph_limit", 150)))
         depth = st.slider("Default traversal depth", 1, 30, int(store.setting(w, "traversal_depth", 5)))
         tree_depth = st.slider("Default tree expansion depth", 0, 30, int(store.setting(w, "tree_expansion_depth", 1)))
+        directions = ["upstream", "downstream", "combined"]
+        direction = st.selectbox("Default graph direction", directions, index=directions.index(appearance.graph_direction))
+        collapse = st.checkbox("Collapse temporary steps by default", appearance.collapse_temporary)
+        labels = ["compact", "full", "hidden"]
+        label = st.selectbox("Graph labels", labels, index=labels.index(appearance.graph_labels),
+                             help="Full names fit inside wider nodes. Tooltips and evidence always retain exact names.")
+        palettes = ["semantic", "neutral"]
+        palette = st.selectbox("Node palette", palettes, index=palettes.index(appearance.graph_palette),
+                               help="Semantic colors distinguish sources, temporary and unresolved assets. Neutral uses one fill.")
+        edge_width = st.slider("Edge width", 1, 5, appearance.graph_edge_width)
+        source_modes = ["complete", "relevant"]
+        source_mode = st.selectbox("Default source view", source_modes, index=source_modes.index(appearance.source_view_mode),
+                                   format_func=lambda x: "Complete source expanded" if x == "complete" else "Relevant statements first")
+        line_numbers = st.checkbox("Show source line numbers", appearance.source_line_numbers)
         if st.form_submit_button("Save visualization settings"):
-            store.set_setting(w, "graph_limit", limit)
-            store.set_setting(w, "traversal_depth", depth)
-            store.set_setting(w, "tree_expansion_depth", tree_depth)
+            values = VisualizationSettings(graph_direction=direction, collapse_temporary=collapse,
+                graph_labels=label, graph_palette=palette, graph_edge_width=edge_width,
+                source_view_mode=source_mode, source_line_numbers=line_numbers).model_dump()
+            with store.transaction():
+                for key, value in {**values, "graph_limit": limit, "traversal_depth": depth,
+                                    "tree_expansion_depth": tree_depth}.items():
+                    store.set_setting(w, key, value)
+            for key in ("graph_direction_" + w, "graph_collapse_" + w, "lineage_source_complete_" + w):
+                st.session_state.pop(key, None)
             st.success("Visualization settings saved")
-    st.caption("Switch light/dark appearance from the application menu. Graphs support fit, zoom, pan, search and evidence selection.")
+    st.caption("Defaults apply when opening Explorer. Graph appearance is included in offline HTML/JSON and safe workspace configuration transfers. Switch light/dark appearance from the application menu.")
 elif tab == "Security and privacy":
     st.caption("Host directory access is restricted to these configured roots:")
     st.code("\n".join(str(p) for p in allowed_roots()), language=None)

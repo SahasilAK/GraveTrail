@@ -14,6 +14,8 @@ source-hash evidence, quoted names, unused CTEs, SAS inline data and retention o
 AppTest renders every page and exercises ambiguous choices, profile forms and settings sections.
 Actual browser checks are separate because Python AppTest cannot execute custom graph JavaScript.
 Browser testing found and fixed a JS string-escaping defect; a syntax regression now covers it.
+Node also checks mounting an empty graph through a DocumentFragment-shaped container without
+an element style property. Real-browser tests verify rendering and interactions separately.
 Provider tests use HTTPX MockTransport with real protocol payload validation. They do not prove
 live account permissions/model availability. Do not call them a live integration test.
 
@@ -32,3 +34,10 @@ discovery, UI connection and separate grounded SQL/SAS responses have passed; au
 routes have also produced quarantined invalid output, so a full live check is not yet claimed
 green. A listed fixed model was not callable. See plans/LLM_LIVE_RESULTS.json and the
 implementation status rather than treating model-list membership as availability.
+
+History tests cover archive/restore protection, v3 migration, bounded payloads, rollback and
+database recovery after filename loss/restart. Visualization checks cover strict preferences,
+safe configuration round trips, graph export parity, source expansion and workspace selection
+resets. Actual browser verification saved preferences, restarted the server, checked hidden
+labels with accessible full names, neutral fills and edge width, selected node evidence and
+downloaded matching graph JSON. Both normal and clean Python 3.11 environments pass 120 tests.

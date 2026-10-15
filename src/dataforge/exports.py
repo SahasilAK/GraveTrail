@@ -9,6 +9,7 @@ import zipfile
 
 import networkx as nx
 
+from dataforge.configuration import VisualizationSettings
 from dataforge.ingestion import safe_relative
 
 
@@ -36,6 +37,7 @@ GRAPH_CSS = """
 .df-graph .node{cursor:pointer}.df-graph .node:focus rect{stroke:#cc7a00;stroke-width:4}
 .df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;fill:none}
 .df-graph .chosen{stroke:#d67d0d!important;stroke-width:4!important}
+.df-graph .edge.chosen{stroke-width:var(--df-selected-edge-width,4)!important}
 .df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font-size:13px;line-height:1.6}
 .df-graph .hint{font-size:12px;color:inherit;opacity:.8}
 """
@@ -43,11 +45,14 @@ GRAPH_CSS = """
 GRAPH_JS = r"""
 function mountGraph(root, data, notify) {
  const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
+ const appearance=data.appearance||{},labels=appearance.graph_labels||'compact';
+ const edgeWidth=appearance.graph_edge_width||2;
+ root.querySelector('.df-graph').style.setProperty('--df-selected-edge-width',edgeWidth+2);
  const ns='http://www.w3.org/2000/svg';
  const make=(tag,attrs,parent)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));parent.appendChild(e);return e};
  stage.replaceChildren();
  const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
- let width=Math.max(700,...data.nodes.map(n=>n.x+250)),height=Math.max(360,...data.nodes.map(n=>n.y+90));
+ let width=Math.max(700,...data.nodes.map(n=>n.x+n.width+35)),height=Math.max(360,...data.nodes.map(n=>n.y+90));
  let box=[0,0,width,height];
  const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
  const highlight=(ids)=>{stage.querySelectorAll('.chosen').forEach(e=>e.classList.remove('chosen'));ids.forEach(id=>{stage.querySelectorAll('[data-node]').forEach(e=>{if(e.dataset.node===id)e.classList.add('chosen')})});};
@@ -60,17 +65,22 @@ function mountGraph(root, data, notify) {
  };
  data.edges.forEach((edge,i)=>{
    const a=nodes.get(edge.source),b=nodes.get(edge.target);
-   let x1=a.x+215,y1=a.y+24,x2=b.x,y2=b.y+24;
-   const d=edge.source===edge.target?`M ${x1} ${y1} c 70 -80 -240 -80 -210 0`:`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`;
+   let x1=a.x+a.width,y1=a.y+24,x2=b.x,y2=b.y+24;
+   const d=edge.source===edge.target?`M ${x1} ${y1} c 70 -80 ${-a.width-25} -80 ${5-a.width} 0`:`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`;
    const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':a.name+' to '+b.name},stage);
+   p.style.strokeWidth=edgeWidth;
    const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=a.name+' → '+b.name+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
    p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter')show()};
  });
  data.nodes.forEach(n=>{
    const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':n.name},stage);
-   const color=n.kind==='unresolved'?'#fff1d6':n.temporary?'#e5e1f8':n.source?'#d6eeed':'#dfebfc';
-   make('rect',{width:215,height:48,rx:6,fill:color,stroke:'#6c8bab','data-node':n.asset_id},g);
-   const text=make('text',{x:12,y:29,fill:'#17324d','font-size':13},g);text.textContent=n.name.length>27?n.name.slice(0,26)+'…':n.name;
+   const color=appearance.graph_palette==='neutral'?'#e8edf1':n.kind==='unresolved'?'#fff1d6':n.temporary?'#e5e1f8':n.source?'#d6eeed':'#dfebfc';
+   make('rect',{width:n.width,height:48,rx:6,fill:color,stroke:'#6c8bab','data-node':n.asset_id},g);
+   if(labels!=='hidden'){
+     const text=make('text',{x:12,y:29,fill:'#17324d','font-size':13},g);
+     text.textContent=labels==='compact'&&n.name.length>27?n.name.slice(0,26)+'…':n.name;
+     if(labels==='full'&&text.getComputedTextLength()>n.width-24){text.setAttribute('textLength',n.width-24);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
+   }
    make('title',{},g).textContent=n.name;
    g.onclick=()=>inspectNode(n);g.onkeydown=e=>{if(e.key==='Enter')inspectNode(n)};
  });
@@ -89,23 +99,27 @@ function mountGraph(root, data, notify) {
 GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select a node or edge for evidence. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
 
 
-def graph_data(graph) -> dict:
+def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
+    appearance = appearance or VisualizationSettings()
     condensed = nx.condensation(graph.graph)
     groups = list(nx.topological_generations(condensed))
+    width = min(700, max([215] + [len(n["name"]) * 7 + 24 for n in graph.nodes.values()])) if appearance.graph_labels == "full" else 215
     nodes = []
     for level, components in enumerate(groups):
         ids = sorted(n for c in components for n in condensed.nodes[c]["members"])
         for row, node in enumerate(ids):
             attrs = dict(graph.nodes[node])
-            attrs.update(x=20 + level * 300, y=20 + row * 85, source=graph.graph.in_degree(node) == 0)
+            attrs.update(x=20 + level * (width + 85), y=20 + row * 85, width=width,
+                         source=graph.graph.in_degree(node) == 0)
             nodes.append(attrs)
     edges = [{"source": s, "target": t, "evidence": a["evidence"], "intermediates": a.get("intermediates", [])}
              for s, t, a in graph.graph.edges(data=True)]
-    return {"nodes": nodes, "edges": edges}
+    return {"nodes": nodes, "edges": edges, "appearance": appearance.model_dump(include={
+        "graph_labels", "graph_palette", "graph_edge_width"})}
 
 
-def graph_html(graph) -> str:
-    data = json.dumps(graph_data(graph), default=str).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+def graph_html(graph, appearance: VisualizationSettings | None = None) -> str:
+    data = json.dumps(graph_data(graph, appearance), default=str).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>DataForge lineage</title><style>body{margin:20px}' + GRAPH_CSS + '</style></head><body>'
             '<h1>DataForge lineage</h1><p>Static dependencies with source evidence. Logical ordering is not execution order.</p>'

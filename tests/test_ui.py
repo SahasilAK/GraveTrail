@@ -143,6 +143,61 @@ def test_history_archive_and_restore_through_settings(tmp_path, monkeypatch):
     assert len(get_store(str(tmp_path)).runs(w)) == 3
 
 
+def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(tmp_path, monkeypatch):
+    from dataforge.ingestion import Importer
+    from dataforge.services import analyze
+    from dataforge.store import Store
+    from ui.common import get_store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    store = Store(tmp_path)
+    first, other = store.create_workspace("Preferences"), store.create_workspace("Other preferences")
+    for workspace in (first, other):
+        Importer(store, workspace).files([("q.sql", b"-- complete source header\nCREATE TABLE mart.x AS SELECT id FROM raw.a;")], {".sql"})
+        analyze(store, workspace)
+    store.close()
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    app.switch_page("ui/pages/settings.py").run()
+    app.segmented_control[0].set_value("Visualization").run()
+    next(n for n in app.selectbox if n.label == "Default graph direction").set_value("downstream")
+    next(n for n in app.checkbox if n.label == "Collapse temporary steps by default").uncheck()
+    next(n for n in app.selectbox if n.label == "Graph labels").set_value("hidden")
+    next(n for n in app.selectbox if n.label == "Node palette").set_value("neutral")
+    next(n for n in app.slider if n.label == "Edge width").set_value(4)
+    next(n for n in app.selectbox if n.label == "Default source view").set_value("relevant")
+    next(n for n in app.checkbox if n.label == "Show source line numbers").uncheck()
+    next(n for n in app.button if n.label == "Save visualization settings").click().run()
+    assert not app.exception
+    saved = get_store(str(tmp_path))
+    assert saved.setting(first, "graph_labels") == "hidden"
+    assert saved.setting(first, "source_view_mode") == "relevant"
+    assert saved.setting(other, "graph_labels") is None
+    app.switch_page("ui/pages/explorer.py").run()
+    app.text_input(key="asset_search_lineage").set_value("raw.a").run()
+    choice = app.selectbox(key="asset_choice_lineage")
+    choice.select(choice.options[0]).run()
+    assert not app.exception
+    assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "downstream"
+    assert next(n for n in app.toggle if n.label == "Collapse temporary steps").value is False
+    assert len(app.code) == 1
+    assert app.code and all(not c.proto.show_line_numbers for c in app.code)
+    # Full source remains explicitly available even in relevant-first mode.
+    app.session_state["lineage_source_complete_" + first] = True
+    app.run()
+    assert not app.exception
+    assert len(app.code) == 2
+    app.selectbox(key="workspace").set_value(other).run()
+    assert not app.exception
+    assert app.selectbox(key="asset_choice_lineage").value is None
+    app.text_input(key="asset_search_lineage").set_value("mart.x").run()
+    choice = app.selectbox(key="asset_choice_lineage")
+    choice.select(choice.options[0]).run()
+    assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "upstream"
+    assert next(n for n in app.toggle if n.label == "Collapse temporary steps").value is True
+    assert app.selectbox(key="lineage_source_file").value in {f["file_id"] for f in saved.files(other)}
+    assert len(app.code) == 2 and all(c.proto.show_line_numbers for c in app.code)
+
+
 @pytest.fixture(autouse=True)
 def clear_resources():
     yield

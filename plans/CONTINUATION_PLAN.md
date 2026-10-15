@@ -43,6 +43,19 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
    Implemented with migration3 transactional compressed recovery journal plus JSON copy;
    missing-file restart recovery and failure rollback tested. 110 tests/Ruff/lock checks pass.
    Actual Settings browser archived and restored three records; active imports protected.
+6. **Persistent visualization and source-view defaults.** Reuse Settings, Explorer, graph
+   renderer and configuration schema. Save workspace defaults for direction, temporary-step
+   collapse, compact/full/hidden labels, semantic/neutral node palette, edge width, complete/
+   relevant-first source and code line numbers. Validate with a typed allowlist; share graph
+   appearance between the live component and offline exports. Keep exact names accessible
+   through tooltips and evidence regardless of label density. Apply saved defaults to Explorer
+   controls per workspace without carrying widget choices between workspaces. No new renderer,
+   custom CSS input, source changes or lineage-semantic changes. Test saved/reopened/portable
+   preferences, actual rendered graph/export data and lazy source display, then browser-check.
+   Implemented. 120 tests pass in normal and clean Python 3.11 environments; Ruff/lock/build
+   checks pass. Actual browser saved preferences and verified persistence after restart,
+   hidden labels/accessible names, neutral fills, 4px edges, evidence and downloaded JSON.
+   Independent review cleared state/config/evidence handling after actual-text fitting fix.
 
 ## Remaining backlog beyond these slices
 
@@ -50,7 +63,7 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
   workspace bundles. Retained history archives are recoverable; there is no permanent purge.
 - Explicit job/session identity and broader target-vendor SQL/SAS fixtures.
 - Integrated opt-in unresolved-assistance queues, task-specific result schemas,
-  LLM concurrency/chunking controls, remaining parsing/visualization settings.
+  LLM concurrency/chunking controls and remaining parsing settings.
 - Real large-project accuracy checks, Docker/remote CI execution, standalone HTML
   browser verification where file navigation is supported.
 

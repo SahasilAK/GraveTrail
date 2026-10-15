@@ -2,6 +2,7 @@ import json
 
 import streamlit as st
 
+from dataforge.configuration import VisualizationSettings
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
 from ui.lineage_tree import render_tree
@@ -9,15 +10,18 @@ from ui.lineage_tree import render_tree
 title("Lineage explorer", "Trace upstream inputs, downstream impact and the source evidence behind each relationship.")
 store, w = context()
 graph = load_graph(store, w)
+appearance = VisualizationSettings.from_store(store, w)
 asset = choose_asset(graph, "lineage")
 if asset:
     upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
                                   on_change="rerun", key="lineage_direction_tabs")
     # Selection also allows a combined graph without losing either principal tab.
-    direction = st.segmented_control("Graph direction", ["upstream", "downstream", "combined"], default="upstream")
+    direction = st.segmented_control("Graph direction", ["upstream", "downstream", "combined"],
+                                     default=appearance.graph_direction, key="graph_direction_" + w)
     with st.container(horizontal=True):
         depth = st.slider("Traversal depth", 1, 30, int(store.setting(w, "traversal_depth", 5)))
-        simplified = st.toggle("Collapse temporary steps", value=True)
+        simplified = st.toggle("Collapse temporary steps", value=appearance.collapse_temporary,
+                               key="graph_collapse_" + w)
     view_graph = graph.simplified(keep=[asset]) if simplified else graph
     limit = int(store.setting(w, "graph_limit", 150))
 
@@ -32,7 +36,7 @@ if asset:
         st.warning(f"Graph limited to {limit} assets. Reduce depth or focus another asset.")
     if focused.cycles():
         st.warning("Cyclic dependencies are present in this view. Tree expansion stops at repeated nodes.")
-    result = graph_view(focused, "lineage_graph")
+    result = graph_view(focused, "lineage_graph_" + w, appearance)
     rows = focused.lineage_rows()
     selection = result.selection
     evidence = [e for _, _, a in focused.graph.edges(data=True) for e in a["evidence"]]
@@ -66,8 +70,8 @@ if asset:
                     st.download_button("Download paths CSV", report_csv(path_rows(report)),
                                        "dependency-paths.csv", "text/csv")
         with st.container(horizontal=True):
-            st.download_button("Download offline graph", graph_html(focused), "lineage.html", "text/html")
-            st.download_button("Download graph JSON", json.dumps(graph_data(focused), default=str, indent=2), "graph.json", "application/json")
+            st.download_button("Download offline graph", graph_html(focused, appearance), "lineage.html", "text/html")
+            st.download_button("Download graph JSON", json.dumps(graph_data(focused, appearance), default=str, indent=2), "graph.json", "application/json")
             ids = list(dict.fromkeys(e["file_id"] for e in evidence))
             if ids:
                 st.download_button("Download relevant sources", source_bundle(store, ids, {e["file_id"]: e.get("source_hash") for e in evidence}), "sources.zip", "application/zip")

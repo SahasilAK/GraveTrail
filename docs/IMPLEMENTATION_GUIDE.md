@@ -35,3 +35,13 @@ Legacy v1 imports ignore unrecognized/private settings; v2 rejects unknown setti
 the complete document before creating the new workspace, then create identity/settings in one
 transaction. Never serialize arbitrary settings, provider endpoints, credentials or privacy gates.
 Restart Streamlit after changing cached Store class definitions during development.
+Also restart after editing registered custom-component JavaScript: hot reload can retain an
+older component asset even after Python re-registers the same name. Verify the running graph
+in a real browser; AppTest cannot prove component rendering.
+
+`VisualizationSettings` validates display preferences; `PortableSettings` includes that same
+allowlist. Explorer passes one settings object to the live graph and offline HTML/JSON exports.
+The component mount root can be a ShadowRoot/DocumentFragment with no `.style`; style the
+contained graph element. Full SVG label fitting uses actual rendered text measurement.
+Before reusing asset/source selectbox keys, clear selections absent from the current choices.
+Key-based widget identity can otherwise preserve an ID from another workspace or filter.

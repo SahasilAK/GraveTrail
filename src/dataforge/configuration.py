@@ -41,7 +41,23 @@ class WorkspaceIdentity(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
-class PortableSettings(ParsingSettings):
+class VisualizationSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    graph_direction: Literal["upstream", "downstream", "combined"] = "upstream"
+    collapse_temporary: bool = True
+    graph_labels: Literal["compact", "full", "hidden"] = "compact"
+    graph_palette: Literal["semantic", "neutral"] = "semantic"
+    graph_edge_width: int = Field(default=2, ge=1, le=5)
+    source_view_mode: Literal["complete", "relevant"] = "complete"
+    source_line_numbers: bool = True
+
+    @classmethod
+    def from_store(cls, store, workspace):
+        return cls.model_validate({key: store.setting(workspace, key, field.default)
+                                   for key, field in cls.model_fields.items()})
+
+
+class PortableSettings(ParsingSettings, VisualizationSettings):
     """Explicit allowlist: no network, secrets, AI retention, or transmission permissions."""
     max_file_mb: int = Field(default=20, ge=1, le=100)
     max_files: int = Field(default=10000, ge=1, le=100000)

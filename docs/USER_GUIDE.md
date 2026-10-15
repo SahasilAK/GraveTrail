@@ -62,6 +62,19 @@ supported. Profiles, credentials, privacy permissions, sources and analysis hist
 this is a configuration transfer, not a workspace backup. Deletion requires typing the current
 workspace name.
 
+**Visualization defaults:** Save graph direction, temporary-step collapse, label density,
+node palette and edge width in Settings → Visualization. Compact labels shorten long names;
+full names fit inside wider nodes; hidden labels still expose exact names in keyboard-accessible
+nodes, tooltips and evidence. Semantic colors distinguish asset kinds; the neutral palette uses
+one fill. Live Explorer and offline graph HTML/JSON share these settings. Direction and collapse
+remain adjustable for the current exploration. Preferences belong to each workspace and are
+included in safe configuration transfers. Theme remains in the application menu.
+
+Choose complete source expanded or relevant statements first, and whether code displays line
+numbers. Relevant-first mode keeps the **Complete source** panel closed when evidence snippets
+are available; open it to load the full display. Files without focused evidence default to full
+source. Exact original line ranges remain on evidence panels even when code numbers are hidden.
+
 **History maintenance:** In Settings → Storage and workspaces, open **Archive and restore old
 history**. Choose recent analysis/import counts to retain and a batch limit (up to 100 records
 per type). Preview shows eligible records; the latest completed analysis, active edge/inventory

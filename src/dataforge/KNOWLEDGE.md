@@ -7,8 +7,8 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 
 ## Files
 - `__init__.py` — Package marker; no business behavior.
-- `configuration.py` — ParsingSettings/PortableSettings validate bounded non-network configuration; WorkspaceIdentity validates names/descriptions; versioned export/import supports v1 and atomic v2 round trips.
-- `exports.py` — Embedded graph_data/graph_html and shared SVG JS/CSS; path_rows flattens ordered paths/evidence; report_csv/html escape untrusted values; source_bundle preserves analyzed original bytes.
+- `configuration.py` — ParsingSettings/VisualizationSettings/PortableSettings validate bounded non-network preferences; WorkspaceIdentity validates names/descriptions; export/import supports v1 and atomic v2 round trips.
+- `exports.py` — graph_data/graph_html share validated label/palette/edge appearance and fitted full names with live SVG JS/CSS; path_rows flattens paths/evidence; report_csv/html escape values; source_bundle preserves analyzed originals.
 - `graph.py` — LineageGraph provides bounded search/focus, SCC cycles, temporary contraction, logical rows, root_paths and ordered path_report with evidence and explicit depth/cycle/truncation boundaries.
 - `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Original blobs are SHA-256 named.
 - `llm.py` — Profile/Adapter implement protocols/discovery and explicit nonstreaming chat; response_object accepts one enclosing JSON fence only; assist/assist_task enforce privacy/routing, GroundedResponse/validate_response ground claims, merge_claims persists inferred facts.

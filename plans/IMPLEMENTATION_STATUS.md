@@ -32,8 +32,8 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
   and folder knowledge maps. Original user .gitignore edits are preserved separately.
 
 ## Verification evidence
-- Latest continuation: 110 tests pass in the normal environment; Ruff and lock checks clean.
-  The initial 62-test release also passed in a separately created clean Python 3.11 environment.
+- Latest continuation: 120 tests pass in normal and separate clean Python 3.11 environments;
+  Ruff and lock checks clean. Wheel and source distribution rebuilt successfully.
 - uv lock --check passes; wheel installed without editable source and imported with Python -I;
   bundled prompt/schema assets verified. Sdist/wheel exclude local runtime data.
 - Clean-environment Streamlit server launched at http://127.0.0.1:8501; health endpoint 200.
@@ -142,3 +142,14 @@ discovery, source/blob lifecycle, portable backups and auth if expanding beyond 
   analysis records while imports referenced by active inventory stayed protected. Screenshot:
   `.dataforge/verification/history-recovery.png`. Recovery is retained; no source GC or disk
   shrink claim. Next: controlled temporary-file cleanup and remaining storage portability.
+- Visualization defaults completed: typed workspace direction/temporary collapse, compact/
+  full/hidden labels, semantic/neutral node palettes, edge width, source expansion and line
+  numbers. Live graph and offline HTML/JSON share appearance; safe configuration includes it.
+  Actual browser saved and reopened preferences after server restart; six exact accessible
+  names remained with hidden labels, neutral fills and 4px edges. Node evidence and matching
+  downloaded JSON passed. Full names use rendered SVG measurement to fit wider nodes.
+  Fixed stale asset/source selectors on workspace/filter changes and ShadowRoot styling;
+  added regressions. Independent reviewer reported no material remaining findings. 120 tests
+  pass in normal and clean environments; Ruff, lock and wheel/sdist build pass. No new migration.
+  Actual full-label graph and selected original evidence captured in
+  `.dataforge/verification/visualization-defaults.png`.

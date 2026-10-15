@@ -6,6 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from dataforge.configuration import VisualizationSettings
 from dataforge.exports import GRAPH_BODY, GRAPH_CSS, GRAPH_JS, graph_data, report_csv, report_html
 from dataforge.graph import LineageGraph
 from dataforge.store import Store
@@ -52,9 +53,12 @@ def choose_asset(graph, key):
     if len(matches) > 1:
         st.caption(f"{len(matches)} matches. Choose the exact asset to avoid ambiguous names.")
     mapping = {a["asset_id"]: a for a in matches}
+    choice_key = f"asset_choice_{key}"
+    if st.session_state.get(choice_key) not in mapping:
+        st.session_state.pop(choice_key, None)
     return st.selectbox("Choose an exact asset", list(mapping), index=None,
         format_func=lambda k: f'{mapping[k]["name"]}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
-        key=f"asset_choice_{key}")
+        key=choice_key)
 
 
 def downloads(rows, stem, include_html=True):
@@ -72,10 +76,13 @@ def source_viewer(store, file_ids, key="source", evidence=None):
     ids = list(dict.fromkeys(file_ids))
     choices = {r["file_id"]: r["relative_path"] for r in store.rows(
         "SELECT file_id,relative_path FROM source_files WHERE file_id IN (" + ",".join("?" for _ in ids) + ") ORDER BY relative_path", ids)}
+    if st.session_state.get(key + "_file") not in choices:
+        st.session_state.pop(key + "_file", None)
     fid = st.selectbox("Source file", list(choices), format_func=choices.get, key=key + "_file")
     relevant = [e for e in evidence or [] if e.get("file_id") == fid]
     source_hash = relevant[0].get("source_hash") if relevant else None
     source = store.file(fid, source_hash)
+    appearance = VisualizationSettings.from_store(store, source["workspace_id"])
     st.caption(f'{source["relative_path"]} | {source["encoding"]} | {source["line_count"]} lines | {source["file_size"]:,} bytes')
     st.download_button("Download original file", store.original(fid, source_hash), source["file_name"], key=key + "_download")
     if source_hash and source_hash != store.file(fid)["content_hash"]:
@@ -90,9 +97,12 @@ def source_viewer(store, file_ids, key="source", evidence=None):
         st.markdown("**Relevant statements**")
         for e in {e["statement_id"]: e for e in relevant}.values():
             with st.expander(f'Lines {e["start_line"]}–{e["end_line"]}: {e.get("kind", e.get("operation_type", "Reference"))}', expanded=True):
-                st.code(e["code"], language=language, line_numbers=True)
-    st.markdown("**Complete source**")
-    st.code(text, language=language, line_numbers=True, height=500)
+                st.code(e["code"], language=language, line_numbers=appearance.source_line_numbers)
+    complete = st.expander("Complete source", expanded=appearance.source_view_mode == "complete" or not relevant,
+                           on_change="rerun", key=key + "_complete_" + source["workspace_id"])
+    if complete.open:
+        with complete:
+            st.code(text, language=language, line_numbers=appearance.source_line_numbers, height=500)
     st.caption("Use the code block copy button to copy code. Line ranges above refer to the original file.")
 
 
@@ -100,6 +110,6 @@ _GRAPH = st.components.v2.component("dataforge_graph", html=GRAPH_BODY, css=GRAP
     js=GRAPH_JS + "\nexport default function(c){mountGraph(c.parentElement,c.data,v=>c.setStateValue('selection',v));}\n")
 
 
-def graph_view(graph, key="graph"):
-    return _GRAPH(data=graph_data(graph), key=key, default={"selection": None},
+def graph_view(graph, key="graph", appearance=None):
+    return _GRAPH(data=graph_data(graph, appearance), key=key, default={"selection": None},
                   on_selection_change=lambda: None, height="content")
