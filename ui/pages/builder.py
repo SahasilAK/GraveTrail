@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from dataclasses import asdict
 
 import streamlit as st
@@ -9,6 +10,9 @@ from ui.common import allowed_roots, context, downloads, source_viewer, title
 
 title("Lineage builder", "Import source files, inspect the inventory, then build evidence-backed lineage.")
 store, w = context()
+if result := st.session_state.pop("analysis_notice_" + w, None):
+    st.success(f"Analysis complete: {result['assets']} assets, {result['edges']} dependencies. "
+               f"Parsed {result['analyzed']}; reused {result['cached']} cached files in {result['duration']:.2f}s.")
 mode = st.segmented_control("Input source", ["ZIP archive", "Folder upload", "Host directory"], default="ZIP archive")
 extensions = {"." + x for x in st.multiselect("File types to analyze", ["sql", "sas", "csv"], default=["sql", "sas", "csv"])}
 entries, archive, directory = [], None, ""
@@ -52,6 +56,12 @@ files = store.files(w)
 if files:
     st.divider()
     st.subheader("Master file inventory")
+    statuses = Counter(f["parsing_status"] for f in files)
+    with st.container(horizontal=True):
+        for label, status in [("Successful parses", "success"), ("Partial parses", "partial"),
+                              ("Failed parses", "failed"), ("Pending files", "pending")]:
+            st.metric(label, statuses[status])
+    st.caption("Extensions: " + ", ".join(f"{ext}: {count}" for ext, count in sorted(Counter(f["extension"] for f in files).items())))
     search = st.text_input("Filter inventory", placeholder="Path, file name or status")
     shown = [f for f in files if search.casefold() in (f["relative_path"] + " " + f["parsing_status"]).casefold()]
     inventory = [{k: f[k] for k in ["relative_path", "extension", "file_size", "encoding", "line_count", "parsing_status", "content_hash"]} for f in shown]
@@ -69,9 +79,9 @@ if files:
             result = analyze(store, w, selected or None if not rebuild else None,
                              force=rebuild or store.setting(w, "reanalysis_mode", "changed") == "all",
                              progress=lambda p, text: bar.progress(p, text=text))
-            st.success(f"Analysis complete: {result['assets']} assets, {result['edges']} dependencies. "
-                       f"Parsed {result['analyzed']}; reused {result['cached']} cached files in {result['duration']:.2f}s.")
             st.session_state["last_analysis"] = result
+            st.session_state["analysis_notice_" + w] = result
+            st.rerun()
         except Exception as exc:
             st.error(f"Analysis failed ({type(exc).__name__}). Previous committed lineage was retained.")
     if validate:

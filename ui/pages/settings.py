@@ -25,6 +25,8 @@ if tab == "Parsing and lineage":
         dialect = st.selectbox("Default SQL dialect", dialects, index=dialects.index(store.setting(w, "dialect", "")), format_func=lambda x: x or "Generic SQL")
         case = st.checkbox("Case-sensitive asset identities", value=store.setting(w, "case_sensitive", False))
         expand = st.checkbox("Expand plain SQL wildcards using consistent declared schemas", value=store.setting(w, "expand_wildcards", True))
+        csv_sample_rows = st.number_input("CSV sample rows", 0, 100, int(store.setting(w, "csv_sample_rows", 25)),
+            help="Retained preview rows and sampled type inference. Zero disables sampling; complete original files and row counting remain available.")
         mappings = st.text_area("SAS library mappings (JSON)", json.dumps(store.setting(w, "library_mappings", {}), indent=2), help='Example: {"src": "catalog.raw"}')
         macros = st.text_area("Static SAS macro values (JSON)", json.dumps(store.setting(w, "macros", {}), indent=2))
         folders = st.text_area("SQL dialect by folder prefix (JSON)", json.dumps(store.setting(w, "dialect_by_folder", {}), indent=2))
@@ -44,7 +46,8 @@ if tab == "Parsing and lineage":
         st.caption("Filters affect displayed graphs and their exports; stored evidence and diagnostics are retained. Inferred relationships never become verified through a threshold.")
         if st.form_submit_button("Save parsing settings"):
             try:
-                data = {"dialect": dialect, "case_sensitive": case, "expand_wildcards": expand, "default_job": default_job}
+                data = {"dialect": dialect, "case_sensitive": case, "expand_wildcards": expand, "default_job": default_job,
+                        "csv_sample_rows": csv_sample_rows}
                 for key, value in [("library_mappings", mappings), ("macros", macros), ("dialect_by_folder", folders), ("dialect_by_extension", extension_dialects), ("job_by_folder", job_folders)]:
                     obj = json.loads(value)
                     if not isinstance(obj, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):

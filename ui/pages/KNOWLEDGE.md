@@ -15,3 +15,6 @@ reanalyze to apply new identity boundaries. Persistent assets remain shared.
 
 Storage settings opens only startup-allowed storage locations; failed opens keep the current
 workspace and successful opens reset this session before widgets are rebuilt.
+
+Builder reruns with analysis notices for fresh status counters/extension counts; Settings
+controls CSV sample0–100. Explorer tree tabs share the left/right source evidence row.

@@ -6,6 +6,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `fixtures/` — [fixtures/KNOWLEDGE.md](fixtures/KNOWLEDGE.md).
 
 ## Files
+- `test_inventory_controls.py` — CSV sample bounds/portability/cache refresh and immediate post-analysis inventory status counters.
 - `test_storage_locations.py` — Explicit/bounded path choices, two-session switching/back with retained sources and failed-open preservation.
 - `test_vendor_fixtures.py` — Exact labeled dependency/direct-column/temporary sets for six SQL dialects and SAS, original evidence and warm-cache preservation.
 - `test_job_identity.py` — Cross-job temporary/schema/column isolation, global persistent paths, mixed-lifetime diagnostics, AI refresh, history/exports and Settings/chooser UI regressions.

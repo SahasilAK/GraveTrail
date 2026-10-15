@@ -395,3 +395,21 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Final storage verification:207 tests passed,1 skipped in23.15s; Ruff clean. Actual isolated
   UI opened alternate-ui (new My workspace), then returned to Completion verification with
   its 10.26MB database and history intact. Screenshot .dataforge/verification/storage-location.png.
+
+
+## Completion execution: inventory and investigation UI — 2026-10-16
+
+- Audited master gaps: configurable CSV sampling (0–100 retained rows, default25; zero leaves
+  types unknown), explicit inventory successful/partial/failed/pending counts and extension
+  breakdown. Safe setting round trips and participates in parser cache keys. Full originals
+  and complete bounded row counting are unaffected by the sample limit.
+- Builder now reruns after completed analysis with a durable success notice so inventory and
+  counters show current statuses immediately. Explorer dependency tabs/tree occupy the left
+  panel beside source evidence on the right; shared graph remains above both panels.
+- Failing behavior tests preceded fixes; full209 tests passed,1 skipped in final result below.
+  Actual isolated Settings saved sample5. Final UI proof and full timing follow below.
+- Audit also identified SAS DATA/PROC blocks joining statement snippets with artificial newlines;
+  next fix exact original block evidence before final packaging and acceptance accounting.
+- Final UI refinement verification:209 tests passed,1 skipped in23.28s; Ruff clean; independent
+  review found no regressions. Running Explorer shows tree and exact SELECT_INTO source side
+  by side; screenshot .dataforge/verification/tree-source-panels.png.

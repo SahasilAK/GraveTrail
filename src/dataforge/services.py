@@ -88,7 +88,7 @@ def _parse_inventory(store, metadata, config):
         return parse_sql(content, source_dialect(metadata, config))
     if ext == ".sas":
         return parse_sas(content, config["library_mappings"], config["macros"], source_dialect(metadata, config))
-    return parse_csv(content, metadata["relative_path"])
+    return parse_csv(content, metadata["relative_path"], sample_size=config["csv_sample_rows"])
 
 
 def _collect_jobs(store, jobs, results, progress, cancelled):

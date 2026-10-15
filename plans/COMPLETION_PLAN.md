@@ -37,6 +37,8 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
 - [x] Add target-vendor fixture cases and resolve demonstrated defects. Commit tested groups.
 
 ## 6. Acceptance and delivery
+- [x] Audited CSV sample setting, inventory summary/refresh and tree/source panel layout.
+- [ ] Preserve exact original SAS block snippets rather than reconstructed token joins.
 - [x] Close audited storage-location selection gap: explicit startup-allowed locations,
   session-scoped selection, no data migration, isolated/reopened stores and safe failures.
 - [ ] Requirement-by-requirement accounting with code/tests and external verification status.

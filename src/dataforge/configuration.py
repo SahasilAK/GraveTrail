@@ -16,6 +16,7 @@ class ParsingSettings(BaseModel):
     macros: dict[str, str] = Field(default_factory=dict)
     case_sensitive: bool = False
     expand_wildcards: bool = True
+    csv_sample_rows: int = Field(default=25, ge=0, le=100)
     default_job: str = "workspace"
     job_by_folder: dict[str, str] = Field(default_factory=dict)
 

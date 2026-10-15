@@ -13,8 +13,6 @@ graph = load_graph(store, w)
 appearance = VisualizationSettings.from_store(store, w)
 asset = choose_asset(graph, "lineage")
 if asset:
-    upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
-                                  on_change="rerun", key="lineage_direction_tabs")
     # Selection also allows a combined graph without losing either principal tab.
     direction = st.segmented_control("Graph direction", ["upstream", "downstream", "combined"],
                                      default=appearance.graph_direction, key="graph_direction_" + w)
@@ -25,12 +23,6 @@ if asset:
     view_graph = graph.simplified(keep=[asset]) if simplified else graph
     limit = int(store.setting(w, "graph_limit", 150))
 
-    for tab, d in [(upstream, "upstream"), (downstream, "downstream")]:
-        if tab.open:
-            with tab:
-                render_tree(view_graph, asset, d, depth, limit,
-                            key=f"tree_{w}_{asset}_{d}_{simplified}",
-                            default_expansion=int(store.setting(w, "tree_expansion_depth", 1)))
     focused = view_graph.focus(asset, direction, depth, limit)
     if focused.truncated:
         st.warning(f"Graph limited to {limit} assets. Reduce depth or focus another asset.")
@@ -49,6 +41,14 @@ if asset:
         evidence = [e for s, t, a in focused.graph.edges(data=True) if node in {s, t} for e in a["evidence"]]
     left, right = st.columns([1, 1])
     with left:
+        upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
+                                      on_change="rerun", key="lineage_direction_tabs")
+        for tab, d in [(upstream, "upstream"), (downstream, "downstream")]:
+            if tab.open:
+                with tab:
+                    render_tree(view_graph, asset, d, depth, limit,
+                                key=f"tree_{w}_{asset}_{d}_{simplified}",
+                                default_expansion=int(store.setting(w, "tree_expansion_depth", 1)))
         st.subheader("Step-wise lineage")
         st.caption("Dependency-based logical ordering. Source execution order is unknown.")
         st.dataframe([{k: v for k, v in r.items() if k not in {"file_id", "statement_id"}} for r in rows], hide_index=True)

@@ -152,3 +152,8 @@ Use supplied IDs to separate temporary datasets belonging to different jobs; the
 prefix wins. Reanalyze after changes. Persistent tables remain shared. Mixed temporary and
 persistent writes to the same name in a job leave reads unresolved. Static source cannot
 establish runtime execution order. Exact selectors and graph labels show nondefault job IDs.
+
+CSV sample rows in Parsing and lineage controls retained preview and sampled type inference
+(0–100; default25). Zero retains no sample and leaves inferred types unknown. Reanalyze after
+changes. Inventory counters and extension breakdown refresh immediately after analysis.
+Explorer displays dependency trees beside their source evidence beneath the focused graph.
