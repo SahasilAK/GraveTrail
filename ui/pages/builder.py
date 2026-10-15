@@ -84,3 +84,6 @@ if files:
         fid = st.session_state.get("inventory_source_file")
         if fid:
             st.json(json.loads(store.file(fid)["metadata"]))
+    with st.expander("Optional AI assistance"):
+        from ui.assistance import render
+        render(store, w)

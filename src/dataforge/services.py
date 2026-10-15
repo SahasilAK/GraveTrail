@@ -66,6 +66,7 @@ def analyze(store, workspace: str, file_ids: list[str] | None = None, force: boo
             results.append((metadata, parsed))
             if progress:
                 progress((i + 1) / max(len(files), 1), metadata["relative_path"])
+        _restore_ai_results(store, workspace, results)
         with store.transaction():
             snapshot = _materialize(store, workspace, run_id, results, config)
             duration = time.perf_counter() - start
@@ -139,7 +140,7 @@ def _materialize(store, workspace, run_id, results, config):
                     rows["operation_assets"].append([workspace, oid, aid, role])
             for source, source_inferred in inputs:
                 for target, target_inferred in outputs:
-                    inferred = source_inferred or target_inferred
+                    inferred = source_inferred or target_inferred or op.method == "llm"
                     eid = stable_id(oid, source, target)
                     rows["edges"].append([eid, workspace, source, target, oid, sid, fid, op.kind,
                                           op.method, min(op.confidence, .85) if inferred else op.confidence,
@@ -182,3 +183,28 @@ def compare_runs(first: dict, second: dict) -> dict:
     return {"added_assets": sorted(bset - aset), "removed_assets": sorted(aset - bset),
             "added_edges": sorted(be - ae), "removed_edges": sorted(ae - be),
             "changed_files": sorted(k for k in set(a["files"]) | set(b["files"]) if a["files"].get(k) != b["files"].get(k))}
+
+
+def _restore_ai_results(store, workspace, results):
+    from dataforge.llm import GroundedResponse, validate_response
+    from dataforge.models import Operation
+
+    known = {r.name for _, parsed in results for r in [*parsed.assets,
+             *(ref for op in parsed.operations for ref in [*op.sources, *op.targets])]}
+    by_file = {m["file_id"]: (m, parsed) for m, parsed in results}
+    for record in store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND outcome='merged'", [workspace]):
+        details = json.loads(record["details"])
+        if record["file_id"] not in by_file:
+            continue
+        metadata, parsed = by_file[record["file_id"]]
+        if metadata["content_hash"] != details["content_hash"]:
+            continue
+        response = GroundedResponse.model_validate(details["result"])
+        content = store.file(record["file_id"])["raw_content"]
+        try:
+            validate_response(response, content, known, 1, len(content.splitlines()))
+        except ValueError:
+            continue
+        for c in response.claims:
+            parsed.operations.append(Operation(c.operation, [AssetRef(c.source)], [AssetRef(c.target)],
+                c.quote, c.start_line, c.end_line, "llm", min(c.confidence, .8), warnings=[c.explanation]))

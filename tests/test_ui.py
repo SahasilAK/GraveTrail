@@ -42,6 +42,21 @@ def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):
     assert app.dataframe
 
 
+def test_provider_profile_form_and_settings_sections(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
+    app.switch_page("ui/pages/settings.py").run()
+    for section in ["Storage and workspaces", "Performance", "Visualization", "Security and privacy", "LLM providers"]:
+        app.segmented_control[0].set_value(section).run()
+        assert not app.exception
+    for field in app.text_input:
+        if field.label == "Model or deployment identifier":
+            field.set_value("local-test-model")
+    next(b for b in app.button if b.label == "Save provider profile").click().run()
+    assert not app.exception
+    assert any(s.label == "Default profile" for s in app.selectbox)
+
+
 @pytest.fixture(autouse=True)
 def clear_resources():
     yield

@@ -102,5 +102,5 @@ elif tab == "Security and privacy":
                 store.set_setting(w, k, v)
             st.success("Privacy settings saved")
 else:
-    # Provider configuration is implemented by the separate LLM slice.
-    st.caption("Deterministic analysis works without a provider.")
+    from ui.provider_settings import render
+    render(store, w)

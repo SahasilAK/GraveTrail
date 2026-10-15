@@ -21,7 +21,16 @@ Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23
   invalid-LLM scenario awaits the provider slice. Restart and changed-source replacement tested.
 
 ## In progress
-- Provider profiles, privacy-gated assistance, schema validation and prompt repository.
+- Final hardening, parser edge cases, benchmark, packaging and required documentation.
+
+## Provider slice
+- Profile UI and HTTP adapters for OpenAI-compatible services, Anthropic, Ollama, Gemini,
+  Azure OpenAI and Databricks; manual models, discovery, connection checks and task routing.
+- Focused AI assistance in Builder, versioned prompts/schema/hash, env-only credentials,
+  privacy/context gates, redaction, retention, bounded retries and recipient-host fallback.
+- Strict evidence validation/quarantine; explicit inferred merge with hash-based invalidation.
+- 43 tests pass and Ruff clean before provider UI regression expansion. Live provider calls
+  have not been verified; protocol tests use HTTPX MockTransport.
 
 ## UI / export verification
 - Multipage Streamlit shell, dashboard, ZIP/folder/allowed-root Builder, filtered inventory,
@@ -44,6 +53,6 @@ Python 3.11 environment installed: Streamlit 1.66.0, DuckDB 1.5.6, SQLGlot 30.23
 ## Decisions / handoff
 See MASTER_PLAN and ARCHITECTURE_DECISIONS. Run `.venv\Scripts\python.exe -m pytest`.
 Local runtime path `.dataforge/`. No LLM credentials detected or needed for core features.
-Next concrete action: implement provider adapters against tests/test_llm.py (currently red).
-Live LLM tests require a reachable endpoint/credentials; do not claim them without evidence.
+Next concrete action: finish hardening and review, benchmark, clean install, browser ZIP/export
+and column workflows, required docs and folder knowledge; commit each tested group.
 Commit policy (user steering): commit each feature/group only after its tests pass.
