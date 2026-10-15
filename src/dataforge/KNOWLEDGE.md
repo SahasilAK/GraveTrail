@@ -21,7 +21,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `maintenance.py` — history_plan protects current references/latest completed runs; bounded archive_history journals recovery with removal, writes an extra checksummed file; restore_history inserts missing IDs atomically, preferring the DB journal.
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.
 - `schemas.py` — collect_schemas reconciles typed DDL through the lineage identity resolver, retaining immutable declaration evidence; conflicting/incomplete/schema-changing declarations disable expansion without guessing execution order.
-- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; schema-backed plain wildcard expansion is inferred and re-materialized on schema refresh; column_report, compare_runs and retained AI provenance use stored facts. Parser version 5.
+- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; schema-backed plain wildcard expansion is inferred and re-materialized on schema refresh; column_report, compare_runs and retained AI provenance use stored facts. Parser version 6.
 - `store.py` — Store owns locked DuckDB access, migrations v1–v4 (history and temporary recovery journals), validated workspace creation/editing, settings, source versions, immutable snapshots and transactional boundaries.
 
 ## Invariants

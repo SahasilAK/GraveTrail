@@ -10,3 +10,6 @@ Pure static parsers returning ParseResult. Add positive/negative fixtures and bu
 
 SAS parse_sas accepts sql_dialect for PROC SQL only; default/extension/folder precedence is
 resolved in services.source_dialect. SAS DATA/PROC static rules are unchanged.
+
+SQL preserves SQL Server #/## identifier flags, top-level SELECT INTO set-query targets and
+Teradata volatile parenthesized CTAS inputs; parser cache version6.

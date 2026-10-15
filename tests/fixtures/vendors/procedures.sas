@@ -1,0 +1,10 @@
+proc sort data=raw.orders out=work.sorted;
+by id;
+run;
+proc means data=work.sorted;
+var amount;
+output out=work.totals sum=total;
+run;
+proc transpose data=work.totals out=mart.order_columns;
+var total;
+run;

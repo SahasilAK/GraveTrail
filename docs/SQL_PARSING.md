@@ -39,5 +39,15 @@ distinguishes DDL-declared types from sampled CSV types and incomplete direct re
 
 Current exclusions: database-catalog/schema discovery, full stored procedures, dynamic templating,
 general schema evolution, arbitrary table-valued functions and runtime temporary-session
-isolation. WORK/temporary identity is workspace scoped. Repeated writes expose possible static
+discovery. Supplied Settings job/session IDs isolate temporary assets; persistent tables stay
+workspace-global. Unspecified inputs use the legacy workspace job. Same-job mixed temporary/
+persistent reads are unresolved, because execution order is unavailable. Repeated writes expose possible static
 dependencies; static code alone does not determine which write executed last.
+
+
+Labeled vendor fixtures cover SQL Server SELECT INTO (#/## prefix identities, including
+qualified tempdb references), PostgreSQL temporary/CTE/DELETE USING, Snowflake QUALIFY/MERGE,
+BigQuery three-part backtick identifiers, Teradata parenthesized volatile CTAS and Oracle
+MERGE/views. SELECT INTO set queries retain both branches. SAS procedure-chain fixtures are
+separate. These examples establish measured fixture coverage, not universal vendor support.
+SQLGlot AST temporary flags are preserved in asset names; imported SQL is never executed.

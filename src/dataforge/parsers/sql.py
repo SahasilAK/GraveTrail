@@ -16,11 +16,31 @@ logging.getLogger("sqlglot").setLevel(logging.ERROR)
 
 
 def table_name(table: exp.Table) -> str:
-    return ".".join('"' + p.name.replace('"', '""') + '"' if "." in p.name else p.name for p in table.parts)
+    def component(part):
+        prefix = "##" if part.args.get("global_") else "#" if part.args.get("temporary") else ""
+        name = prefix + part.name
+        return '"' + name.replace('"', '""') + '"' if "." in name else name
+
+    return ".".join(component(part) for part in table.parts)
+
+
+def select_into(node):
+    # INTO belongs to the left SELECT of a top-level set query, never an arbitrary descendant.
+    while isinstance(node, (exp.SetOperation, exp.Subquery)):
+        node = node.this
+    return node.args.get("into") if isinstance(node, exp.Select) else None
+
+
+def temporary_identifier(table):
+    return isinstance(table, exp.Table) and isinstance(table.this, exp.Identifier) and bool(
+        table.this.args.get("temporary") or table.this.args.get("global_"))
 
 
 def target_table(node):
     target = node.this if isinstance(node, (exp.Create, exp.Insert, exp.Update, exp.Delete, exp.Merge)) else None
+    into = select_into(node)
+    if isinstance(into, exp.Into):
+        target = into.this
     if isinstance(target, exp.Schema):
         target = target.this
     return target if isinstance(target, exp.Table) else None
@@ -92,7 +112,7 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                 for _, source in scope.selected_sources.values():
                     if isinstance(source, Scope):
                         visit(source)
-                for child in [*scope.set_operation_scopes, *scope.subquery_scopes]:
+                for child in [*scope.set_operation_scopes, *scope.subquery_scopes, *scope.derived_table_scopes]:
                     visit(child)
 
             for scope in all_scopes:
@@ -107,7 +127,10 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
             scopes = [s for s in all_scopes if id(s) in active]
             inactive_nodes = {id(n) for s in all_scopes if id(s) not in active for n in s.expression.walk()}
             target = target_table(tree)
-            temp = bool(tree.find(exp.TemporaryProperty)) or (target is not None and target.name.startswith("#"))
+            into = select_into(tree)
+            temp = bool(tree.find(exp.TemporaryProperty, exp.VolatileProperty)) or (
+                temporary_identifier(target)) or (
+                isinstance(into, exp.Into) and bool(into.args.get("temporary")))
             targets = [AssetRef(table_name(target), temp)] if target is not None else []
             base_tables: dict[int, exp.Table] = {}
             for scope in scopes:
@@ -121,7 +144,8 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                     if table is not target and table.name.casefold() not in cte_names and id(table) not in inactive_nodes:
                         if isinstance(table.this, exp.Identifier):
                             base_tables[id(table)] = table
-            sources = list({table_name(t): AssetRef(table_name(t)) for t in base_tables.values()}.values())
+            sources = list({table_name(t): AssetRef(table_name(t), temporary=temporary_identifier(t))
+                            for t in base_tables.values()}.values())
             usages = []
             handled = set()
 
@@ -190,7 +214,7 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
                 result.diagnostics.append(Diagnostic("Dynamic SQL target cannot be resolved", start))
                 continue
             if sources or targets or usages:
-                kind = tree.key.upper() if target is not None else "SELECT"
+                kind = "SELECT_INTO" if into is not None and target is not None else tree.key.upper() if target is not None else "SELECT"
                 result.operations.append(Operation(kind, sources, targets, code, start, end, usages=usages))
             elif not isinstance(tree, (exp.Set, exp.Use)):
                 result.diagnostics.append(Diagnostic("No statically analyzable table references", start, severity="info"))

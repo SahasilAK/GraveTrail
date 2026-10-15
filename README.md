@@ -91,8 +91,8 @@ Read [User guide](docs/USER_GUIDE.md), [Architecture](docs/ARCHITECTURE.md) and
 This is static dependency analysis, not database/SAS execution. Dynamic SQL, runtime macros,
 stored procedures and SAS name literals beyond supported rules are diagnosed rather than
 guessed. Direct SAS variable usage is conservative; it is not a full SAS language compiler.
-Unknown wildcards remain unknown. WORK/session and repeated-write ordering cannot be
-reconstructed without execution metadata. See [SQL](docs/SQL_PARSING.md) and
+Unknown wildcards remain unknown. Supplied job/session IDs separate temporary assets through Settings; runtime session discovery
+and repeated-write ordering require execution metadata. See [SQL](docs/SQL_PARSING.md) and
 [SAS](docs/SAS_PARSING.md) coverage. Live provider verification requires an available endpoint;
 the automated provider tests use protocol mocks. This local tool has no multi-user auth layer.
 

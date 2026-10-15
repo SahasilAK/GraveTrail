@@ -78,7 +78,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 ## Continuation
 Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
 uv run ruff check .; uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json.
-Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 5; increment
+Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 6; increment
 for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
 to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
 Keep future work in tested Conventional Commits, as requested. No push was requested.
@@ -174,7 +174,7 @@ discovery, source/blob lifecycle, portable backups and auth if expanding beyond 
 Task-specific AI contracts, bounded resources, and remaining settings are now implemented.
 Resume with explicit job/session identity, broader vendor fixtures and requirement-by-requirement acceptance accounting.
 Keep new work in tested commits; preserve all fourteen themes and active configuration.
-Current parser cache version5. Previously analyzed cache-incompatible files reparse on selected
+Current parser cache version6. Previously analyzed cache-incompatible files reparse on selected
 refresh to retain coherent facts. OmniRoute tests must use model auto; its latest connection
 check failed and discovery did not advertise that literal ID. Do not substitute fixed models
 or repeat inference without new evidence. Docker/remote CI and independent local HTML remain
@@ -360,3 +360,23 @@ unverified; clean installation/packaging must be rerun after these new slices.
   success. Primary workspace/settings/themes untouched. Screenshot: job-session-settings.png
   under .dataforge/verification. Next: target-vendor fixtures and final acceptance accounting.
 - Final job/session verification:190 tests passed,1 skipped in21.58s; Ruff clean.
+
+
+## Completion execution: labeled vendor coverage — 2026-10-16
+
+- Added real source fixtures and hand-labeled expected dependency, temporary and direct-column
+  sets for SQL Server, PostgreSQL, Snowflake, BigQuery, Teradata, Oracle and SAS procedures.
+  Exact graph sets prove no missing/extra fixture edges; immutable original source evidence
+  and incremental reuse are checked. No universal dialect/real-client accuracy claim.
+- Initially failing fixtures exposed missing SELECT INTO writes, SQL Server lost #/## prefixes,
+  missing Teradata parenthesized CTAS inputs and volatile lifetime. Corrected AST extraction;
+  parser cache6 invalidates previous semantics. Review also caught INTO set-query roots and
+  qualified global temporary flags; regression tests precede both fixes.
+- Actual isolated UI imported two vendor files, applied folder dialect/job assignments and
+  analyzed successfully:8 assets/6 dependencies including its existing one-file fixture.
+  Primary source data/configuration unchanged. Full-suite verification follows below.
+- Next: final requirement matrix, remaining storage-location configuration gap and clean
+  install/package/benchmark checks; retain explicit external verification blockers.
+- Final vendor verification:204 tests passed,1 skipped in21.82s; Ruff clean. Actual UI
+  selected #stage [job: tsql], clicked SELECT_INTO edge and displayed exact lines1–2. Proof:
+  .dataforge/verification/vendor-lineage.png.

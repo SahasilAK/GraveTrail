@@ -1,0 +1,9 @@
+{
+  "tsql": {"edges": [["raw.orders", "#stage"], ["#stage", "mart.orders"], ["stage", "mart.audit"]], "temporary": ["#stage"], "columns": {"raw.orders": ["id", "amount"], "#stage": ["id", "amount"]}},
+  "postgres": {"edges": [["raw.orders", "stage"], ["stage", "mart.orders"], ["raw.cancelled", "mart.orders"]], "temporary": ["stage"], "columns": {"raw.orders": ["id", "amount", "active"]}},
+  "snowflake": {"edges": [["raw.orders", "stage"], ["stage", "mart.orders"]], "temporary": ["stage"], "columns": {"raw.orders": ["id", "amount", "changed_at"]}},
+  "bigquery": {"edges": [["analytics.raw.orders", "analytics.mart.orders"]], "temporary": [], "columns": {"analytics.raw.orders": ["id", "amount", "active"]}},
+  "teradata": {"edges": [["raw.orders", "stage"], ["stage", "mart.orders"]], "temporary": ["stage"], "columns": {"raw.orders": ["id", "amount"]}},
+  "oracle": {"edges": [["raw.orders", "mart.orders"], ["mart.orders", "mart.active_orders"]], "temporary": [], "columns": {"raw.orders": ["id", "amount"]}},
+  "sas": {"file": "procedures.sas", "edges": [["raw.orders", "work.sorted"], ["work.sorted", "work.totals"], ["work.totals", "mart.order_columns"]], "temporary": ["work.sorted", "work.totals"], "columns": {}}
+}

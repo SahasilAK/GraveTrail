@@ -96,3 +96,42 @@ def test_order_alias_is_not_fabricated_as_a_base_column():
 def test_single_target_update_reads_unqualified_rhs_columns():
     r = parse_sql('UPDATE mart.employee SET salary=salary*1.1 WHERE active=1')
     assert {u.column for u in r.operations[0].usages} == {"salary", "active"}
+
+
+@pytest.mark.parametrize("name", ["#stage", "##stage"])
+def test_tsql_temporary_prefix_survives_ddl_reads_and_column_attribution(name):
+    code = f"CREATE TABLE {name} (id INT); SELECT id FROM {name}; SELECT id FROM stage;"
+    result = parse_sql(code, "tsql")
+    assert result.operations[0].targets[0].name == name
+    assert result.operations[0].targets[0].temporary
+    assert result.metadata["declared_schemas"][0]["table"] == name
+    assert result.operations[1].sources[0].name == name
+    assert result.operations[1].usages[0].table == name
+    assert result.operations[2].sources[0].name == "stage"
+
+
+def test_postgres_select_into_temporary_keeps_target_lifetime():
+    result = parse_sql("SELECT id INTO TEMPORARY TABLE stage FROM raw.orders;", "postgres")
+    operation = result.operations[0]
+    assert operation.kind == "SELECT_INTO"
+    assert operation.targets[0].name == "stage" and operation.targets[0].temporary
+    assert names(operation.sources) == {"raw.orders"}
+
+
+@pytest.mark.parametrize("dialect,into", [("tsql", "#stage"), ("postgres", "TEMPORARY TABLE stage")])
+def test_select_into_set_query_records_all_branches_and_target(dialect, into):
+    result = parse_sql(f"SELECT id INTO {into} FROM raw.a UNION ALL SELECT id FROM raw.b;", dialect)
+    operation = result.operations[0]
+    assert operation.kind == "SELECT_INTO"
+    assert names(operation.sources) == {"raw.a", "raw.b"}
+    assert operation.targets[0].temporary
+    assert operation.targets[0].name == ("#stage" if dialect == "tsql" else "stage")
+
+
+@pytest.mark.parametrize("sql", ["CREATE TABLE tempdb..##stage(id INT);",
+                                 "SELECT id INTO tempdb..##stage FROM raw.a;"])
+def test_qualified_global_tsql_temporary_target_and_reads(sql):
+    result = parse_sql(sql + " SELECT id FROM tempdb..##stage;", "tsql")
+    assert result.operations[0].targets[0].temporary
+    assert result.operations[1].sources[0].temporary
+    assert result.operations[0].targets[0].name == result.operations[1].sources[0].name

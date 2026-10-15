@@ -121,3 +121,6 @@ Next: explicit job/session scope and vendor fixtures, then final acceptance/veri
 
 2026-10-16: explicit supplied job/session identity implemented with regression and UI checks;
 next vendor fixtures and final acceptance/package accounting. See IMPLEMENTATION_STATUS.
+
+2026-10-16: seven labeled vendor/SAS fixture cases added; parser6 fixes SELECT INTO, SQL
+Server temporary identifier prefixes and Teradata volatile CTAS. Next final acceptance checks.
