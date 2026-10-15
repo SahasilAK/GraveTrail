@@ -112,10 +112,10 @@ def report_html(rows: list[dict]) -> str:
     return '<!doctype html><html lang="en"><meta charset="utf-8"><title>DataForge report</title><style>body{font:14px system-ui;margin:24px}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd;text-align:left;white-space:pre-wrap}</style><h1>DataForge report</h1><table><thead><tr>' + header + '</tr></thead><tbody>' + body + '</tbody></table></html>'
 
 
-def source_bundle(store, file_ids: list[str]) -> bytes:
+def source_bundle(store, file_ids: list[str], versions: dict | None = None) -> bytes:
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for fid in dict.fromkeys(file_ids):
             source = store.file(fid)
-            archive.writestr(safe_relative(source["relative_path"]), store.original(fid))
+            archive.writestr(safe_relative(source["relative_path"]), store.original(fid, (versions or {}).get(fid)))
     return out.getvalue()

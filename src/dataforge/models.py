@@ -11,8 +11,15 @@ def stable_id(*parts: str) -> str:
 
 
 def canonical(name: str) -> str:
-    # SQL parsers supply unquoted identifier components; SAS may supply raw names.
-    return ".".join(p.strip().strip('`"[]').casefold() for p in name.strip().split("."))
+    parts = re.findall(r'"(?:""|[^"])*"|`(?:``|[^`])*`|\[(?:\]\]|[^\]])*\]|[^.]+', name.strip())
+    normalized = []
+    for part in parts:
+        value = part.strip()
+        if value[:1] in {'"', '`', '['}:
+            value = value[1:-1].replace('""', '"').replace('``', '`').replace(']]', ']')
+        value = value.casefold()
+        normalized.append('"' + value.replace('"', '""') + '"' if '.' in value else value)
+    return ".".join(normalized)
 
 
 def file_asset(path: str) -> str:
@@ -125,6 +132,14 @@ def statements(text: str, sas: bool = False):
                 leading = len(raw) - len(raw.lstrip())
                 a = start + leading
                 yield raw.strip(), text.count("\n", 0, a) + 1, text.count("\n", 0, i) + 1
+            if sas and (inline := re.match(r"\s*(?:datalines|cards)(4)?\s*;\s*$", raw, re.I)):
+                terminator = ";;;;" if inline.group(1) else ";"
+                stop = re.search(r"(?m)^[ \t]*" + re.escape(terminator) + r"[ \t]*\r?$", text[i + 1:])
+                if stop is None:
+                    return
+                i += 1 + stop.end()
+                start = i
+                continue
             start = i + 1
         i += 1
     if text[start:].strip():

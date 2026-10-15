@@ -15,8 +15,8 @@ from urllib.parse import quote, urlparse
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from dataforge.models import canonical, stable_id
-from dataforge.parsers.sas import strip_comments
+from dataforge.models import canonical, stable_id, statements
+from dataforge.parsers.sas import parse_sas, strip_comments
 
 PROVIDERS = {"OpenAI": "https://api.openai.com/v1", "Anthropic": "https://api.anthropic.com/v1",
     "Ollama": "http://localhost:11434", "LM Studio": "http://localhost:1234/v1",
@@ -221,7 +221,7 @@ def validate_response(response: GroundedResponse, code: str, known: set[str], fi
         span = "\n".join(lines[claim.start_line - 1:claim.end_line])
         if claim.quote not in span:
             raise ValueError("Claim quote is not exact source evidence")
-        cleaned = re.sub(r"--[^\n]*", "", strip_comments(span))
+        cleaned = re.sub(r"--[^\n]*", "", strip_comments(claim.quote))
         cleaned = re.sub(r"'([^']|'')*'", "''", cleaned)
         cleaned = re.sub(r'["`\[\]]', "", cleaned)
         for name in [claim.source, claim.target]:
@@ -229,10 +229,15 @@ def validate_response(response: GroundedResponse, code: str, known: set[str], fi
                 raise ValueError("Claim asset is not known or is absent from code evidence")
         src = re.escape(claim.source)
         tgt = re.escape(claim.target)
-        if not re.search(r"(?:from|join|using|set|merge|modify|data\s*=)\s*" + src + r"(?![\w.])", cleaned, re.I):
-            raise ValueError("Source lacks explicit read evidence")
-        if not re.search(r"(?:table|view|into|update|data|out\s*=|base\s*=)\s*" + tgt + r"(?![\w.])", cleaned, re.I):
-            raise ValueError("Target lacks explicit write evidence")
+        reads = r"(?:from|join|using|set|merge|modify|data\s*=)\s*" + src + r"(?![\w.])"
+        writes = r"(?:table|view|into|update|data|out\s*=|base\s*=)\s*" + tgt + r"(?![\w.])"
+        same_statement = any(re.search(reads, part, re.I) and re.search(writes, part, re.I)
+                             for part, _, _ in statements(cleaned))
+        # SAS DATA headers and reads span semicolon-delimited statements; bind them by block.
+        same_sas_block = any(canonical(s.name) == canonical(claim.source) and canonical(t.name) == canonical(claim.target)
+            for op in parse_sas(claim.quote).operations for s in op.sources for t in op.targets)
+        if not same_statement and not same_sas_block:
+            raise ValueError("Source and target lack bound read/write evidence in the same statement or SAS block")
     return response
 
 
@@ -293,7 +298,13 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
                       [record_id, workspace, profile_id, task, file_id, first, prompt_hash, profile.provider,
                        profile.model, outcome, time.perf_counter() - start, json.dumps(usage), json.dumps(details)])
         days = int(store.setting(workspace, "llm_retention_days", 30))
-        store.execute("DELETE FROM llm_records WHERE workspace_id=? AND created_at < current_timestamp - ? * INTERVAL '1 day'", [workspace, days])
+        expired = store.rows("SELECT record_id,details FROM llm_records WHERE workspace_id=? AND outcome='merged' AND created_at < current_timestamp - ? * INTERVAL '1 day'", [workspace, days])
+        for old in expired:
+            minimal = json.loads(old["details"])
+            minimal.pop("context", None)
+            minimal.pop("response", None)
+            store.execute("UPDATE llm_records SET details=? WHERE record_id=?", [json.dumps(minimal), old["record_id"]])
+        store.execute("DELETE FROM llm_records WHERE workspace_id=? AND outcome<>'merged' AND created_at < current_timestamp - ? * INTERVAL '1 day'", [workspace, days])
     return {"record_id": record_id, "outcome": outcome, "reason": reason,
             "result": validated.model_dump() if outcome == "validated" else None, "usage": usage,
             "retryable": retryable}
@@ -316,7 +327,7 @@ def merge_claims(store, workspace, record_id):
             sid = stable_id(record_id, str(i))
             oid = stable_id(sid, "llm")
             src, tgt = assets[canonical(c.source)], assets[canonical(c.target)]
-            store.execute("INSERT INTO statements VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING", [sid, workspace, source["file_id"], c.start_line, c.end_line, c.quote])
+            store.execute("INSERT INTO statements VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [sid, workspace, source["file_id"], c.start_line, c.end_line, c.quote, source["content_hash"]])
             store.execute("INSERT INTO operations VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [oid, workspace, sid, c.operation, "llm", min(c.confidence, .8), json.dumps([c.explanation])])
             store.db.executemany("INSERT INTO operation_assets VALUES (?,?,?,?)", [[workspace, oid, src, "input"], [workspace, oid, tgt, "output"]])
             store.execute("INSERT INTO edges VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [stable_id(oid, src, tgt), workspace, src, tgt, oid, sid, source["file_id"], c.operation, "llm", min(c.confidence, .8), "inferred", "llm:" + record_id])

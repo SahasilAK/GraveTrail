@@ -12,12 +12,17 @@ from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 
-PARSER_VERSION = "1"
+PARSER_VERSION = "2"
 log = logging.getLogger(__name__)
 
 
 def analyze(store, workspace: str, file_ids: list[str] | None = None, force: bool = False,
             progress=None, cancelled=None) -> dict:
+    with store.analysis_lock:
+        return _analyze(store, workspace, file_ids, force, progress, cancelled)
+
+
+def _analyze(store, workspace, file_ids, force, progress, cancelled):
     """Rebuild derived facts atomically; hashes skip unchanged parser work.
 
     A selection reparses selected files and reuses the existing cached analysis for others.
@@ -47,7 +52,7 @@ def analyze(store, workspace: str, file_ids: list[str] | None = None, force: boo
             elif not selected:
                 continue
             else:
-                content = store.file(fid)["raw_content"]
+                content = store.snapshot_content(metadata)
                 ext = metadata["extension"]
                 if ext == ".sql":
                     dialect = config["dialect"]
@@ -131,7 +136,7 @@ def _materialize(store, workspace, run_id, results, config):
         for i, op in enumerate(parsed.operations):
             sid = stable_id(workspace, fid, str(i), metadata["content_hash"])
             oid = stable_id(sid, op.kind)
-            rows["statements"].append([sid, workspace, fid, op.start, op.end, op.code])
+            rows["statements"].append([sid, workspace, fid, op.start, op.end, op.code, metadata["content_hash"]])
             rows["operations"].append([oid, workspace, sid, op.kind, op.method, op.confidence, json.dumps(op.warnings)])
             inputs = [resolve(s, metadata, parsed) for s in op.sources]
             outputs = [resolve(t, metadata, parsed) for t in op.targets]
@@ -154,7 +159,7 @@ def _materialize(store, workspace, run_id, results, config):
         errors = any(d.severity == "error" for d in parsed.diagnostics)
         status = "failed" if errors and not parsed.operations and not parsed.assets else (
             "partial" if any(d.severity != "info" for d in parsed.diagnostics) else "success")
-        statuses.append([status, json.dumps(parsed.metadata), "\n".join(d.message for d in parsed.diagnostics), fid])
+        statuses.append([status, json.dumps(parsed.metadata), "\n".join(d.message for d in parsed.diagnostics), fid, metadata["content_hash"]])
     rows["assets"] = list(registry.values())
     rows["asset_aliases"] = list(aliases)
     for table, values in rows.items():
@@ -162,14 +167,14 @@ def _materialize(store, workspace, run_id, results, config):
         if values:
             store.db.executemany(f"INSERT INTO {table} VALUES ({','.join('?' for _ in values[0])})", values)
     if statuses:
-        store.db.executemany("UPDATE source_files SET parsing_status=?,metadata=?,error_details=? WHERE file_id=?", statuses)
+        store.db.executemany("UPDATE source_files SET parsing_status=?,metadata=?,error_details=? WHERE file_id=? AND content_hash=?", statuses)
     return {"assets": [{"name": a[3], "kind": a[4]} for a in registry.values()],
             "edges": sorted({(e[2], e[3]) for e in rows["edges"]}),
             "files": {m["relative_path"]: m["content_hash"] for m, _ in results}}
 
 
 def column_report(store, workspace: str, asset_id: str) -> list[dict]:
-    return store.rows("""SELECT u.*,a.name AS source_table,f.file_name,f.relative_path,s.start_line,s.end_line,s.code,
+    return store.rows("""SELECT u.*,a.name AS source_table,f.file_name,f.relative_path,s.start_line,s.end_line,s.code,s.content_hash AS source_hash,
         o.kind AS operation_type FROM column_usages u JOIN assets a ON u.asset_id=a.asset_id
         JOIN source_files f ON u.file_id=f.file_id JOIN statements s ON u.statement_id=s.statement_id
         JOIN operations o ON u.operation_id=o.operation_id WHERE u.workspace_id=? AND u.asset_id=?
@@ -200,7 +205,7 @@ def _restore_ai_results(store, workspace, results):
         if metadata["content_hash"] != details["content_hash"]:
             continue
         response = GroundedResponse.model_validate(details["result"])
-        content = store.file(record["file_id"])["raw_content"]
+        content = store.snapshot_content(metadata)
         try:
             validate_response(response, content, known, 1, len(content.splitlines()))
         except ValueError:

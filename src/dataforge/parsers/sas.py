@@ -21,6 +21,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
     variables = {k.casefold(): str(v) for k, v in (macros or {}).items()}
     tokens = list(statements(content, sas=True))
     macro_depth = 0
+    control_depth = 0
     block = []
     block_type = ""
     block_bad = False
@@ -37,6 +38,9 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
         return AssetRef(name, temporary=name.casefold().startswith("work."))
 
     def dataset_list(text):
+        if re.search(r"(['\"]).*?\1n\b", text, re.I | re.S):
+            result.diagnostics.append(Diagnostic("SAS name literal is unresolved; dataset references were not guessed", block[0][1] if block else 1))
+            return []
         text = re.sub(r"\([^)]*\)", " ", text)
         text = re.split(r"\b\w+\s*=|/", text, maxsplit=1)[0]
         return [ref(n) for n in re.findall(IDENT, text) if n.casefold() != "_null_"]
@@ -131,6 +135,8 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
         clean = strip_comments(raw).strip()
         if not clean or clean.startswith(("*", "%*")):
             continue
+        if re.match(r"(?:datalines|cards)4?\s*;", clean, re.I):
+            result.diagnostics.append(Diagnostic("Inline SAS data retained as data, not parsed as code", line, "info"))
         if re.match(r"%macro\b", clean, re.I):
             flush()
             macro_depth += 1
@@ -139,6 +145,20 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
         if macro_depth:
             if re.match(r"%mend\b", clean, re.I):
                 macro_depth -= 1
+            continue
+        if control_depth:
+            if re.search(r"%do\b", clean, re.I):
+                control_depth += 1
+            if re.match(r"%end\b", clean, re.I):
+                control_depth -= 1
+            continue
+        if re.match(r"%(if|else|do)\b", clean, re.I):
+            if block:
+                block_bad = True
+            flush()
+            if re.search(r"%do\b", clean, re.I):
+                control_depth = 1
+            result.diagnostics.append(Diagnostic("SAS macro control flow is unresolved; conditional block not analyzed", line))
             continue
         assignment = re.fullmatch(r"%let\s+(\w+)\s*=\s*([^;&%]*);?", clean, re.I)
         if assignment:

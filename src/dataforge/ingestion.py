@@ -128,6 +128,9 @@ class Importer:
         paths = set()
         with self.store.transaction():
             for name, reader in entries:
+                if total >= self.limits.max_total_bytes:
+                    report.diagnostics.append("Total byte budget exhausted; remaining files were not read")
+                    break
                 if cancelled and cancelled():
                     report.diagnostics.append("Import cancelled; accepted files retained")
                     break

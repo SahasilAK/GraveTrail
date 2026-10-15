@@ -1,7 +1,9 @@
 """Versioned DuckDB persistence with serialized, transactional access."""
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import threading
 import uuid
 from contextlib import contextmanager
@@ -40,10 +42,16 @@ class Store:
         self.home.mkdir(parents=True, exist_ok=True)
         (self.home / "blobs").mkdir(exist_ok=True)
         self.lock = threading.RLock()
+        self.analysis_lock = threading.Lock()
         self.db = duckdb.connect(str(self.home / "dataforge.duckdb"))
         with self.transaction():
             self.db.execute(SCHEMA)
             self.db.execute("INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING")
+            versions = self.db.execute("SELECT version FROM schema_migrations").fetchall()
+            if (2,) not in versions:
+                self.db.execute("ALTER TABLE statements ADD COLUMN IF NOT EXISTS content_hash VARCHAR DEFAULT ''")
+                self.db.execute("UPDATE statements SET content_hash=f.content_hash FROM source_files f WHERE statements.file_id=f.file_id AND statements.content_hash=''")
+                self.db.execute("INSERT INTO schema_migrations(version) VALUES (2)")
 
     @contextmanager
     def transaction(self):
@@ -89,20 +97,40 @@ class Store:
         return self.rows("SELECT * EXCLUDE(raw_content) FROM source_files WHERE workspace_id=? ORDER BY relative_path",
                          [workspace])
 
-    def file(self, file_id: str):
+    def file(self, file_id: str, content_hash: str | None = None):
         rows = self.rows("SELECT * FROM source_files WHERE file_id=?", [file_id])
         if not rows:
             raise ValueError("Source file no longer exists")
-        return rows[0]
+        source = rows[0]
+        if content_hash and content_hash != source["content_hash"]:
+            if not re.fullmatch(r"[0-9a-f]{64}", content_hash) or not self.rows(
+                "SELECT 1 FROM statements WHERE file_id=? AND content_hash=? LIMIT 1", [file_id, content_hash]):
+                raise ValueError("Original source version is not referenced by this file")
+            from dataforge.ingestion import decode
+            data = (self.home / "blobs" / content_hash).read_bytes()
+            text, encoding, _ = decode(data)
+            source.update(raw_content=text, content_hash=content_hash, file_size=len(data), encoding=encoding,
+                          line_count=len(text.splitlines()), storage_path="blobs/" + content_hash)
+        return source
 
-    def original(self, file_id: str) -> bytes:
-        return (self.home / "blobs" / self.file(file_id)["content_hash"]).read_bytes()
+    def original(self, file_id: str, content_hash: str | None = None) -> bytes:
+        return (self.home / "blobs" / self.file(file_id, content_hash)["content_hash"]).read_bytes()
+
+    def snapshot_content(self, inventory: dict) -> str:
+        """Read an immutable snapshot captured by files(), even before first analysis."""
+        digest = inventory["content_hash"]
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("Invalid inventory content hash")
+        data = (self.home / "blobs" / digest).read_bytes()
+        if hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError("Original source blob failed integrity verification")
+        return data.decode(inventory["encoding"])
 
     def assets(self, workspace: str):
         return self.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY name", [workspace])
 
     def edges(self, workspace: str):
-        return self.rows("SELECT e.*,s.start_line,s.end_line,s.code,f.relative_path FROM edges e JOIN statements s ON e.statement_id=s.statement_id JOIN source_files f ON e.file_id=f.file_id WHERE e.workspace_id=?", [workspace])
+        return self.rows("SELECT e.*,s.start_line,s.end_line,s.code,s.content_hash AS source_hash,f.relative_path FROM edges e JOIN statements s ON e.statement_id=s.statement_id JOIN source_files f ON e.file_id=f.file_id WHERE e.workspace_id=?", [workspace])
 
     def diagnostics(self, workspace: str):
         return self.rows("SELECT d.*,f.relative_path FROM diagnostics d LEFT JOIN source_files f USING(file_id) WHERE d.workspace_id=? ORDER BY relative_path,line", [workspace])

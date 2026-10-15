@@ -92,6 +92,10 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path):
     inferred = [e for e in store.edges(w) if e["method"] == "llm"]
     assert len(inferred) == 1 and inferred[0]["status"] == "inferred"
     assert inferred[0]["confidence"] <= .8
+    store.execute("UPDATE llm_records SET created_at=current_timestamp - INTERVAL '31 days' WHERE record_id=?", [result["record_id"]])
+    assist(store, w, Profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
+    analyze(store, w)
+    assert len([e for e in store.edges(w) if e["method"] == "llm"]) == 1
     Importer(store, w).files([("q.sql", b"select id from raw.a;")], {".sql"})
     analyze(store, w)
     assert not [e for e in store.edges(w) if e["method"] == "llm"]
@@ -105,3 +109,12 @@ def test_versioned_prompt_schema_and_templates():
         system = (PROMPTS / task / "system.md").read_text()
         assert "untrusted" in system and "Counterexample" in system
         assert (PROMPTS / task / "user_template.md").read_text().count("{{context}}") == 1
+
+
+def test_llm_cannot_splice_unrelated_statements_into_a_dependency():
+    code = "create table mart.a as select id from raw.x;\ncreate table mart.b as select id from raw.y;"
+    response = GroundedResponse.model_validate({"claims": [{"source": "raw.x", "target": "mart.b",
+        "operation": "CREATE", "start_line": 1, "end_line": 2, "quote": code,
+        "explanation": "Unsupported splice", "confidence": .99}]})
+    with pytest.raises(ValueError, match="same|bound|statement"):
+        validate_response(response, code, {"raw.x", "raw.y", "mart.a", "mart.b"}, 1, 2)

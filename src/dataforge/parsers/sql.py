@@ -6,15 +6,17 @@ import logging
 import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ErrorLevel, OptimizeError, ParseError, TokenError
-from sqlglot.optimizer.scope import traverse_scope
+from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, statements
 
 log = logging.getLogger(__name__)
+# SQLGlot fallback warnings include raw imported statements; keep sensitive source out of logs.
+logging.getLogger("sqlglot").setLevel(logging.ERROR)
 
 
 def table_name(table: exp.Table) -> str:
-    return ".".join(p.name for p in table.parts)
+    return ".".join('"' + p.name.replace('"', '""') + '"' if "." in p.name else p.name for p in table.parts)
 
 
 def target_table(node):
@@ -46,7 +48,23 @@ def parse_sql(content: str, dialect: str = "") -> ParseResult:
             if isinstance(tree, (exp.Command, exp.Block)):
                 result.diagnostics.append(Diagnostic("Unsupported SQL command or procedural block; no guessed lineage", start))
                 continue
-            scopes = list(traverse_scope(tree) or [])
+            all_scopes = list(traverse_scope(tree) or [])
+            active = {}
+
+            def visit(scope):
+                if id(scope) in active:
+                    return
+                active[id(scope)] = scope
+                for _, source in scope.selected_sources.values():
+                    if isinstance(source, Scope):
+                        visit(source)
+                for child in [*scope.set_operation_scopes, *scope.subquery_scopes]:
+                    visit(child)
+
+            for scope in all_scopes:
+                if scope.parent is None:
+                    visit(scope)
+            scopes = [s for s in all_scopes if id(s) in active]
             target = target_table(tree)
             temp = bool(tree.find(exp.TemporaryProperty)) or (target is not None and target.name.startswith("#"))
             targets = [AssetRef(table_name(target), temp)] if target is not None else []

@@ -27,7 +27,9 @@ Retries/fallbacks apply to connection failures, HTTP 429 and 5xx only. Fallbacks
 recipient host. No fallback for authentication, malformed JSON, unsupported claims or privacy
 errors. HTTP responses are size bounded; redirects and ambient proxy credentials are disabled.
 Metadata records task/provider/model/hash/outcome/duration/tokens; full context/history is opt-in
-and retention is configurable. Monetary cost is not estimated without provider pricing.
+and retention is configurable. Minimal merged claims are durable lineage evidence; retention
+removes their full context/response bodies while retaining claims/provenance. Monetary cost
+is not estimated without provider pricing.
 
 Codex's interactive environment is used to develop this application, not as a hidden runtime API.
 ChatGPT/Codex sign-in credentials are not scraped or repurposed. Databricks Genie is a distinct

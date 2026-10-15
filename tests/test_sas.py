@@ -61,3 +61,34 @@ def test_csv_schema_never_executes_values():
     assert [c["name"] for c in r.metadata["columns"]] == ["id", "name"]
     assert r.metadata["row_count"] == 2
     assert r.assets[0].name == "file:input/x.csv"
+
+
+def test_macro_control_flow_never_becomes_verified_unconditional_lineage():
+    r = parse_sas('''%if 0 %then %do;
+data mart.false; set raw.source; run;
+%end;
+data mart.real; set raw.actual; run;''')
+    assert pairs(r) == {("raw.actual", "mart.real")}
+    assert r.diagnostics
+
+
+def test_name_literals_are_unresolved_instead_of_scanned_as_plain_identifiers():
+    r = parse_sas("data mart.x; set 'raw.orders'n; run;")
+    assert pairs(r) == set()
+    assert r.diagnostics
+
+
+def test_inline_data_is_never_parsed_as_code():
+    r = parse_sas('''data work.x; input line $80.; datalines;
+data mart.fake; set raw.fake; run;
+;
+run;
+data mart.actual; set raw.real; run;''')
+    assert pairs(r) == {("raw.real", "mart.actual")}
+
+
+def test_csv_extreme_width_and_header_errors_are_diagnostics():
+    r = parse_csv("," * 20000 + "\n", "wide.csv")
+    assert r.diagnostics and len(r.metadata.get("columns", [])) <= 4096
+    r = parse_csv("a" * 140000 + "\n1\n", "long.csv")
+    assert any(d.severity == "error" for d in r.diagnostics)

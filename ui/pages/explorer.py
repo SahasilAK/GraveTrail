@@ -73,7 +73,7 @@ if asset:
             st.download_button("Download graph JSON", json.dumps(graph_data(focused), default=str, indent=2), "graph.json", "application/json")
             ids = list(dict.fromkeys(e["file_id"] for e in evidence))
             if ids:
-                st.download_button("Download relevant sources", source_bundle(store, ids), "sources.zip", "application/zip")
+                st.download_button("Download relevant sources", source_bundle(store, ids, {e["file_id"]: e.get("source_hash") for e in evidence}), "sources.zip", "application/zip")
     with right:
         st.subheader("Source evidence")
         source_viewer(store, list(dict.fromkeys(e["file_id"] for e in evidence)), "lineage_source", evidence)

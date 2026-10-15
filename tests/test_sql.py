@@ -62,3 +62,16 @@ def test_semicolon_in_comment_literal_and_subquery():
     assert len(r.operations) == 2
     assert names(r.operations[0].sources) == {"raw.a"}
     assert [(u.table, u.column) for u in r.operations[0].usages] == [("raw.a", "id"), ("raw.a", "txt")]
+
+
+def test_unused_cte_contributes_no_lineage_or_columns():
+    r = parse_sql("CREATE TABLE mart.x AS WITH unused AS (SELECT secret FROM raw.secret) SELECT id FROM raw.real;")
+    assert names(r.operations[0].sources) == {"raw.real"}
+    assert {u.table for u in r.operations[0].usages} == {"raw.real"}
+
+
+def test_quoted_dotted_identifier_keeps_component_boundaries():
+    from dataforge.models import canonical
+    r = parse_sql('create table mart.x as select * from "raw.orders"; create table mart.y as select * from raw.orders;')
+    a, b = [o.sources[0].name for o in r.operations]
+    assert canonical(a) != canonical(b)

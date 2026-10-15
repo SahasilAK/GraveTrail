@@ -64,15 +64,18 @@ def source_viewer(store, file_ids, key="source", evidence=None):
         return
     choices = {fid: store.file(fid)["relative_path"] for fid in dict.fromkeys(file_ids)}
     fid = st.selectbox("Source file", list(choices), format_func=choices.get, key=key + "_file")
-    source = store.file(fid)
+    relevant = [e for e in evidence or [] if e.get("file_id") == fid]
+    source_hash = relevant[0].get("source_hash") if relevant else None
+    source = store.file(fid, source_hash)
     st.caption(f'{source["relative_path"]} | {source["encoding"]} | {source["line_count"]} lines | {source["file_size"]:,} bytes')
-    st.download_button("Download original file", store.original(fid), source["file_name"], key=key + "_download")
+    st.download_button("Download original file", store.original(fid, source_hash), source["file_name"], key=key + "_download")
+    if source_hash and source_hash != store.file(fid)["content_hash"]:
+        st.warning("Showing the original analyzed version. A newer file is pending analysis in the inventory.")
     text = source["raw_content"]
     needle = st.text_input("Find in source", key=key + "_find")
     if needle:
         lines = [str(i) for i, line in enumerate(text.splitlines(), 1) if needle.casefold() in line.casefold()]
         st.caption("Matching lines: " + (", ".join(lines[:100]) if lines else "none"))
-    relevant = [e for e in evidence or [] if e.get("file_id") == fid]
     language = "sql" if source["extension"] == ".sql" else "sas" if source["extension"] == ".sas" else "text"
     if relevant:
         st.markdown("**Relevant statements**")
