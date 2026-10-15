@@ -48,6 +48,28 @@ PALETTES = {
 PRESETS = {f"{name} {mode}": {"base": mode, **modes[mode]}
            for mode in ("dark", "light") for name, modes in PALETTES.items()}
 
+# Additional choices leave the original eight definitions and their order intact.
+PRESETS.update({
+    "Claude orange light": {"base": "light", **_colors(
+        "#a84b2f", "#faf7f2", "#eee7dc", "#3d332c", "#d6cabb", "#a0482e",
+        ["#a84b2f", "#607568", "#8c7197", "#92733f"])},
+    "Claude orange dark": {"base": "dark", **_colors(
+        "#a84b2f", "#26231f", "#342e28", "#f0e7dd", "#746354", "#edaa85",
+        ["#e6a180", "#a0baa2", "#c6a8d3", "#d6bd87"])},
+    "Nord light": {"base": "light", **_colors(
+        "#466384", "#f4f7fb", "#e6edf5", "#2e3440", "#c5d0df", "#3e5d7e",
+        ["#466384", "#4b7a81", "#8b6799", "#9b7046"])},
+    "Rose light": {"base": "light", **_colors(
+        "#9d4162", "#fffafb", "#f8eaf0", "#4a2938", "#dfc3cf", "#963857",
+        ["#9d4162", "#527e78", "#7d6ba8", "#9a7138"])},
+    "Sand light": {"base": "light", **_colors(
+        "#886315", "#fcfaf4", "#eee9dc", "#403b2e", "#d4c9af", "#76540f",
+        ["#886315", "#4e7772", "#8d6689", "#586d9a"])},
+    "Mint light": {"base": "light", **_colors(
+        "#226d5a", "#f7fcfa", "#e6f2ee", "#253d36", "#bed8cf", "#1c6654",
+        ["#226d5a", "#5679a1", "#937042", "#8b679c"])},
+})
+
 
 def current_preset(path):
     theme = tomllib.loads(Path(path).read_text(encoding="utf-8")).get("theme", {})
@@ -135,7 +157,7 @@ def render_theme_picker():
             st.success(notice)
         choices = list(PRESETS)
         selected = st.selectbox("Theme preset", choices, index=choices.index(active) if active else 0)
-        st.caption("Choose Ocean, Forest, Amethyst or Graphite in dark or light. Dark presets apply a dark appearance directly. Applies across this local app and all workspaces.")
+        st.caption("Original Ocean, Forest, Amethyst and Graphite themes remain available. Added Claude-inspired orange light/dark, Nord light, Rose light, Sand light and Mint light. Changes apply only when you choose Apply theme, across this local app.")
         if active is None:
             st.caption("Current palette is customized. Applying a preset replaces its colors and appearance; custom layout/sidebar overrides remain.")
         if st.button("Apply theme", disabled=selected is None or selected == active):

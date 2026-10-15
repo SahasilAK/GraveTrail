@@ -225,3 +225,15 @@ configured model when one becomes available. Preserve the user's unrelated `.git
   found no material remaining findings. Final appearance validation is intentionally with
   the user; no additional browser interaction was performed after that request.
 - The original master backlog remains unchanged by this focused theme request.
+
+## Additive theme correction — 2026-10-15
+
+- User clarified: preserve current themes and active appearance; add at most six choices.
+  Appended Claude orange light/dark, Nord light, Rose light, Sand light and Mint light (14 total).
+  Original eight names, colors and ordering remain byte-equivalent under canonical JSON;
+  a frozen baseline hash regression protects them. No theme application logic was changed.
+- No browser interaction or appearance validation was performed for this correction, as
+  requested. The user will apply and validate. Existing active `.streamlit/config.toml` edits
+  were not written by this task and are excluded from its commit.
+- Verification: 136 tests passed; Ruff clean. All fourteen presets pass configuration
+  round-trips and text/link/button contrast checks. Independent review found no issues.

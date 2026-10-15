@@ -94,6 +94,12 @@ native `.streamlit/config.toml`, separately from workspace configuration transfe
 waits briefly for native configuration reload; refresh the page if a reload hint appears.
 The configuration must be writable. Custom layout/sidebar overrides are retained.
 
+Six additional choices are available alongside those original eight: **Claude orange light**,
+**Claude orange dark**, **Nord light**, **Rose light**, **Sand light** and **Mint light**.
+The orange choices are inspired by Claude's warm palette. Existing theme names and colors
+are preserved. Adding these options does not apply a different theme; choose **Apply theme**
+only when you want to change the current appearance.
+
 Choose complete source expanded or relevant statements first, and whether code displays line
 numbers. Relevant-first mode keeps the **Complete source** panel closed when evidence snippets
 are available; open it to load the full display. Files without focused evidence default to full

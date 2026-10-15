@@ -79,6 +79,11 @@ depending on the browser's Light/Dark menu. Preserve unrelated config, use atomi
 updates and bounded native reload acknowledgement. User will validate final appearance;
 no further browser inspection after that instruction.
 
+Follow-up theme correction: preserve all eight existing definitions/order and the user's
+active configuration. Append only six choices: Claude orange light/dark, Nord light, Rose
+light, Sand light and Mint light. No changes to theme application logic or default selection;
+user validates appearance. Keep the user's `.streamlit/config.toml` edit out of the commit.
+
 - Next: task-specific column/explanation result schemas beyond the shared grounded-lineage
   schema. Extend prompt/schema versioning, deterministic quote/column validation and advisory
   presentation; do not merge explanations or column suggestions as table relationships.
