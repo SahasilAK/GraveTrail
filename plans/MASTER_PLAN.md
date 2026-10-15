@@ -21,50 +21,50 @@ columns; atomic recovery after failures; cycles and large graph rendering.
 ## Vertical slices
 
 ### 1. Foundation and persistent import
-- [ ] Create `pyproject.toml`, `app.py`, `src/dataforge/models.py`, `store.py`, `ingestion.py`.
-- [ ] Test ZIP traversal, allowed roots, extension filters, duplicate hashes, persistence.
-- [ ] Implement workspaces, versioned schema, inventory, immutable original bytes and limits.
-- [ ] Wire workspace selection, Builder upload/directory import, inventory and full viewer.
-- [ ] Gate: `pytest tests/test_ingestion.py tests/test_store.py` and Builder UI smoke.
+- [x] Create `pyproject.toml`, `app.py`, `src/dataforge/models.py`, `store.py`, `ingestion.py`.
+- [x] Test ZIP traversal, allowed roots, extension filters, duplicate hashes, persistence.
+- [x] Implement workspaces, versioned schema, inventory, immutable original bytes and limits.
+- [x] Wire workspace selection, Builder upload/directory import, inventory and full viewer.
+- [x] Gate: `pytest tests/test_ingestion.py tests/test_store.py` and Builder UI smoke.
 
 ### 2. SQL analysis
-- [ ] Tests: CTAS/INSERT/UPDATE/MERGE/DELETE, unions, quoted names, CTEs, aliases,
+- [x] Tests: CTAS/INSERT/UPDATE/MERGE/DELETE, unions, quoted names, CTEs, aliases,
       ambiguity, exact evidence, parse errors, no transitive direct columns.
-- [ ] Implement `parsers/sql.py`: statement splitter, SQLGlot AST/scopes, read/write
+- [x] Implement `parsers/sql.py`: statement splitter, SQLGlot AST/scopes, read/write
       operations, source ranges, direct usage, warnings; `services.py`: transactional runs.
-- [ ] Interfaces: `parse_sql(content, dialect) -> ParseResult`; `analyze(store, workspace)`.
-- [ ] Gate: `pytest tests/test_sql.py` plus persisted SQL import/analyze in Builder.
+- [x] Interfaces: `parse_sql(content, dialect) -> ParseResult`; `analyze(store, workspace)`.
+- [x] Gate: `pytest tests/test_sql.py` plus persisted SQL import/analyze in Builder.
 
 ### 3. SAS and CSV
-- [ ] Fixtures: explicit CSV import to WORK to staging to mart, unresolved macro, DATA
+- [x] Fixtures: explicit CSV import to WORK to staging to mart, unresolved macro, DATA
       SET/MERGE, PROC SQL/SORT/MEANS/TRANSPOSE/IMPORT/EXPORT, comments/quoted semicolons.
-- [ ] Implement `parsers/sas.py` with static macro assignments, librefs, conservative
+- [x] Implement `parsers/sas.py` with static macro assignments, librefs, conservative
       procedure extraction; `parsers/csv.py` bounded schema sampling and row count.
-- [ ] Gate: `pytest tests/test_sas.py tests/test_workflow.py` and mixed import in UI.
+- [x] Gate: `pytest tests/test_sas.py tests/test_workflow.py` and mixed import in UI.
 
 ### 4. Graph, explorer and column usage
-- [ ] Test cycle-safe bounded traversals, cross-file linking and temporary contraction
+- [x] Test cycle-safe bounded traversals, cross-file linking and temporary contraction
       preserving all evidence; never infer a CSV match from a table's name alone.
-- [ ] `graph.py`: stable IDs, focused upstream/downstream/combined traversal and paths.
-- [ ] `ui/pages/`: exact asset chooser, progressive dependency tree, interactive offline
+- [x] `graph.py`: stable IDs, focused upstream/downstream/combined traversal and paths.
+- [x] `ui/pages/`: exact asset chooser, progressive dependency tree, interactive offline
       HTML/SVG graph, relevant file viewer; columns with grouping/filter/exports.
-- [ ] Gate: `pytest tests/test_graph.py tests/test_ui.py` and browser verification.
+- [x] Gate: `pytest tests/test_graph.py tests/test_ui.py` and browser verification.
 
 ### 5. LLM profiles and privacy
-- [ ] Test provider payloads with HTTP transport fakes, privacy gates, malformed output,
+- [x] Test provider payloads with HTTP transport fakes, privacy gates, malformed output,
       invented names, invalid line ranges, prompt integrity and quarantine.
-- [ ] `llm.py`: provider-specific adapters, env-only secrets, model discovery, bounded
+- [x] `llm.py`: provider-specific adapters, env-only secrets, model discovery, bounded
       retries, task routing, grounded structured validation; versioned `prompts/`.
-- [ ] Wire configuration and unresolved-statement assistance with explicit user action.
-- [ ] Gate: `pytest tests/test_llm.py`; live test only with an available configured endpoint.
+- [x] Wire configuration and unresolved-statement assistance with explicit user action.
+- [x] Gate: `pytest tests/test_llm.py`; live test only with an available configured endpoint.
 
 ### 6. Exports, productivity and hardening
-- [ ] Standalone HTML graph, JSON/CSV, original bundles, metadata transfer, code search,
+- [x] Standalone HTML graph, JSON/CSV, original bundles, metadata transfer, code search,
       impact analysis, data dictionary and run comparison using shared inventory.
-- [ ] Test hostile HTML, workspace isolation, incremental replacement and rollback,
+- [x] Test hostile HTML, workspace isolation, incremental replacement and rollback,
       missing/binary files, graph bounds; run representative generated workload benchmark.
-- [ ] Add all required docs, folder knowledge, lockfile, Docker and CI.
-- [ ] Gate: full pytest, Ruff, clean install, Streamlit health, actual browser workflow.
+- [x] Add all required docs, folder knowledge, lockfile, Docker and CI.
+- [x] Gate: full pytest, Ruff, clean install, Streamlit health, actual browser workflow.
 
 ## Design
 

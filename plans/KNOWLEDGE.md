@@ -1,0 +1,12 @@
+# plans/
+
+Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current truth; MASTER_PLAN and acceptance/test/risk docs preserve intent.
+
+## Files
+- `ACCEPTANCE_CRITERIA.md` — Acceptance criteria. Maintained documentation; consult implementation status for verification boundaries.
+- `ARCHITECTURE_DECISIONS.md` — Architecture decisions. Maintained documentation; consult implementation status for verification boundaries.
+- `BENCHMARK_RESULTS.json` — Measured 500-file synthetic workload and environment versions; not a general-language accuracy claim.
+- `IMPLEMENTATION_STATUS.md` — Current delivered features, actual validation, unsupported cases and concrete continuation priorities.
+- `MASTER_PLAN.md` — DataForge Implementation Plan. Maintained documentation; consult implementation status for verification boundaries.
+- `RISKS_AND_ASSUMPTIONS.md` — Risks and assumptions. Maintained documentation; consult implementation status for verification boundaries.
+- `TEST_STRATEGY.md` — Test strategy. Maintained documentation; consult implementation status for verification boundaries.

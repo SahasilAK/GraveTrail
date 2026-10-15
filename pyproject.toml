@@ -23,6 +23,10 @@ packages = ["src/dataforge"]
 [tool.hatch.build.targets.wheel.force-include]
 "prompts" = "dataforge/prompts"
 
+[tool.hatch.build.targets.sdist]
+include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "plans/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "AGENTS.md", "KNOWLEDGE.md", ".kbignore", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", ".dockerignore", ".github/**"]
+exclude = ["docs/prompts/**", "docs/plans/**", "**/__pycache__/**", "**/*.pyc"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
