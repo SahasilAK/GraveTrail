@@ -10,6 +10,7 @@ class ParsingSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     dialect: str = ""
     dialect_by_folder: dict[str, str] = Field(default_factory=dict)
+    dialect_by_extension: dict[str, str] = Field(default_factory=dict)
     library_mappings: dict[str, str] = Field(default_factory=dict)
     macros: dict[str, str] = Field(default_factory=dict)
     case_sensitive: bool = False
@@ -27,6 +28,13 @@ class ParsingSettings(BaseModel):
     def folder_dialects_known(cls, value):
         if any(d not in Dialect.classes for d in value.values()):
             raise ValueError("Unknown SQL dialect in folder mappings")
+        return value
+
+    @field_validator("dialect_by_extension")
+    @classmethod
+    def extension_dialects_known(cls, value):
+        if any(k not in {".sql", ".sas"} or v not in Dialect.classes for k, v in value.items()):
+            raise ValueError("Extension dialects require .sql/.sas keys and known SQL dialects")
         return value
 
 
@@ -63,7 +71,15 @@ class LLMResourceSettings(BaseModel):
     llm_chunk_chars: int = Field(default=4000, ge=500, le=100000)
 
 
-class PortableSettings(ParsingSettings, VisualizationSettings, LLMResourceSettings):
+class AnalysisPreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    min_lineage_confidence: float = Field(default=0., ge=0, le=1)
+    include_inferred: bool = True
+    diagnostic_visibility: Literal["all", "warnings_errors", "errors"] = "all"
+    reanalysis_mode: Literal["changed", "all"] = "changed"
+
+
+class PortableSettings(ParsingSettings, VisualizationSettings, LLMResourceSettings, AnalysisPreferences):
     """Explicit allowlist: no network, secrets, AI retention, or transmission permissions."""
     max_file_mb: int = Field(default=20, ge=1, le=100)
     max_files: int = Field(default=10000, ge=1, le=100000)

@@ -15,3 +15,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `themes.py` — Fourteen native presets: original eight unchanged plus six additive orange/Nord/Rose/Sand/Mint choices. TOML-aware atomic config updates, detection and bounded reload acknowledgement. Applies only on explicit request, app-wide.
 - `unresolved_review.py` — Offline bounded diagnostic selector/context preview with adjustable source ranges and explicit hash-pinned review button; uses shared durable result presentation.
 - `workspace_history.py` — Lazy native Settings panel previews bounded history eligibility, archives with retained recovery and restores missing records; all persistence lives in maintenance.py.
+
+Settings graph confidence/status filters participate in common.load_graph cache keys before
+temporary contraction; app-wide log level is excluded from workspace transfers. Saved settings
+rerun with notices to establish current widget identities before the next edit.

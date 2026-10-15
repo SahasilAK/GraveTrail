@@ -16,11 +16,13 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(event)
 
 
-def configure_logging():
+def configure_logging(level="INFO"):
+    if level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
+        raise ValueError("Choose DEBUG, INFO, WARNING or ERROR logging")
     logger = logging.getLogger("dataforge")
     if not logger.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(level)
     logger.propagate = False

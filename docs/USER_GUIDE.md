@@ -120,3 +120,12 @@ history. Restore prefers the database copy and works after restart even if the J
 Recovery copies remain retained; this reorganizes history and does not reclaim source-file disk
 space or guarantee that DuckDB immediately shrinks. Original blobs, current facts and AI evidence
 are untouched. This is a manual operation, not a scheduled retention policy or a full backup.
+
+SQL dialect selection uses default, then extension override, then the longest matching folder
+prefix. For .sas only PROC SQL uses this dialect; DATA/PROC rules remain SAS. Graph confidence
+and inferred visibility preferences filter the view and graph exports, without deleting facts.
+Parsing diagnostics can be filtered for display; the unresolved review queue still preserves
+warnings/errors. Analyze can reuse unchanged results or reparse selected/all files. On parser or
+configuration changes, previously analyzed incompatible files refresh to keep the workspace
+coherent; newly imported unselected files remain pending. Logging level in Security and privacy
+is app-wide for the data home, persists across restart and is not transferred with workspaces.

@@ -15,7 +15,8 @@ def strip_comments(text: str) -> str:
                   lambda m: m.group(1) if m.group(1) else re.sub(r"[^\n]", " ", m.group()), text, flags=re.S)
 
 
-def parse_sas(content: str, library_mappings: dict | None = None, macros: dict | None = None) -> ParseResult:
+def parse_sas(content: str, library_mappings: dict | None = None, macros: dict | None = None,
+              sql_dialect: str = "") -> ParseResult:
     result = ParseResult()
     libraries = {k.casefold(): v for k, v in (library_mappings or {}).items()}
     variables = {k.casefold(): str(v) for k, v in (macros or {}).items()}
@@ -93,7 +94,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
             for raw, line, last, statement in block[1:]:
                 if re.match(r"\s*(quit|run)\b", statement, re.I):
                     continue
-                parsed = parse_sql(statement)
+                parsed = parse_sql(statement, sql_dialect)
                 for d in parsed.diagnostics:
                     d.line += line - 1
                 result.diagnostics.extend(parsed.diagnostics)

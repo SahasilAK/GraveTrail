@@ -51,3 +51,8 @@
   time; preserve whole SAS macro/interactive PROC contexts and original source coordinates.
   Oversized blocks are refused, never truncated. Cancellation is cooperative; an in-flight
   HTTP wait remains bounded by its configured timeout.
+
+- ADR 019: View thresholds filter evidence before graph contraction and never remove stored
+  facts. Extension SQL dialect applies to SAS PROC SQL only. Cache-incompatible previously
+  analyzed files reparse on selected refresh so full materialization cannot silently drop them.
+  App-wide log level uses reserved __application__ settings scope (no migration, no export).

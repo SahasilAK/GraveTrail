@@ -66,7 +66,8 @@ if files:
     if run or rebuild:
         try:
             bar = st.progress(0, text="Reading inventory")
-            result = analyze(store, w, selected or None if not rebuild else None, force=rebuild,
+            result = analyze(store, w, selected or None if not rebuild else None,
+                             force=rebuild or store.setting(w, "reanalysis_mode", "changed") == "all",
                              progress=lambda p, text: bar.progress(p, text=text))
             st.success(f"Analysis complete: {result['assets']} assets, {result['edges']} dependencies. "
                        f"Parsed {result['analyzed']}; reused {result['cached']} cached files in {result['duration']:.2f}s.")
@@ -77,6 +78,11 @@ if files:
         invalid = [e for e in store.edges(w) if not e["code"] or e["start_line"] < 1 or not 0 <= e["confidence"] <= 1]
         (st.error if invalid else st.success)(f"Validation: {len(invalid)} invalid evidence records")
     diagnostics = store.diagnostics(w)
+    visibility = store.setting(w, "diagnostic_visibility", "all")
+    if visibility != "all":
+        diagnostics = [d for d in diagnostics if d["severity"] == "error" or
+                       (visibility == "warnings_errors" and d["severity"] == "warning")]
+        st.caption("Parsing diagnostic display is filtered. All diagnostics remain stored and unresolved review still includes warnings/errors.")
     if diagnostics:
         with st.expander(f"Parsing diagnostics ({len(diagnostics)})", expanded=True):
             st.dataframe([{k: d[k] for k in ["relative_path", "line", "severity", "message"]} for d in diagnostics], hide_index=True)

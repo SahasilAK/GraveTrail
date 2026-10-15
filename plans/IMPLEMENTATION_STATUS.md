@@ -78,7 +78,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 ## Continuation
 Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
 uv run ruff check .; uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json.
-Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 4; increment
+Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 5; increment
 for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
 to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
 Keep future work in tested Conventional Commits, as requested. No push was requested.
@@ -171,18 +171,15 @@ discovery, source/blob lifecycle, portable backups and auth if expanding beyond 
 
 ## Next session entry point
 
-Current committed core plus the continuation slices above are working; the full master remains
-incomplete. Resume with task-specific AI result contracts for direct-column analysis and source
-explanation: the current five prompts still share GroundedResponse, which only represents
-grounded relationships and advisory text. Add task-specific grounding and persistence without
-turning advisory output into lineage. Preserve explicit user invocation and provider privacy.
-Then address LLM concurrency/chunking controls, remaining parsing/confidence/logging settings,
-safe stale temporary-file maintenance, explicit job/session identity and target-vendor fixtures.
-Portable source/history bundles and blob garbage collection are optional operational follow-ups
-beyond the already implemented master-required metadata transfer. Real-project accuracy,
-Docker/remote CI and standalone HTML browser acceptance remain unverified as stated above.
-Do not re-run unreliable automatic gateway routes just to obtain a green result. Use a stable
-configured model when one becomes available. Preserve the user's unrelated `.gitignore` edit.
+Task-specific AI contracts, bounded resources, and remaining settings are now implemented.
+Resume with safe stale application-owned temporary-file cleanup, then explicit job/session
+identity, broader vendor fixtures and requirement-by-requirement acceptance accounting.
+Keep new work in tested commits; preserve all fourteen themes and active configuration.
+Current parser cache version5. Previously analyzed cache-incompatible files reparse on selected
+refresh to retain coherent facts. OmniRoute tests must use model auto; its latest connection
+check failed and discovery did not advertise that literal ID. Do not substitute fixed models
+or repeat inference without new evidence. Docker/remote CI and independent local HTML remain
+unverified; clean installation/packaging must be rerun after these new slices.
 
 ## Final runtime and packaging handoff — 2026-10-15
 
@@ -297,3 +294,28 @@ configured model when one becomes available. Preserve the user's unrelated `.git
   OmniRoute testing must use model auto. No further gateway request was made after the hold.
   AGENTS.md and live-check command default record this policy. Fixed-route success above is
   historical evidence obtained before the new instruction, not a current route recommendation.
+
+## Completion execution: remaining settings — 2026-10-15
+
+- Added validated extension SQL dialect overrides (.sql and SAS PROC SQL), with default →
+  extension → longest folder precedence. Parser cache version5; SAS rules remain static.
+- Saved graph confidence/inferred-visibility preferences filter evidence before temporary
+  contraction, with cache keys including filters. Facts/diagnostics remain retained. Graph
+  exports reflect the visible filtered view. Diagnostic visibility and Analyze-button reuse/
+  reparse mode now persist and travel in safe workspace configuration.
+- Persistent app-wide logging level uses reserved __application__ settings scope, excluded
+  from workspace exports. Safe structured event fields and privacy behavior remain intact.
+- Fixed settings forms losing subsequent edits after saved defaults changed: success notice
+  and rerun establish current widget identities. Regression covers valid then invalid saves.
+- Review exposed selected refresh dropping unselected facts after parser/config cache
+  invalidation. Previously analyzed incompatible files now reparse before atomic replacement;
+  new unselected pending files remain pending. Regression simulates v4 → v5 and dialect changes.
+- OmniRoute restarted per user. Model auto live check failed at connection (ProviderError),
+  before source assistance; discovery lists964 IDs and auto/... routes but no literal auto.
+  No fixed-model substitution or repeated inference attempts. Latest report records failure;
+  earlier fixed-route success predates the user's auto-only policy. Gateway hold is lifted.
+- Next required slice: safe application-owned stale temporary-file cleanup, then explicit
+  job/session identity, vendor fixtures and final acceptance accounting/packaging verification.
+- Final settings verification:171 tests passed in22.71s; Ruff clean. Actual isolated Settings
+  saved extension dialect and inferred-visibility preferences with immediate success; screenshot
+  .dataforge/verification/parsing-preferences.png. Primary theme/configuration was untouched.

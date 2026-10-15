@@ -22,9 +22,9 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
   implicit transmission. Wire settings/config transfer and UI, verify and commit.
 
 ## 3. Remaining settings
-- [ ] Reconcile extension dialect, confidence/unresolved display, reanalysis and safe logging
+- [x] Reconcile extension dialect, confidence/unresolved display, reanalysis and safe logging
   controls with existing services; implement actual behavior with compatible defaults.
-- [ ] Test precedence, cache invalidation, persistence, portability and privacy. Commit.
+- [x] Test precedence, cache invalidation, persistence, portability and privacy. Commit.
 
 ## 4. Temporary cleanup
 - [ ] Bound preview/cleanup to explicitly application-owned stale temporary files. Protect

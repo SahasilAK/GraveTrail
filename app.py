@@ -9,6 +9,7 @@ from ui.common import ROOT, get_store
 configure_logging()
 st.set_page_config(page_title="DataForge | Engineering workspace", page_icon=":material/account_tree:", layout="wide")
 store = get_store(os.environ.get("DATAFORGE_HOME", str(ROOT / ".dataforge")))
+configure_logging(store.setting("__application__", "log_level", "INFO"))
 workspaces = store.workspaces()
 if not workspaces:
     store.create_workspace("My workspace", "Local engineering workspace")

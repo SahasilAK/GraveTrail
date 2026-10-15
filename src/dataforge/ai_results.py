@@ -46,7 +46,7 @@ def validate_advisory(response, source, known, first, last, settings):
     lines = source["raw_content"].splitlines()
     identity = (lambda name: name) if settings.get("case_sensitive", False) else canonical
     known = {identity(name) for name in known}
-    parsed = (parse_sas(source["raw_content"], settings.get("library_mappings"), settings.get("macros"))
+    parsed = (parse_sas(source["raw_content"], settings.get("library_mappings"), settings.get("macros"), settings.get("dialect", ""))
               if source["extension"] == ".sas" else parse_sql(source["raw_content"], settings.get("dialect", "")))
     items = response.columns if isinstance(response, ColumnResponse) else response.explanations
     for item in items:

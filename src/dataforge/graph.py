@@ -7,12 +7,14 @@ import networkx as nx
 
 
 class LineageGraph:
-    def __init__(self, assets: list[dict], edges: list[dict]):
+    def __init__(self, assets: list[dict], edges: list[dict], min_confidence=0., include_inferred=True):
         self.graph = nx.DiGraph()
         self.truncated = False
         for a in assets:
             self.graph.add_node(a["asset_id"], **a)
         for e in edges:
+            if e.get("confidence", 1.) < min_confidence or (not include_inferred and e.get("status") == "inferred"):
+                continue
             s, t = e["source_id"], e["target_id"]
             if self.graph.has_edge(s, t):
                 self.graph[s][t]["evidence"].append(e)

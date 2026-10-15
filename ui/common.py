@@ -6,7 +6,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from dataforge.configuration import VisualizationSettings
+from dataforge.configuration import AnalysisPreferences, VisualizationSettings
 from dataforge.exports import GRAPH_BODY, GRAPH_CSS, GRAPH_JS, graph_data, report_csv, report_html
 from dataforge.graph import LineageGraph
 from dataforge.store import Store
@@ -34,14 +34,19 @@ def title(name: str, description: str):
 
 def load_graph(store, workspace):
     latest = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
-    return _cached_graph(str(store.home), workspace, latest[0]["run_id"] if latest else "empty")
+    preferences = AnalysisPreferences.model_validate({k: store.setting(workspace, k, v)
+        for k, v in AnalysisPreferences().model_dump().items()})
+    if preferences.min_lineage_confidence > 0 or not preferences.include_inferred:
+        st.caption(f"Lineage view filters: minimum confidence {preferences.min_lineage_confidence:.2f}; inferred relationships {'included' if preferences.include_inferred else 'hidden'}. Graph exports use these filters. Stored facts remain intact.")
+    return _cached_graph(str(store.home), workspace, latest[0]["run_id"] if latest else "empty",
+                         preferences.min_lineage_confidence, preferences.include_inferred)
 
 
 @st.cache_resource(max_entries=32, ttl=300)
-def _cached_graph(home, workspace, revision):
+def _cached_graph(home, workspace, revision, min_confidence=0., include_inferred=True):
     store = get_store(home)
     with store.lock:
-        return LineageGraph(store.assets(workspace), store.edges(workspace))
+        return LineageGraph(store.assets(workspace), store.edges(workspace), min_confidence, include_inferred)
 
 
 def choose_asset(graph, key):

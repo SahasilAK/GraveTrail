@@ -107,5 +107,10 @@ AI resource controls implemented: bounded admission, offline complete-statement 
 one explicit request per chunk, portable settings and cooperative cancellation. Fixed-route
 synthetic live SQL/SAS merge/refresh/reopen passed. Next: remaining settings and cleanup.
 
-Current live-test constraint: OmniRoute model must be auto (user instruction). Provider calls
-are on hold while the user starts OmniRoute; continue independent local work only.
+Current live-test constraint: OmniRoute model must be auto (user instruction). User has restarted OmniRoute. Literal auto connection check failed; preserve quarantine and
+record the endpoint model-availability limitation. No fixed-model substitution.
+
+Remaining settings implemented: extension dialect/PROC SQL precedence, confidence/inferred graph
+filters, diagnostic display and reparse defaults, safe app-wide logging. Parser cache version5.
+Selected refresh reparses previously analyzed incompatible files rather than dropping facts.
+Next: temporary cleanup, job/session boundaries, vendor fixtures and final acceptance.

@@ -1,51 +1,12 @@
 {
   "provider": "OmniRoute",
   "endpoint": "http://localhost:20128/v1",
-  "model": "cx/gpt-5.6-luna-low",
+  "model": "auto",
   "credential_variable": "OMNIROUTE_API_KEY",
   "synthetic_sources_only": true,
-  "checks": [
-    {
-      "name": "connection",
-      "status": "passed",
-      "usage": {
-        "prompt_tokens": 29,
-        "completion_tokens": 9,
-        "total_tokens": 38
-      }
-    },
-    {
-      "name": ".sql",
-      "status": "passed",
-      "merged_claims": 1,
-      "usage": {
-        "prompt_tokens": 805,
-        "completion_tokens": 106,
-        "total_tokens": 911,
-        "completion_tokens_details": {
-          "reasoning_tokens": 19
-        }
-      }
-    },
-    {
-      "name": ".sas",
-      "status": "passed",
-      "merged_claims": 1,
-      "usage": {
-        "prompt_tokens": 807,
-        "completion_tokens": 137,
-        "total_tokens": 944,
-        "completion_tokens_details": {
-          "reasoning_tokens": 43
-        }
-      }
-    },
-    {
-      "name": "merge-refresh-restart",
-      "status": "passed"
-    }
-  ],
-  "discovered_models": 965,
-  "status": "passed",
-  "duration_seconds": 19.87
+  "checks": [],
+  "discovered_models": 964,
+  "status": "failed",
+  "error_type": "ProviderError",
+  "duration_seconds": 7.29
 }

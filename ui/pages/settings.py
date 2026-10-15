@@ -4,6 +4,8 @@ import sqlglot
 import streamlit as st
 
 from dataforge.configuration import (
+    AnalysisPreferences,
+    ParsingSettings,
     VisualizationSettings,
     export_workspace_configuration,
     import_workspace_configuration,
@@ -12,8 +14,12 @@ from ui.common import allowed_roots, context, title
 
 title("Settings", "Configure analysis, storage, resource budgets and source-code privacy.")
 store, w = context()
+if notice := st.session_state.pop("settings_notice_" + w, None):
+    st.success(notice)
 tab = st.segmented_control("Settings section", ["Parsing and lineage", "Storage and workspaces", "Performance", "Visualization", "Security and privacy", "LLM providers"], default="Parsing and lineage")
 if tab == "Parsing and lineage":
+    if notice := st.session_state.pop("parsing_notice_" + w, None):
+        st.success(notice)
     with st.form("parsing_settings"):
         dialects = [""] + sorted(k for k in sqlglot.Dialect.classes if k)
         dialect = st.selectbox("Default SQL dialect", dialects, index=dialects.index(store.setting(w, "dialect", "")), format_func=lambda x: x or "Generic SQL")
@@ -22,20 +28,35 @@ if tab == "Parsing and lineage":
         mappings = st.text_area("SAS library mappings (JSON)", json.dumps(store.setting(w, "library_mappings", {}), indent=2), help='Example: {"src": "catalog.raw"}')
         macros = st.text_area("Static SAS macro values (JSON)", json.dumps(store.setting(w, "macros", {}), indent=2))
         folders = st.text_area("SQL dialect by folder prefix (JSON)", json.dumps(store.setting(w, "dialect_by_folder", {}), indent=2))
+        extension_dialects = st.text_area("SQL dialect by extension (JSON)", json.dumps(store.setting(w, "dialect_by_extension", {}), indent=2), help="Use .sql or .sas keys. SAS overrides apply to PROC SQL only. Folder overrides take precedence.")
+        confidence = st.slider("Minimum lineage confidence in graph views", 0., 1., float(store.setting(w, "min_lineage_confidence", 0.)), step=.05)
+        inferred = st.checkbox("Include inferred relationships in graph views", store.setting(w, "include_inferred", True))
+        diagnostic_modes = ["all", "warnings_errors", "errors"]
+        diagnostic_mode = st.selectbox("Visible parsing diagnostics", diagnostic_modes,
+            index=diagnostic_modes.index(store.setting(w, "diagnostic_visibility", "all")))
+        reanalysis_modes = ["changed", "all"]
+        reanalysis_mode = st.selectbox("Analyze button mode", reanalysis_modes,
+            index=reanalysis_modes.index(store.setting(w, "reanalysis_mode", "changed")),
+            format_func=lambda x: "Reuse unchanged parser results" if x == "changed" else "Reparse selected/all files")
+        st.caption("Filters affect displayed graphs and their exports; stored evidence and diagnostics are retained. Inferred relationships never become verified through a threshold.")
         if st.form_submit_button("Save parsing settings"):
             try:
                 data = {"dialect": dialect, "case_sensitive": case, "expand_wildcards": expand}
-                for key, value in [("library_mappings", mappings), ("macros", macros), ("dialect_by_folder", folders)]:
+                for key, value in [("library_mappings", mappings), ("macros", macros), ("dialect_by_folder", folders), ("dialect_by_extension", extension_dialects)]:
                     obj = json.loads(value)
                     if not isinstance(obj, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):
                         raise ValueError("Mappings must be JSON objects with string keys and values")
                     if key == "dialect_by_folder" and any(v not in dialects for v in obj.values()):
                         raise ValueError("Unknown SQL dialect in folder mappings")
                     data[key] = obj
+                data = ParsingSettings.model_validate(data).model_dump()
+                data.update(AnalysisPreferences(min_lineage_confidence=confidence, include_inferred=inferred,
+                    diagnostic_visibility=diagnostic_mode, reanalysis_mode=reanalysis_mode).model_dump())
                 with store.transaction():
                     for key, value in data.items():
                         store.set_setting(w, key, value)
-                st.success("Parsing settings saved. Analyze files to apply changes.")
+                st.session_state["parsing_notice_" + w] = "Parsing settings saved. Analyze files to apply changes."
+                st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
 elif tab == "Storage and workspaces":
@@ -88,7 +109,8 @@ elif tab == "Performance":
             store.set_setting(w, "parse_workers", workers)
             store.set_setting(w, "llm_concurrency", llm_workers)
             store.set_setting(w, "llm_chunk_chars", chunk_chars)
-            st.success("Resource limits saved")
+            st.session_state["settings_notice_" + w] = "Resource limits saved"
+            st.rerun()
     st.caption("Imports also enforce 100 MB compressed / 200 MB total and a 200:1 ZIP expansion ratio. Analysis reuses content hashes on every refresh.")
     st.caption("AI requests are also capped at eight across this app process. Busy requests are refused immediately. Chunking is an offline preview; each selected chunk requires its own explicit request. Provider budgets still apply.")
     if st.button("Clear parser cache"):
@@ -127,9 +149,21 @@ elif tab == "Visualization":
                     store.set_setting(w, key, value)
             for key in ("graph_direction_" + w, "graph_collapse_" + w, "lineage_source_complete_" + w):
                 st.session_state.pop(key, None)
-            st.success("Visualization settings saved")
+            st.session_state["settings_notice_" + w] = "Visualization settings saved"
+            st.rerun()
     st.caption("Defaults apply when opening Explorer. Graph appearance is included in offline HTML/JSON and safe workspace configuration transfers. Switch light/dark appearance from the application menu.")
 elif tab == "Security and privacy":
+    from dataforge.logging_config import configure_logging
+    with st.form("application_logging"):
+        levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
+        log_level = st.selectbox("Application log level", levels,
+            index=levels.index(store.setting("__application__", "log_level", "INFO")))
+        st.caption("Applies across workspaces in this data home and survives restart. Source content and credentials remain excluded from structured event fields; full AI interaction storage is controlled separately below.")
+        if st.form_submit_button("Save logging level"):
+            configure_logging(log_level)
+            store.set_setting("__application__", "log_level", log_level)
+            st.session_state["settings_notice_" + w] = "Application logging level saved"
+            st.rerun()
     st.caption("Host directory access is restricted to these configured roots:")
     st.code("\n".join(str(p) for p in allowed_roots()), language=None)
     st.caption("Configure DATAFORGE_ALLOWED_ROOTS before startup; use the operating system path separator between roots.")
@@ -144,7 +178,8 @@ elif tab == "Security and privacy":
             for k, v in [("external_llm", external), ("allow_full_source", full), ("max_context_chars", max_context),
                          ("redact_secrets", redact), ("llm_history", history), ("llm_retention_days", retention)]:
                 store.set_setting(w, k, v)
-            st.success("Privacy settings saved")
+            st.session_state["settings_notice_" + w] = "Privacy settings saved"
+            st.rerun()
 else:
     from ui.provider_settings import render
     render(store, w)

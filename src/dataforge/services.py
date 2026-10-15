@@ -15,7 +15,7 @@ from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 
-PARSER_VERSION = "4"
+PARSER_VERSION = "5"
 log = logging.getLogger(__name__)
 
 
@@ -28,8 +28,9 @@ def analyze(store, workspace: str, file_ids: list[str] | None = None, force: boo
 def _analyze(store, workspace, file_ids, force, progress, cancelled):
     """Rebuild derived facts atomically; hashes skip unchanged parser work.
 
-    A selection reparses selected files and reuses the existing cached analysis for others.
-    Files with no matching cache outside a selection remain pending.
+    A selection reparses selected files and reuses compatible cached analysis for others.
+    Previously analyzed files whose cache became incompatible are refreshed to preserve a
+    coherent workspace. Newly imported unselected files remain pending.
     """
     start = time.perf_counter()
     run_id = uuid.uuid4().hex
@@ -51,7 +52,7 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
                 selected = file_ids is None or fid in file_ids
                 if existing and (not force or not selected):
                     jobs.append((metadata, key, ParseResult.from_dict(json.loads(existing[0]["result"])), None))
-                elif selected:
+                elif selected or metadata["parsing_status"] != "pending":
                     jobs.append((metadata, key, None, pool.submit(_parse_inventory, store, metadata, config)))
             _collect_jobs(store, jobs, results, progress, cancelled)
         analyzed = sum(job[3] is not None for job in jobs)
@@ -73,7 +74,7 @@ def _analyze(store, workspace, file_ids, force, progress, cancelled):
 
 
 def source_dialect(metadata, config):
-    dialect = config["dialect"]
+    dialect = config.get("dialect_by_extension", {}).get(metadata["extension"], config["dialect"])
     for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
         if metadata["relative_path"].startswith(prefix):
             dialect = override
@@ -86,7 +87,7 @@ def _parse_inventory(store, metadata, config):
     if ext == ".sql":
         return parse_sql(content, source_dialect(metadata, config))
     if ext == ".sas":
-        return parse_sas(content, config["library_mappings"], config["macros"])
+        return parse_sas(content, config["library_mappings"], config["macros"], source_dialect(metadata, config))
     return parse_csv(content, metadata["relative_path"])
 
 
