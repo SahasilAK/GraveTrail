@@ -21,6 +21,8 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
     libraries = {k.casefold(): v for k, v in (library_mappings or {}).items()}
     variables = {k.casefold(): str(v) for k, v in (macros or {}).items()}
     tokens = list(statements(content, sas=True))
+    line_offsets = [0, *(match.end() for match in re.finditer("\n", content))]
+    cursor = 0
     macro_depth = 0
     control_depth = 0
     block = []
@@ -58,7 +60,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
         nonlocal block, block_type, block_bad
         if not block:
             return
-        raw_code = "\n".join(t[0] for t in block)
+        raw_code = content[block[0][4]:block[-1][5]]
         clean = "\n".join(t[3] for t in block)
         start, end = block[0][1], block[-1][2]
         sources, targets, usages = [], [], []
@@ -68,7 +70,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
         if block_type == "data":
             header = re.sub(r"^\s*data\s+", "", block[0][3], flags=re.I).rstrip(";")
             targets = dataset_list(header)
-            for raw, line, _, statement in block[1:]:
+            for raw, line, _, statement, _, _ in block[1:]:
                 m = re.match(r"\s*(set|merge|update|modify)\s+(.+?);?$", statement, re.I | re.S)
                 if m:
                     sources.extend(dataset_list(m.group(2)))
@@ -79,7 +81,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
             # Only explicit variable lists with one source have reliable ownership.
             if len(unique_sources) == 1:
                 source = next(iter(unique_sources.values()))
-                for _, _, _, statement in block[1:]:
+                for _, _, _, statement, _, _ in block[1:]:
                     m = re.match(r"\s*(keep|drop|by|rename)\s+(.+?);?$", statement, re.I | re.S)
                     if m:
                         items = m.group(2)
@@ -91,7 +93,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
                         for name in re.findall(r"\b[A-Za-z_]\w*\b", keep.group(2)):
                             usages.append(Usage(source.name, name, keep.group(1).upper(), expression=statement))
         elif block_type == "sql":
-            for raw, line, last, statement in block[1:]:
+            for raw, line, last, statement, _, _ in block[1:]:
                 if re.match(r"\s*(quit|run)\b", statement, re.I):
                     continue
                 parsed = parse_sql(statement, sql_dialect)
@@ -133,6 +135,9 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
         block, block_type, block_bad = [], "", False
 
     for raw, line, end in tokens:
+        # Anchor at the original line as inline data may contain identical skipped tokens.
+        offset = content.index(raw, max(cursor, line_offsets[line - 1]))
+        cursor = offset + len(raw)
         clean = strip_comments(raw).strip()
         if not clean or clean.startswith(("*", "%*")):
             continue
@@ -189,9 +194,9 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
             flush()
             block_type = "data" if header.group(1).lower() == "data" else header.group(2).lower()
             block_bad = bool(unresolved) or (previous_bad and clean.startswith("%"))
-            block = [(raw, line, end, clean)]
+            block = [(raw, line, end, clean, offset, cursor)]
         elif block:
-            block.append((raw, line, end, clean))
+            block.append((raw, line, end, clean, offset, cursor))
             if re.match(r"(run|quit)\b", clean, re.I):
                 flush()
         elif re.match(r"libname\b", clean, re.I):

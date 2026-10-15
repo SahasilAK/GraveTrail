@@ -2,6 +2,30 @@ from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 
 
+def test_sas_blocks_preserve_original_spacing_comments_and_same_line_boundaries():
+    first = "data work.stage;   set raw.a;\n\n  /* retained comment */ keep id; run;"
+    second = "data mart.x; set work.stage; run;"
+    code = "\n  " + first + "   " + second + "\n"
+    result = parse_sas(code)
+    assert [operation.code for operation in result.operations] == [first, second]
+    assert result.operations[0].start == 2 and result.operations[0].end == 4
+    assert result.operations[1].start == 4 and result.operations[1].end == 4
+    assert all(operation.code in code for operation in result.operations)
+
+
+def test_sas_proc_evidence_is_an_original_contiguous_block():
+    code = "proc sort data=raw.a out=mart.x;   by id;\n\nrun;"
+    result = parse_sas(code)
+    assert result.operations[0].code == code
+
+
+def test_sas_evidence_offsets_skip_identical_tokens_inside_inline_data():
+    code = "data work.inline;\ninput text $;\ndatalines;\nrun;\n;\nrun;"
+    result = parse_sas(code)
+    assert result.operations[0].code == code
+    assert result.operations[0].end == 6
+
+
 def pairs(result):
     return {(s.name.lower(), t.name.lower()) for o in result.operations for s in o.sources for t in o.targets}
 

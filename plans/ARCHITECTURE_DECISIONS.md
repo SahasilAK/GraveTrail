@@ -72,3 +72,7 @@
   cached stores alive for other sessions. No global environment mutation, file migration or
   arbitrary-path input. A new session starts with DATAFORGE_HOME. Locations are not portable
   workspace preferences; operator configuration remains authoritative.
+
+- ADR 023: SAS rule evidence slices original source using token offsets anchored at original
+  lines. Joining tokens changes evidence and can move same-line block boundaries. Inline-data
+  contents may repeat tokens, so line anchors supplement monotonic source lookup. Parser7.

@@ -24,3 +24,7 @@ Limitations: no SAS runtime, macro interpreter, PROC IML, general procedure outp
 dynamic libraries, job scheduling/session boundaries or faithful execution order. Static WORK
 datasets are workspace scoped and can be ambiguous across independent jobs. Add separate
 workspaces for unrelated SAS sessions. Optional AI does not bypass evidence validation.
+
+DATA/PROC evidence is sliced directly from the original source between statement offsets;
+spacing, blank lines, comments and same-line block boundaries remain intact. Inline-data
+contents remain evidence text without becoming executable statements or guessed dependencies.

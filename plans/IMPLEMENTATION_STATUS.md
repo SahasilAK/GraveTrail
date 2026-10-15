@@ -78,7 +78,7 @@ means the core was delivered; detailed remaining requirements are in CONTINUATIO
 ## Continuation
 Run: uv sync --locked --extra dev; uv run streamlit run app.py; uv run pytest -q;
 uv run ruff check .; uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json.
-Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 6; increment
+Read AGENTS.md and affected KNOWLEDGE.md before changes. Parser cache version is 7; increment
 for semantic extraction changes. Runtime defaults to ignored .dataforge/. Host roots default
 to tests/fixtures and require explicit DATAFORGE_ALLOWED_ROOTS configuration for real jobs.
 Keep future work in tested Conventional Commits, as requested. No push was requested.
@@ -174,7 +174,7 @@ discovery, source/blob lifecycle, portable backups and auth if expanding beyond 
 Task-specific AI contracts, bounded resources, and remaining settings are now implemented.
 Resume with explicit job/session identity, broader vendor fixtures and requirement-by-requirement acceptance accounting.
 Keep new work in tested commits; preserve all fourteen themes and active configuration.
-Current parser cache version6. Previously analyzed cache-incompatible files reparse on selected
+Current parser cache version7. Previously analyzed cache-incompatible files reparse on selected
 refresh to retain coherent facts. OmniRoute tests must use model auto; its latest connection
 check failed and discovery did not advertise that literal ID. Do not substitute fixed models
 or repeat inference without new evidence. Docker/remote CI and independent local HTML remain
@@ -413,3 +413,19 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Final UI refinement verification:209 tests passed,1 skipped in23.28s; Ruff clean; independent
   review found no regressions. Running Explorer shows tree and exact SELECT_INTO source side
   by side; screenshot .dataforge/verification/tree-source-panels.png.
+
+
+## Completion execution: exact SAS evidence — 2026-10-16
+
+- Corrected rule-block statement evidence: original contiguous source slices preserve spacing,
+  comments, blank lines and same-line block boundaries. Line-anchored offsets prevent skipped
+  inline data containing identical tokens from redirecting evidence. No input code executes.
+- Parser7 invalidates reconstructed cached snippets. Regression tests cover DATA, PROC and
+  inline-data offsets; advisory grounding and labeled fixtures remain compatible. Independent
+  review found no evidence/line-range issue (38 focused tests pass). Final full result follows.
+- Next: final clean source install, package/runtime checks and acceptance matrix. Docker engine
+  is unavailable; literal OmniRoute auto connection failure remains an external blocker.
+- Final SAS verification:212 tests passed,1 skipped in24.56s; Ruff clean.
+- Running isolated UI imported/formatted SAS, analyzed4 files (10 assets/7 edges), immediately
+  showed4 successful/0 pending and displayed exact DATA evidence lines1–3 including blank
+  line/spacing. Screenshot .dataforge/verification/exact-sas-evidence.png.
