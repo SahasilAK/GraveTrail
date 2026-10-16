@@ -24,3 +24,5 @@ requires an explicit evidence request or detailed response. Polling avoids long 
 AgentService exposes cleanup inspect/preview and policy-gated confirmed apply; restricted
 workspace policies cannot create whole-home backups. MCP registers inspect/preview only,
 never a destructive cleanup tool. CLI applies saved preview tokens under existing write gates.
+
+- `capabilities.py` — 46-ID UI parity inventory, paginated discovery with explicit pending and policy restrictions; launch config/network/application grants are independent.

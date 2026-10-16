@@ -738,3 +738,10 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - This is documentation only; no new commands/tools are implemented and no live calls,
   data changes, credential changes or application configuration changes were performed.
   Implementation remains pending; existing test/build results above are unchanged.
+
+## CLI/MCP parity execution — 2026-10-16
+
+- Slice 1 foundation: versioned 46-ID paginated catalog (pending entries are explicit), independent config/network/application/admin startup grants, MCP refuses local-admin launches. Existing outputs preserved.
+- RED: two new regressions failed for missing catalog/permissions. GREEN: 19 parity/agent CLI/service/MCP tests and agent Settings AppTest pass; Ruff clean. Running isolated8513 UI lists get_capabilities and actual local handler test succeeds.
+- Slices2–9 remain pending. No primary home, source fixtures or master prompt changed.
+- Ruling: work in the existing codex/agent-integration checkout requested by the user; no extra worktree or branch switch. Existing clean baseline preserved.

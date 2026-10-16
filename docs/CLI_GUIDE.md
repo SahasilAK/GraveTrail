@@ -111,3 +111,5 @@ Up to two jobs may run, one per workspace. Graph queries reject more than 20,000
 assets or 100,000 evidence edges. Journals and exports cap at 1,000 each (exports
 per workspace); archive completed local files when reached. No distributed worker,
 job cancellation or automatic job retry is introduced.
+
+Parity discovery: `dataforge capabilities` / `get_capabilities` enumerate all46 IDs with explicit pending/restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.

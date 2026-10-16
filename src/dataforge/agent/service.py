@@ -65,14 +65,14 @@ class AgentService:
         if action not in {"workspaces", "create_workspace", "summary", "assets", "files", "issues",
                           "lineage", "impact", "batch", "columns", "source", "search_code",
                           "ingest", "analyze", "job", "export", "result",
-                          "cleanup_inspect", "cleanup_preview", "cleanup_apply"}:
+                          "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities"}:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
             if action == "job":
                 return self.job_status(workspace_id, arguments["job_id"], options)
             with self.store.lock:
-                if action in {"workspaces", "create_workspace"}:
+                if action in {"workspaces", "create_workspace"} or (action == 'capabilities' and not workspace_id):
                     settings = AgentSettings()
                     if write and (not self.policy.allow_write or self.policy.workspaces is not None):
                         raise AgentError("forbidden", "Workspace creation requires unrestricted explicit write access")
@@ -98,6 +98,10 @@ class AgentService:
             raise AgentError("invalid_argument", "Invalid request arguments", reason=type(exc).__name__) from None
         except OSError:
             raise AgentError("io_error", "Local file operation failed; check access and available storage") from None
+
+    def _capabilities(self, w, opts):
+        from dataforge.agent.capabilities import capability_catalog
+        return self._page(w, opts, 'capabilities', capability_catalog(self, w), schema_version=1)
 
     def _revision(self, w):
         files = self.store.rows("SELECT file_id,content_hash,parsing_status FROM source_files WHERE workspace_id=? ORDER BY file_id", [w])

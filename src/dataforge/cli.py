@@ -51,6 +51,12 @@ def configure(ctx: typer.Context,
               json_output: bool = typer.Option(False, "--json", help="Compact structured JSON output."),
               quiet: bool = typer.Option(False, "--quiet", "-q"),
               allow_write: bool = typer.Option(False, help="Explicitly authorize mutations for this launch."),
+              allow_config_write: bool = typer.Option(False),
+              allow_llm: bool = typer.Option(False),
+              allowed_llm_origin: list[str] = typer.Option(None),
+              allowed_credential_ref: list[str] = typer.Option(None),
+              allow_application_config: bool = typer.Option(False),
+              allow_admin: bool = typer.Option(False, help="Local CLI administration only; cannot be used by MCP."),
               allowed_workspace: list[str] = typer.Option(None, help="Restrict to these workspace IDs; repeatable."),
               allowed_root: list[Path] = typer.Option(None, help="Authorized import root; repeatable."),
               limit: int = typer.Option(50, min=1, max=500), cursor: str = typer.Option(None),
@@ -64,7 +70,9 @@ def configure(ctx: typer.Context,
     ctx.obj = {"home": (home or default_home(source=application_root().name != '_app' and not getattr(sys, 'frozen', False))).resolve(),
                "json": json_output, "quiet": quiet, "output": output,
                "policy": AccessPolicy(allow_write, tuple(allowed_workspace) if allowed_workspace else None,
-                                      tuple(str(p.resolve()) for p in roots)),
+                                      tuple(str(p.resolve()) for p in roots),
+                                      allow_config_write, allow_llm, tuple(allowed_llm_origin or ()),
+                                      tuple(allowed_credential_ref or ()), allow_application_config, allow_admin),
                "options": {"limit": limit, "cursor": cursor, "max_depth": max_depth,
                            "max_items": max_items, "max_chars": max_chars, "detail_level": detail,
                            "collapse_temporary": collapse_temporary}}
@@ -92,6 +100,12 @@ def emit(ctx, result):
     else:
         for key, value in result.items():
             typer.echo(f"{key}: {compact(value) if isinstance(value, (dict, list)) else value}")
+
+
+@app.command()
+def capabilities(ctx: typer.Context, workspace: str = typer.Option('')):
+    """Discover permitted operations and explicit policy restrictions; follow next_cursor."""
+    invoke(ctx, 'capabilities', workspace)
 
 
 def fail(ctx, exc):

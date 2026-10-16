@@ -10,7 +10,7 @@
 
 **Specification and context:** [MASTER_PROMPT](../docs/prompts/MASTER_PROMPT.md), [maintenance specification](../docs/prompts/FEATURE_MAINTENANCE_AND_DEPLOYMENT.md), [AGENTS](../AGENTS.md), [current status](IMPLEMENTATION_STATUS.md), [existing agent plan](AGENT_INTEGRATION_PLAN.md), [CLI guide](../docs/CLI_GUIDE.md), [MCP guide](../docs/MCP_INTEGRATION.md). This plan implements the user's request following the complete UI-only inventory discussed on 2026-10-16.
 
-**Status:** Planned; no application implementation is authorized by creating this document. Changes made for this planning task are documentation only.
+**Status:** Implementation authorized 2026-10-16; slice1 foundation tested. Catalog tracks pending capabilities honestly. Slices2–9 in progress.
 
 ## 1. Completion boundary and existing coverage
 
@@ -176,7 +176,7 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** `capability_catalog(service, workspace_id=None) -> dict`; strict typed settings/operation requests; additive launch policy fields described in section3. All new handlers still pass through shared authorization.
 
-- [ ] Add `test_capabilities_cover_inventory`: every section4 ID has CLI/MCP status, effects and restriction metadata; no unknown or duplicate IDs.
+- [x] Add `test_capabilities_cover_inventory`: every section4 ID has CLI/MCP status, effects and restriction metadata; no unknown or duplicate IDs.
 - [ ] Add tests denying source/network/config writes without their independent permission, scoped global administration and attempts to alter launch policy through request JSON.
 - [ ] Implement capability discovery, schema versions, stable errors and conflict revisions. Do not change existing default policy semantics or tool outputs.
 - [ ] Add tests showing both stdio and HTTP enforce the same service checks and MCP64KB admission limit remains effective.

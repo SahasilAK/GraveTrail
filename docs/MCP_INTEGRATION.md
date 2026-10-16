@@ -123,3 +123,5 @@ transactions. UI access settings also publish a credential-free revocation snaps
 for polling while DuckDB is busy. Jobs already running may finish after revocation;
 new operations and subsequent status retrieval are denied. Restarted/crashed jobs
 expire to interrupted and require explicit retry. No hidden daemon or shell tool.
+
+Parity discovery: `dataforge capabilities` / `get_capabilities` enumerate all46 IDs with explicit pending/restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.

@@ -17,6 +17,8 @@ from dataforge.connections import current_connections
 
 
 def create_server(service: AgentService, host="127.0.0.1", port=8765):
+    if service.policy.allow_admin:
+        raise AgentError('requires_local_admin', 'MCP cannot use --allow-admin; use a local CLI invocation')
     server = FastMCP("DataForge", instructions=(
         "Query stored engineering metadata locally. Resolve ambiguous names with search_assets. "
         "Default summary results contain no source. Request evidence only when needed. "
@@ -144,6 +146,11 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
                    options: QueryOptions | None = None) -> CallToolResult:
         """Read an explicitly selected, workspace-scoped bounded export."""
         return await call("result", workspace_id, options, result_id=result_id, format=format)
+
+    @server.tool(annotations=read)
+    async def get_capabilities(workspace_id: str = '', options: QueryOptions | None = None) -> CallToolResult:
+        """Discover versioned operations, required permissions and local-only restrictions."""
+        return await call('capabilities', workspace_id, options)
 
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:
