@@ -514,3 +514,8 @@ unverified; clean installation/packaging must be rerun after these new slices.
   .dataforge/verification/before-query-metadata-repair.duckdb; export/repaired copy retained.
 - Automated:223 passed/1 existing skip in27.19s, plus added explorer missing-asset integration
   regression (2 explorer tests pass);8 graph/tree/source tests pass and Ruff clean.
+
+- Final browser recovery verification: restarted8501 after session interruption; all9 asset choices
+  present. Selected mart.customer_summary, expanded upstream through staging.customers to the
+  CSV source, and verified graph/table/SAS original evidence render without exceptions. Screenshot:
+  .dataforge/verification/lineage-recovery.png. App remains running. User tests/sample_data is untouched.
