@@ -6,7 +6,11 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
 - Python 3.11+, Streamlit UI, SQLGlot, NetworkX, DuckDB. No imported code is executed.
 - `src/dataforge/`: domain, storage, ingestion, parsers, graph, exports, LLM, services.
 - `ui/`: presentation only. `app.py` is the entry point. `tests/` includes real fixtures.
-- `tests/sample_data/` contains SQL and SAS sample project ZIPs; use them to load sample data when testing the application.
+- Use the SQL and SAS project ZIPs in `tests/sample_data/` for future application testing.
+  Each has 85 tables, 128 lineage edges and seven ETL layers; SAS adds 16 temporary WORK
+  datasets. Import either ZIP, select only its script extension (`.sql` or `.sas`),
+  generate lineage and search `pub.all_kpis`: trace all seven layers to all 16 sources.
+  See `tests/sample_data/KNOWLEDGE.md` for fixture details and verification limits.
 - Preserve evidence (file, exact statement, line range, method) for every relationship.
 - Prefer unresolved diagnostics to guessed dependencies. Never merge ambiguous names.
 - Runtime data belongs under `DATAFORGE_HOME` (default `.dataforge/`, ignored).
