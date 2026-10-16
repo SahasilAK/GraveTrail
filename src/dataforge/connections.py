@@ -1,6 +1,7 @@
 """Runtime-only credentials. Scope a manager per session; never mutate os.environ."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -21,6 +22,7 @@ DEFAULT_KEY_ENV = {
 class RuntimeConnections:
     def __init__(self):
         self._credentials: dict[str, tuple[str, float | None]] = {}
+        self._resolved: dict[str, str] = {}
 
     def register(self, name: str, secret: str, ttl: float | None = None):
         if not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name):
@@ -34,16 +36,22 @@ class RuntimeConnections:
         if credential:
             secret, expires = credential
             if expires is None or expires > time.monotonic():
+                self._resolved[name] = secret
                 return secret
             self._credentials.pop(name, None)
         # Explicit legacy environment references remain read-only for compatibility.
-        return os.environ.get(name, '') if name else ''
+        value = os.environ.get(name, '') if name else ''
+        if value:
+            self._resolved[name] = value
+        return value
 
     def clear(self, name: str | None = None):
         if name is None:
             self._credentials.clear()
+            self._resolved.clear()
         else:
             self._credentials.pop(name, None)
+            self._resolved.pop(name, None)
 
     def scoped_environment(self, names: list[str]) -> dict[str, str]:
         if any(not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name) for name in names):
@@ -52,13 +60,25 @@ class RuntimeConnections:
 
     def redact(self, text: str) -> str:
         secrets = [value[0] for value in self._credentials.values()]
+        secrets.extend(self._resolved.values())
         secrets.extend(value for name, value in os.environ.items()
                        if re.search(r'(?:KEY|TOKEN|PASSWORD|SECRET)$', name, re.I) and value)
         for secret in sorted(set(secrets), key=len, reverse=True):
-            text = text.replace(secret, '[REDACTED]')
+            variants = {secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1]}
+            for variant in sorted(variants, key=len, reverse=True):
+                text = text.replace(variant, '[REDACTED]')
         text = re.sub(r'(?i)(Bearer\s+)[^\s"\'<>]+', r'\1[REDACTED]', text)
         return re.sub(r"(?i)(\b(?:password|api[_-]?key|token|secret)\s*[=:]\s*)(['\"]?)[^\s;'\"]+\2",
                       r"\1'[REDACTED]'", text)
+
+    def sanitize(self, value):
+        if isinstance(value, str):
+            return self.redact(value)
+        if isinstance(value, dict):
+            return {self.redact(k): self.sanitize(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self.sanitize(item) for item in value]
+        return value
 
 
 _active: ContextVar[RuntimeConnections | None] = ContextVar('dataforge_connections', default=None)

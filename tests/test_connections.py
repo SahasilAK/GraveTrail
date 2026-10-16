@@ -66,6 +66,7 @@ def test_masked_ui_credential_is_cleared_without_persistence(tmp_path, monkeypat
     app = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
     app.switch_page('ui/pages/settings.py').run()
     app.segmented_control[0].set_value('LLM providers').run()
+    next(t for t in app.text_input if t.label == 'Credential environment variable name').set_value('DATAFORGE_OLLAMA_API_KEY')
     next(t for t in app.text_input if t.label == 'Model or deployment identifier').set_value('test')
     next(b for b in app.button if b.label == 'Save provider profile').click().run()
     profile = next(s for s in app.selectbox if s.label == 'Provider profile')
@@ -78,3 +79,37 @@ def test_masked_ui_credential_is_cleared_without_persistence(tmp_path, monkeypat
     next(b for b in app.button if b.label == 'Clear runtime credentials').click().run()
     assert not app.exception
     assert app.session_state['runtime_connections'].resolve('DATAFORGE_OLLAMA_API_KEY') == ''
+
+
+def test_json_escaped_secret_is_redacted_before_persistence(tmp_path):
+    import json
+
+    from dataforge.ingestion import Importer
+    from dataforge.llm import assist
+    from dataforge.store import Store
+
+    store = Store(tmp_path)
+    w = store.create_workspace('test')
+    Importer(store, w).files([('q.sql', b'SELECT 1;')], {'.sql'})
+    store.set_setting(w, 'llm_history', True)
+    manager = RuntimeConnections()
+    secret = 'dummy"quoted\\secret'
+    manager.register('DATAFORGE_TEST_API_KEY', secret)
+    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': json.dumps({'explanation': secret})}}))
+    with connection_scope(manager):
+        result = assist(store, w, profile, store.files(w)[0]['file_id'], 1, 1, transport=transport)
+    assert result['result']['explanation'] != secret
+    details = json.loads(store.rows('SELECT details FROM llm_records')[0]['details'])
+    assert details['result']['explanation'] != secret
+    assert secret not in details['response'] and json.dumps(secret)[1:-1] not in details['response']
+    store.close()
+
+
+def test_explicit_environment_reference_redacts_arbitrary_variable_names(monkeypatch):
+    monkeypatch.setenv('DATAFORGE_AUTH_CREDENTIAL', 'dummy-environment-sensitive-123')
+    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_AUTH_CREDENTIAL')
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': '{"explanation":"dummy-environment-sensitive-123"}'}}))
+    with Adapter(profile, transport=transport) as adapter:
+        content, _ = adapter.complete('test', 'test')
+    assert 'dummy-environment-sensitive-123' not in content

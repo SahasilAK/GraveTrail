@@ -21,7 +21,7 @@ def render(store, workspace):
         name = st.text_input("Profile name", config.get("name", provider))
         url = st.text_input("API base URL", config.get("base_url", PROVIDERS[provider]))
         model = st.text_input("Model or deployment identifier", config.get("model", ""), help="Use model discovery below or enter an identifier available to your account.")
-        key_env = st.text_input("Credential environment variable name", config.get("key_env", DEFAULT_KEY_ENV[provider]), placeholder="e.g. DATAFORGE_OPENAI_API_KEY")
+        key_env = st.text_input("Credential environment variable name", config.get("key_env", '' if provider in {'Ollama', 'LM Studio'} else DEFAULT_KEY_ENV[provider]), placeholder=DEFAULT_KEY_ENV[provider])
         st.caption("Store only the variable name here. Set its secret value in the process environment before launching the app.")
         auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")))

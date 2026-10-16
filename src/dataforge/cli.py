@@ -21,6 +21,7 @@ from dataforge.agent.contracts import (
 )
 from dataforge.agent.jobs import TERMINAL, Jobs, status_result
 from dataforge.agent.service import AgentService
+from dataforge.launcher import application_root, default_home
 from dataforge.store import Store
 
 app = typer.Typer(no_args_is_help=True, help="Local evidence-backed SQL/SAS analysis and agent access.")
@@ -33,9 +34,12 @@ impact_app = typer.Typer(help="Stored downstream change impact.")
 jobs_app = typer.Typer(help="Persisted job status and results.")
 exports_app = typer.Typer(help="Bounded lineage exports.")
 batch_app = typer.Typer(help="Aggregate-budget lineage queries.")
+cleanup_app = typer.Typer(help="Preview and explicitly confirm workspace cleanup.")
+maintenance_app = typer.Typer(help="Local database inspection, backup, checkpoint and safe restore.")
 for name, group in [("workspace", workspace_app), ("lineage", lineage_app), ("columns", columns_app),
                     ("source", source_app), ("assets", assets_app), ("impact", impact_app),
-                    ("jobs", jobs_app), ("export", exports_app), ("batch", batch_app)]:
+                    ("jobs", jobs_app), ("export", exports_app), ("batch", batch_app),
+                    ('cleanup', cleanup_app), ('maintenance', maintenance_app)]:
     app.add_typer(group, name=name)
 
 Workspace = Annotated[str, typer.Option("--workspace", "-w", help="Exact workspace ID.")]
@@ -57,7 +61,7 @@ def configure(ctx: typer.Context,
               collapse_temporary: bool = typer.Option(None, "--collapse-temporary/--keep-temporary"),
               output: Path = typer.Option(None, help="Write JSON to a new local file, without overwriting.")):
     roots = allowed_root or [Path(p) for p in os.environ.get("DATAFORGE_ALLOWED_ROOTS", "").split(os.pathsep) if p]
-    ctx.obj = {"home": (home or Path(os.environ.get("DATAFORGE_HOME", ".dataforge"))).resolve(),
+    ctx.obj = {"home": (home or default_home(source=application_root().name != '_app' and not getattr(sys, 'frozen', False))).resolve(),
                "json": json_output, "quiet": quiet, "output": output,
                "policy": AccessPolicy(allow_write, tuple(allowed_workspace) if allowed_workspace else None,
                                       tuple(str(p.resolve()) for p in roots)),
@@ -140,8 +144,8 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 store.close()
                 service = store = None
                 flags = (subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS) if os.name == "nt" else 0
-                subprocess.Popen([sys.executable, "-m", "dataforge.agent.worker", str(config["home"]),
-                                  record["job_id"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                worker_command = [sys.executable, '--worker'] if getattr(sys, 'frozen', False) else [sys.executable, '-m', 'dataforge.agent.worker']
+                subprocess.Popen([*worker_command, str(config["home"]), record["job_id"]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                  stderr=subprocess.DEVNULL, creationflags=flags, start_new_session=os.name != "nt")
                 result = {"job_id": record["job_id"], "status": "queued"}
             else:
@@ -290,6 +294,89 @@ def mcp(ctx: typer.Context, transport: str = "stdio", host: str = "127.0.0.1", p
         fail(ctx, exc)
     except duckdb.Error:
         fail(ctx, AgentError("storage_busy", "Storage has another owner; stop it or choose a separate --home"))
+
+
+@cleanup_app.command('inspect')
+def cleanup_inspect(ctx: typer.Context, workspace: Workspace):
+    invoke(ctx, 'cleanup_inspect', workspace)
+
+
+def _cleanup_command(category):
+    def command(ctx: typer.Context, workspace: Workspace, dry_run: bool = True,
+                preview: Path = None, confirm: str = '', backup: bool = False,
+                file_id: list[str] = typer.Option(None), run_id: str = None):
+        """Defaults to dry-run. Apply with --no-dry-run --preview FILE --confirm WORKSPACE_NAME."""
+        if dry_run:
+            invoke(ctx, 'cleanup_preview', workspace, category=category, file_ids=file_id, run_id=run_id)
+        else:
+            import json
+            try:
+                if preview is None or preview.stat().st_size > 8 * 1024 * 1024:
+                    raise ValueError('A bounded saved preview is required')
+                plan = json.loads(preview.read_text(encoding='utf-8'))
+                if plan.get('category') != category:
+                    raise ValueError('Preview category does not match')
+            except (OSError, ValueError):
+                fail(ctx, AgentError('invalid_argument', 'Provide a saved cleanup preview for this category'))
+                return
+            invoke(ctx, 'cleanup_apply', workspace, preview=plan, confirmation=confirm, backup_first=backup)
+    return command
+
+
+for _category in ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace'):
+    cleanup_app.command(_category)(_cleanup_command(_category))
+workspace_app.command('reset')(_cleanup_command('reset'))
+
+
+@maintenance_app.command('inspect')
+def maintenance_inspect(ctx: typer.Context):
+    _maintenance(ctx, 'inspect')
+
+
+@maintenance_app.command('backup')
+def maintenance_backup(ctx: typer.Context):
+    _maintenance(ctx, 'backup')
+
+
+@maintenance_app.command('checkpoint')
+def maintenance_checkpoint(ctx: typer.Context):
+    _maintenance(ctx, 'checkpoint')
+
+
+def _maintenance(ctx, operation):
+    from dataforge.database_maintenance import backup, checkpoint, inspect_database
+    if ctx.obj['policy'].workspaces is not None or (operation != 'inspect' and not ctx.obj['policy'].allow_write):
+        fail(ctx, AgentError('forbidden', 'Whole-home maintenance requires unrestricted local access and --allow-write for writes'))
+        return
+    store = None
+    try:
+        store = Store(ctx.obj['home'])
+        result = {'backup': str(backup(store))} if operation == 'backup' else checkpoint(store) if operation == 'checkpoint' else inspect_database(store)
+        emit(ctx, result)
+    except (OSError, ValueError, duckdb.Error):
+        fail(ctx, AgentError('maintenance_failed', 'Maintenance failed; check active jobs, database ownership and filesystem access'))
+    finally:
+        if store:
+            store.close()
+
+
+@maintenance_app.command('restore')
+def maintenance_restore(ctx: typer.Context, archive: Path, destination: Path, confirm: str = ''):
+    from dataforge.database_maintenance import restore_backup
+    if not ctx.obj['policy'].allow_write or ctx.obj['policy'].workspaces is not None or confirm != 'RESTORE DATAFORGE':
+        fail(ctx, AgentError('forbidden', 'Restore requires unrestricted --allow-write and --confirm "RESTORE DATAFORGE"'))
+        return
+    try:
+        emit(ctx, {'restored_home': str(restore_backup(archive, destination))})
+    except (OSError, ValueError, duckdb.Error):
+        fail(ctx, AgentError('maintenance_failed', 'Backup invalid or destination is not a new directory'))
+
+
+@app.command('ui', context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
+def ui(ctx: typer.Context):
+    """Launch the packaged Streamlit UI; extra arguments go to the launcher."""
+    from dataforge.launcher import main
+    main(['--home', str(ctx.obj['home']), *ctx.args])
 
 
 if __name__ == "__main__":

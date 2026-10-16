@@ -26,7 +26,7 @@ from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
 
-WRITES = {"create_workspace", "ingest", "analyze", "export"}
+WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply"}
 
 
 class AgentService:
@@ -64,7 +64,8 @@ class AgentService:
         """Transport-neutral request boundary. No queries parse files or contact an LLM."""
         if action not in {"workspaces", "create_workspace", "summary", "assets", "files", "issues",
                           "lineage", "impact", "batch", "columns", "source", "search_code",
-                          "ingest", "analyze", "job", "export", "result"}:
+                          "ingest", "analyze", "job", "export", "result",
+                          "cleanup_inspect", "cleanup_preview", "cleanup_apply"}:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -102,6 +103,28 @@ class AgentService:
         files = self.store.rows("SELECT file_id,content_hash,parsing_status FROM source_files WHERE workspace_id=? ORDER BY file_id", [w])
         runs = self.store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [w])
         return [files, runs]
+
+    def _cleanup_inspect(self, w, opts):
+        from dataforge.cleanup import cleanup_plan
+        plans = {category: cleanup_plan(self.store, w, category) for category in
+                 ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace')}
+        return {'workspace_id': w, 'categories': {key: {'records': p['records'],
+                'logical_bytes_estimate': p['logical_bytes_estimate'], 'file_bytes': p['file_bytes']}
+                for key, p in plans.items()}, 'notes': next(iter(plans.values()))['notes']}
+
+    def _cleanup_preview(self, w, opts, category='lineage', file_ids=None, run_id=None):
+        from dataforge.cleanup import cleanup_plan
+        if category in {'application', 'cache', 'orphans'}:
+            raise AgentError('forbidden', 'Shared cleanup requires the local human maintenance interface')
+        return cleanup_plan(self.store, w, category, file_ids, run_id)
+
+    def _cleanup_apply(self, w, opts, preview, confirmation='', backup_first=False):
+        from dataforge.cleanup import apply_cleanup
+        if backup_first and self.policy.workspaces is not None:
+            raise AgentError('forbidden', 'Whole-home backup requires unrestricted local access')
+        if preview.get('workspace_id') != w or preview.get('category') in {'application', 'cache', 'orphans'}:
+            raise AgentError('forbidden', 'Cleanup preview is outside the permitted workspace')
+        return apply_cleanup(self.store, preview, confirmation, backup_first)
 
     def _current(self, w):
         files = self.store.files(w)

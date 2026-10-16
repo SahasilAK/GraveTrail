@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-import os
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -14,6 +13,7 @@ from starlette.responses import JSONResponse
 
 from dataforge.agent.contracts import AgentError, QueryOptions, compact
 from dataforge.agent.service import AgentService
+from dataforge.connections import current_connections
 
 
 def create_server(service: AgentService, host="127.0.0.1", port=8765):
@@ -43,6 +43,17 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
 
     read = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
     write = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
+
+    @server.tool(annotations=read)
+    async def inspect_cleanup(workspace_id: str) -> CallToolResult:
+        """Inspect real workspace cleanup counts and storage estimates. Does not delete anything."""
+        return await call('cleanup_inspect', workspace_id)
+
+    @server.tool(annotations=read)
+    async def preview_cleanup(workspace_id: str, category: Literal['sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace'],
+                              file_ids: list[str] | None = None, run_id: str | None = None) -> CallToolResult:
+        """Dry-run only. A local human must apply destructive cleanup through UI or CLI confirmation."""
+        return await call('cleanup_preview', workspace_id, category=category, file_ids=file_ids, run_id=run_id)
 
     @server.tool(annotations=read)
     async def list_workspaces(query: str = "", options: QueryOptions | None = None) -> CallToolResult:
@@ -183,7 +194,7 @@ class BearerGuard:
 
 
 def http_app(server, policy, host="127.0.0.1", port=8765, public_url=None):
-    token = os.environ.get("DATAFORGE_MCP_TOKEN", "")
+    token = current_connections().resolve('DATAFORGE_MCP_TOKEN')
     if not 32 <= len(token) <= 4096 or policy.workspaces is None or not policy.workspaces:
         raise AgentError("forbidden", "HTTP requires DATAFORGE_MCP_TOKEN (32+ characters) and explicit --allowed-workspace IDs")
     if host not in {"127.0.0.1", "localhost", "::1"}:

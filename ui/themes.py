@@ -9,7 +9,7 @@ from pathlib import Path
 
 import tomlkit
 
-CONFIG_PATH = Path(__file__).resolve().parents[1] / ".streamlit" / "config.toml"
+CONFIG_PATH = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(Path(__file__).resolve().parents[1] / '.streamlit' / 'config.toml')))
 _LOCK = threading.Lock()
 
 

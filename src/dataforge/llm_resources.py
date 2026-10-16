@@ -9,6 +9,27 @@ from dataforge.parsers.sas import strip_comments
 
 _LOCK = threading.Lock()
 _ACTIVE = {}
+_MAINTENANCE = set()
+
+
+@contextmanager
+def block_requests_for_maintenance(home):
+    identity = str(Path(home).resolve())
+    with _LOCK:
+        if any(key[0] == identity and count for key, count in _ACTIVE.items()):
+            raise ValueError('An active AI request blocks maintenance')
+        _MAINTENANCE.add(identity)
+    try:
+        yield
+    finally:
+        with _LOCK:
+            _MAINTENANCE.discard(identity)
+
+
+def has_active_requests(home, workspace=''):
+    with _LOCK:
+        return any(count and key[0] == str(Path(home).resolve()) and (not workspace or key[1] == workspace)
+                   for key, count in _ACTIVE.items())
 
 
 @contextmanager
@@ -16,6 +37,8 @@ def request_slot(home, workspace, limit):
     """Fail fast rather than accumulate queued source payloads; always release capacity."""
     key = (str(Path(home).resolve()), workspace)
     with _LOCK:
+        if key[0] in _MAINTENANCE:
+            raise ValueError('Storage maintenance is active; retry when it finishes')
         if _ACTIVE.get(key, 0) >= limit or sum(_ACTIVE.values()) >= 8:
             raise ValueError("LLM requests are busy; retry after an active request finishes")
         _ACTIVE[key] = _ACTIVE.get(key, 0) + 1
