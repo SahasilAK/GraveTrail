@@ -418,7 +418,7 @@ def _merge_claims(store, workspace, record_id):
     return len(response.claims)
 
 
-def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None, cancelled=None):
+def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None, cancelled=None, authorize=None):
     profiles = {r["profile_id"]: Profile.model_validate_json(r["config"])
                 for r in store.rows("SELECT * FROM llm_profiles WHERE workspace_id=?", [workspace])}
     assignments = store.setting(workspace, "task_models", {})
@@ -435,6 +435,8 @@ def assist_task(store, workspace, file_id, first, last, task, transport=None, ex
         # Fallback never silently changes the recipient host or authentication audience.
         if urlparse(profile.base_url).netloc != urlparse(first_profile.base_url).netloc:
             continue
+        if authorize:
+            profile = authorize(pid, profile)
         result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
                         expected_hash=expected_hash, cancelled=cancelled)
         if not result["retryable"]:

@@ -11,12 +11,59 @@ Workspace = Annotated[str, typer.Option('--workspace', '-w')]
 
 
 def register(app, invoke, fail):
+    ai = typer.Typer(help='Explicit hash/job-pinned grounded assistance; preview operations are offline.')
+    review = typer.Typer(help='Current diagnostic review candidates and bounded source previews.')
+    results = typer.Typer(help='Durable results; detailed reads need source permission.')
+    app.add_typer(ai, name='ai')
+    ai.add_typer(review, name='review')
+    ai.add_typer(results, name='results')
     providers = typer.Typer(help='Profiles, approved runtime references and explicit outbound tests.')
     routing = typer.Typer(help='Default, five task routes and ordered fallbacks.')
     credentials = typer.Typer(help='Status only; use --credential-prompt on a single operation for hidden input.')
     app.add_typer(providers, name='providers')
     providers.add_typer(routing, name='routing')
     providers.add_typer(credentials, name='credentials')
+
+    @ai.command('chunks')
+    def chunks(ctx: typer.Context, file_id: str, workspace: Workspace, first: int = typer.Option(...), last: int = typer.Option(...), task: str = typer.Option(...)):
+        invoke(ctx, 'ai_chunks', workspace, file_id=file_id, first=first, last=last, task=task)
+
+    @ai.command('request')
+    def request(ctx: typer.Context, file_id: str, workspace: Workspace, first: int = typer.Option(...), last: int = typer.Option(...), task: str = typer.Option(...),
+                expected_hash: str = typer.Option(...), expected_job: str = 'workspace', credential_prompt: bool = False):
+        invoke(ctx, 'ai_request', workspace, file_id=file_id, first=first, last=last, task=task,
+               expected_hash=expected_hash, expected_job=expected_job, credential_prompt=credential_prompt)
+
+    @review.command('list')
+    def review_list(ctx: typer.Context, workspace: Workspace):
+        invoke(ctx, 'review_list', workspace)
+
+    @review.command('preview')
+    def review_preview(ctx: typer.Context, diagnostic_id: str, workspace: Workspace,
+                       first: int = typer.Option(None), last: int = typer.Option(None)):
+        invoke(ctx, 'review_preview', workspace, diagnostic_id=diagnostic_id, first=first, last=last)
+
+    @review.command('request')
+    def review_request(ctx: typer.Context, diagnostic_id: str, workspace: Workspace, expected_hash: str = typer.Option(...),
+                       first: int = typer.Option(...), last: int = typer.Option(...), expected_job: str = 'workspace'):
+        invoke(ctx, 'review_request', workspace, diagnostic_id=diagnostic_id, expected_hash=expected_hash,
+               first=first, last=last, expected_job=expected_job)
+
+    @results.command('list')
+    def results_list(ctx: typer.Context, workspace: Workspace):
+        invoke(ctx, 'ai_results', workspace)
+
+    @results.command('get')
+    def result_get(ctx: typer.Context, record_id: str, workspace: Workspace):
+        invoke(ctx, 'ai_result', workspace, record_id=record_id)
+
+    @ai.command('activity')
+    def activity(ctx: typer.Context, workspace: Workspace):
+        invoke(ctx, 'ai_activity', workspace)
+
+    @ai.command('merge')
+    def merge(ctx: typer.Context, record_id: str, workspace: Workspace, refresh: bool = True):
+        invoke(ctx, 'ai_merge', workspace, record_id=record_id, refresh=refresh)
 
     @providers.command('list')
     def list_profiles(ctx: typer.Context, workspace: Workspace):

@@ -146,6 +146,8 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 from dataforge.connections import RuntimeConnections
                 from dataforge.provider_service import authorize_provider, get_profile
                 profile_id = arguments.get('profile_id', '')
+                if action == 'ai_request':
+                    profile_id = store.setting(workspace_id, 'task_models', {}).get(arguments['task']) or store.setting(workspace_id, 'default_profile', '')
                 profile = get_profile(store, workspace_id, profile_id)
                 service._workspace(workspace_id, write=True)
                 authorize_provider(store, service.policy, workspace_id, profile)

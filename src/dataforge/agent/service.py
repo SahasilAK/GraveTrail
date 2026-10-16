@@ -20,6 +20,9 @@ from dataforge.agent.contracts import (
 )
 from dataforge.agent.jobs import Jobs, status_result
 from dataforge.agent.paging import page
+from dataforge.ai_service import READS as AI_READS
+from dataforge.ai_service import WRITES as AI_WRITES
+from dataforge.ai_service import AIOperations
 from dataforge.asset_identity import asset_label
 from dataforge.configuration import ParsingSettings
 from dataforge.graph import LineageGraph
@@ -30,10 +33,10 @@ from dataforge.provider_service import WRITES as PROVIDER_WRITES
 from dataforge.provider_service import ProviderOperations
 
 WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
-          'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES
+          'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES | AI_WRITES
 
 
-class AgentService(ProviderOperations):
+class AgentService(ProviderOperations, AIOperations):
     def __init__(self, store, policy: AccessPolicy | None = None):
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
@@ -76,7 +79,7 @@ class AgentService(ProviderOperations):
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES:
+                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES | AI_READS | AI_WRITES:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -96,6 +99,7 @@ class AgentService(ProviderOperations):
                 if opts.detail_level == "detailed" and not settings.allow_source:
                     raise AgentError("forbidden", "Detailed source retrieval is disabled")
                 result = getattr(self, "_" + action)(workspace_id, opts, **arguments)
+                result = json.loads(compact(result))
                 if len(compact(result)) > opts.max_chars:
                     raise AgentError("budget_too_small", "Response exceeds max_chars; narrow the request or increase the budget")
                 if write or settings.audit_reads:

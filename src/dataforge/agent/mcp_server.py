@@ -239,6 +239,51 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         """test provider connection; requires independent launch grants. Never supply raw credentials."""
         return await call('provider_test', workspace_id, options, profile_id=profile_id)
 
+    @server.tool(annotations=read)
+    async def preview_ai_chunks(workspace_id: str, file_id: str, first: int, last: int, task: str, options: QueryOptions | None = None) -> CallToolResult:
+        """preview ai chunks; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_chunks', workspace_id, options, file_id=file_id, first=first, last=last, task=task)
+
+    @server.tool(annotations=read)
+    async def list_review_candidates(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list review candidates; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('review_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def preview_diagnostic_review(workspace_id: str, diagnostic_id: str, first: int | None = None, last: int | None = None, options: QueryOptions | None = None) -> CallToolResult:
+        """preview diagnostic review; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('review_preview', workspace_id, options, diagnostic_id=diagnostic_id, first=first, last=last)
+
+    @server.tool(annotations=network)
+    async def request_diagnostic_review(workspace_id: str, diagnostic_id: str, expected_hash: str, first: int, last: int, expected_job: str = "workspace", options: QueryOptions | None = None) -> CallToolResult:
+        """request diagnostic review; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('review_request', workspace_id, options, diagnostic_id=diagnostic_id, expected_hash=expected_hash, first=first, last=last, expected_job=expected_job)
+
+    @server.tool(annotations=network)
+    async def request_ai_assistance(workspace_id: str, file_id: str, first: int, last: int, task: str, expected_hash: str, expected_job: str = "workspace", options: QueryOptions | None = None) -> CallToolResult:
+        """request ai assistance; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_request', workspace_id, options, file_id=file_id, first=first, last=last, task=task, expected_hash=expected_hash, expected_job=expected_job)
+
+    @server.tool(annotations=read)
+    async def list_ai_results(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list ai results; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_results', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_ai_result(workspace_id: str, record_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get ai result; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_result', workspace_id, options, record_id=record_id)
+
+    @server.tool(annotations=read)
+    async def get_ai_activity(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get ai activity; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_activity', workspace_id, options)
+
+    @server.tool(annotations=write)
+    async def merge_ai_claims(workspace_id: str, record_id: str, refresh: bool = True, options: QueryOptions | None = None) -> CallToolResult:
+        """merge ai claims; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_merge', workspace_id, options, record_id=record_id, refresh=refresh)
+
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:
         """First compact permitted workspace page; use tools for continuation."""

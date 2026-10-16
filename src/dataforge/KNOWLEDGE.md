@@ -45,3 +45,5 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 - `settings_service.py` — section schemas, content revisions, atomic validated patches, privilege tightening and bounded JSON input; UI uses local-human authority.
 
 - `provider_service.py` — validated profile/routing CRUD, exact origin/reference authorization, per-profile runtime bindings and bounded model/test adapter operations.
+
+- `ai_service.py` — offline chunks/diagnostic review, hash/job-pinned synchronous assistance with per-fallback authorization, durable metadata/detail/activity and idempotent inferred merge with refresh-failure reporting.
