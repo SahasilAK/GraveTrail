@@ -9,7 +9,8 @@ MAINTENANCE_DEPLOYMENT_PLAN.md. Delivered previewed dependency-aware cleanup, se
 runtime credentials, checksummed backup/new-home restore, packaged Python UI/CLI/MCP,
 non-root persistent Docker deployment, host-native executable/release tooling and the
 17-part docs/SETUP_AND_DEPLOYMENT.md guide. All destructive verification used isolated homes.
-Remaining gates: native Linux/macOS executables, hosted release CI and OmniRoute auto routing.
+Remaining gates: native Linux/macOS executables, hosted release CI and reliable OmniRoute
+SAS assistance. auto/best-reasoning completes connection and SQL checks; SAS remains unresolved.
 
 SAS PROC SQL FORMAT= parsing is fixed with exact source evidence and parser cache8.
 The supplied SAS project now matches all128 logical edges (144 physical evidence edges),
@@ -64,12 +65,12 @@ accuracy or production deployment certification is claimed.
 
 ## External gates and intentional boundaries
 
-- Latest OmniRoute auto attempt reaches discovery (964 models), but auto completion fails
-  with ProviderError in11.59s. The named credential is present. Earlier discovery advertised964 IDs
-  including auto/... aliases but no literal auto. Do not substitute
-  fixed models. Historical fixed-route success predates the user's auto-only instruction.
-  Re-run scripts/verify_llm.py after gateway routing changes; use OMNIROUTE_API_KEY, never
-  persist/print its value. Task-specific new advisory schemas remain synthetic-HTTP verified.
+- User now requests OmniRoute auto/best-reasoning, superseding literal auto. Discovery966
+  advertises the requested route but not literal auto. Connection JSON and grounded SQL
+  assistance/merge pass. SAS response fails schema validation; one focused SAS check then
+  returns ProviderError. Further live attempts stopped per user request. No full live
+  merge-refresh-restart acceptance claim. Use OMNIROUTE_API_KEY without persisting its value;
+  no fixed-model fallback or weakened quarantine. New advisory schemas remain mock-verified.
 - Docker daemon29.2.1 is now available. The actual Linux image build, non-root runtime,
   rendered UI, persisted volume and stdio MCP checks pass. No registry push or hosted CI run.
 - Self-contained HTML export/JS/downloads are verified. Direct file-browser interaction remains
@@ -85,7 +86,7 @@ accuracy or production deployment certification is claimed.
 
 ## Resume instructions
 
-Read AGENTS.md, REQUIREMENT_MATRIX.md and the latest entry below. Parser cache version7;
+Read AGENTS.md, REQUIREMENT_MATRIX.md and the latest entry below. Parser cache version8;
 retain migration4 recovery journals and original blobs. DATAFORGE_HOME defaults to .dataforge;
 DATAFORGE_ALLOWED_ROOTS controls host imports; DATAFORGE_STORAGE_LOCATIONS names additional
 absolute session storage choices (maximum8 total). No data migration occurs on selection.
@@ -658,3 +659,22 @@ unverified; clean installation/packaging must be rerun after these new slices.
   Latest measurements:.dataforge/verification/sas-format-final.json; no LLM calls required.
 - Remaining deployment gates above are unchanged. Existing wheel/executable/Docker artifacts
   were not rebuilt for this source parser fix; rebuild them to include parser8.
+
+## OmniRoute best-reasoning diagnosis — 2026-10-16
+
+- User explicitly switched the authorized test model from auto to auto/best-reasoning and
+  requested stopping if repeated issues arise. Updated live-check default, guidance and setup
+  documentation; endpoint remains http://localhost:20128/v1 with named OMNIROUTE_API_KEY.
+- Discovery returns966 models and advertises auto/best-reasoning, not literal auto. The new
+  route successfully returns connection JSON and a grounded SQL claim; inferred merge passes.
+  This demonstrates working completion for those requests, not the cause of old auto failures.
+- Existing synthetic live checker stops after SAS schema ValidationError (usage present),
+  total94.03s. One additional isolated synthetic SAS call returns ProviderError; no usage or
+  response is available for schema diagnosis. No additional live requests were attempted.
+- Full live SQL/SAS merge-refresh-restart gate remains open. Preserved validation/quarantine,
+  did not change prompts, substitute fixed routes, or modify existing user profiles/projects.
+  Safe report:plans/LLM_LIVE_RESULTS.json; no source/headers/credential values/raw responses.
+- Local verification:44 focused LLM/credential/advisory tests pass in6.16s, Ruff and script
+  help pass. Previous full suite288 passed/1 privilege skip; no application logic/UI changed.
+- Stopped network diagnosis per user request after repeated SAS failures. Further live tests
+  need renewed user direction; no retry loops, scheduled checks or gateway changes were made.

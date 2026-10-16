@@ -31,7 +31,7 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
   archives only into new destinations. Keep runtime reset separate from schema removal.
 - Installation and build commands are in `docs/SETUP_AND_DEPLOYMENT.md`. Validate installed
   wheel/frozen UI assets outside the checkout; native binaries require target-platform tests.
-- OmniRoute testing must use model `auto`, endpoint `http://localhost:20128/v1`, and the
+- OmniRoute testing must use model `auto/best-reasoning`, endpoint `http://localhost:20128/v1`, and the
   existing `OMNIROUTE_API_KEY` environment variable. Do not substitute fixed models/routes.
 - Use parameterized SQL, safe relative paths, allowed import roots, bounded resources.
 - Verify each vertical slice with pytest and the running UI. Update status and knowledge.

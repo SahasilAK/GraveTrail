@@ -85,7 +85,7 @@ Run an opt-in check with an available model identifier:
 
 ```powershell
 $env:OMNIROUTE_API_KEY = [Environment]::GetEnvironmentVariable('OMNIROUTE_API_KEY', 'User')
-uv run python scripts/verify_llm.py --model auto --output plans/LLM_LIVE_RESULTS.json
+uv run python scripts/verify_llm.py --model auto/best-reasoning --output plans/LLM_LIVE_RESULTS.json
 ```
 
 This uses synthetic SQL/SAS in an isolated temporary database, checks discovery, connection,
@@ -121,10 +121,17 @@ units require a larger budget or different selection. Source/profile budgets sti
 Cancellation callbacks stop retries and response processing cooperatively; blocking network
 waits finish within their configured timeout. There is no preemptive HTTP cancellation claim.
 
-Fixed-route live verification on2026-10-15 passed with cx/gpt-5.6-luna-low, including grounded
-SQL/SAS inferred merge and restart. See plans/LLM_LIVE_RESULTS.json; this proves that configured
-route at test time, not all discovered models or advisory-task output compliance.
+Historical fixed-route verification on2026-10-15 passed with cx/gpt-5.6-luna-low, including
+grounded SQL/SAS inferred merge and restart; this does not establish current auto-route acceptance.
 
-Current user testing policy: always use OmniRoute model `auto`; the live-check script defaults
-accordingly. Fixed-model results above predate that instruction. Preserve quarantine if auto
-returns invalid output; do not substitute another route or weaken validation to force success.
+Current user testing policy: use OmniRoute model `auto/best-reasoning`; the live-check script
+defaults accordingly. This supersedes the earlier literal `auto` instruction. Preserve
+quarantine for invalid output; do not substitute another route or weaken validation to force
+success. Model discovery alone does not prove completion or task-schema compliance.
+
+Latest check on2026-10-16: discovery966 advertises `auto/best-reasoning` and omits literal
+`auto`. The requested route passes connection JSON and grounded SQL assistance/merge.
+SAS JSON fails schema validation; one focused SAS follow-up returns `ProviderError`.
+Further live attempts stopped at the user's request. No raw response, credential or imported
+project source is included in the report. See `plans/LLM_LIVE_RESULTS.json`. Full live
+merge-refresh-restart acceptance remains open; no prompt/schema change was made to force a pass.

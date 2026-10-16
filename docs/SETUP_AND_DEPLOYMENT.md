@@ -311,7 +311,7 @@ transmission has a separate permission. Local Ollama/LM Studio endpoints may nee
 Network-mounted or container-host model endpoints may be classified as remote.
 
 For this repository's OmniRoute verification, use endpoint `http://localhost:20128/v1`,
-model `auto` and the existing `OMNIROUTE_API_KEY` reference. Do not substitute a fixed route.
+model `auto/best-reasoning` and the existing `OMNIROUTE_API_KEY` reference. Do not substitute a fixed route.
 Gateway availability remains an external verification condition. See
 [LLM integration](LLM_INTEGRATION.md) for task routing and grounding behavior and
 [secure configuration](SECURE_CONFIGURATION.md) for credential lifecycle details.

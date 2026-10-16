@@ -76,13 +76,12 @@ not passed. Optional enhancements are explicitly separate.
 Latest measured gate results are recorded in IMPLEMENTATION_STATUS.md. Clean artifacts live
 under ignored `.dataforge/verification/`; do not commit runtime databases, sources or secrets.
 
-- Literal OmniRoute model **auto**: latest retry failed during discovery in4.15s, before
-  connection/SQL/SAS assistance. No local TCP listener was present on20128; named credential
-  exists. Earlier discovery returned964 IDs including auto/... routes but no literal auto. That absence does
-  not itself prove a route unsupported. No fixed model substitution is allowed. Historical
-  fixed-route success predates the user's auto-only instruction and is not current acceptance.
-  Keep strict grounding/quarantine. Re-run `scripts/verify_llm.py` after gateway availability/routing
-  changes; use named OMNIROUTE_API_KEY and synthetic sources. New advisory tasks are mock-backed.
+- OmniRoute **auto/best-reasoning** is the current user-requested route. Discovery966 advertises
+  it; connection JSON and grounded SQL assistance/merge pass. SAS returns schema-invalid JSON,
+  followed by ProviderError in one focused check. Stopped additional live calls per user request.
+  Full live SQL/SAS merge-refresh-restart remains unverified. The earlier literal-auto failures
+  are historical; alias discovery alone does not explain their root cause. Keep strict
+  grounding/quarantine, named OMNIROUTE_API_KEY and synthetic sources; no fixed-model fallback.
 - Other live provider protocols: credentials/endpoints not exercised here; synthetic HTTP
   tests establish request/validation behavior, not live account compatibility.
 - Docker: CLI installed; Docker Desktop Linux engine pipe unavailable on final check. No

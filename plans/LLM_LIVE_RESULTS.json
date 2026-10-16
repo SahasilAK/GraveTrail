@@ -1,11 +1,55 @@
 {
   "provider": "OmniRoute",
   "endpoint": "http://localhost:20128/v1",
-  "model": "auto",
+  "model": "auto/best-reasoning",
   "credential_variable": "OMNIROUTE_API_KEY",
   "synthetic_sources_only": true,
-  "checks": [],
+  "checks": [
+    {
+      "name": "connection",
+      "status": "passed",
+      "usage": {
+        "prompt_tokens": 96,
+        "completion_tokens": 5,
+        "total_tokens": 101
+      }
+    },
+    {
+      "name": ".sql",
+      "status": "passed",
+      "merged_claims": 1,
+      "usage": {
+        "prompt_tokens": 840,
+        "completion_tokens": 114,
+        "total_tokens": 954,
+        "prompt_tokens_details": null
+      }
+    },
+    {
+      "name": ".sas",
+      "status": "failed",
+      "outcome": "quarantined",
+      "reason": "ValidationError",
+      "usage": {
+        "prompt_tokens": 1200,
+        "completion_tokens": 15,
+        "total_tokens": 1215,
+        "prompt_tokens_details": null
+      }
+    }
+  ],
+  "discovered_models": 966,
   "status": "failed",
-  "error_type": "ProviderError",
-  "duration_seconds": 4.15
+  "error_type": "ValueError",
+  "duration_seconds": 94.03,
+  "follow_up_sas_check": {
+    "model": "auto/best-reasoning",
+    "synthetic_sources_only": true,
+    "outcome": "quarantined",
+    "reason": "ProviderError",
+    "usage": {},
+    "response_is_json_object": false
+  },
+  "live_requests_stopped": true,
+  "stop_reason": "Repeated SAS failures; user requested bounded troubleshooting"
 }

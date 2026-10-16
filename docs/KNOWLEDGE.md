@@ -19,7 +19,7 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `EXTENDING_THE_APP.md` — Extending DataForge. Maintained documentation; consult implementation status for verification boundaries.
 - `IMPLEMENTATION_GUIDE.md` — Implementation guide. Maintained documentation; consult implementation status for verification boundaries.
 - `LINEAGE_ENGINE.md` — Lineage engine. Maintained documentation; consult implementation status for verification boundaries.
-- `LLM_INTEGRATION.md` — LLM integration. Maintained documentation; consult implementation status for verification boundaries.
+- `LLM_INTEGRATION.md` — Provider protocols, privacy, grounding, current auto/best-reasoning test route and partial live acceptance (connection/SQL pass; SAS unresolved).
 - `PERFORMANCE.md` — Performance. Maintained documentation; consult implementation status for verification boundaries.
 - `PROMPT_ENGINEERING.md` — Prompt engineering. Maintained documentation; consult implementation status for verification boundaries.
 - `REVIEW.md` — Implementation review, 2026-10-15. Maintained documentation; consult implementation status for verification boundaries.
