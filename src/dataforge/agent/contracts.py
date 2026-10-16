@@ -73,7 +73,7 @@ class QueryOptions(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
     enabled: bool = True
     allow_write: bool = True
     allow_source: bool = True

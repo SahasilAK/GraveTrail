@@ -26,7 +26,8 @@ from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
 
-WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply"}
+WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
+          'settings_update', 'workspace_update', 'config_import'}
 
 
 class AgentService:
@@ -65,14 +66,16 @@ class AgentService:
         if action not in {"workspaces", "create_workspace", "summary", "assets", "files", "issues",
                           "lineage", "impact", "batch", "columns", "source", "search_code",
                           "ingest", "analyze", "job", "export", "result",
-                          "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities"}:
+                          "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
+                          'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
+                          'config_export', 'config_import'}:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
             if action == "job":
                 return self.job_status(workspace_id, arguments["job_id"], options)
             with self.store.lock:
-                if action in {"workspaces", "create_workspace"} or (action == 'capabilities' and not workspace_id):
+                if action in {"workspaces", "create_workspace", 'config_import'} or (action == 'capabilities' and not workspace_id):
                     settings = AgentSettings()
                     if write and (not self.policy.allow_write or self.policy.workspaces is not None):
                         raise AgentError("forbidden", "Workspace creation requires unrestricted explicit write access")
@@ -102,6 +105,36 @@ class AgentService:
     def _capabilities(self, w, opts):
         from dataforge.agent.capabilities import capability_catalog
         return self._page(w, opts, 'capabilities', capability_catalog(self, w), schema_version=1)
+
+    def _settings_schema(self, w, opts, section=None):
+        from dataforge.settings_service import settings_schema
+        return settings_schema(section)
+
+    def _settings_get(self, w, opts, section):
+        from dataforge.settings_service import read_settings
+        return read_settings(self.store, w, section)
+
+    def _settings_update(self, w, opts, section, values, expected_revision):
+        from dataforge.settings_service import update_settings
+        return update_settings(self.store, self.policy, w, section, values, expected_revision)
+
+    def _workspace_update(self, w, opts, name, description, expected_revision):
+        from dataforge.settings_service import check_revision, revision
+        self.policy.require('config')
+        check_revision(self.store, w, expected_revision)
+        self.store.update_workspace(w, name, description)
+        return {'workspace_id': w, 'settings_revision': revision(self.store, w)}
+
+    def _config_export(self, w, opts):
+        from dataforge.configuration import export_workspace_configuration
+        return {'configuration': json.loads(export_workspace_configuration(self.store, w))}
+
+    def _config_import(self, w, opts, configuration):
+        from dataforge.configuration import import_workspace_configuration
+        self.policy.require('config')
+        if self.policy.workspaces is not None:
+            raise AgentError('forbidden', 'Configuration import creates a new workspace; unrestricted launch required')
+        return {'workspace_id': import_workspace_configuration(self.store, compact(configuration))}
 
     def _revision(self, w):
         files = self.store.rows("SELECT file_id,content_hash,parsing_status FROM source_files WHERE workspace_id=? ORDER BY file_id", [w])

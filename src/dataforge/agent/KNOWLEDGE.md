@@ -26,3 +26,5 @@ workspace policies cannot create whole-home backups. MCP registers inspect/previ
 never a destructive cleanup tool. CLI applies saved preview tokens under existing write gates.
 
 - `capabilities.py` — 46-ID UI parity inventory, paginated discovery with explicit pending and policy restrictions; launch config/network/application grants are independent.
+
+- `cli_settings.py` — explicit settings/schema and workspace identity/configuration Typer adapters; no arbitrary key execution.

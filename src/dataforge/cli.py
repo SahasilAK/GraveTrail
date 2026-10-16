@@ -393,5 +393,9 @@ def ui(ctx: typer.Context):
     main(['--home', str(ctx.obj['home']), *ctx.args])
 
 
+from dataforge.agent.cli_settings import register as register_settings
+
+register_settings(app, workspace_app, invoke, fail)
+
 if __name__ == "__main__":
     app()

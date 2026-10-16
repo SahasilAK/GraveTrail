@@ -152,6 +152,36 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         """Discover versioned operations, required permissions and local-only restrictions."""
         return await call('capabilities', workspace_id, options)
 
+    @server.tool(annotations=read)
+    async def get_settings_schema(workspace_id: str, section: str | None = None) -> CallToolResult:
+        """Discover section schemas/defaults; omit section to list sections. Offline."""
+        return await call('settings_schema', workspace_id, section=section)
+
+    @server.tool(annotations=read)
+    async def get_workspace_settings(workspace_id: str, section: str) -> CallToolResult:
+        """Read validated preferences and current settings_revision."""
+        return await call('settings_get', workspace_id, section=section)
+
+    @server.tool(annotations=write)
+    async def update_workspace_settings(workspace_id: str, section: str, values: dict, expected_revision: str) -> CallToolResult:
+        """Atomic typed patch; privacy/access widening requires local administrator, never MCP."""
+        return await call('settings_update', workspace_id, section=section, values=values, expected_revision=expected_revision)
+
+    @server.tool(annotations=write)
+    async def update_workspace(workspace_id: str, name: str, description: str, expected_revision: str) -> CallToolResult:
+        """Edit workspace identity with a configuration revision guard."""
+        return await call('workspace_update', workspace_id, name=name, description=description, expected_revision=expected_revision)
+
+    @server.tool(annotations=read)
+    async def export_workspace_configuration(workspace_id: str) -> CallToolResult:
+        """Safe v2 configuration; excludes profiles, secrets, privacy, source and history."""
+        return await call('config_export', workspace_id)
+
+    @server.tool(annotations=write)
+    async def import_workspace_configuration(configuration: dict) -> CallToolResult:
+        """Create a new workspace from bounded v1/v2 configuration; unrestricted launch required."""
+        return await call('config_import', configuration=configuration)
+
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:
         """First compact permitted workspace page; use tools for continuation."""

@@ -8,6 +8,7 @@ import streamlit as st
 from dataforge.agent.contracts import AgentError, AgentSettings
 from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
+from dataforge.settings_service import save_ui_settings
 
 
 def render(store, workspace):
@@ -28,7 +29,7 @@ def render(store, workspace):
         if st.form_submit_button("Save agent access settings"):
             values = AgentSettings(enabled=enabled, allow_write=writes, allow_source=source,
                                    default_detail=detail, max_chars=budget, audit_reads=logging)
-            values.save(store, workspace)
+            save_ui_settings(store, workspace, 'agent_access', values.model_dump())
             st.session_state["settings_notice_" + workspace] = "Agent access settings saved"
             st.rerun()
 

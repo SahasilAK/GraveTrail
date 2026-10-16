@@ -10,6 +10,7 @@ from dataforge.configuration import (
     export_workspace_configuration,
     import_workspace_configuration,
 )
+from dataforge.settings_service import save_ui_settings
 from ui.common import allowed_roots, context, open_storage_home, storage_homes, title
 
 title("Settings", "Configure analysis, storage, resource budgets and source-code privacy.")
@@ -58,9 +59,9 @@ if tab == "Parsing and lineage":
                 data = ParsingSettings.model_validate(data).model_dump()
                 data.update(AnalysisPreferences(min_lineage_confidence=confidence, include_inferred=inferred,
                     diagnostic_visibility=diagnostic_mode, reanalysis_mode=reanalysis_mode).model_dump())
-                with store.transaction():
-                    for key, value in data.items():
-                        store.set_setting(w, key, value)
+                with store.lock:
+                    save_ui_settings(store, w, 'parsing', {k: v for k, v in data.items() if k in ParsingSettings.model_fields})
+                    save_ui_settings(store, w, 'analysis', {k: v for k, v in data.items() if k in AnalysisPreferences.model_fields})
                 st.session_state["parsing_notice_" + w] = "Parsing settings saved. Analyze files to apply changes."
                 st.rerun()
             except ValueError as exc:
@@ -116,11 +117,8 @@ elif tab == "Performance":
         llm_workers = st.number_input("Maximum concurrent AI requests per workspace", 1, 4, int(store.setting(w, "llm_concurrency", 1)))
         chunk_chars = st.number_input("AI context chunk size (characters)", 500, 100000, int(store.setting(w, "llm_chunk_chars", 4000)), step=500)
         if st.form_submit_button("Save resource limits"):
-            store.set_setting(w, "max_file_mb", max_file)
-            store.set_setting(w, "max_files", max_files)
-            store.set_setting(w, "parse_workers", workers)
-            store.set_setting(w, "llm_concurrency", llm_workers)
-            store.set_setting(w, "llm_chunk_chars", chunk_chars)
+            save_ui_settings(store, w, 'resources', {'max_file_mb': max_file, 'max_files': max_files,
+                'parse_workers': workers, 'llm_concurrency': llm_workers, 'llm_chunk_chars': chunk_chars})
             st.session_state["settings_notice_" + w] = "Resource limits saved"
             st.rerun()
     st.caption("Imports also enforce 100 MB compressed / 200 MB total and a 200:1 ZIP expansion ratio. Analysis reuses content hashes on every refresh.")
@@ -153,10 +151,8 @@ elif tab == "Visualization":
             values = VisualizationSettings(graph_direction=direction, collapse_temporary=collapse,
                 graph_labels=label, graph_palette=palette, graph_edge_width=edge_width,
                 source_view_mode=source_mode, source_line_numbers=line_numbers).model_dump()
-            with store.transaction():
-                for key, value in {**values, "graph_limit": limit, "traversal_depth": depth,
-                                    "tree_expansion_depth": tree_depth}.items():
-                    store.set_setting(w, key, value)
+            save_ui_settings(store, w, 'visualization', {**values, "graph_limit": limit,
+                "traversal_depth": depth, "tree_expansion_depth": tree_depth})
             for key in ("graph_direction_" + w, "graph_collapse_" + w, "lineage_source_complete_" + w):
                 st.session_state.pop(key, None)
             st.session_state["settings_notice_" + w] = "Visualization settings saved"
@@ -185,9 +181,9 @@ elif tab == "Security and privacy":
         history = st.checkbox("Store full AI interaction context locally", value=store.setting(w, "llm_history", False))
         retention = st.number_input("AI record retention days", 1, 3650, int(store.setting(w, "llm_retention_days", 30)))
         if st.form_submit_button("Save privacy settings"):
-            for k, v in [("external_llm", external), ("allow_full_source", full), ("max_context_chars", max_context),
-                         ("redact_secrets", redact), ("llm_history", history), ("llm_retention_days", retention)]:
-                store.set_setting(w, k, v)
+            save_ui_settings(store, w, 'privacy', {'external_llm': external, 'allow_full_source': full,
+                'max_context_chars': max_context, 'redact_secrets': redact, 'llm_history': history,
+                'llm_retention_days': retention})
             st.session_state["settings_notice_" + w] = "Privacy settings saved"
             st.rerun()
 elif tab == "Agent & Automation Access":

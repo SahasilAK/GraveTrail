@@ -745,3 +745,5 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - RED: two new regressions failed for missing catalog/permissions. GREEN: 19 parity/agent CLI/service/MCP tests and agent Settings AppTest pass; Ruff clean. Running isolated8513 UI lists get_capabilities and actual local handler test succeeds.
 - Slices2–9 remain pending. No primary home, source fixtures or master prompt changed.
 - Ruling: work in the existing codex/agent-integration checkout requested by the user; no extra worktree or branch switch. Existing clean baseline preserved.
+
+- Slice2: seven typed sections, schemas/defaults, atomic revision-checked patches, workspace identity/configuration CLI and actual MCP handlers. UI parsing/resources/visualization/privacy/agent access reuse validation.35 focused tests pass; running8513 resource Save succeeds. Widening external/full-source/history/access/budgets, disabling redaction/audit and enabling auto cleanup requires local administrator. No implicit analysis/network/cleanup.

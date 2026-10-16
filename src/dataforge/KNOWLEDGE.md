@@ -41,3 +41,5 @@ globally or persist it. `docs/SECURE_CONFIGURATION.md` describes limits and envi
 
 AI admission now covers source reads through result commit; maintenance reserves the home
 against new requests. Whole-home backups require unrestricted local authorization.
+
+- `settings_service.py` — section schemas, content revisions, atomic validated patches, privilege tightening and bounded JSON input; UI uses local-human authority.
