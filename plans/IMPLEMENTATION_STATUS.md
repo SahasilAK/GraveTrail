@@ -725,3 +725,16 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Proof: ignored .dataforge/verification/omniroute-app-success.png. Application code,
   prompts, parsing, output preprocessing and external gateway settings were unchanged.
   This bounded UI test passed; it does not establish long-term gateway availability.
+
+## CLI and MCP parity planning — 2026-10-16
+
+- Added CLI_MCP_UI_PARITY_PLAN.md at the user's request:46 coverage IDs across provider
+  setup/runtime credentials, AI workflows, settings, workspace/configuration/history,
+  visualization, reports, source/graph exports and maintenance. Nine ordered vertical
+  slices specify shared modules, CLI/MCP interfaces, guards and verification gates.
+- Explicitly retained AGENTS policy:shared cache/orphan/application cleanup is UI-only,
+  MCP cleanup is read-only, secrets are never tool arguments or persisted, and agents
+  cannot expand their own access. Discovery must report these restrictions honestly.
+- This is documentation only; no new commands/tools are implemented and no live calls,
+  data changes, credential changes or application configuration changes were performed.
+  Implementation remains pending; existing test/build results above are unchanged.
