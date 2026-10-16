@@ -25,7 +25,7 @@ def register(app, workspace_app, invoke, fail):
         invoke(ctx, 'settings_get', workspace, section=section)
 
     @settings.command('update')
-    def update(ctx: typer.Context, section: str, file: Path, workspace: Workspace, expected_revision: str):
+    def update(ctx: typer.Context, section: str, file: Path, workspace: Workspace, expected_revision: str = typer.Option(...)):
         try:
             values = read_json_file(file)
         except (OSError, ValueError, AgentError):

@@ -1,13 +1,15 @@
 """Provider profiles and task routing. Secrets remain environment references."""
 import json
-import uuid
 
 import streamlit as st
 
+from dataforge.agent.contracts import AccessPolicy, AgentError
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import DEFAULT_KEY_ENV, current_connections
 from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
 from dataforge.llm_resources import request_slot
+from dataforge.provider_service import save_profile, save_routing
+from dataforge.settings_service import revision
 
 
 def render(store, workspace):
@@ -39,12 +41,12 @@ def render(store, workspace):
             profile = Profile(provider=provider, name=name, base_url=url, model=model, key_env=key_env, auth=auth,
                 timeout=timeout, retries=retries, max_tokens=max_tokens, context_chars=context,
                 temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version)
-            pid = selection if existing else uuid.uuid4().hex
-            store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?) ON CONFLICT(profile_id) DO UPDATE SET name=excluded.name,config=excluded.config",
-                          [pid, workspace, name, profile.model_dump_json()])
+            policy = AccessPolicy(allow_write=True, allow_config_write=True, allowed_credential_refs=(key_env,) if key_env else ())
+            with store.lock:
+                save_profile(store, policy, workspace, profile.model_dump(), revision(store, workspace), selection if existing else '')
             st.success("Provider profile saved")
             st.rerun()
-        except ValueError:
+        except (ValueError, AgentError):
             st.error("Profile configuration is invalid. Check the endpoint, model and environment variable name.")
     if existing:
         profile = Profile.model_validate(config)
@@ -106,8 +108,7 @@ def render(store, workspace):
                 default=[x for x in store.setting(workspace, "fallback_profiles", []) if x in ids], format_func=names.get)
             st.caption("Fallback applies only to transient failures and profiles on the same recipient host. Malformed/unsupported output is quarantined.")
             if st.form_submit_button("Save model routing"):
-                store.set_setting(workspace, "default_profile", default)
-                store.set_setting(workspace, "task_models", selected)
-                store.set_setting(workspace, "fallback_profiles", fallbacks)
+                save_routing(store, AccessPolicy(allow_write=True, allow_config_write=True), workspace,
+                    {'default_profile': default, 'task_models': selected, 'fallback_profiles': fallbacks}, revision(store, workspace))
                 st.success("Task routing saved")
     st.caption("Databricks Model Serving uses the serving endpoint API. Genie is a separate query agent and is not treated as a chat model. Codex/ChatGPT sign-in is not used as an application API credential.")

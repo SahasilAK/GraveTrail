@@ -43,3 +43,5 @@ AI admission now covers source reads through result commit; maintenance reserves
 against new requests. Whole-home backups require unrestricted local authorization.
 
 - `settings_service.py` — section schemas, content revisions, atomic validated patches, privilege tightening and bounded JSON input; UI uses local-human authority.
+
+- `provider_service.py` — validated profile/routing CRUD, exact origin/reference authorization, per-profile runtime bindings and bounded model/test adapter operations.

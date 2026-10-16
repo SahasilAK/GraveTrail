@@ -182,6 +182,63 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         """Create a new workspace from bounded v1/v2 configuration; unrestricted launch required."""
         return await call('config_import', configuration=configuration)
 
+    network = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True)
+
+    @server.tool(annotations=read)
+    async def list_provider_profiles(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list provider profiles; requires independent launch grants. Never supply raw credentials."""
+        return await call('providers_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_provider_profile(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get provider profile; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_get', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def save_provider_profile(workspace_id: str, profile: dict, expected_revision: str, profile_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """save provider profile; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_save', workspace_id, options, profile=profile, expected_revision=expected_revision, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def remove_provider_profile(workspace_id: str, profile_id: str, expected_revision: str, options: QueryOptions | None = None) -> CallToolResult:
+        """remove provider profile; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_remove', workspace_id, options, profile_id=profile_id, expected_revision=expected_revision)
+
+    @server.tool(annotations=read)
+    async def get_model_routing(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get model routing; requires independent launch grants. Never supply raw credentials."""
+        return await call('routing_get', workspace_id, options)
+
+    @server.tool(annotations=write)
+    async def update_model_routing(workspace_id: str, values: dict, expected_revision: str, options: QueryOptions | None = None) -> CallToolResult:
+        """update model routing; requires independent launch grants. Never supply raw credentials."""
+        return await call('routing_update', workspace_id, options, values=values, expected_revision=expected_revision)
+
+    @server.tool(annotations=read)
+    async def get_runtime_connection_status(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get runtime connection status; requires independent launch grants. Never supply raw credentials."""
+        return await call('runtime_status', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def connect_runtime_reference(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """connect runtime reference; requires independent launch grants. Never supply raw credentials."""
+        return await call('runtime_connect', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def clear_runtime_connection(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """clear runtime connection; requires independent launch grants. Never supply raw credentials."""
+        return await call('runtime_clear', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=network)
+    async def discover_provider_models(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """discover provider models; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_models', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=network)
+    async def test_provider_connection(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """test provider connection; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_test', workspace_id, options, profile_id=profile_id)
+
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:
         """First compact permitted workspace page; use tools for continuation."""

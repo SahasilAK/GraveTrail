@@ -11,6 +11,8 @@ from typing import Annotated
 import duckdb
 import typer
 
+from dataforge.agent.cli_ai import register as register_ai
+from dataforge.agent.cli_settings import register as register_settings
 from dataforge.agent.contracts import (
     AccessPolicy,
     AgentError,
@@ -140,6 +142,16 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
         else:
             store = Store(config["home"])
             service = AgentService(store, config["policy"])
+            if arguments.pop('credential_prompt', False):
+                from dataforge.connections import RuntimeConnections
+                from dataforge.provider_service import authorize_provider, get_profile
+                profile_id = arguments.get('profile_id', '')
+                profile = get_profile(store, workspace_id, profile_id)
+                service._workspace(workspace_id, write=True)
+                authorize_provider(store, service.policy, workspace_id, profile)
+                manager = RuntimeConnections()
+                manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True))
+                service.runtime_connections[(workspace_id, profile_id)] = manager
             if background:
                 service._workspace(workspace_id, write=True)
                 QueryOptions.model_validate(config["options"])
@@ -393,9 +405,9 @@ def ui(ctx: typer.Context):
     main(['--home', str(ctx.obj['home']), *ctx.args])
 
 
-from dataforge.agent.cli_settings import register as register_settings
 
 register_settings(app, workspace_app, invoke, fail)
+register_ai(app, invoke, fail)
 
 if __name__ == "__main__":
     app()

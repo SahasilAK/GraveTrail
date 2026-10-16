@@ -25,17 +25,25 @@ from dataforge.configuration import ParsingSettings
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
+from dataforge.provider_service import READS as PROVIDER_READS
+from dataforge.provider_service import WRITES as PROVIDER_WRITES
+from dataforge.provider_service import ProviderOperations
 
 WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
-          'settings_update', 'workspace_update', 'config_import'}
+          'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES
 
 
-class AgentService:
+class AgentService(ProviderOperations):
     def __init__(self, store, policy: AccessPolicy | None = None):
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
+        self.runtime_connections = {}
+        self.provider_transport = None
 
     def close(self):
+        for manager in self.runtime_connections.values():
+            manager.clear()
+        self.runtime_connections.clear()
         self.jobs.close()
 
     def _workspace(self, workspace, write=False, source=False):
@@ -68,7 +76,7 @@ class AgentService:
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import'}:
+                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
