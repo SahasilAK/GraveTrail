@@ -29,3 +29,8 @@ OmniRoute policy uses auto/best-reasoning. LLM_LIVE_RESULTS.json records valid f
 output accepted unchanged, earlier connection/SQL success and latest gateway503 candidate
 exhaustion. Old schema error was not reproduced. Live diagnosis stopped per user direction;
 no further calls without renewed direction, no preprocessing change, strict quarantine retained.
+
+User renewed testing with a new runtime key: the dated application retest in
+IMPLEMENTATION_STATUS.md records successful connection, exact-quote SAS validation and
+one inferred merge/refresh through the8512 UI in an isolated home. Earlier gateway
+failures remain historical evidence; no app/preprocessing/gateway code was changed.

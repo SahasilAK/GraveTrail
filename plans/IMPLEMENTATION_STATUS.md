@@ -706,3 +706,22 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Validation:44 focused LLM/credential/advisory tests pass in6.38s; Ruff passes. No additional
   preprocessing is supported by the captured response. Full live merge-refresh-restart gate
   remains open due intermittent gateway availability; docs/acceptance/knowledge updated.
+
+## OmniRoute application retest — 2026-10-16
+
+- User authorized the newly supplied key and renewed testing through the application.
+  Restarted the stopped Streamlit server on8512 using the existing isolated
+  .dataforge/verification/sas-format-fixtures home; primary user data was untouched.
+- Saved an OmniRoute test profile pointing to http://localhost:20128/v1 with model
+  auto/best-reasoning, timeout60s, retries0 and JSON output enabled. Registered the key
+  through the UI's session-only runtime credential control; no credential value is stored
+  in source, configuration, reports or databases. The runtime connection remains available
+  in the current browser session and must be supplied again after restart.
+- The UI's Test model connection passed (127 total tokens). SAS lineage assistance for
+  02_extractions/017_customers_raw.sas, lines1–12, returned one validated CREATE claim:
+  src.customers -> ext.customers_raw, exact quoted lines7–11 (2190 total tokens).
+  Merge succeeded and refreshed lineage: “Merged 1 inferred relationships and refreshed
+  lineage”. No ProviderError or schema validation failure occurred in these two requests.
+- Proof: ignored .dataforge/verification/omniroute-app-success.png. Application code,
+  prompts, parsing, output preprocessing and external gateway settings were unchanged.
+  This bounded UI test passed; it does not establish long-term gateway availability.
