@@ -2,6 +2,7 @@
 import duckdb
 import streamlit as st
 
+from dataforge.connections import RuntimeConnections, connection_scope
 from dataforge.logging_config import configure_logging
 from ui.common import current_home, get_store
 
@@ -43,4 +44,6 @@ pages = {
     "Productivity": [st.Page("ui/pages/tools.py", title="Engineering tools", icon=":material/build:")],
     "Configuration": [st.Page("ui/pages/settings.py", title="Settings", icon=":material/settings:")],
 }
-st.navigation(pages).run()
+st.session_state.setdefault('runtime_connections', RuntimeConnections())
+with connection_scope(st.session_state['runtime_connections']):
+    st.navigation(pages).run()

@@ -4,6 +4,12 @@ Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Current delivery state
 
+Maintenance/deployment enhancement is in progress; plan: MAINTENANCE_DEPLOYMENT_PLAN.md.
+Runtime credentials now support masked session-only entry, context-local adapter injection,
+expiration/disconnect and redaction of echoed provider secrets. Startup environment values
+remain read-only and legacy variable references remain compatible. Cleanup services and
+distribution builds are the next active slices; all destructive verification uses isolated homes.
+
 Additional Agent & Automation Access feature is implemented and locally verified:
 standalone CLI, token-efficient MCP, managed jobs and human Settings integration.
 See AGENT_INTEGRATION_PLAN.md and AGENT_ACCEPTANCE.md for the current feature evidence.

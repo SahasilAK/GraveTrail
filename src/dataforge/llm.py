@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
-import os
 import re
 import time
 import uuid
@@ -18,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
+from dataforge.connections import current_connections
 from dataforge.llm_resources import request_slot
 from dataforge.models import canonical, stable_id, statements
 from dataforge.parsers.sas import parse_sas, strip_comments
@@ -140,7 +140,7 @@ class Adapter:
 
     def _headers(self):
         p = self.profile
-        key = os.environ.get(p.key_env, "") if p.key_env else ""
+        key = current_connections().resolve(p.key_env)
         if p.key_env and not key:
             raise ValueError(f"Credential environment variable {p.key_env} is not set")
         auth = p.auth
@@ -275,8 +275,7 @@ def validate_response(response: GroundedResponse, code: str, known: set[str], fi
 
 
 def redact(text: str) -> str:
-    return re.sub(r"(?i)(\b(?:password|api[_-]?key|token|secret)\s*[=:]\s*)(['\"]?)[^\s;'\"]+\2",
-                  r"\1'[REDACTED]'", text)
+    return current_connections().redact(text)
 
 
 def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
@@ -330,6 +329,8 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
             raw, usage = adapter.complete(system, user)
         if cancelled and cancelled():
             raise ProviderError("AI request cancelled after response; result quarantined")
+        raw = redact(raw)
+        usage = json.loads(redact(json.dumps(usage)))
         validated = response_model.model_validate(response_object(raw))
         if task in TASK_SCHEMAS:
             from dataforge.services import source_dialect

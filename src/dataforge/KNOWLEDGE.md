@@ -29,3 +29,8 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 
 ## Invariants
 Every edge has exact statement/file/version evidence. UI never executes imported code. Cache changes require a parser-version bump. New migrations preserve facts. External AI is opt-in; unknown references remain diagnostics.
+# Runtime credentials
+
+`connections.py` owns session-local credentials, context scopes, read-only environment
+resolution and redaction. Adapters and log formatting share it; never cache a session manager
+globally or persist it. `docs/SECURE_CONFIGURATION.md` describes limits and environment names.
