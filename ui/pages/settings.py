@@ -16,7 +16,7 @@ title("Settings", "Configure analysis, storage, resource budgets and source-code
 store, w = context()
 if notice := st.session_state.pop("settings_notice_" + w, None):
     st.success(notice)
-tab = st.segmented_control("Settings section", ["Parsing and lineage", "Storage and workspaces", "Performance", "Visualization", "Security and privacy", "LLM providers"], default="Parsing and lineage")
+tab = st.segmented_control("Settings section", ["Parsing and lineage", "Storage and workspaces", "Performance", "Visualization", "Security and privacy", "LLM providers", "Agent & Automation Access"], default="Parsing and lineage")
 if tab == "Parsing and lineage":
     if notice := st.session_state.pop("parsing_notice_" + w, None):
         st.success(notice)
@@ -194,6 +194,9 @@ elif tab == "Security and privacy":
                 store.set_setting(w, k, v)
             st.session_state["settings_notice_" + w] = "Privacy settings saved"
             st.rerun()
+elif tab == "Agent & Automation Access":
+    from ui.agent_settings import render
+    render(store, w)
 else:
     from ui.provider_settings import render
     render(store, w)

@@ -6,6 +6,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 
 ## Files
+- `agent_settings.py` — Workspace agent permissions/budgets/auditing, client setup examples and actual in-process MCP handler test; publishes credential-free status-polling revocation snapshots.
 - `temporary_cleanup.py` — Lazy Storage panel for bounded stale staging preview, explicit selection/cleanup and retained restore; safe failure messages, per-workspace notices.
 - `__init__.py` — Package marker; no business behavior.
 - `assistance.py` — Explicit source-range/task AI action with hash-pinned preview and durable result ID; delegates validated/quarantined response presentation and inferred merge.

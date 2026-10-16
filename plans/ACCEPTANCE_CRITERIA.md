@@ -11,3 +11,10 @@
 - Persist profiles without keys, enforce privacy, validate/quarantine LLM output.
 - Reopen workspaces; incrementally skip unchanged parses and replace stale relationships.
 - Run full tests, lint, health and actual UI; document limits and resume instructions honestly.
+
+
+## Additional agent integration feature
+
+See [AGENT_ACCEPTANCE.md](AGENT_ACCEPTANCE.md) for the feature-specific 15-point verification
+matrix and explicit storage/authentication/parser limitations. CLI and MCP are mandatory;
+REST remains optional and omitted. Existing human-first workflows remain unchanged.

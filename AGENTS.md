@@ -11,6 +11,10 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
   datasets. Import either ZIP, select only its script extension (`.sql` or `.sas`),
   generate lineage and search `pub.all_kpis`: trace all seven layers to all 16 sources.
   See `tests/sample_data/KNOWLEDGE.md` for fixture details and verification limits.
+- For analyzed workspaces, prefer `dataforge --json` CLI queries or MCP tools over
+  manually rereading scripts. Resolve asset IDs, honor freshness/completeness and
+  cursors, and request source evidence only as needed. Setup and permissions are in
+  `docs/CLI_GUIDE.md` and `docs/MCP_INTEGRATION.md`, including DuckDB ownership limits.
 - Preserve evidence (file, exact statement, line range, method) for every relationship.
 - Prefer unresolved diagnostics to guessed dependencies. Never merge ambiguous names.
 - Runtime data belongs under `DATAFORGE_HOME` (default `.dataforge/`, ignored).

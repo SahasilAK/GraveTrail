@@ -3,9 +3,11 @@
 Static facts, persistence, analysis and export APIs. Keep UI imports out of this package. Related tables and data flow are in docs/DATA_MODEL.md.
 
 ## Subfolders
+- `agent/` — Shared automation requests, permissions, jobs, paging and MCP. See [agent/KNOWLEDGE.md](agent/KNOWLEDGE.md).
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).
 
 ## Files
+- `cli.py` — Typer CLI and console entry point; JSON/human output, explicit write/import authorization, background workers, DB-free bounded status polling, MCP launcher. No Streamlit imports.
 - `storage_locations.py` — Pure bounded startup storage allowlist and resolved selection validation; never creates or migrates directories.
 - `asset_identity.py` — AssetResolver separates supplied temporary job/session namespaces, preserves global persistent outputs and rejects mixed-lifetime reads; shared labels/AI visibility helpers.
 - `temporary_cleanup.py` — Scoped stale UUID.tmp preview, bounded journal-before-removal, full file identity checks, retained recovery and atomic no-overwrite restore. Uses maintenance idle lock and schema4.

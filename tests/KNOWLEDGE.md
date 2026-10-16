@@ -7,6 +7,10 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `sample_data/` — SQL and SAS sample project ZIPs for loading sample data into the application during testing. See [sample_data/KNOWLEDGE.md](sample_data/KNOWLEDGE.md).
 
 ## Files
+- `test_agent_service.py` — Shared SQL/SAS/CSV queries/cache, ambiguity, paging/depth/budgets, stale inputs/config, permissions/source boundaries, jobs/crash states and nonblocking/revoked status.
+- `test_agent_cli.py` — No-UI subprocess help, authorization/errors, real import/background build/status/export and polling revocation/budgets.
+- `test_agent_mcp.py` — Official SDK tool parity/resources/prompts, actual stdio client, authenticated HTTP client/refusals and status responsiveness while a query waits on ingestion.
+- `test_agent_settings.py` — Agent settings AppTest, generated client config, local handler test and durable source/access revocation.
 - `test_explorer_evidence.py` — Missing-asset warning/search regression; active tree tab filters source files independently of graph direction; explicit graph evidence selection overrides it.
 - `test_inventory_controls.py` — CSV sample bounds/portability/cache refresh and immediate post-analysis inventory status counters.
 - `test_storage_locations.py` — Explicit/bounded path choices, two-session switching/back with retained sources and failed-open preservation.

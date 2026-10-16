@@ -54,3 +54,16 @@ input. Both app bootstrap and the switch callback validate the selected resolved
 A target store opens before session controls reset; failures retain the active workspace.
 This local filesystem allowlist is operator configuration, not an authentication boundary for
 untrusted users or a defense against a local account that can mutate configured directories.
+
+
+## Agent access
+
+CLI/MCP launches are read-only unless explicitly authorized with --allow-write; per-workspace
+settings may revoke writes, all access or source retrieval. Imports require startup-allowed
+roots. Tools cannot execute arbitrary commands/SQL, inspect credentials or invoke an LLM.
+Queries are workspace scoped, paged and character limited; ambiguity is explicit. Mutations
+are audited without source/arguments/credentials. HTTP additionally requires a named environment
+bearer credential and explicit workspace IDs. Externally bound deployments require a TLS
+reverse proxy and network rules blocking direct plaintext backend access. These application
+controls assume the OS user/data-home administrator is trusted. See MCP_INTEGRATION.md for
+pre-provisioned-auth and single-owner storage limits.

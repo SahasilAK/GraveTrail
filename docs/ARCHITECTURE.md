@@ -41,3 +41,14 @@ snapshots allow import activity without cache poisoning. Graph cache revisions u
 
 No graph database, message broker or external service is required. The intended deployment is a
 single local user/process. Multi-user/authenticated hosting requires additional deployment work.
+
+
+## Agent and automation interfaces
+
+`dataforge.cli` (Typer) and `dataforge.agent.mcp_server` (official MCP SDK) call
+`AgentService`, which applies permissions/output policy and delegates to the existing
+Importer, analyze, Store, LineageGraph, column_report and export helpers. Streamlit
+remains the primary UI; Settings adds setup/control/test presentation only. No parser,
+source execution or LLM logic is added to adapters. Managed jobs/results/audit/revocation
+snapshots live beneath the runtime home's `agent/` directory; no database migration is
+needed. See [MCP_INTEGRATION.md](MCP_INTEGRATION.md) and [CLI_GUIDE.md](CLI_GUIDE.md).

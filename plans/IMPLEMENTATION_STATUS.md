@@ -4,6 +4,10 @@ Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Current delivery state
 
+Additional Agent & Automation Access feature is implemented and locally verified:
+standalone CLI, token-efficient MCP, managed jobs and human Settings integration.
+See AGENT_INTEGRATION_PLAN.md and AGENT_ACCEPTANCE.md for the current feature evidence.
+
 Six-page working local application. Planned implementation slices and the final audit fixes
 are implemented, with conservative static-analysis boundaries. See REQUIREMENT_MATRIX.md for
 section-by-section acceptance. External release acceptance remains open; no universal parser
@@ -519,3 +523,40 @@ unverified; clean installation/packaging must be rerun after these new slices.
   present. Selected mart.customer_summary, expanded upstream through staging.customers to the
   CSV source, and verified graph/table/SAS original evidence render without exceptions. Screenshot:
   .dataforge/verification/lineage-recovery.png. App remains running. User tests/sample_data is untouched.
+
+
+## Agent & Automation Access — 2026-10-16
+
+- Delivered three vertical slices: shared automation services/CLI, official-SDK MCP/security,
+  and Streamlit settings/documentation. Human UI and extraction logic remain intact. CLI/MCP
+  delegate to existing Store, Importer, analyze, column_report, LineageGraph and exports.
+- Typer console command supports workspaces/import/cached build/lineage/columns/evidence/
+  code search/issues/impact/batch/jobs/exports; human/JSON/quiet/file output and meaningful
+  errors. Read-only startup default; explicit writes/allowed roots/workspace scoping.
+- MCP offers 16 typed async tools, resources and workflow prompt; stdio and authenticated
+  Streamable HTTP. Successful responses carry one structured payload. Summary/standard/
+  detailed disclosure, bounded pages/cursors/depth/items/chars and source-permission gates.
+- Jobs persist atomic journals/results and independent heartbeats; crashes report interrupted.
+  CLI detached workers survive the launching CLI and retry brief storage-ownership races.
+  Journal polling remains responsive during importer transactions and honors UI revocation
+  snapshots/output caps. Mutation auditing excludes arguments, credentials and code.
+- Settings → Agent & Automation Access provides permissions/source/budget/read-audit controls,
+  verified Codex/Claude configuration examples and actual local MCP handler test. CLI_GUIDE,
+  MCP_INTEGRATION, AGENT_WORKFLOWS and TOKEN_OPTIMIZATION document the complete workflows.
+- Fresh full suite:242 passed/1 existing skipped in43.81s;18 focused agent tests pass. Ruff,
+  locked dependency validation, wheel/sdist builds and isolated installed-wheel CLI/MCP
+  imports pass with Streamlit absent from sys.modules. Running isolated8505 Settings test
+  succeeded on SQL fixture (86 files/92 registry assets/128 edges). Primary data/theme intact.
+- Independent review's import progress, standard-expression disclosure, CLI polling and
+  MCP responsiveness findings were reproduced and corrected. The actual SDK stdio and
+  authenticated/unauthorized HTTP paths pass; no external LLM invocation was needed.
+- Both supplied ZIPs imported with only their script extension. SQL matches all128 expected
+  logical edges and traces pub.all_kpis through seven layers to all16 sources. SAS preserves
+  16 WORK assets/48 physical32 collapsed edges but existing FORMAT= PROC SQL limitations
+  leave96 missing logical edges and final published asset absent;68 diagnostics, no guesses.
+  Both warm refreshes reuse86 caches. Static source only; no SQL/SAS execution claims.
+- Measured10-row summary/detail payloads:SQL1509/64841 chars, supported SAS staging649/3529;
+  approx97.7%/81.6% reduction, character/4 estimates only. Raw results in verification home.
+- Explicit boundaries:one DuckDB owner per home; private bearer auth (no OAuth issuance),
+  external TLS reverse proxy required; remote deployment/client configuration changes not
+  performed. Optional REST omitted. Existing OmniRoute/Docker external gates remain unchanged.

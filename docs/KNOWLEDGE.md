@@ -6,6 +6,10 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `prompts/` — [prompts/KNOWLEDGE.md](prompts/KNOWLEDGE.md).
 
 ## Files
+- `CLI_GUIDE.md` — Commands, jobs, scopes, import roots, exit codes, response budgets and single-owner DuckDB workflow.
+- `MCP_INTEGRATION.md` — Official SDK transports, tools/resources/prompts, current official Codex/Claude examples, private bearer auth and remote TLS-proxy boundary.
+- `AGENT_WORKFLOWS.md` — Focused metadata/evidence/columns/impact/refresh workflows and honest SQL/SAS archive acceptance.
+- `TOKEN_OPTIMIZATION.md` — Progressive disclosure, cursor/budget rules and reproducible representative character/token estimates.
 - `ARCHITECTURE.md` — Architecture. Maintained documentation; consult implementation status for verification boundaries.
 - `DATA_MODEL.md` — Data model. Maintained documentation; consult implementation status for verification boundaries.
 - `EXTENDING_THE_APP.md` — Extending DataForge. Maintained documentation; consult implementation status for verification boundaries.

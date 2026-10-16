@@ -31,6 +31,23 @@ LLM is required. Without uv: create/activate a Python virtual environment, run
 The sample yields nine assets and seven dependencies, including a deliberate cycle and an
 unresolved macro diagnostic. Results are parsed from the files; no sample graph is hardcoded.
 
+## Agent and automation access
+
+The human-first UI now includes **Settings → Agent & Automation Access** with
+workspace permissions, response limits, local connection testing and copyable
+Codex/Claude Code configurations. Use `uv run dataforge --help` for the standalone
+CLI or `uv run dataforge --home ./automation-data mcp` for local MCP stdio.
+Both reuse the same deterministic stored analysis and default to compact summaries
+and read-only access. Imports/builds require explicit `--allow-write` and imports
+also require allowed roots. Authenticated Streamable HTTP is available for private
+clients; externally bound services require a TLS reverse proxy.
+
+Read [CLI guide](docs/CLI_GUIDE.md), [MCP setup](docs/MCP_INTEGRATION.md),
+[agent workflows](docs/AGENT_WORKFLOWS.md) and [token measurements](docs/TOKEN_OPTIMIZATION.md).
+DuckDB allows one owning process per runtime home; stop another owner or use a
+separate home. The supplied SQL/SAS ZIPs in `tests/sample_data` are described in the
+workflow guide, including the current SAS PROC SQL format-modifier limitation.
+
 ## Features
 
 - Isolated persistent workspaces, import history, complete source inventory and original bytes.

@@ -42,3 +42,14 @@ The user reports both archives passed structural and lineage-manifest checks,
 and the SQL transformations passed a SQLite compatibility execution check.
 Full DuckDB execution and licensed SAS execution have not been verified.
 These are fixture provenance notes, not results of a fresh application test.
+
+## Application observations (2026-10-16)
+
+Agent integration verification imported 86 scripts per ZIP using only its extension.
+SQL matches all 128 logical edges; `pub.all_kpis` reaches all 16 sources across seven
+layers. Its registry also contains seven isolated setup/schema names (92 total assets).
+SAS currently yields 16 WORK datasets and 48 physical / 32 collapsed logical edges.
+Existing unsupported PROC SQL `FORMAT=` modifiers prevent 96 expected logical edges
+and `pub.all_kpis`; 68 diagnostics record this limitation. Do not treat manifest
+expectations as successfully extracted facts. Both warm refreshes reuse 86 caches.
+Reproduce with `scripts/verify_agents.py`; no imported SQL/SAS is executed.

@@ -26,7 +26,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — Installation, startup, first workflow, features, configuration, structure and honest limits.
 - `app.py` — Entry point: configure logs, cache Store, select/create workspaces, register six st.Page scripts.
-- `pyproject.toml` — Package/dependency constraints, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
+- `pyproject.toml` — Package/dependency constraints, dataforge CLI entry point, official MCP SDK/Typer dependencies, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
 
 Storage selection is per-session and startup-allowlisted (DATAFORGE_STORAGE_LOCATIONS); app.py
