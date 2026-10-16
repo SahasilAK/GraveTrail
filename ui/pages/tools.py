@@ -2,6 +2,7 @@ import json
 
 import streamlit as st
 
+from dataforge.reporting import code_matches, data_dictionary
 from dataforge.services import compare_runs
 from ui.common import choose_asset, context, downloads, load_graph, source_viewer, title
 
@@ -11,38 +12,14 @@ mode = st.segmented_control("Tool", ["Code search", "Data dictionary", "Impact a
 if mode == "Code search":
     query = st.text_input("Find text in imported source", placeholder="Table, column, procedure or keyword")
     if query:
-        results = []
-        for f in store.files(w):
-            if f["extension"] == ".csv":
-                continue
-            content = store.file(f["file_id"])["raw_content"]
-            for i, line in enumerate(content.splitlines(), 1):
-                if query.casefold() in line.casefold():
-                    results.append({"file_id": f["file_id"], "path": f["relative_path"], "line": i, "code": line})
-                    if len(results) >= 1000:
-                        break
-            if len(results) >= 1000:
-                break
+        results = code_matches(store, w, query, 1000)
         st.caption(f"{len(results)} results (maximum 1,000). CSV values are excluded from code search.")
         st.dataframe(results, hide_index=True)
         downloads(results, "code_search", include_html=False)
         source_viewer(store, list(dict.fromkeys(r["file_id"] for r in results)), "search_source")
 elif mode == "Data dictionary":
     query = st.text_input("Filter dictionary")
-    rows = []
-    for a in store.assets(w):
-        if query.casefold() not in a["name"].casefold():
-            continue
-        metadata = json.loads(a["metadata"])
-        columns = metadata.get("columns", [])
-        if columns:
-            provenance = "SQL DDL declaration" if metadata.get("schema_status") == "declared" else "CSV header / sampled type"
-            rows.extend({"asset": a["name"], "column": c["name"], "type": c["type"], "provenance": provenance} for c in columns)
-        else:
-            usages = store.rows("SELECT DISTINCT column_name FROM column_usages WHERE workspace_id=? AND asset_id=?", [w, a["asset_id"]])
-            rows.extend({"asset": a["name"], "column": u["column_name"], "type": "unknown", "provenance": "direct code reference; incomplete schema"} for u in usages)
-            if not usages:
-                rows.append({"asset": a["name"], "column": "unknown", "type": "unknown", "provenance": "table reference only"})
+    rows = data_dictionary(store, w, query)
     st.dataframe(rows, hide_index=True)
     downloads(rows, "data_dictionary")
 elif mode == "Impact analysis":

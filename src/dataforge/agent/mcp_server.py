@@ -119,9 +119,9 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
                     operation_id=operation_id, start_line=start_line, end_line=end_line, full=full)
 
     @server.tool(annotations=read)
-    async def search_source_code(workspace_id: str, query: str = "", options: QueryOptions | None = None) -> CallToolResult:
+    async def search_source_code(workspace_id: str, query: str = "", include_matches: bool = False, options: QueryOptions | None = None) -> CallToolResult:
         """List file references, optionally matching literal code; source content stays local."""
-        return await call("search_code" if query else "files", workspace_id, options, query=query)
+        return await call("search_code" if query else "files", workspace_id, options, query=query, **({"include_matches": include_matches} if query else {}))
 
     @server.tool(annotations=read)
     async def analyze_impact(workspace_id: str, asset: str, options: QueryOptions | None = None) -> CallToolResult:
@@ -283,6 +283,56 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
     async def merge_ai_claims(workspace_id: str, record_id: str, refresh: bool = True, options: QueryOptions | None = None) -> CallToolResult:
         """merge ai claims; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
         return await call('ai_merge', workspace_id, options, record_id=record_id, refresh=refresh)
+
+    @server.tool(annotations=read)
+    async def get_data_dictionary(workspace_id: str, query: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get data dictionary; stored facts only, with scope/freshness/budget guards."""
+        return await call('dictionary', workspace_id, options, query=query)
+
+    @server.tool(annotations=read)
+    async def get_asset_schema(workspace_id: str, asset: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get asset schema; stored facts only, with scope/freshness/budget guards."""
+        return await call('asset_schema', workspace_id, options, asset=asset)
+
+    @server.tool(annotations=read)
+    async def get_workspace_health(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get workspace health; stored facts only, with scope/freshness/budget guards."""
+        return await call('health', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def validate_stored_lineage(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """validate stored lineage; stored facts only, with scope/freshness/budget guards."""
+        return await call('lineage_validate', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def list_analysis_runs(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list analysis runs; stored facts only, with scope/freshness/budget guards."""
+        return await call('runs_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_analysis_run(workspace_id: str, run_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get analysis run; stored facts only, with scope/freshness/budget guards."""
+        return await call('run_get', workspace_id, options, run_id=run_id)
+
+    @server.tool(annotations=read)
+    async def list_ingestion_runs(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list ingestion runs; stored facts only, with scope/freshness/budget guards."""
+        return await call('ingestions_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_ingestion_run(workspace_id: str, ingestion_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get ingestion run; stored facts only, with scope/freshness/budget guards."""
+        return await call('ingestion_get', workspace_id, options, ingestion_id=ingestion_id)
+
+    @server.tool(annotations=read)
+    async def compare_analysis_runs(workspace_id: str, before: str, after: str, options: QueryOptions | None = None) -> CallToolResult:
+        """compare analysis runs; stored facts only, with scope/freshness/budget guards."""
+        return await call('runs_compare', workspace_id, options, before=before, after=after)
+
+    @server.tool(annotations=read)
+    async def get_source_metadata(workspace_id: str, file_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get source metadata; stored facts only, with scope/freshness/budget guards."""
+        return await call('source_metadata', workspace_id, options, file_id=file_id)
 
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:

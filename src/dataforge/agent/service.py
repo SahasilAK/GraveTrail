@@ -31,12 +31,14 @@ from dataforge.models import canonical
 from dataforge.provider_service import READS as PROVIDER_READS
 from dataforge.provider_service import WRITES as PROVIDER_WRITES
 from dataforge.provider_service import ProviderOperations
+from dataforge.reporting import READS as REPORT_READS
+from dataforge.reporting import ReportOperations
 
 WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
           'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES | AI_WRITES
 
 
-class AgentService(ProviderOperations, AIOperations):
+class AgentService(ProviderOperations, AIOperations, ReportOperations):
     def __init__(self, store, policy: AccessPolicy | None = None):
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
@@ -79,7 +81,7 @@ class AgentService(ProviderOperations, AIOperations):
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES | AI_READS | AI_WRITES:
+                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES | AI_READS | AI_WRITES | REPORT_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -238,7 +240,7 @@ class AgentService(ProviderOperations, AIOperations):
         return self._page(w, opts, ["assets", query], items, analysis_current=self._current(w))
 
     def _files(self, w, opts, query=""):
-        fields = ("file_id", "relative_path", "extension", "parsing_status", "line_count", "content_hash")
+        fields = ("file_id", "relative_path", "extension", "parsing_status", "line_count", "content_hash", "file_size", "encoding")
         return self._page(w, opts, ["files", query], [{k: f[k] for k in fields}
             for f in self.store.files(w) if query.casefold() in f["relative_path"].casefold()])
 
@@ -386,7 +388,13 @@ class AgentService(ProviderOperations, AIOperations):
                  for i in range(start - 1, end, 20)]
         return self._page(w, opts, ["source", file_id, start, end], items)
 
-    def _search_code(self, w, opts, query):
+    def _search_code(self, w, opts, query, include_matches=False):
+        if include_matches:
+            from dataforge.reporting import code_matches
+            self._workspace(w, source=True)
+            matches = code_matches(self.store, w, query, opts.max_items + 1)
+            return self._page(w, opts, ['code_matches', query], matches[:opts.max_items],
+                boundaries=['items'] if len(matches) > opts.max_items else [], analysis_current=self._current(w))
         if not query or len(query) > 256:
             raise AgentError("invalid_argument", "Code search requires 1–256 literal characters")
         rows = self.store.rows("""SELECT file_id,relative_path,content_hash,line_count FROM source_files

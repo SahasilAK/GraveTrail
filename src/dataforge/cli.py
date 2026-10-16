@@ -12,6 +12,7 @@ import duckdb
 import typer
 
 from dataforge.agent.cli_ai import register as register_ai
+from dataforge.agent.cli_reports import register as register_reports
 from dataforge.agent.cli_settings import register as register_settings
 from dataforge.agent.contracts import (
     AccessPolicy,
@@ -277,8 +278,8 @@ def source(ctx: typer.Context, workspace: Workspace, file_id: str = None, statem
 
 
 @source_app.command("search")
-def search_source(ctx: typer.Context, query: str, workspace: Workspace):
-    invoke(ctx, "search_code", workspace, query=query)
+def search_source(ctx: typer.Context, query: str, workspace: Workspace, include_matches: bool = False):
+    invoke(ctx, "search_code", workspace, query=query, include_matches=include_matches)
 
 
 @app.command("issues")
@@ -410,6 +411,7 @@ def ui(ctx: typer.Context):
 
 register_settings(app, workspace_app, invoke, fail)
 register_ai(app, invoke, fail)
+register_reports(app, workspace_app, assets_app, lineage_app, source_app, invoke)
 
 if __name__ == "__main__":
     app()
