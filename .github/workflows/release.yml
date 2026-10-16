@@ -1,0 +1,86 @@
+name: release artifacts
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+      - run: uv sync --locked --extra dev
+      - name: Check tag version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: uv run python -c "import os,tomllib; version=tomllib.load(open('pyproject.toml','rb'))['project']['version']; assert os.environ['GITHUB_REF_NAME'] == 'v'+version, 'Tag must match project version'"
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+      - name: Build host executable and Python distributions
+        run: uv run dataforge-build --target executable
+      - name: Smoke native executable
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            uv run python scripts/build/smoke.py --executable dist/.build/bundle/dataforge/dataforge.exe
+          else
+            uv run python scripts/build/smoke.py --executable dist/.build/bundle/dataforge/dataforge
+          fi
+      - name: Install wheel into clean environment
+        shell: bash
+        run: |
+          uv venv dist/installed
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            PYTHON=dist/installed/Scripts/python.exe
+          else
+            PYTHON=dist/installed/bin/python
+          fi
+          uv pip install --python "$PYTHON" dist/python/*.whl
+          uv run python scripts/build/smoke.py --python "$PYTHON"
+      - run: uv run dataforge-build --verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataforge-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/python/*
+            dist/manifest.json
+            dist/SHA256SUMS
+          if-no-files-found: error
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+      - run: uv sync --locked --extra dev
+      - run: uv run dataforge-build --target docker
+      - name: Container health and persistent runtime
+        shell: bash
+        run: |
+          VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          docker volume create dataforge-release-smoke
+          trap 'docker rm -f dataforge-release-smoke 2>/dev/null || true; docker volume rm dataforge-release-smoke' EXIT
+          docker run -d --name dataforge-release-smoke -v dataforge-release-smoke:/data -p 127.0.0.1:18501:8501 "dataforge:$VERSION"
+          for i in {1..60}; do curl -fsS http://127.0.0.1:18501/_stcore/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:18501/_stcore/health
+          docker stop dataforge-release-smoke
+          docker rm dataforge-release-smoke
+          docker run --rm -v dataforge-release-smoke:/data "dataforge:$VERSION" dataforge --json --allow-write workspace create release-smoke
+          docker run --rm -v dataforge-release-smoke:/data "dataforge:$VERSION" dataforge --json workspace list | grep release-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dataforge-container-metadata
+          path: |
+            dist/docker-image.json
+            dist/manifest.json
+            dist/SHA256SUMS

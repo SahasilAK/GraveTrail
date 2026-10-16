@@ -2,6 +2,9 @@
 
 Operational reproducibility utilities. benchmark.py creates isolated synthetic files, measures real services and persists labeled workload metrics.
 
+## Subfolders
+- `build/` — Allowlisted package assets, frozen dispatcher and actual distribution smoke drivers. See [build/KNOWLEDGE.md](build/KNOWLEDGE.md).
+
 ## Files
 - `verify_agents.py` — Static SQL/SAS ZIP/manifests, all-source probe, cached refresh and compact/detailed response measurements in an explicitly separate data home; no imported source execution.
 - `benchmark.py` — CLI labeled SQL-chain benchmark, isolated temporary database, precision/recall assertions, cold/warm/traversal metrics.

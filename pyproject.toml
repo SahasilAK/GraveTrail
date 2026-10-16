@@ -23,19 +23,33 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
+build = ["pyinstaller>=6.22,<7"]
 
 [project.scripts]
 dataforge = "dataforge.cli:app"
+dataforge-ui = "dataforge.launcher:main"
+dataforge-build = "dataforge.build:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dataforge"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"prompts" = "dataforge/prompts"
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "scripts/build/hatch_assets.py"
+
+[tool.hatch.build]
+exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "plans/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "AGENTS.md", "KNOWLEDGE.md", ".kbignore", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", ".dockerignore", ".github/**"]
-exclude = ["docs/prompts/**", "docs/plans/**", "**/__pycache__/**", "**/*.pyc"]
+include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "plans/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "AGENTS.md", "KNOWLEDGE.md", ".kbignore", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
+exclude = ["docs/prompts/**", "docs/plans/**", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
+
+[tool.hatch.build.targets.sdist.force-include]
+"scripts/build/hatch_assets.py" = "scripts/build/hatch_assets.py"
+"scripts/build/frozen_entry.py" = "scripts/build/frozen_entry.py"
+"scripts/build/build_executable.py" = "scripts/build/build_executable.py"
+"scripts/build/smoke.py" = "scripts/build/smoke.py"
+"scripts/build/smoke_docker.py" = "scripts/build/smoke_docker.py"
+"scripts/build/KNOWLEDGE.md" = "scripts/build/KNOWLEDGE.md"
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

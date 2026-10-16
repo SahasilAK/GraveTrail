@@ -1,0 +1,30 @@
+name: dataforge
+x-runtime: &runtime
+  image: dataforge:local
+  build: .
+  container_name: ${COMPOSE_PROJECT_NAME:-dataforge}-owner
+  init: true
+  stop_grace_period: 30s
+  environment:
+    DATAFORGE_HOME: /data
+  volumes:
+    - dataforge-data:/data
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+services:
+  ui:
+    <<: *runtime
+    profiles: [ui]
+    ports:
+      - "127.0.0.1:${DATAFORGE_UI_PORT:-8501}:8501"
+  mcp:
+    <<: *runtime
+    profiles: [mcp]
+    command: [dataforge, mcp]
+    stdin_open: true
+    healthcheck:
+      disable: true
+volumes:
+  dataforge-data:
