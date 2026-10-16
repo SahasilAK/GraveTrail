@@ -6,6 +6,10 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `prompts/` — [prompts/KNOWLEDGE.md](prompts/KNOWLEDGE.md).
 
 ## Files
+- `BUILD_AND_RELEASE.md` — Actual launcher/build options, native artifact contracts, Docker ownership/persistence, CI gates and dated tested/untested platform evidence.
+- `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
+- `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.
+- `SECURE_CONFIGURATION.md` — Session credential lifecycle, namespaced read-only startup variables, legacy compatibility, redaction and trusted-host limits.
 - `CLI_GUIDE.md` — Commands, jobs, scopes, import roots, exit codes, response budgets and single-owner DuckDB workflow.
 - `MCP_INTEGRATION.md` — Official SDK transports, tools/resources/prompts, current official Codex/Claude examples, private bearer auth and remote TLS-proxy boundary.
 - `AGENT_WORKFLOWS.md` — Focused metadata/evidence/columns/impact/refresh workflows and honest SQL/SAS archive acceptance.
@@ -28,3 +32,10 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 
 Latest verification/accounting lives in plans/REQUIREMENT_MATRIX.md and IMPLEMENTATION_STATUS;
 older numerical results in guides are historical. Parser7 preserves exact SAS block evidence.
+
+Maintenance/deployment guidance: `connections.py` isolates session keys; broad cleanup uses
+preview/apply guards, while older history/staging helpers remain separately recoverable.
+Shared parser cache/original blobs require explicit shared cleanup. Source/AI removal clears
+the dependent workspace graph; full runtime reset preserves backups/unrecognized files/schema.
+Backups restore only to a new home. Source/CLI and installed/frozen UI default homes differ;
+pass explicit homes and respect one DuckDB owner. Platform/build evidence lives in status.

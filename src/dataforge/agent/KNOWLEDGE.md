@@ -19,3 +19,8 @@ Store, Importer, LineageGraph and exports; no source execution or LLM requests.
 Runtime artifacts stay under HOME/agent; no schema migration. DuckDB has one process owner.
 Read-only is the startup default. Settings may revoke access/source/writes; source code
 requires an explicit evidence request or detailed response. Polling avoids long transactions.
+# Maintenance integration
+
+AgentService exposes cleanup inspect/preview and policy-gated confirmed apply; restricted
+workspace policies cannot create whole-home backups. MCP registers inspect/preview only,
+never a destructive cleanup tool. CLI applies saved preview tokens under existing write gates.

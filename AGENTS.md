@@ -18,7 +18,19 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
 - Preserve evidence (file, exact statement, line range, method) for every relationship.
 - Prefer unresolved diagnostics to guessed dependencies. Never merge ambiguous names.
 - Runtime data belongs under `DATAFORGE_HOME` (default `.dataforge/`, ignored).
-- Credentials come from named environment variables; never persist their values.
+- Source/CLI default home is `.dataforge/`; installed/frozen UI defaults to platform user data.
+  Pass the same explicit `--home` when switching owners. One DuckDB process owns each home.
+- Credentials come from named read-only launch variables or session `RuntimeConnections`;
+  never persist their values or mutate the process environment for session credentials.
+  New runtime references use `DATAFORGE_`; explicit legacy launch references remain compatible.
+- Cleanup must use shared preview/apply guards and fixed managed paths, protect active jobs,
+  and preserve referenced originals. Source/AI cleanup invalidates the complete workspace graph.
+  Shared cache/orphan/application cleanup is UI-only; MCP cleanup remains read-only.
+- Test destructive operations only in isolated homes. General cleanup requires a backup for
+  recovery; specialized history/staging journals are not general undo. Restore whole-home
+  archives only into new destinations. Keep runtime reset separate from schema removal.
+- Installation and build commands are in `docs/SETUP_AND_DEPLOYMENT.md`. Validate installed
+  wheel/frozen UI assets outside the checkout; native binaries require target-platform tests.
 - OmniRoute testing must use model `auto`, endpoint `http://localhost:20128/v1`, and the
   existing `OMNIROUTE_API_KEY` environment variable. Do not substitute fixed models/routes.
 - Use parameterized SQL, safe relative paths, allowed import roots, bounded resources.

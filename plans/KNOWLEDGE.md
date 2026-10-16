@@ -16,3 +16,8 @@ Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current t
 - `MASTER_PLAN.md` — DataForge Implementation Plan. Maintained documentation; consult implementation status for verification boundaries.
 - `RISKS_AND_ASSUMPTIONS.md` — Risks and assumptions. Maintained documentation; consult implementation status for verification boundaries.
 - `TEST_STRATEGY.md` — Test strategy. Maintained documentation; consult implementation status for verification boundaries.
+# Maintenance and distribution
+
+`MAINTENANCE_DEPLOYMENT_PLAN.md` tracks runtime credentials, safe cleanup, Python/Docker,
+host executable tooling and documentation slices. IMPLEMENTATION_STATUS.md holds verification
+evidence and remaining platform gates; destructive validation uses isolated runtime homes.

@@ -7,6 +7,9 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `sample_data/` — SQL and SAS sample project ZIPs for loading sample data into the application during testing. See [sample_data/KNOWLEDGE.md](sample_data/KNOWLEDGE.md).
 
 ## Files
+- `test_cleanup.py` — Preview staleness, workspace/source dependencies, active jobs/providers, shared blobs, path hardlinks/traversal, scoped backup denial, integrity-checked new-home restore, CLI/MCP and UI backup/rebuild.
+- `test_connections.py` — Session isolation, expiration/disconnect, read-only launch environment, masked input clearing and ordinary/escaped/arbitrary-variable provider-echo redaction.
+- `test_distribution.py` — Runtime home/theme preservation, integrity path/tamper errors, build environment isolation and real wheel/sdist dummy secret/database exclusion canaries.
 - `test_agent_service.py` — Shared SQL/SAS/CSV queries/cache, ambiguity, paging/depth/budgets, stale inputs/config, permissions/source boundaries, jobs/crash states and nonblocking/revoked status.
 - `test_agent_cli.py` — No-UI subprocess help, authorization/errors, real import/background build/status/export and polling revocation/budgets.
 - `test_agent_mcp.py` — Official SDK tool parity/resources/prompts, actual stdio client, authenticated HTTP client/refusals and status responsiveness while a query waits on ingestion.

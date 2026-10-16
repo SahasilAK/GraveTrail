@@ -6,6 +6,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 
 ## Files
+- `data_management.py` — Settings cleanup metrics, dry-run/typed confirmation, optional whole-home backup, rebuild, integrity/checkpoint/new-home restore and opt-in expired staging cleanup.
 - `agent_settings.py` — Workspace agent permissions/budgets/auditing, client setup examples and actual in-process MCP handler test; publishes credential-free status-polling revocation snapshots.
 - `temporary_cleanup.py` — Lazy Storage panel for bounded stale staging preview, explicit selection/cleanup and retained restore; safe failure messages, per-workspace notices.
 - `__init__.py` — Package marker; no business behavior.
@@ -13,7 +14,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `assistance_result.py` — Reads AI record by workspace/ID, displays quarantine/validated result/usage and separately merges inferred claims with refresh; no source/response copies in session state.
 - `common.py` — Shared context/store/graph caches with missing-asset lineage warnings, exact asset/source choices reset when IDs leave current options; styled graph v2 component, downloads and original-version viewer with lazy complete source and workspace line-number preferences.
 - `lineage_tree.py` — Full-width compact indented lineage rows with inline file paths, level labels, scoped theme-aware tree guides, Expand all/Collapse all and optional relationship details. Native branches stay lazy, depth/entry-bounded and cycle-safe; imported labels are Markdown-escaped. Stores controls only.
-- `provider_settings.py` — Profile forms, env-key references, connection/model discovery and task/fallback routing; no secret-value storage.
+- `provider_settings.py` — Safe saved preferences/env references, masked session credential connect/clear, sanitized connection/model discovery and task/fallback routing.
 - `themes.py` — Fourteen native presets: original eight unchanged plus six additive orange/Nord/Rose/Sand/Mint choices. TOML-aware atomic config updates, detection and bounded reload acknowledgement. Applies only on explicit request, app-wide.
 - `unresolved_review.py` — Offline bounded diagnostic selector/context preview with adjustable source ranges and explicit hash-pinned review button; uses shared durable result presentation.
 - `workspace_history.py` — Lazy native Settings panel previews bounded history eligibility, archives with retained recovery and restores missing records; all persistence lives in maintenance.py.

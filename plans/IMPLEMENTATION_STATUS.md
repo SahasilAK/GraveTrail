@@ -4,11 +4,12 @@ Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Current delivery state
 
-Maintenance/deployment enhancement is in progress; plan: MAINTENANCE_DEPLOYMENT_PLAN.md.
-Runtime credentials now support masked session-only entry, context-local adapter injection,
-expiration/disconnect and redaction of echoed provider secrets. Startup environment values
-remain read-only and legacy variable references remain compatible. Cleanup services and
-distribution builds are the next active slices; all destructive verification uses isolated homes.
+Maintenance/deployment enhancement is implemented and locally verified; plan:
+MAINTENANCE_DEPLOYMENT_PLAN.md. Delivered previewed dependency-aware cleanup, session-only
+runtime credentials, checksummed backup/new-home restore, packaged Python UI/CLI/MCP,
+non-root persistent Docker deployment, host-native executable/release tooling and the
+17-part docs/SETUP_AND_DEPLOYMENT.md guide. All destructive verification used isolated homes.
+Remaining gates: native Linux/macOS executables, hosted release CI and OmniRoute auto routing.
 
 Additional Agent & Automation Access feature is implemented and locally verified:
 standalone CLI, token-efficient MCP, managed jobs and human Settings integration.
@@ -42,9 +43,10 @@ accuracy or production deployment certification is claimed.
 
 ## Current verification
 
-- Final main checkout:220 passed,1 skipped in25.21s. Final clean source install:220 passed,
-  1 skipped in25.06s. Ruff passes in both environments; lock validation and package builds pass.
-  Installed wheel imports from site-packages with Python -I; parser7/advisory schemas verified.
+- Latest maintenance suite:266 passed,1 existing Windows symlink-privilege skip. Ruff,
+  locked dependencies and Compose configuration pass. Clean Windows wheel and sdist installs,
+  actual Windows standalone and Linux Docker pass CLI/import/lineage, stdio MCP and rendered
+  HTTP/WebSocket UI checks. Docker additionally verifies UID10001 and volume persistence.
 - Actual isolated running UI verified settings, advisory reopening, cleanup/restore, storage
   switch/back, vendor import/analysis, exact selectors, graph evidence and tree/source panels.
   Primary home, imported source data and active theme/configuration were preserved.
@@ -54,14 +56,14 @@ accuracy or production deployment certification is claimed.
 
 ## External gates and intentional boundaries
 
-- Latest OmniRoute auto attempt failed during model discovery in4.15s. Port20128 had no
-  local TCP listener; the named credential is present. Earlier discovery advertised964 IDs
+- Latest OmniRoute auto attempt reaches discovery (964 models), but auto completion fails
+  with ProviderError in11.59s. The named credential is present. Earlier discovery advertised964 IDs
   including auto/... aliases but no literal auto. Do not substitute
   fixed models. Historical fixed-route success predates the user's auto-only instruction.
   Re-run scripts/verify_llm.py after gateway routing changes; use OMNIROUTE_API_KEY, never
   persist/print its value. Task-specific new advisory schemas remain synthetic-HTTP verified.
-- Docker CLI is installed, but the Linux engine pipe is unavailable. Container execution and
-  remote CI remain unverified. No push or service startup requiring elevation was requested.
+- Docker daemon29.2.1 is now available. The actual Linux image build, non-root runtime,
+  rendered UI, persisted volume and stdio MCP checks pass. No registry push or hosted CI run.
 - Self-contained HTML export/JS/downloads are verified. Direct file-browser interaction remains
   unverified because this browser environment blocked file navigation. No server workaround claim.
 - Windows file-symlink test skips without creation privilege. Runtime path protections remain.
@@ -70,8 +72,8 @@ accuracy or production deployment certification is claimed.
   temporary assets; runtime sessions are not discovered. No invented wildcard/transitive columns.
 - Local single-user process; cooperative cancellation cannot preempt a parser or blocked HTTP
   read. Dense/large real projects need their own labeled accuracy/performance acceptance.
-- Optional: full source/history portable backups, blob GC, SVG/PNG exports, general assistant,
-  transitive column transformation lineage, scheduled retention and multi-user authentication.
+- Optional: SVG/PNG exports, general assistant, transitive column transformation lineage,
+  background scheduled retention and multi-user authentication. Whole-home backups/blob GC are delivered.
 
 ## Resume instructions
 
@@ -83,7 +85,7 @@ absolute session storage choices (maximum8 total). No data migration occurs on s
 Commands: uv sync --locked --extra dev; uv run pytest -q; uv run ruff check .;
 uv run streamlit run app.py --server.address 127.0.0.1.
 Commit each tested coherent group. Preserve user .gitignore/theme edits and the master prompt.
-Next work is external acceptance (auto routing, Docker/CI/offline browser) or a new demonstrated
+Next work is external acceptance (auto routing, native Linux/macOS, CI/offline browser) or a new demonstrated
 project-specific parser case, not restarting completed implementation slices.
 
 ## Continuation execution — 2026-10-15
@@ -566,3 +568,56 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Explicit boundaries:one DuckDB owner per home; private bearer auth (no OAuth issuance),
   external TLS reverse proxy required; remote deployment/client configuration changes not
   performed. Optional REST omitted. Existing OmniRoute/Docker external gates remain unchanged.
+
+
+## Maintenance, secure configuration and deployment — 2026-10-16
+
+- Source inventory, lineage/columns, AI results, eligible history/jobs, reset/deletion, shared
+  parser/data caches, orphan blobs and recognized application reset use service previews,
+  dependency counts, logical size estimates, freshness tokens and typed confirmation. Optional
+  full-home backup is selected by default in UI. Running/queued jobs and provider activity
+  block cleanup; new provider requests are refused until maintenance releases the home.
+- Database commits precede controlled file removal: interruption leaves safe unreferenced
+  files reported for retry. Shared blobs, retained snapshots/history and other workspaces
+  are protected. Full reset preserves backups, unknown files, schema, code and repository docs.
+  Source cleanup invalidates the workspace graph/history; clear shared parser cache and
+  orphan blobs separately when removing unreferenced source-derived copies.
+- Integrity/schema/reference/blob checks, checkpoint, Windows-safe COPY FROM DATABASE
+  snapshot backup and bounded SHA-256 restore to a NEW home. Unsafe archive paths, redirected
+  runtime paths, hardlinks, stale previews and incomplete backups are refused. Backups are
+  capped at512MB/50,000 files. Larger homes need an offline backup. No raw SQL/drop control.
+- Masked runtime credentials stay session/context-local; no global environment mutation or
+  persistent credential values. Explicit legacy environment references remain read-only.
+  Adapter responses/logs scrub known credentials, including escaped JSON and arbitrary
+  explicitly referenced environment names. Request admission spans source reads through
+  persistence. Originals remain exact evidence and can contain user-authored source secrets.
+- CLI workspace cleanup requires existing write policy, saved preview and typed name;
+  restricted policies cannot make full-home backups. MCP adds read-only inspect/preview only.
+  UI offers opt-in recoverable expired staging cleanup on page visits; no background scheduler.
+- Installable UI/assets, shared OS data-home defaults, non-root locked Docker and owner-aware
+  Compose; Python/native/Docker build targets, manifests/checksums, clean host PyInstaller
+  bundles and tagged/manual Windows/Linux/macOS artifact CI without publishing/signing.
+- Tests:266 passed/1 existing privilege skip in82.39s; Ruff, lock and Compose validation pass. Actual
+  clean wheel AND sdist installations outside checkout, Windows executable, and Linux image
+  pass import/lineage, stdio MCP and rendered UI; Docker verifies persistent volume/UID10001.
+  Artifacts:dist/release (four manifest entries, ~115MB standalone ZIP). Build environments
+  exclude inherited provider credentials; real wheel/sdist canary tests exclude secrets/DBs.
+- Running isolated8511 UI displays SQL fixture86 files/92 assets/128 edges and calculated
+  cleanup metrics. AppTest exercises backup/typed cleanup/rebuild and session credential
+  connect/clear. Primary runtime data, source ZIPs, theme and .gitignore were preserved.
+- Both supplied ZIPs rerun:SQL128 exact logical edges, seven layers/all16 roots; SAS existing
+  FORMAT= limitations remain48 physical/32 collapsed edges,16 WORK assets and68 diagnostics.
+  Warm cache86 scripts each.500-file benchmark:501 assets/500 edges, import17.6621s,
+  cold2.4974s, warm0.89s, all500 cached, focused traversal0.0931ms; synthetic fixture only.
+- Professional setup guide has all17 sections and55 verified local documentation links;
+  README, AGENTS, architecture/security/implementation and affected knowledge maps updated.
+- Remaining: hosted Actions and native Linux/macOS binaries unexecuted; unsigned bundles
+  (no installers/notarization); backup limits above; local trusted-user UI without multi-user
+  auth. OmniRoute auto attempt:discovery964 models, completion ProviderError after11.59s;
+  no fixed route substituted. Python protocol mocks cover provider behavior.
+- Independent review findings were reproduced before fixes:post-HTTP persistence race,
+  JSON-escaped credential leak, arbitrary environment-reference leak, incomplete restore,
+  and scoped whole-home backup authorization. Their focused regressions now pass.
+- Final reset safety regression preserves theme assets when a data home overlaps a checkout
+  and ignores non-UUID job filenames; twelve focused cleanup tests pass. No code/schema/docs
+  directory is recursively removed by application reset.

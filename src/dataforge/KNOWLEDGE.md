@@ -7,6 +7,10 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).
 
 ## Files
+- `cleanup.py` — Dependency-aware preview/token/apply services, active-job guards, recognized-file allowlists and conservative shared-blob GC; typed confirmations and transaction-before-file-removal.
+- `database_maintenance.py` — Schema/reference/blob integrity, checkpoint, Windows-safe DuckDB snapshots and bounded checksummed ZIP backup/restore to new directories only.
+- `launcher.py` — Shared checkout/wheel/frozen UI startup; OS user homes, copy-once runtime theme, migrations and bundled-page path discovery. Streamlit imports remain lazy.
+- `build.py` — Source-checkout build CLI: Python, Docker, host PyInstaller/all; sanitized subprocess environments, locked isolated executable build and safe integrity manifests/checksums.
 - `cli.py` — Typer CLI and console entry point; JSON/human output, explicit write/import authorization, background workers, DB-free bounded status polling, MCP launcher. No Streamlit imports.
 - `storage_locations.py` — Pure bounded startup storage allowlist and resolved selection validation; never creates or migrates directories.
 - `asset_identity.py` — AssetResolver separates supplied temporary job/session namespaces, preserves global persistent outputs and rejects mixed-lifetime reads; shared labels/AI visibility helpers.
@@ -32,5 +36,8 @@ Every edge has exact statement/file/version evidence. UI never executes imported
 # Runtime credentials
 
 `connections.py` owns session-local credentials, context scopes, read-only environment
-resolution and redaction. Adapters and log formatting share it; never cache a session manager
+resolution and recursive/JSON-escaped secret redaction. Adapters and log formatting share it; never cache a session manager
 globally or persist it. `docs/SECURE_CONFIGURATION.md` describes limits and environment names.
+
+AI admission now covers source reads through result commit; maintenance reserves the home
+against new requests. Whole-home backups require unrestricted local authorization.

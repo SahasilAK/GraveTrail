@@ -22,7 +22,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `.gitignore` — Source-control exclusions, including local runtime. Preserve separate preexisting user edits.
 - `.kbignore` — Knowledge scan exclusions; this scanner uses bare-name/glob patterns rather than trailing-slash directory patterns.
 - `AGENTS.md` — Repository conventions, authority, module navigation, verification commands and per-feature commit policy.
-- `Dockerfile` — Optional non-root container, persistent /data, writable native theme configuration and health check; engine unavailable for execution here.
+- `Dockerfile`, `compose.yaml` — Locked multi-stage non-root image, persistent /data, UI/MCP owner profiles and health check; actual Linux container smoke verified on Docker Desktop.
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — Installation, startup, first workflow, features, configuration, structure and honest limits.
 - `app.py` — Entry point: configure logs, cache Store, select/create workspaces, register six st.Page scripts.
