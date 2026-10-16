@@ -32,7 +32,8 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_llm.py` — Provider protocols, grounding/privacy, fenced JSON rejection boundaries, malformed HTTP envelopes and inferred merge retention. Temporary runtime data only.
 - `test_logging.py` — Behavioral regression tests for logging. Run with pytest; temporary runtime data only.
 - `test_maintenance.py` — History archive/restore bounds, workspace/reference protection, idempotence, tamper rejection, transaction rollback, v3 migration and journal recovery after lost file/restart.
-- `test_sas.py` — Behavioral regression tests for sas. Run with pytest; temporary runtime data only.
+- `test_sas.py` — Static SAS rules, FORMAT=/LENGTH=/CALCULATED/DATETIME(), nested scope, malformed modifiers, exact evidence and no phantom source columns.
+- `test_sas_project.py` — Real SAS ZIP exact 128 logical edges, seven layers/all 16 sources, WORK collapsing, original evidence, warm reuse and parser-version cache upgrade.
 - `test_schemas.py` — Typed DDL/wildcard eligibility, conflicts/changes/inheritance, cache refresh, disabled extraction, identical declarations, unqualified invalidations, SWAP/RENAME and no CSV name guessing.
 - `test_sql.py` — Behavioral regression tests for sql. Run with pytest; temporary runtime data only.
 - `test_store.py` — Behavioral regression tests for store. Run with pytest; temporary runtime data only.

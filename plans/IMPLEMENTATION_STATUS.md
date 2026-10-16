@@ -11,6 +11,11 @@ non-root persistent Docker deployment, host-native executable/release tooling an
 17-part docs/SETUP_AND_DEPLOYMENT.md guide. All destructive verification used isolated homes.
 Remaining gates: native Linux/macOS executables, hosted release CI and OmniRoute auto routing.
 
+SAS PROC SQL FORMAT= parsing is fixed with exact source evidence and parser cache8.
+The supplied SAS project now matches all128 logical edges (144 physical evidence edges),
+including pub.all_kpis through seven layers to all16 sources. Reanalyze existing workspaces
+to refresh cached results; packaged images/executables built earlier require rebuilding.
+
 Additional Agent & Automation Access feature is implemented and locally verified:
 standalone CLI, token-efficient MCP, managed jobs and human Settings integration.
 See AGENT_INTEGRATION_PLAN.md and AGENT_ACCEPTANCE.md for the current feature evidence.
@@ -27,7 +32,8 @@ accuracy or production deployment certification is claimed.
 - SQL AST lineage/direct columns, reachable CTEs/subqueries/unions, common DML/views, explicit
   dialect precedence, SQL Server SELECT INTO/#/## and Teradata volatile CTAS fixture coverage.
 - Dedicated SAS DATA/PROC rules, exact original evidence, static macros/library maps,
-  explicit file links and unresolved dynamic diagnostics. Configurable CSV sampled metadata.
+  PROC SQL FORMAT=/LENGTH=/CALCULATED/DATETIME(), explicit file links and unresolved dynamic
+  diagnostics. Configurable CSV sampled metadata.
 - Conservative cross-file resolution, supplied temporary job/session IDs, persistent shared
   identities, mixed-lifetime unresolved reads, declared-schema wildcard evidence and provenance.
 - Atomic/incremental analysis, selected refresh, run comparison, rollback/source-version safety,
@@ -43,10 +49,12 @@ accuracy or production deployment certification is claimed.
 
 ## Current verification
 
-- Latest maintenance suite:266 passed,1 existing Windows symlink-privilege skip. Ruff,
-  locked dependencies and Compose configuration pass. Clean Windows wheel and sdist installs,
+- Latest SAS parser suite:288 passed,1 existing Windows symlink-privilege skip in54.07s;
+  Ruff passes. Earlier maintenance suite266 passed; locked dependencies and Compose
+  configuration passed. Clean Windows wheel and sdist installs,
   actual Windows standalone and Linux Docker pass CLI/import/lineage, stdio MCP and rendered
   HTTP/WebSocket UI checks. Docker additionally verifies UID10001 and volume persistence.
+  Those distribution artifacts precede parser8 and were not rebuilt for this parser fix.
 - Actual isolated running UI verified settings, advisory reopening, cleanup/restore, storage
   switch/back, vendor import/analysis, exact selectors, graph evidence and tree/source panels.
   Primary home, imported source data and active theme/configuration were preserved.
@@ -621,3 +629,32 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Final reset safety regression preserves theme assets when a data home overlaps a checkout
   and ignores non-UUID job filenames; twelve focused cleanup tests pass. No code/schema/docs
   directory is recursively removed by application reset.
+
+## SAS PROC SQL FORMAT parsing — 2026-10-16
+
+- Added an instance-local SQLGlot adapter for SELECT FORMAT= modifiers (named numeric,
+  character, custom and width/precision forms), before/after aliases, literal LENGTH=,
+  CALCULATED aliases and zero-argument SAS DATETIME(). No imported source is executed.
+- Exact original statement/file/line evidence remains unchanged. Format names and derived
+  aliases never become direct source columns. Malformed formats are diagnosed; missing or
+  duplicate CALCULATED aliases remain unresolved. Configured dialect projection behavior
+  is preserved, including T-SQL alias=expression. Ordinary SQL parsing remains unchanged.
+- Parser cache8 reparses older cached results during analysis; regression proves parser7
+  failed parses are replaced. Existing workspaces need Analyze all files without reimport.
+  Current materialized results are preserved until analysis; no primary home was modified.
+- Real supplied SAS ZIP:86 scripts,85 persistent assets plus16 WORK assets,144 physical
+  evidence edges/128 collapsed logical edges exactly matching the manifest; pub.all_kpis
+  reaches all16 sources across seven layers. SQL fixture remains128 exact edges/all16 roots.
+  Both warm analyses reuse86 caches. SAS retains31 diagnostics:8 setup macro warnings,
+  7 informational LIBNAME notices and16 inline-data notices; no parse errors remain.
+- Verified isolated running8512 UI:101 SAS assets/144 dependencies, full-depth graph includes
+  all16 src tables, pub.all_kpis exact selector and original Lines7–21 FORMAT=/DATETIME()
+  source evidence. Screenshot:.dataforge/verification/sas-format-ui.png. Source ZIPs untouched.
+- Final pytest:288 passed/1 existing Windows privilege skip in54.07s; Ruff and diff check pass.
+  62 focused parser/settings tests pass. Reviewer findings (T-SQL alias semantics and keyword
+  CALCULATED aliases) were reproduced before fixes and covered by new regressions.
+- scripts/verify_agents.py now asserts exact edges/all-source traversal for BOTH fixtures.
+  README, SAS guide, workflow/token evidence, acceptance and affected knowledge maps updated.
+  Latest measurements:.dataforge/verification/sas-format-final.json; no LLM calls required.
+- Remaining deployment gates above are unchanged. Existing wheel/executable/Docker artifacts
+  were not rebuilt for this source parser fix; rebuild them to include parser8.

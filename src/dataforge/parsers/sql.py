@@ -92,7 +92,7 @@ def declared_schema(tree, start, end, operation_index):
     return records
 
 
-def parse_sql(content: str, dialect: str = "") -> ParseResult:
+def parse_sql(content: str, dialect: str | sqlglot.Dialect = "") -> ParseResult:
     result = ParseResult()
     for code, start, end in statements(content):
         try:

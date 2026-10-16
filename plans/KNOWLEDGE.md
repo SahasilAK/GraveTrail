@@ -21,3 +21,6 @@ Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current t
 `MAINTENANCE_DEPLOYMENT_PLAN.md` tracks runtime credentials, safe cleanup, Python/Docker,
 host executable tooling and documentation slices. IMPLEMENTATION_STATUS.md holds verification
 evidence and remaining platform gates; destructive validation uses isolated runtime homes.
+
+SAS FORMAT= follow-up in IMPLEMENTATION_STATUS.md records parser8, exact128 logical edges,
+all16 sources/seven layers and cache refresh; previous dated SAS gaps are historical.

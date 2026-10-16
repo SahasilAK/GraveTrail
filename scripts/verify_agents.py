@@ -62,9 +62,8 @@ def verify(home):
                     "detailed_estimated_tokens": (sizes["detailed_chars"] + 3) // 4,
                     "note": "Character/4 token estimates; static parsing only; no imported SQL/SAS execution"}
                 results[extension] = result
-                if extension == "sql":
-                    assert result["all_sources_reached"] and result["complete"], result
-                    assert not result["missing_logical_edges"] and not result["extra_logical_edges"], result
+                assert result["all_sources_reached"] and result["complete"], result
+                assert not result["missing_logical_edges"] and not result["extra_logical_edges"], result
                 assert sizes["summary_chars"] < sizes["detailed_chars"] / 2, result
             finally:
                 service.close()

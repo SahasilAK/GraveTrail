@@ -48,8 +48,10 @@ These are fixture provenance notes, not results of a fresh application test.
 Agent integration verification imported 86 scripts per ZIP using only its extension.
 SQL matches all 128 logical edges; `pub.all_kpis` reaches all 16 sources across seven
 layers. Its registry also contains seven isolated setup/schema names (92 total assets).
-SAS currently yields 16 WORK datasets and 48 physical / 32 collapsed logical edges.
-Existing unsupported PROC SQL `FORMAT=` modifiers prevent 96 expected logical edges
-and `pub.all_kpis`; 68 diagnostics record this limitation. Do not treat manifest
-expectations as successfully extracted facts. Both warm refreshes reuse 86 caches.
+With parser version 8, SAS yields 101 assets (85 persistent and 16 WORK datasets),
+144 physical / 128 collapsed logical edges, exactly matching the manifest.
+`pub.all_kpis` reaches all 16 sources through all seven layers. Its 31 diagnostics
+are eight macro warnings and 23 informational LIBNAME/inline-data notices; no parse
+errors remain. Both warm refreshes reuse 86 caches. Older workspaces need analysis
+to refresh parser caches, without reimporting source files.
 Reproduce with `scripts/verify_agents.py`; no imported SQL/SAS is executed.

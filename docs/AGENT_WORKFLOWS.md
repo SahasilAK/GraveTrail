@@ -50,11 +50,12 @@ Check the included README, execution order, lineage CSV/JSON and query-case resu
 
 Recommended probe: search `pub.all_kpis`, query upstream through depth 30 and verify
 all 16 `src.*` tables across seven layers. Check SAS temporary collapsing separately.
-The repository's current parser handles the SQL fixture's 128 logical edges.
-The SAS archive includes PROC SQL `FORMAT=` modifiers unsupported by the existing
-SQL parser: its final published asset is unavailable and diagnostics preserve that
-failure. Do not guess the missing 96 logical edges or imply the archive was fully
-analyzed. Supported SAS DATA steps and WORK collapsing remain available.
+Both fixtures match all 128 expected logical edges and reach all 16 sources across
+seven layers. SAS yields 101 assets including 16 WORK intermediates, with 144 physical
+evidence edges before collapsing. PROC SQL `FORMAT=`, `LENGTH=`, `CALCULATED` and
+`DATETIME()` expressions are handled statically. SAS retains 31 diagnostics (eight
+macro warnings and 23 informational library/inline-data notices), with no parse errors.
+Reanalyze older workspaces to refresh parser caches; no source reimport is needed.
 
 Run `uv run python scripts/verify_agents.py --home .dataforge/verification/agents
 --output .dataforge/verification/agent-results.json` for static fixture comparisons

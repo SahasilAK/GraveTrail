@@ -28,20 +28,19 @@ evidence edges; simplification preserves evidence and intermediate names.
 
 Measured on the supplied archives with static analysis, 2026-10-16. Comparison uses
 the same selected asset and 10-row page limit at a 100,000-character workspace cap.
-SAS uses its supported staging subgraph because final PROC SQL parsing is unresolved.
+Both fixtures use the final published asset after PROC SQL modifier support.
 
 | Fixture / asset | Summary characters | Detailed characters | Approx. summary tokens | Approx. detailed tokens |
 | --- | ---: | ---: | ---: | ---: |
 | SQL / `pub.all_kpis` | 1,509 | 64,841 | 378 | 16,211 |
-| SAS / `stg.customers_clean` | 649 | 3,529 | 163 | 883 |
+| SAS / `pub.all_kpis` | 1,509 | 45,454 | 378 | 11,364 |
 
 Approximate tokens are `ceil(characters / 4)`, not a model-specific tokenizer or
-billing claim. Summary reduced these payloads by about 97.7% and 81.6% respectively.
+billing claim. Summary reduced these payloads by about 97.7% and 96.7% respectively.
 These intentionally evidence-heavy examples do not imply universal savings.
 IDs/cursors contribute to output size, so future measurements may differ slightly.
 
 `scripts/verify_agents.py` reproduces the measurement and compares logical edge
-sets with each bundled manifest. SQL matches all 128 expected edges and reaches
-all 16 sources; SAS reports its existing unresolved FORMAT-modifier limitation
-instead of claiming 128 edges. Both warm analyses reuse all 86 script caches.
+sets with each bundled manifest. Both match all 128 expected logical edges and reach
+all 16 sources. Both warm analyses reuse all 86 script caches.
 See [AGENT_WORKFLOWS.md](AGENT_WORKFLOWS.md) for fixture interpretation and limits.

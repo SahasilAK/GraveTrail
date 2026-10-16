@@ -63,7 +63,8 @@ Read [CLI guide](docs/CLI_GUIDE.md), [MCP setup](docs/MCP_INTEGRATION.md),
 [agent workflows](docs/AGENT_WORKFLOWS.md) and [token measurements](docs/TOKEN_OPTIMIZATION.md).
 DuckDB allows one owning process per runtime home; stop another owner or use a
 separate home. The supplied SQL/SAS ZIPs in `tests/sample_data` are described in the
-workflow guide, including the current SAS PROC SQL format-modifier limitation.
+workflow guide. Both now match all 128 expected logical dependencies, including SAS
+PROC SQL `FORMAT=` expressions and temporary WORK collapsing.
 
 ## Features
 

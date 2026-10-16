@@ -9,7 +9,7 @@ optional REST omitted because CLI/MCP cover the requested workflows.
 | MCP without Streamlit | Real SDK stdio subprocess initializes and queries; independent HTTP startup |
 | CLI/MCP consistent lineage | Both delegate to AgentService; SDK response equals the same real-store service query, CLI resolves actual imported/built lineage |
 | Stored metadata/cache reuse | Query test refuses analysis calls; both supplied ZIP warm refreshes reuse all 86 cached scripts |
-| Smaller summary defaults | SQL 1,509 vs 64,841 chars; supported SAS staging query 649 vs 3,529 chars |
+| Smaller summary defaults | SQL 1,509 vs 64,841 chars; SAS 1,509 vs 45,454 chars, both pub.all_kpis |
 | Pagination/output budgets | Query-bound cursors, max chars/items/depth, aggregate batch budgets and explicit oversized-record errors |
 | Source only on request | Summary/search omit code; explicit lines/statement/operation retrieval; standard columns omit expressions; revocation enforced |
 | Ambiguous names | Candidate asset IDs returned; no arbitrary first match |
@@ -43,11 +43,11 @@ optional REST omitted because CLI/MCP cover the requested workflows.
   manifest, no extras/missing edges, all 16 sources reached through seven layers,
   81 dependencies upstream of pub.all_kpis. Registry has 92 assets including seven
   isolated setup/schema names in addition to the manifest's 85 persistent tables.
-- Fresh SAS fixture: 86 scripts analyzed, 16 WORK assets, 48 physical/32 collapsed
-  logical edges, 68 diagnostics. No invented edges. Existing PROC SQL FORMAT= syntax
-  prevents 96 logical edges and pub.all_kpis from being materialized. Its staging
-  graph still supports deterministic evidence and temporary collapsing. This is
-  reported as incomplete; parser behavior was not broadened in this feature.
+- SAS parser8 follow-up: 86 scripts analyzed, 101 assets including 16 WORK assets,
+  144 physical/128 collapsed logical edges exactly matching the manifest; pub.all_kpis
+  reaches all16 sources through seven layers. All86 warm parses are cached. The31
+  diagnostics comprise eight setup macro warnings and23 informational library/inline-data
+  notices, with no parse errors. Earlier FORMAT= failures are resolved by the parser fix.
 - Token estimates are ceil(characters/4), not billing tokens. Fixture verification
   executes no SQL/SAS. Full DuckDB transformation and licensed SAS execution remain
   unverified as previously recorded by the user.

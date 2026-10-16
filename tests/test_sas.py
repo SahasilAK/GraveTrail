@@ -1,3 +1,5 @@
+import pytest
+
 from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 
@@ -118,3 +120,78 @@ def test_csv_extreme_width_and_header_errors_are_diagnostics():
     assert any(d.severity == "error" for d in r.diagnostics)
     r = parse_csv('unquoted"' + "," * 20000 + "\n", "quote_bypass.csv")
     assert r.diagnostics and len(r.metadata.get("columns", [])) <= 4096
+
+
+@pytest.mark.parametrize('attribute', ['format=yymmdd10.', 'FORMAT = comma18.2',
+                                      'format=$char20.', 'format=8.2', 'format=best.',
+                                      'format=8.', 'format=my_custom.'])
+def test_proc_sql_formats_preserve_dependencies_columns_and_original_evidence(attribute):
+    statement = f'create table mart.x as\nselect a.event_date {attribute}, a.amount as total\nfrom raw.orders a where a.format=1;'
+    result = parse_sas('proc sql;\n' + statement + '\nquit;')
+    assert not result.diagnostics
+    assert pairs(result) == {('raw.orders', 'mart.x')}
+    operation = result.operations[0]
+    assert operation.code == statement and (operation.start, operation.end) == (2, 4)
+    assert operation.method == 'sas-proc-sql'
+    assert {u.column for u in operation.usages} == {'event_date', 'amount', 'format'}
+
+
+def test_proc_sql_format_length_and_calculated_do_not_invent_source_columns():
+    statement = '''create table mart.x as select sum(a.amount) as total format=comma18.2,
+        calculated total * 2 as doubled length=8,
+        'format=date9. from raw.fake' as text format=$char40.
+        from raw.orders a having calculated total > 0;'''
+    result = parse_sas('proc sql;\n' + statement + '\nquit;')
+    assert not result.diagnostics
+    assert pairs(result) == {('raw.orders', 'mart.x')}
+    assert {u.column for u in result.operations[0].usages} == {'amount'}
+    assert result.operations[0].code == statement
+
+
+def test_proc_sql_format_on_zero_argument_sas_datetime_retains_table_lineage():
+    result = parse_sas('proc sql; create table pub.x as select a.id, datetime() as published_at format=datetime19. from raw.a a; quit;')
+    assert pairs(result) == {('raw.a', 'pub.x')}
+    assert not result.diagnostics
+    assert {u.column for u in result.operations[0].usages} == {'id'}
+
+
+@pytest.mark.parametrize('attribute', ['format=', 'format=date9', 'format=date9.evil', 'format=8.2extra'])
+def test_proc_sql_invalid_format_is_diagnosed_without_guessed_edges(attribute):
+    result = parse_sas(f'proc sql; create table mart.x as select a.id {attribute} from raw.a a; quit;')
+    assert not pairs(result)
+    assert any(d.severity == 'error' for d in result.diagnostics)
+
+
+def test_proc_sql_nested_formats_before_alias_and_comments_preserve_scope():
+    statement = '''create table mart.x as select q.id format=8. as identifier
+        from (select a.id /* format=bad from raw.fake */ format=best. as id
+              from raw.a a) q;'''
+    result = parse_sas('proc sql;\n' + statement + '\nquit;')
+    assert not result.diagnostics
+    assert pairs(result) == {('raw.a', 'mart.x')}
+    assert {(u.table, u.column) for u in result.operations[0].usages} == {('raw.a', 'id')}
+    assert result.operations[0].code == statement
+
+
+@pytest.mark.parametrize('projection', ['a.id as value', 'a.id as missing, a.id as missing'])
+def test_proc_sql_unknown_or_ambiguous_calculated_alias_is_diagnosed(projection):
+    result = parse_sas(f'proc sql; create table mart.x as select {projection}, calculated missing as derived from raw.a a; quit;')
+    assert pairs(result) == {('raw.a', 'mart.x')}
+    assert any('CALCULATED alias' in d.message and d.symbol == 'missing' for d in result.diagnostics)
+    assert {u.column for u in result.operations[0].usages} == {'id'}
+
+
+def test_proc_sql_modifiers_preserve_configured_tsql_projection_alias_rules():
+    result = parse_sas('proc sql; create table mart.x as select total = a.amount format=comma18.2 from raw.orders a; quit;',
+                       sql_dialect='tsql')
+    assert not result.diagnostics
+    assert pairs(result) == {('raw.orders', 'mart.x')}
+    assert {u.column for u in result.operations[0].usages} == {'amount'}
+
+
+@pytest.mark.parametrize('alias', ['date', 'format', 'time'])
+def test_proc_sql_calculated_accepts_keyword_aliases(alias):
+    result = parse_sas(f'proc sql; create table mart.x as select a.id as {alias}, calculated {alias} as derived from raw.a a; quit;')
+    assert not result.diagnostics
+    assert pairs(result) == {('raw.a', 'mart.x')}
+    assert {u.column for u in result.operations[0].usages} == {'id'}

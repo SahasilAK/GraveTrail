@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, file_asset, statements
-from dataforge.parsers.sql import parse_sql
+from dataforge.parsers.sas_sql import parse_proc_sql
 
 IDENT = r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?"
 
@@ -96,7 +96,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
             for raw, line, last, statement, _, _ in block[1:]:
                 if re.match(r"\s*(quit|run)\b", statement, re.I):
                     continue
-                parsed = parse_sql(statement, sql_dialect)
+                parsed = parse_proc_sql(statement, sql_dialect)
                 for d in parsed.diagnostics:
                     d.line += line - 1
                 result.diagnostics.extend(parsed.diagnostics)
