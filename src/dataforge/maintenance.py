@@ -34,7 +34,11 @@ def _idle(store):
         raise ValueError("Analysis is running; retry history maintenance after it finishes")
     try:
         with store.lock:
-            yield
+            from dataforge.cleanup import assert_idle
+            from dataforge.llm_resources import block_requests_for_maintenance
+            with block_requests_for_maintenance(store.home):
+                assert_idle(store)
+                yield
     finally:
         store.analysis_lock.release()
 

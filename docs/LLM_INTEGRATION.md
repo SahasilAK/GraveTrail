@@ -11,7 +11,27 @@ declared resolved. Queue request/merge tests use synthetic HTTP payloads, not a 
 
 The application is fully usable without an LLM. Settings → LLM providers stores multiple
 profiles, task overrides, same-host ordered fallbacks and environment variable names for keys.
-Set the actual variable before startup. Neither profile exports nor logs store key values.
+For a saved profile, enter a masked **Runtime credential** and choose **Connect for this
+session**, or provision the named variable before startup. A session's `RuntimeConnections`
+manager holds entered keys in memory and passes them directly to provider adapters through
+a context-local scope; the process environment is never changed for session credentials.
+**Clear runtime credentials** removes session entries. Launch variables remain read-only
+and available, so clearing a session entry does not disconnect a startup-provisioned key.
+Re-enter credentials in a fresh session/restart unless supplied at launch.
+
+New provider references default to `DATAFORGE_` names, such as `DATAFORGE_OPENAI_API_KEY`,
+`DATAFORGE_ANTHROPIC_API_KEY` and `DATAFORGE_DATABRICKS_TOKEN`. Explicit legacy references
+remain compatible without rewriting unrelated environment variables. Profiles persist only
+validated non-secret preferences and credential variable names. Secret-bearing URL userinfo
+and authentication query parameters are rejected. Entered key values are not persisted in
+DuckDB, files, exports, build outputs or logs; provider-echoed known credentials are redacted
+before durable result storage. Imported originals deliberately preserve exact bytes and may
+themselves contain sensitive information. Protect them and the runtime home accordingly.
+See [secure configuration](SECURE_CONFIGURATION.md) for the lifecycle and security boundary,
+and [setup and deployment](SETUP_AND_DEPLOYMENT.md#9-llm-connection-configuration) for all
+default provider variable names. The runtime manager supports expiration for callers that
+register a lifetime; the current UI connects for the session without an expiration control.
+
 External requests are disabled until enabled in Security and privacy. Loopback endpoints are
 permitted for offline use; a local gateway may itself forward requests, so configure it carefully.
 
@@ -65,7 +85,7 @@ Run an opt-in check with an available model identifier:
 
 ```powershell
 $env:OMNIROUTE_API_KEY = [Environment]::GetEnvironmentVariable('OMNIROUTE_API_KEY', 'User')
-uv run python scripts/verify_llm.py --model auto --output plans/LLM_LIVE_RESULTS.json
+uv run python scripts/verify_llm.py --model auto/best-reasoning --output plans/LLM_LIVE_RESULTS.json
 ```
 
 This uses synthetic SQL/SAS in an isolated temporary database, checks discovery, connection,
@@ -101,10 +121,21 @@ units require a larger budget or different selection. Source/profile budgets sti
 Cancellation callbacks stop retries and response processing cooperatively; blocking network
 waits finish within their configured timeout. There is no preemptive HTTP cancellation claim.
 
-Fixed-route live verification on2026-10-15 passed with cx/gpt-5.6-luna-low, including grounded
-SQL/SAS inferred merge and restart. See plans/LLM_LIVE_RESULTS.json; this proves that configured
-route at test time, not all discovered models or advisory-task output compliance.
+Historical fixed-route verification on2026-10-15 passed with cx/gpt-5.6-luna-low, including
+grounded SQL/SAS inferred merge and restart; this does not establish current auto-route acceptance.
 
-Current user testing policy: always use OmniRoute model `auto`; the live-check script defaults
-accordingly. Fixed-model results above predate that instruction. Preserve quarantine if auto
-returns invalid output; do not substitute another route or weaken validation to force success.
+Current user testing policy: use OmniRoute model `auto/best-reasoning`; the live-check script
+defaults accordingly. This supersedes the earlier literal `auto` instruction. Preserve
+quarantine for invalid output; do not substitute another route or weaken validation to force
+success. Model discovery alone does not prove completion or task-schema compliance.
+
+Latest inspection on2026-10-16: discovery966 advertises `auto/best-reasoning` and omits literal
+`auto`. Earlier connection/SQL assistance/merge pass. A fresh SAS response returns HTTP200,
+valid fields, exact source evidence and one enclosing JSON fence; existing processing accepts
+it unchanged. The old SAS schema failure was not reproduced. A full-workflow probe then fails
+at connection with HTTP503: `Maximum combo retry limit reached`,28 attempted candidates from
+a pool of787, `terminalReason=max_attempts_exceeded`. This is gateway candidate exhaustion,
+which output normalization cannot repair. Individual upstream failure reasons remain unknown.
+No preprocessing/prompt/schema change was made. Further live calls stopped per user request.
+See `plans/LLM_LIVE_RESULTS.json` for safe metadata without raw output or credentials.
+Full live merge-refresh-restart acceptance remains open.

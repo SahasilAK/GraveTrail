@@ -7,6 +7,18 @@ and reports unsupported runtime constructs. PROC SQL statements use SQLGlot afte
 Tested: DATA outputs, SET/MERGE/UPDATE/MODIFY inputs, explicit INFILE/FILE paths, WORK assets,
 PROC SQL CTAS, SORT OUT= (or in-place), SUMMARY/MEANS OUTPUT OUT=, TRANSPOSE, IMPORT DATAFILE/OUT,
 EXPORT DATA/OUTFILE, common DATA/OUT procedure conventions and APPEND DATA/BASE.
+PROC SQL SELECT expressions accept literal `FORMAT=` display modifiers (named, numeric,
+character and custom formats ending in a period or decimal precision), before or after aliases,
+and positive literal `LENGTH=` modifiers. `CALCULATED` references use uniquely defined SELECT
+aliases without inventing base-table columns; missing or ambiguous aliases produce diagnostics.
+SAS `DATETIME()` is recognized as an expression. Malformed modifiers remain parse errors.
+These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
+See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
+
+Parser cache version 8 invalidates earlier results on the next analysis. Run **Analyze all files**
+in Lineage builder for previously analyzed workspaces; source bytes and original statement/line
+evidence remain intact. Existing packaged executables/images need rebuilding to include this fix.
+
 Library mappings rewrite namespaces, not filesystem permissions. LIBNAME paths are not read.
 One-level SAS datasets use WORK; WORK objects are temporary but remain in internal lineage.
 

@@ -3,6 +3,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from dataforge.connections import current_connections
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -13,7 +15,7 @@ class JsonFormatter(logging.Formatter):
                 event[key] = getattr(record, key)
         if record.exc_info:
             event["error_type"] = record.exc_info[0].__name__
-        return json.dumps(event)
+        return current_connections().redact(json.dumps(event))
 
 
 def configure_logging(level="INFO"):

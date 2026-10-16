@@ -158,14 +158,11 @@ class Store:
     def runs(self, workspace: str):
         return self.rows("SELECT * FROM analysis_runs WHERE workspace_id=? ORDER BY created_at DESC", [workspace])
 
-    def delete_workspace(self, workspace: str):
-        # Immutable blobs may be shared. Garbage collection is a separate, explicit operation.
-        tables = ["settings", "ingestion_runs", "source_files", "analysis_runs", "assets", "asset_aliases",
-                  "statements", "operations", "operation_assets", "edges", "column_usages", "diagnostics",
-                  "llm_profiles", "llm_records", "history_archives", "temporary_recovery", "workspaces"]
-        with self.transaction():
-            for table in tables:
-                self.execute(f"DELETE FROM {table} WHERE workspace_id=?", [workspace])
+    def delete_workspace(self, workspace: str, *, preview=None, confirmation='', backup_first=False):
+        from dataforge.cleanup import apply_cleanup
+        if not preview or preview.get('workspace_id') != workspace or preview.get('category') != 'workspace':
+            raise ValueError('Use a confirmed cleanup preview to delete a workspace safely')
+        return apply_cleanup(self, preview, confirmation, backup_first)
 
     def close(self):
         with self.lock:

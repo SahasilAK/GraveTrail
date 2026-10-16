@@ -3,6 +3,8 @@
 Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current truth; MASTER_PLAN and acceptance/test/risk docs preserve intent.
 
 ## Files
+- `AGENT_ACCEPTANCE.md` — Feature requirement matrix, actual test/build/UI/review evidence, sample measurements and storage/auth/parser boundaries.
+- `AGENT_INTEGRATION_PLAN.md` — CLI/shared-service, MCP/security and human settings/delivery vertical slices, constraints, tests and acceptance.
 - `REQUIREMENT_MATRIX.md` — Master-section acceptance with code/tests, eight scenarios, external gates and explicit optional/conservative boundaries.
 - `COMPLETION_PLAN.md` — Remaining master slices, checked only with full tests and UI evidence; completed slices and remaining external acceptance gates.
 - `ACCEPTANCE_CRITERIA.md` — Acceptance criteria. Maintained documentation; consult implementation status for verification boundaries.
@@ -14,3 +16,21 @@ Persistent execution and handoff context. IMPLEMENTATION_STATUS is the current t
 - `MASTER_PLAN.md` — DataForge Implementation Plan. Maintained documentation; consult implementation status for verification boundaries.
 - `RISKS_AND_ASSUMPTIONS.md` — Risks and assumptions. Maintained documentation; consult implementation status for verification boundaries.
 - `TEST_STRATEGY.md` — Test strategy. Maintained documentation; consult implementation status for verification boundaries.
+# Maintenance and distribution
+
+`MAINTENANCE_DEPLOYMENT_PLAN.md` tracks runtime credentials, safe cleanup, Python/Docker,
+host executable tooling and documentation slices. IMPLEMENTATION_STATUS.md holds verification
+evidence and remaining platform gates; destructive validation uses isolated runtime homes.
+
+SAS FORMAT= follow-up in IMPLEMENTATION_STATUS.md records parser8, exact128 logical edges,
+all16 sources/seven layers and cache refresh; previous dated SAS gaps are historical.
+
+OmniRoute policy uses auto/best-reasoning. LLM_LIVE_RESULTS.json records valid fenced SAS
+output accepted unchanged, earlier connection/SQL success and latest gateway503 candidate
+exhaustion. Old schema error was not reproduced. Live diagnosis stopped per user direction;
+no further calls without renewed direction, no preprocessing change, strict quarantine retained.
+
+User renewed testing with a new runtime key: the dated application retest in
+IMPLEMENTATION_STATUS.md records successful connection, exact-quote SAS validation and
+one inferred merge/refresh through the8512 UI in an isolated home. Earlier gateway
+failures remain historical evidence; no app/preprocessing/gateway code was changed.

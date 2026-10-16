@@ -4,10 +4,10 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import json
-import os
 import re
 import time
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, urlparse
@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
+from dataforge.connections import connection_scope, current_connections
 from dataforge.llm_resources import request_slot
 from dataforge.models import canonical, stable_id, statements
 from dataforge.parsers.sas import parse_sas, strip_comments
@@ -129,6 +130,7 @@ def response_object(text: str) -> dict:
 class Adapter:
     def __init__(self, profile: Profile, transport=None, cancelled=None):
         self.profile = profile
+        self.connections = current_connections()
         self.cancelled = cancelled
         self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
 
@@ -140,7 +142,7 @@ class Adapter:
 
     def _headers(self):
         p = self.profile
-        key = os.environ.get(p.key_env, "") if p.key_env else ""
+        key = self.connections.resolve(p.key_env)
         if p.key_env and not key:
             raise ValueError(f"Credential environment variable {p.key_env} is not set")
         auth = p.auth
@@ -180,7 +182,7 @@ class Adapter:
                         raise ProviderError("Provider returned invalid JSON") from None
                     if not isinstance(data, dict):
                         raise ProviderError("Provider response must be a JSON object")
-                    return data
+                    return self.connections.sanitize(data)
             except httpx.TransportError:
                 if attempt >= self.profile.retries:
                     raise ProviderError("Provider connection failed or timed out", True) from None
@@ -275,12 +277,27 @@ def validate_response(response: GroundedResponse, code: str, known: set[str], fi
 
 
 def redact(text: str) -> str:
-    return re.sub(r"(?i)(\b(?:password|api[_-]?key|token|secret)\s*[=:]\s*)(['\"]?)[^\s;'\"]+\2",
-                  r"\1'[REDACTED]'", text)
+    return current_connections().redact(text)
 
 
 def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
            transport=None, expected_hash=None, cancelled=None):
+    if cancelled and cancelled():
+        raise InterruptedError('AI request cancelled before transmission')
+    resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
+        for k, v in LLMResourceSettings().model_dump().items()})
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(request_slot(store.home, workspace, resources.llm_concurrency))
+        except ValueError:
+            return {'record_id': '', 'outcome': 'quarantined', 'reason': 'ValueError',
+                    'result': None, 'usage': {}, 'retryable': False}
+        stack.enter_context(connection_scope(current_connections()))
+        return _assist(store, workspace, profile, file_id, first, last, task, profile_id,
+                       transport, expected_hash, cancelled)
+
+
+def _assist(store, workspace, profile, file_id, first, last, task, profile_id, transport, expected_hash, cancelled):
     if cancelled and cancelled():
         raise InterruptedError("AI request cancelled before transmission")
     if task not in TASKS:
@@ -322,14 +339,14 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
     usage, raw, validated = {}, "", None
     outcome, reason, retryable = "validated", "", False
     try:
-        resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
-            for k, v in LLMResourceSettings().model_dump().items()})
-        with request_slot(store.home, workspace, resources.llm_concurrency), Adapter(profile, transport, cancelled) as adapter:
+        with Adapter(profile, transport, cancelled) as adapter:
             if cancelled and cancelled():
                 raise InterruptedError("AI request cancelled before transmission")
             raw, usage = adapter.complete(system, user)
         if cancelled and cancelled():
             raise ProviderError("AI request cancelled after response; result quarantined")
+        raw = redact(raw)
+        usage = json.loads(redact(json.dumps(usage)))
         validated = response_model.model_validate(response_object(raw))
         if task in TASK_SCHEMAS:
             from dataforge.services import source_dialect
@@ -344,6 +361,8 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
                "result": validated.model_dump() if outcome == "validated" else None}
     if store.setting(workspace, "llm_history", False):
         details.update(context=focused, response=raw)
+    details = json.loads(redact(json.dumps(details)))
+    usage = json.loads(redact(json.dumps(usage)))
     record_id = uuid.uuid4().hex
     with store.transaction():
         store.execute("INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING", [prompt_hash, task, version])
@@ -364,6 +383,11 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
 
 
 def merge_claims(store, workspace, record_id):
+    with store.lock:
+        return _merge_claims(store, workspace, record_id)
+
+
+def _merge_claims(store, workspace, record_id):
     records = store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND record_id=? AND outcome='validated'", [workspace, record_id])
     if not records:
         raise ValueError("Only validated AI records can be merged")

@@ -82,3 +82,10 @@ support for light/dark; avoid decorative dashboard cards and external font reque
 
 `Input -> bounded inventory + original blob -> parse results -> atomic run -> graph/columns
 -> focused explorer -> source evidence / offline exports`.
+
+
+## Additional feature — Agent & Automation Access (2026-10-16)
+
+Implemented through the shared CLI/service slice, official-SDK MCP/security slice,
+and human settings/documentation slice. See [AGENT_INTEGRATION_PLAN.md](AGENT_INTEGRATION_PLAN.md)
+and [AGENT_ACCEPTANCE.md](AGENT_ACCEPTANCE.md) for evidence and known boundaries.

@@ -1,11 +1,11 @@
 """Provider profiles and task routing. Secrets remain environment references."""
 import json
-import os
 import uuid
 
 import streamlit as st
 
 from dataforge.configuration import LLMResourceSettings
+from dataforge.connections import DEFAULT_KEY_ENV, current_connections
 from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
 from dataforge.llm_resources import request_slot
 
@@ -21,7 +21,7 @@ def render(store, workspace):
         name = st.text_input("Profile name", config.get("name", provider))
         url = st.text_input("API base URL", config.get("base_url", PROVIDERS[provider]))
         model = st.text_input("Model or deployment identifier", config.get("model", ""), help="Use model discovery below or enter an identifier available to your account.")
-        key_env = st.text_input("Credential environment variable name", config.get("key_env", ""), placeholder="e.g. OPENAI_API_KEY")
+        key_env = st.text_input("Credential environment variable name", config.get("key_env", '' if provider in {'Ollama', 'LM Studio'} else DEFAULT_KEY_ENV[provider]), placeholder=DEFAULT_KEY_ENV[provider])
         st.caption("Store only the variable name here. Set its secret value in the process environment before launching the app.")
         auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")))
@@ -44,11 +44,26 @@ def render(store, workspace):
                           [pid, workspace, name, profile.model_dump_json()])
             st.success("Provider profile saved")
             st.rerun()
-        except ValueError as exc:
-            st.error(f"Profile configuration is invalid: {exc}")
+        except ValueError:
+            st.error("Profile configuration is invalid. Check the endpoint, model and environment variable name.")
     if existing:
         profile = Profile.model_validate(config)
-        st.caption("Credential status: " + ("available" if profile.key_env and os.getenv(profile.key_env) else "not configured / optional for local endpoints"))
+        manager = current_connections()
+        st.caption("Credentials are retained only for the active runtime and are not saved in application files or databases. They may need to be re-entered when the application restarts.")
+        st.caption("Credential status: " + ("available" if manager.resolve(profile.key_env) else "disconnected / optional for local endpoints"))
+        def connect():
+            try:
+                manager.register(profile.key_env, st.session_state.pop('runtime_secret', ''))
+            except ValueError:
+                st.session_state['connection_notice'] = 'Use a DATAFORGE_ variable name and a nonempty credential.'
+        st.text_input("Runtime credential", type="password", key="runtime_secret")
+        st.button("Connect for this session", on_click=connect)
+        if st.button("Clear runtime credentials"):
+            manager.clear()
+            st.session_state.pop('runtime_secret', None)
+            st.rerun()
+        if notice := st.session_state.pop('connection_notice', None):
+            st.warning(notice)
         with st.container(horizontal=True):
             discover = st.button("Discover models")
             test = st.button("Test model connection")
@@ -73,7 +88,8 @@ def render(store, workspace):
                         st.success("Model connection validated")
                         st.json(usage)
             except Exception as exc:
-                st.error(f"Connection check failed ({type(exc).__name__}): {exc}")
+                message = "LLM requests are busy; retry after an active request finishes." if isinstance(exc, ValueError) and 'requests are busy' in str(exc) else "Check runtime credentials, endpoint and privacy settings."
+                st.error(f"Connection check failed ({type(exc).__name__}). {message}")
     if names:
         st.subheader("Task-specific model routing")
         with st.form("task_routing"):

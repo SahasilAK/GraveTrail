@@ -16,7 +16,7 @@ title("Settings", "Configure analysis, storage, resource budgets and source-code
 store, w = context()
 if notice := st.session_state.pop("settings_notice_" + w, None):
     st.success(notice)
-tab = st.segmented_control("Settings section", ["Parsing and lineage", "Storage and workspaces", "Performance", "Visualization", "Security and privacy", "LLM providers"], default="Parsing and lineage")
+tab = st.segmented_control("Settings section", ["Parsing and lineage", "Storage and workspaces", "Data Management & Cleanup", "Performance", "Visualization", "Security and privacy", "LLM providers", "Agent & Automation Access"], default="Parsing and lineage")
 if tab == "Parsing and lineage":
     if notice := st.session_state.pop("parsing_notice_" + w, None):
         st.success(notice)
@@ -104,12 +104,10 @@ elif tab == "Storage and workspaces":
     render_history(store, w)
     from ui.temporary_cleanup import render as render_temporary_cleanup
     render_temporary_cleanup(store, w)
-    with st.expander("Delete active workspace"):
-        confirmation = st.text_input("Type the active workspace name to delete its inventory and analysis")
-        if st.button("Delete workspace", disabled=confirmation != workspace["name"]):
-            store.delete_workspace(w)
-            st.session_state.pop("workspace", None)
-            st.rerun()
+    st.caption('Use Data Management & Cleanup to preview dependencies, back up, reset or delete this workspace.')
+elif tab == 'Data Management & Cleanup':
+    from ui.data_management import render
+    render(store, w)
 elif tab == "Performance":
     with st.form("performance"):
         max_file = st.number_input("Maximum file size (MB)", 1, 100, int(store.setting(w, "max_file_mb", 20)))
@@ -127,9 +125,7 @@ elif tab == "Performance":
             st.rerun()
     st.caption("Imports also enforce 100 MB compressed / 200 MB total and a 200:1 ZIP expansion ratio. Analysis reuses content hashes on every refresh.")
     st.caption("AI requests are also capped at eight across this app process. Busy requests are refused immediately. Chunking is an offline preview; each selected chunk requires its own explicit request. Provider budgets still apply.")
-    if st.button("Clear parser cache"):
-        store.execute("DELETE FROM parse_cache")
-        st.success("Parser cache cleared; stored lineage and source inventory retained")
+    st.caption('Clear the shared parser cache with a preview and confirmation in Data Management & Cleanup.')
 elif tab == "Visualization":
     from ui.themes import render_theme_picker
     render_theme_picker()
@@ -194,6 +190,9 @@ elif tab == "Security and privacy":
                 store.set_setting(w, k, v)
             st.session_state["settings_notice_" + w] = "Privacy settings saved"
             st.rerun()
+elif tab == "Agent & Automation Access":
+    from ui.agent_settings import render
+    render(store, w)
 else:
     from ui.provider_settings import render
     render(store, w)

@@ -161,3 +161,12 @@ Explorer displays dependency trees beside their source evidence beneath the focu
 The source selector follows the active Upstream/Downstream dependency tab. Clicking a graph
 asset or edge shows that selection's evidence instead; Source scope labels the current context.
 Graph direction remains independently configurable. Switching tabs clears graph selection.
+
+
+## Agent & Automation Access
+
+Open Settings → Agent & Automation Access for CLI instructions, copyable Codex/Claude
+configuration, workspace permissions, source disclosure, response budgets and auditing.
+The local connection test invokes the real MCP handler in-process. To connect a separate
+client to this data home, stop the Streamlit owner first or use an isolated automation home.
+See [CLI_GUIDE.md](CLI_GUIDE.md) and [AGENT_WORKFLOWS.md](AGENT_WORKFLOWS.md).

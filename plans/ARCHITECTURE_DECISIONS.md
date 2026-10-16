@@ -76,3 +76,20 @@
 - ADR 023: SAS rule evidence slices original source using token offsets anchored at original
   lines. Joining tokens changes evidence and can move same-line block boundaries. Inline-data
   contents may repeat tokens, so line anchors supplement monotonic source lookup. Parser7.
+
+
+- ADR 022: Additive AgentService wraps existing Store/Importer/analyze/LineageGraph/exports;
+  Typer and official MCP SDK adapters share its exact result contract. Do not duplicate
+  extraction or refactor UI business behavior unnecessarily. Summary is default; source
+  is explicit. Async MCP handlers offload synchronous queries so journal polling remains
+  responsive during long import transactions. DuckDB parameter adapters initialize before
+  stdio threads to avoid reproduced Windows lazy NumPy/Pandas initialization blocking.
+- ADR 023: Keep DuckDB single-process ownership explicit rather than introducing a daemon
+  or copying an active database. CLI detached workers retry brief startup ownership races.
+  Jobs use atomic bounded local journals and heartbeat expiry; UI revocation snapshots
+  allow authorized, budgeted status polling while the worker owns DuckDB. No schema change.
+- ADR 024: Read-only launch default, per-workspace revocation/source/write controls, allowed
+  import roots and mutation auditing. HTTP requires an explicit workspace allowlist and
+  environment bearer token; external bindings require a declared HTTPS endpoint/TLS proxy.
+  Private pre-provisioned credentials are supported; OAuth issuance/discovery and optional
+  REST add no necessary workflow for this feature and are not implemented.

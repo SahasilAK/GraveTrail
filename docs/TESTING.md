@@ -59,3 +59,12 @@ seven labeled vendor/SAS cases in LF and CRLF, storage isolation, inventory refr
 SAS evidence. Historical test counts above describe earlier stages. Current auto-only OmniRoute
 attempt failed during discovery with no listener on port20128; prior fixed-route success predates that instruction. Docker engine
 and direct file-browser interaction are unavailable/unverified, not passing release gates.
+
+
+## Agent integration acceptance
+
+Run the four `tests/test_agent_*.py` modules for standalone CLI/MCP parity, actual SDK
+stdio/HTTP, permissions/budgets, persisted/background jobs, source boundaries and Settings
+AppTest. Run `scripts/verify_agents.py` with an isolated --home and --output for both supplied
+SQL/SAS ZIPs and representative token estimates. It executes no imported source and records
+SAS unsupported FORMAT-modifier diagnostics honestly. See plans/AGENT_ACCEPTANCE.md.

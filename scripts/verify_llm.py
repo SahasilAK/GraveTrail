@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", default="OmniRoute")
     parser.add_argument("--base-url", default="http://localhost:20128/v1")
-    parser.add_argument("--model", default="auto")
+    parser.add_argument("--model", default="auto/best-reasoning")
     parser.add_argument("--key-env", default="OMNIROUTE_API_KEY")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()

@@ -4,6 +4,24 @@ Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Current delivery state
 
+Maintenance/deployment enhancement is implemented and locally verified; plan:
+MAINTENANCE_DEPLOYMENT_PLAN.md. Delivered previewed dependency-aware cleanup, session-only
+runtime credentials, checksummed backup/new-home restore, packaged Python UI/CLI/MCP,
+non-root persistent Docker deployment, host-native executable/release tooling and the
+17-part docs/SETUP_AND_DEPLOYMENT.md guide. All destructive verification used isolated homes.
+Remaining gates: native Linux/macOS executables, hosted release CI and reliable OmniRoute
+completion availability. auto/best-reasoning has completed connection/SQL and a fresh SAS
+inspection; its latest workflow attempt fails with gateway HTTP503 candidate exhaustion.
+
+SAS PROC SQL FORMAT= parsing is fixed with exact source evidence and parser cache8.
+The supplied SAS project now matches all128 logical edges (144 physical evidence edges),
+including pub.all_kpis through seven layers to all16 sources. Reanalyze existing workspaces
+to refresh cached results; packaged images/executables built earlier require rebuilding.
+
+Additional Agent & Automation Access feature is implemented and locally verified:
+standalone CLI, token-efficient MCP, managed jobs and human Settings integration.
+See AGENT_INTEGRATION_PLAN.md and AGENT_ACCEPTANCE.md for the current feature evidence.
+
 Six-page working local application. Planned implementation slices and the final audit fixes
 are implemented, with conservative static-analysis boundaries. See REQUIREMENT_MATRIX.md for
 section-by-section acceptance. External release acceptance remains open; no universal parser
@@ -16,7 +34,8 @@ accuracy or production deployment certification is claimed.
 - SQL AST lineage/direct columns, reachable CTEs/subqueries/unions, common DML/views, explicit
   dialect precedence, SQL Server SELECT INTO/#/## and Teradata volatile CTAS fixture coverage.
 - Dedicated SAS DATA/PROC rules, exact original evidence, static macros/library maps,
-  explicit file links and unresolved dynamic diagnostics. Configurable CSV sampled metadata.
+  PROC SQL FORMAT=/LENGTH=/CALCULATED/DATETIME(), explicit file links and unresolved dynamic
+  diagnostics. Configurable CSV sampled metadata.
 - Conservative cross-file resolution, supplied temporary job/session IDs, persistent shared
   identities, mixed-lifetime unresolved reads, declared-schema wildcard evidence and provenance.
 - Atomic/incremental analysis, selected refresh, run comparison, rollback/source-version safety,
@@ -32,9 +51,12 @@ accuracy or production deployment certification is claimed.
 
 ## Current verification
 
-- Final main checkout:220 passed,1 skipped in25.21s. Final clean source install:220 passed,
-  1 skipped in25.06s. Ruff passes in both environments; lock validation and package builds pass.
-  Installed wheel imports from site-packages with Python -I; parser7/advisory schemas verified.
+- Latest SAS parser suite:288 passed,1 existing Windows symlink-privilege skip in54.07s;
+  Ruff passes. Earlier maintenance suite266 passed; locked dependencies and Compose
+  configuration passed. Clean Windows wheel and sdist installs,
+  actual Windows standalone and Linux Docker pass CLI/import/lineage, stdio MCP and rendered
+  HTTP/WebSocket UI checks. Docker additionally verifies UID10001 and volume persistence.
+  Those distribution artifacts precede parser8 and were not rebuilt for this parser fix.
 - Actual isolated running UI verified settings, advisory reopening, cleanup/restore, storage
   switch/back, vendor import/analysis, exact selectors, graph evidence and tree/source panels.
   Primary home, imported source data and active theme/configuration were preserved.
@@ -44,14 +66,17 @@ accuracy or production deployment certification is claimed.
 
 ## External gates and intentional boundaries
 
-- Latest OmniRoute auto attempt failed during model discovery in4.15s. Port20128 had no
-  local TCP listener; the named credential is present. Earlier discovery advertised964 IDs
-  including auto/... aliases but no literal auto. Do not substitute
-  fixed models. Historical fixed-route success predates the user's auto-only instruction.
-  Re-run scripts/verify_llm.py after gateway routing changes; use OMNIROUTE_API_KEY, never
-  persist/print its value. Task-specific new advisory schemas remain synthetic-HTTP verified.
-- Docker CLI is installed, but the Linux engine pipe is unavailable. Container execution and
-  remote CI remain unverified. No push or service startup requiring elevation was requested.
+- User now requests OmniRoute auto/best-reasoning, superseding literal auto. Discovery966
+  advertises the requested route but not literal auto. Connection JSON and grounded SQL
+  assistance/merge passed earlier. Fresh SAS response is valid fenced JSON and passes strict
+  schema/source grounding unchanged. A full-workflow probe then fails at connection with
+  HTTP503, Maximum combo retry limit reached:28 attempted candidates, pool787,
+  terminalReason=max_attempts_exceeded. No preprocessing change is justified. Prior SAS schema
+  failure was not reproduced. Stopped live calls; full merge-refresh-restart remains open.
+  Use OMNIROUTE_API_KEY without persisting its value;
+  no fixed-model fallback or weakened quarantine. New advisory schemas remain mock-verified.
+- Docker daemon29.2.1 is now available. The actual Linux image build, non-root runtime,
+  rendered UI, persisted volume and stdio MCP checks pass. No registry push or hosted CI run.
 - Self-contained HTML export/JS/downloads are verified. Direct file-browser interaction remains
   unverified because this browser environment blocked file navigation. No server workaround claim.
 - Windows file-symlink test skips without creation privilege. Runtime path protections remain.
@@ -60,12 +85,12 @@ accuracy or production deployment certification is claimed.
   temporary assets; runtime sessions are not discovered. No invented wildcard/transitive columns.
 - Local single-user process; cooperative cancellation cannot preempt a parser or blocked HTTP
   read. Dense/large real projects need their own labeled accuracy/performance acceptance.
-- Optional: full source/history portable backups, blob GC, SVG/PNG exports, general assistant,
-  transitive column transformation lineage, scheduled retention and multi-user authentication.
+- Optional: SVG/PNG exports, general assistant, transitive column transformation lineage,
+  background scheduled retention and multi-user authentication. Whole-home backups/blob GC are delivered.
 
 ## Resume instructions
 
-Read AGENTS.md, REQUIREMENT_MATRIX.md and the latest entry below. Parser cache version7;
+Read AGENTS.md, REQUIREMENT_MATRIX.md and the latest entry below. Parser cache version8;
 retain migration4 recovery journals and original blobs. DATAFORGE_HOME defaults to .dataforge;
 DATAFORGE_ALLOWED_ROOTS controls host imports; DATAFORGE_STORAGE_LOCATIONS names additional
 absolute session storage choices (maximum8 total). No data migration occurs on selection.
@@ -73,7 +98,7 @@ absolute session storage choices (maximum8 total). No data migration occurs on s
 Commands: uv sync --locked --extra dev; uv run pytest -q; uv run ruff check .;
 uv run streamlit run app.py --server.address 127.0.0.1.
 Commit each tested coherent group. Preserve user .gitignore/theme edits and the master prompt.
-Next work is external acceptance (auto routing, Docker/CI/offline browser) or a new demonstrated
+Next work is external acceptance (auto routing, native Linux/macOS, CI/offline browser) or a new demonstrated
 project-specific parser case, not restarting completed implementation slices.
 
 ## Continuation execution — 2026-10-15
@@ -519,3 +544,184 @@ unverified; clean installation/packaging must be rerun after these new slices.
   present. Selected mart.customer_summary, expanded upstream through staging.customers to the
   CSV source, and verified graph/table/SAS original evidence render without exceptions. Screenshot:
   .dataforge/verification/lineage-recovery.png. App remains running. User tests/sample_data is untouched.
+
+
+## Agent & Automation Access — 2026-10-16
+
+- Delivered three vertical slices: shared automation services/CLI, official-SDK MCP/security,
+  and Streamlit settings/documentation. Human UI and extraction logic remain intact. CLI/MCP
+  delegate to existing Store, Importer, analyze, column_report, LineageGraph and exports.
+- Typer console command supports workspaces/import/cached build/lineage/columns/evidence/
+  code search/issues/impact/batch/jobs/exports; human/JSON/quiet/file output and meaningful
+  errors. Read-only startup default; explicit writes/allowed roots/workspace scoping.
+- MCP offers 16 typed async tools, resources and workflow prompt; stdio and authenticated
+  Streamable HTTP. Successful responses carry one structured payload. Summary/standard/
+  detailed disclosure, bounded pages/cursors/depth/items/chars and source-permission gates.
+- Jobs persist atomic journals/results and independent heartbeats; crashes report interrupted.
+  CLI detached workers survive the launching CLI and retry brief storage-ownership races.
+  Journal polling remains responsive during importer transactions and honors UI revocation
+  snapshots/output caps. Mutation auditing excludes arguments, credentials and code.
+- Settings → Agent & Automation Access provides permissions/source/budget/read-audit controls,
+  verified Codex/Claude configuration examples and actual local MCP handler test. CLI_GUIDE,
+  MCP_INTEGRATION, AGENT_WORKFLOWS and TOKEN_OPTIMIZATION document the complete workflows.
+- Fresh full suite:242 passed/1 existing skipped in43.81s;18 focused agent tests pass. Ruff,
+  locked dependency validation, wheel/sdist builds and isolated installed-wheel CLI/MCP
+  imports pass with Streamlit absent from sys.modules. Running isolated8505 Settings test
+  succeeded on SQL fixture (86 files/92 registry assets/128 edges). Primary data/theme intact.
+- Independent review's import progress, standard-expression disclosure, CLI polling and
+  MCP responsiveness findings were reproduced and corrected. The actual SDK stdio and
+  authenticated/unauthorized HTTP paths pass; no external LLM invocation was needed.
+- Both supplied ZIPs imported with only their script extension. SQL matches all128 expected
+  logical edges and traces pub.all_kpis through seven layers to all16 sources. SAS preserves
+  16 WORK assets/48 physical32 collapsed edges but existing FORMAT= PROC SQL limitations
+  leave96 missing logical edges and final published asset absent;68 diagnostics, no guesses.
+  Both warm refreshes reuse86 caches. Static source only; no SQL/SAS execution claims.
+- Measured10-row summary/detail payloads:SQL1509/64841 chars, supported SAS staging649/3529;
+  approx97.7%/81.6% reduction, character/4 estimates only. Raw results in verification home.
+- Explicit boundaries:one DuckDB owner per home; private bearer auth (no OAuth issuance),
+  external TLS reverse proxy required; remote deployment/client configuration changes not
+  performed. Optional REST omitted. Existing OmniRoute/Docker external gates remain unchanged.
+
+
+## Maintenance, secure configuration and deployment — 2026-10-16
+
+- Source inventory, lineage/columns, AI results, eligible history/jobs, reset/deletion, shared
+  parser/data caches, orphan blobs and recognized application reset use service previews,
+  dependency counts, logical size estimates, freshness tokens and typed confirmation. Optional
+  full-home backup is selected by default in UI. Running/queued jobs and provider activity
+  block cleanup; new provider requests are refused until maintenance releases the home.
+- Database commits precede controlled file removal: interruption leaves safe unreferenced
+  files reported for retry. Shared blobs, retained snapshots/history and other workspaces
+  are protected. Full reset preserves backups, unknown files, schema, code and repository docs.
+  Source cleanup invalidates the workspace graph/history; clear shared parser cache and
+  orphan blobs separately when removing unreferenced source-derived copies.
+- Integrity/schema/reference/blob checks, checkpoint, Windows-safe COPY FROM DATABASE
+  snapshot backup and bounded SHA-256 restore to a NEW home. Unsafe archive paths, redirected
+  runtime paths, hardlinks, stale previews and incomplete backups are refused. Backups are
+  capped at512MB/50,000 files. Larger homes need an offline backup. No raw SQL/drop control.
+- Masked runtime credentials stay session/context-local; no global environment mutation or
+  persistent credential values. Explicit legacy environment references remain read-only.
+  Adapter responses/logs scrub known credentials, including escaped JSON and arbitrary
+  explicitly referenced environment names. Request admission spans source reads through
+  persistence. Originals remain exact evidence and can contain user-authored source secrets.
+- CLI workspace cleanup requires existing write policy, saved preview and typed name;
+  restricted policies cannot make full-home backups. MCP adds read-only inspect/preview only.
+  UI offers opt-in recoverable expired staging cleanup on page visits; no background scheduler.
+- Installable UI/assets, shared OS data-home defaults, non-root locked Docker and owner-aware
+  Compose; Python/native/Docker build targets, manifests/checksums, clean host PyInstaller
+  bundles and tagged/manual Windows/Linux/macOS artifact CI without publishing/signing.
+- Tests:266 passed/1 existing privilege skip in82.39s; Ruff, lock and Compose validation pass. Actual
+  clean wheel AND sdist installations outside checkout, Windows executable, and Linux image
+  pass import/lineage, stdio MCP and rendered UI; Docker verifies persistent volume/UID10001.
+  Artifacts:dist/release (four manifest entries, ~115MB standalone ZIP). Build environments
+  exclude inherited provider credentials; real wheel/sdist canary tests exclude secrets/DBs.
+- Running isolated8511 UI displays SQL fixture86 files/92 assets/128 edges and calculated
+  cleanup metrics. AppTest exercises backup/typed cleanup/rebuild and session credential
+  connect/clear. Primary runtime data, source ZIPs, theme and .gitignore were preserved.
+- Both supplied ZIPs rerun:SQL128 exact logical edges, seven layers/all16 roots; SAS existing
+  FORMAT= limitations remain48 physical/32 collapsed edges,16 WORK assets and68 diagnostics.
+  Warm cache86 scripts each.500-file benchmark:501 assets/500 edges, import17.6621s,
+  cold2.4974s, warm0.89s, all500 cached, focused traversal0.0931ms; synthetic fixture only.
+- Professional setup guide has all17 sections and55 verified local documentation links;
+  README, AGENTS, architecture/security/implementation and affected knowledge maps updated.
+- Remaining: hosted Actions and native Linux/macOS binaries unexecuted; unsigned bundles
+  (no installers/notarization); backup limits above; local trusted-user UI without multi-user
+  auth. OmniRoute auto attempt:discovery964 models, completion ProviderError after11.59s;
+  no fixed route substituted. Python protocol mocks cover provider behavior.
+- Independent review findings were reproduced before fixes:post-HTTP persistence race,
+  JSON-escaped credential leak, arbitrary environment-reference leak, incomplete restore,
+  and scoped whole-home backup authorization. Their focused regressions now pass.
+- Final reset safety regression preserves theme assets when a data home overlaps a checkout
+  and ignores non-UUID job filenames; twelve focused cleanup tests pass. No code/schema/docs
+  directory is recursively removed by application reset.
+
+## SAS PROC SQL FORMAT parsing — 2026-10-16
+
+- Added an instance-local SQLGlot adapter for SELECT FORMAT= modifiers (named numeric,
+  character, custom and width/precision forms), before/after aliases, literal LENGTH=,
+  CALCULATED aliases and zero-argument SAS DATETIME(). No imported source is executed.
+- Exact original statement/file/line evidence remains unchanged. Format names and derived
+  aliases never become direct source columns. Malformed formats are diagnosed; missing or
+  duplicate CALCULATED aliases remain unresolved. Configured dialect projection behavior
+  is preserved, including T-SQL alias=expression. Ordinary SQL parsing remains unchanged.
+- Parser cache8 reparses older cached results during analysis; regression proves parser7
+  failed parses are replaced. Existing workspaces need Analyze all files without reimport.
+  Current materialized results are preserved until analysis; no primary home was modified.
+- Real supplied SAS ZIP:86 scripts,85 persistent assets plus16 WORK assets,144 physical
+  evidence edges/128 collapsed logical edges exactly matching the manifest; pub.all_kpis
+  reaches all16 sources across seven layers. SQL fixture remains128 exact edges/all16 roots.
+  Both warm analyses reuse86 caches. SAS retains31 diagnostics:8 setup macro warnings,
+  7 informational LIBNAME notices and16 inline-data notices; no parse errors remain.
+- Verified isolated running8512 UI:101 SAS assets/144 dependencies, full-depth graph includes
+  all16 src tables, pub.all_kpis exact selector and original Lines7–21 FORMAT=/DATETIME()
+  source evidence. Screenshot:.dataforge/verification/sas-format-ui.png. Source ZIPs untouched.
+- Final pytest:288 passed/1 existing Windows privilege skip in54.07s; Ruff and diff check pass.
+  62 focused parser/settings tests pass. Reviewer findings (T-SQL alias semantics and keyword
+  CALCULATED aliases) were reproduced before fixes and covered by new regressions.
+- scripts/verify_agents.py now asserts exact edges/all-source traversal for BOTH fixtures.
+  README, SAS guide, workflow/token evidence, acceptance and affected knowledge maps updated.
+  Latest measurements:.dataforge/verification/sas-format-final.json; no LLM calls required.
+- Remaining deployment gates above are unchanged. Existing wheel/executable/Docker artifacts
+  were not rebuilt for this source parser fix; rebuild them to include parser8.
+
+## OmniRoute best-reasoning diagnosis — 2026-10-16
+
+- User explicitly switched the authorized test model from auto to auto/best-reasoning and
+  requested stopping if repeated issues arise. Updated live-check default, guidance and setup
+  documentation; endpoint remains http://localhost:20128/v1 with named OMNIROUTE_API_KEY.
+- Discovery returns966 models and advertises auto/best-reasoning, not literal auto. The new
+  route successfully returns connection JSON and a grounded SQL claim; inferred merge passes.
+  This demonstrates working completion for those requests, not the cause of old auto failures.
+- Existing synthetic live checker stops after SAS schema ValidationError (usage present),
+  total94.03s. One additional isolated synthetic SAS call returns ProviderError; no usage or
+  response is available for schema diagnosis. No additional live requests were attempted.
+- Full live SQL/SAS merge-refresh-restart gate remains open. Preserved validation/quarantine,
+  did not change prompts, substitute fixed routes, or modify existing user profiles/projects.
+  Safe report:plans/LLM_LIVE_RESULTS.json; no source/headers/credential values/raw responses.
+- Local verification:44 focused LLM/credential/advisory tests pass in6.16s, Ruff and script
+  help pass. Previous full suite288 passed/1 privilege skip; no application logic/UI changed.
+- Stopped network diagnosis per user request after repeated SAS failures. Further live tests
+  need renewed user direction; no retry loops, scheduled checks or gateway changes were made.
+
+## OmniRoute output inspection — 2026-10-16
+
+- User renewed bounded diagnosis and requested inspecting actual output before choosing any
+  preprocessing. One fresh synthetic SAS call returned HTTP200/finish_reason=stop in13.13s:
+  fenced JSON containing a complete raw.b -> mart.y DATA claim, original lines1–3/quote,
+  explanation and confidence. Existing fence processing, schema and grounding all validate it.
+- The earlier SAS ValidationError was not reproduced; its original invalid response was not
+  retained, so its exact failed field remains unknown. No guessed coercion/wrapper repair,
+  prompt change or relaxed evidence checks were introduced.
+- One original full-workflow probe then failed at connection after discovery966 in71.87s:
+  HTTP503 service_unavailable, Maximum combo retry limit reached,28 attempted candidates,
+  pool787, terminalReason=max_attempts_exceeded. This explains this ProviderError precisely:
+  OmniRoute exhausted candidate attempts before usable completion output. Per-provider failure
+  causes remain unknown. Output preprocessing cannot repair this gateway error.
+- Kept auto/best-reasoning and named OMNIROUTE_API_KEY. Did not follow the gateway's suggestion
+  to switch routes. Gateway/provider combo investigation remains external work; stopped further
+  network requests under the user's bounded-troubleshooting instruction.
+- Safe metadata:plans/LLM_LIVE_RESULTS.json. Redacted synthetic output/HTTP diagnostics only in
+  ignored .dataforge/verification/omniroute-output-inspection.json and
+  omniroute-workflow-outputs.json; no primary home, user profiles or application logic changed.
+- Validation:44 focused LLM/credential/advisory tests pass in6.38s; Ruff passes. No additional
+  preprocessing is supported by the captured response. Full live merge-refresh-restart gate
+  remains open due intermittent gateway availability; docs/acceptance/knowledge updated.
+
+## OmniRoute application retest — 2026-10-16
+
+- User authorized the newly supplied key and renewed testing through the application.
+  Restarted the stopped Streamlit server on8512 using the existing isolated
+  .dataforge/verification/sas-format-fixtures home; primary user data was untouched.
+- Saved an OmniRoute test profile pointing to http://localhost:20128/v1 with model
+  auto/best-reasoning, timeout60s, retries0 and JSON output enabled. Registered the key
+  through the UI's session-only runtime credential control; no credential value is stored
+  in source, configuration, reports or databases. The runtime connection remains available
+  in the current browser session and must be supplied again after restart.
+- The UI's Test model connection passed (127 total tokens). SAS lineage assistance for
+  02_extractions/017_customers_raw.sas, lines1–12, returned one validated CREATE claim:
+  src.customers -> ext.customers_raw, exact quoted lines7–11 (2190 total tokens).
+  Merge succeeded and refreshed lineage: “Merged 1 inferred relationships and refreshed
+  lineage”. No ProviderError or schema validation failure occurred in these two requests.
+- Proof: ignored .dataforge/verification/omniroute-app-success.png. Application code,
+  prompts, parsing, output preprocessing and external gateway settings were unchanged.
+  This bounded UI test passed; it does not establish long-term gateway availability.
