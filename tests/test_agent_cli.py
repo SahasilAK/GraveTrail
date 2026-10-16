@@ -66,4 +66,3 @@ def test_cli_jobs_obey_revocation_and_budget(tmp_path):
     result = runner.invoke(app, args)
     assert result.exit_code == 3
     jobs.close()
-

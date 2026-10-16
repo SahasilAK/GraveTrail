@@ -183,5 +183,3 @@ def test_job_poll_does_not_wait_for_import_transaction_and_respects_revocation(e
     finally:
         release.set()
         thread.join(5)
-
-
