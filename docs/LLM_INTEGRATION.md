@@ -129,9 +129,13 @@ defaults accordingly. This supersedes the earlier literal `auto` instruction. Pr
 quarantine for invalid output; do not substitute another route or weaken validation to force
 success. Model discovery alone does not prove completion or task-schema compliance.
 
-Latest check on2026-10-16: discovery966 advertises `auto/best-reasoning` and omits literal
-`auto`. The requested route passes connection JSON and grounded SQL assistance/merge.
-SAS JSON fails schema validation; one focused SAS follow-up returns `ProviderError`.
-Further live attempts stopped at the user's request. No raw response, credential or imported
-project source is included in the report. See `plans/LLM_LIVE_RESULTS.json`. Full live
-merge-refresh-restart acceptance remains open; no prompt/schema change was made to force a pass.
+Latest inspection on2026-10-16: discovery966 advertises `auto/best-reasoning` and omits literal
+`auto`. Earlier connection/SQL assistance/merge pass. A fresh SAS response returns HTTP200,
+valid fields, exact source evidence and one enclosing JSON fence; existing processing accepts
+it unchanged. The old SAS schema failure was not reproduced. A full-workflow probe then fails
+at connection with HTTP503: `Maximum combo retry limit reached`,28 attempted candidates from
+a pool of787, `terminalReason=max_attempts_exceeded`. This is gateway candidate exhaustion,
+which output normalization cannot repair. Individual upstream failure reasons remain unknown.
+No preprocessing/prompt/schema change was made. Further live calls stopped per user request.
+See `plans/LLM_LIVE_RESULTS.json` for safe metadata without raw output or credentials.
+Full live merge-refresh-restart acceptance remains open.

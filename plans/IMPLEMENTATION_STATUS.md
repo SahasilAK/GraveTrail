@@ -10,7 +10,8 @@ runtime credentials, checksummed backup/new-home restore, packaged Python UI/CLI
 non-root persistent Docker deployment, host-native executable/release tooling and the
 17-part docs/SETUP_AND_DEPLOYMENT.md guide. All destructive verification used isolated homes.
 Remaining gates: native Linux/macOS executables, hosted release CI and reliable OmniRoute
-SAS assistance. auto/best-reasoning completes connection and SQL checks; SAS remains unresolved.
+completion availability. auto/best-reasoning has completed connection/SQL and a fresh SAS
+inspection; its latest workflow attempt fails with gateway HTTP503 candidate exhaustion.
 
 SAS PROC SQL FORMAT= parsing is fixed with exact source evidence and parser cache8.
 The supplied SAS project now matches all128 logical edges (144 physical evidence edges),
@@ -67,9 +68,12 @@ accuracy or production deployment certification is claimed.
 
 - User now requests OmniRoute auto/best-reasoning, superseding literal auto. Discovery966
   advertises the requested route but not literal auto. Connection JSON and grounded SQL
-  assistance/merge pass. SAS response fails schema validation; one focused SAS check then
-  returns ProviderError. Further live attempts stopped per user request. No full live
-  merge-refresh-restart acceptance claim. Use OMNIROUTE_API_KEY without persisting its value;
+  assistance/merge passed earlier. Fresh SAS response is valid fenced JSON and passes strict
+  schema/source grounding unchanged. A full-workflow probe then fails at connection with
+  HTTP503, Maximum combo retry limit reached:28 attempted candidates, pool787,
+  terminalReason=max_attempts_exceeded. No preprocessing change is justified. Prior SAS schema
+  failure was not reproduced. Stopped live calls; full merge-refresh-restart remains open.
+  Use OMNIROUTE_API_KEY without persisting its value;
   no fixed-model fallback or weakened quarantine. New advisory schemas remain mock-verified.
 - Docker daemon29.2.1 is now available. The actual Linux image build, non-root runtime,
   rendered UI, persisted volume and stdio MCP checks pass. No registry push or hosted CI run.
@@ -678,3 +682,27 @@ unverified; clean installation/packaging must be rerun after these new slices.
   help pass. Previous full suite288 passed/1 privilege skip; no application logic/UI changed.
 - Stopped network diagnosis per user request after repeated SAS failures. Further live tests
   need renewed user direction; no retry loops, scheduled checks or gateway changes were made.
+
+## OmniRoute output inspection — 2026-10-16
+
+- User renewed bounded diagnosis and requested inspecting actual output before choosing any
+  preprocessing. One fresh synthetic SAS call returned HTTP200/finish_reason=stop in13.13s:
+  fenced JSON containing a complete raw.b -> mart.y DATA claim, original lines1–3/quote,
+  explanation and confidence. Existing fence processing, schema and grounding all validate it.
+- The earlier SAS ValidationError was not reproduced; its original invalid response was not
+  retained, so its exact failed field remains unknown. No guessed coercion/wrapper repair,
+  prompt change or relaxed evidence checks were introduced.
+- One original full-workflow probe then failed at connection after discovery966 in71.87s:
+  HTTP503 service_unavailable, Maximum combo retry limit reached,28 attempted candidates,
+  pool787, terminalReason=max_attempts_exceeded. This explains this ProviderError precisely:
+  OmniRoute exhausted candidate attempts before usable completion output. Per-provider failure
+  causes remain unknown. Output preprocessing cannot repair this gateway error.
+- Kept auto/best-reasoning and named OMNIROUTE_API_KEY. Did not follow the gateway's suggestion
+  to switch routes. Gateway/provider combo investigation remains external work; stopped further
+  network requests under the user's bounded-troubleshooting instruction.
+- Safe metadata:plans/LLM_LIVE_RESULTS.json. Redacted synthetic output/HTTP diagnostics only in
+  ignored .dataforge/verification/omniroute-output-inspection.json and
+  omniroute-workflow-outputs.json; no primary home, user profiles or application logic changed.
+- Validation:44 focused LLM/credential/advisory tests pass in6.38s; Ruff passes. No additional
+  preprocessing is supported by the captured response. Full live merge-refresh-restart gate
+  remains open due intermittent gateway availability; docs/acceptance/knowledge updated.

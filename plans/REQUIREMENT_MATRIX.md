@@ -77,10 +77,11 @@ Latest measured gate results are recorded in IMPLEMENTATION_STATUS.md. Clean art
 under ignored `.dataforge/verification/`; do not commit runtime databases, sources or secrets.
 
 - OmniRoute **auto/best-reasoning** is the current user-requested route. Discovery966 advertises
-  it; connection JSON and grounded SQL assistance/merge pass. SAS returns schema-invalid JSON,
-  followed by ProviderError in one focused check. Stopped additional live calls per user request.
+  it; earlier connection/SQL assistance/merge pass. Fresh inspected SAS output passes existing
+  fence normalization, schema and source grounding. Full-workflow probe fails at connection:
+  gateway HTTP503 Maximum combo retry limit reached (28 candidates; pool787). Stopped live calls.
   Full live SQL/SAS merge-refresh-restart remains unverified. The earlier literal-auto failures
-  are historical; alias discovery alone does not explain their root cause. Keep strict
+  are historical; the old SAS schema failure was not reproduced. Keep strict
   grounding/quarantine, named OMNIROUTE_API_KEY and synthetic sources; no fixed-model fallback.
 - Other live provider protocols: credentials/endpoints not exercised here; synthetic HTTP
   tests establish request/validation behavior, not live account compatibility.

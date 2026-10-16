@@ -25,6 +25,7 @@ evidence and remaining platform gates; destructive validation uses isolated runt
 SAS FORMAT= follow-up in IMPLEMENTATION_STATUS.md records parser8, exact128 logical edges,
 all16 sources/seven layers and cache refresh; previous dated SAS gaps are historical.
 
-OmniRoute policy now uses auto/best-reasoning. LLM_LIVE_RESULTS.json records connection/SQL
-success plus repeated SAS failures; live diagnosis stopped per user direction. No further
-live attempts without renewed direction; validation/quarantine stays strict.
+OmniRoute policy uses auto/best-reasoning. LLM_LIVE_RESULTS.json records valid fenced SAS
+output accepted unchanged, earlier connection/SQL success and latest gateway503 candidate
+exhaustion. Old schema error was not reproduced. Live diagnosis stopped per user direction;
+no further calls without renewed direction, no preprocessing change, strict quarantine retained.
