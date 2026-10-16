@@ -18,7 +18,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_assistance_queue.py` — Current diagnostic eligibility/bounds, SQL/SAS focused context, isolation, privacy, quarantine/inferred merge and preview-hash race refusal using synthetic HTTP only.
 - `test_exports.py` — Escaped reports/original ZIPs, path evidence/order, live/offline appearance parity and Node syntax/DocumentFragment mount regression.
 - `test_graph.py` — Behavioral regression tests for graph. Run with pytest; temporary runtime data only.
-- `test_lineage_tree.py` — AppTest proves closed descendants are absent and expand/collapse controls change rendered branches.
+- `test_lineage_tree.py` — AppTest covers lazy compact branches, Expand all/Collapse all, inline files, both directions, optional evidence details, cycle stops and depth/entry limits.
 - `test_hardening.py` — Behavioral regression tests for hardening. Run with pytest; temporary runtime data only.
 - `test_ingestion.py` — Behavioral regression tests for ingestion. Run with pytest; temporary runtime data only.
 - `test_llm.py` — Provider protocols, grounding/privacy, fenced JSON rejection boundaries, malformed HTTP envelopes and inferred merge retention. Temporary runtime data only.

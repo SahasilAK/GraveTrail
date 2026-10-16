@@ -479,3 +479,19 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Final report and module knowledge updated; remaining incomplete gate is live auto-provider
   validation after gateway availability is restored, plus documented Docker/remoteCI/offline
   browser verification. No additional product code changes are pending.
+
+
+## Reference-style lineage trees — 2026-10-16
+
+- User-requested redesign gives upstream/downstream tabs full-width compact indented trees.
+  Bold asset labels, inline via-script paths, left chevrons, theme-aware branch guides and
+  Expand all/Collapse all replace boxed per-node evidence summaries and depth-entry controls.
+  The existing traversal-depth slider bounds Expand all; levels indicate distance, not execution.
+- Relationship metadata is available through Show relationship details; source evidence and
+  exports remain below the trees. Existing direction/source selection behavior is preserved.
+  Native branch widgets remain lazy and cycle/depth/entry-bounded. Imported labels are escaped.
+- Verification: full suite222 passed/1 existing skipped in26.51s; Ruff clean. After final styling,
+  four focused tree/source-scope tests pass. Actual isolated app on8504 exercised upstream and
+  downstream, Expand all/Collapse all and descendant disappearance. Screenshot:
+  .dataforge/verification/lineage-tree-redesign.png. Synthetic data stays in separate verification
+  home; primary data/theme/master prompt untouched. Scoped CSS relies on Streamlit expander DOM.

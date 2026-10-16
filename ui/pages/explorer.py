@@ -46,8 +46,7 @@ if asset:
         node = selection["node"]
         evidence = [e for s, t, a in focused.graph.edges(data=True) if node in {s, t} for e in a["evidence"]]
         source_scope = "Selected graph asset"
-    left, right = st.columns([1, 1])
-    with left:
+    with st.container():
         upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
                                       default=default_tab, on_change="rerun", key="lineage_direction_tabs")
         for tab, d in [(upstream, "upstream"), (downstream, "downstream")]:
@@ -56,6 +55,8 @@ if asset:
                     render_tree(view_graph, asset, d, depth, limit,
                                 key=f"tree_{w}_{asset}_{d}_{simplified}",
                                 default_expansion=int(store.setting(w, "tree_expansion_depth", 1)))
+    left, right = st.columns([1, 1])
+    with left:
         st.subheader("Step-wise lineage")
         st.caption("Dependency-based logical ordering. Source execution order is unknown.")
         st.dataframe([{k: v for k, v in r.items() if k not in {"file_id", "statement_id"}} for r in rows], hide_index=True)

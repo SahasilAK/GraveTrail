@@ -17,7 +17,7 @@ Storage settings opens only startup-allowed storage locations; failed opens keep
 workspace and successful opens reset this session before widgets are rebuilt.
 
 Builder reruns with analysis notices for fresh status counters/extension counts; Settings
-controls CSV sample0–100. Explorer tree tabs share the left/right source evidence row.
+controls CSV sample0–100. Explorer tree tabs span the full width above the step-wise table/source evidence row.
 
 Explorer source scope follows active dependency tabs until an explicit graph selection; source
 scope caption explains the override, and changing tabs resets graph selection.
