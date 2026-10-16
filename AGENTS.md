@@ -6,6 +6,7 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
 - Python 3.11+, Streamlit UI, SQLGlot, NetworkX, DuckDB. No imported code is executed.
 - `src/dataforge/`: domain, storage, ingestion, parsers, graph, exports, LLM, services.
 - `ui/`: presentation only. `app.py` is the entry point. `tests/` includes real fixtures.
+- `tests/sample_data/` contains SQL and SAS sample project ZIPs; use them to load sample data when testing the application.
 - Preserve evidence (file, exact statement, line range, method) for every relationship.
 - Prefer unresolved diagnostics to guessed dependencies. Never merge ambiguous names.
 - Runtime data belongs under `DATAFORGE_HOME` (default `.dataforge/`, ignored).

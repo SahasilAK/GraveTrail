@@ -4,6 +4,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 
 ## Subfolders
 - `fixtures/` — [fixtures/KNOWLEDGE.md](fixtures/KNOWLEDGE.md).
+- `sample_data/` — SQL and SAS sample project ZIPs for loading sample data into the application during testing. See [sample_data/KNOWLEDGE.md](sample_data/KNOWLEDGE.md).
 
 ## Files
 - `test_explorer_evidence.py` — Missing-asset warning/search regression; active tree tab filters source files independently of graph direction; explicit graph evidence selection overrides it.
