@@ -272,3 +272,19 @@ def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path)
         backup(store)
     assert not (tmp_path / 'restore').exists()
     store.close()
+
+
+def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp_path):
+    from dataforge.cleanup import apply_cleanup, cleanup_plan
+
+    store = Store(tmp_path)
+    w = populated(store, 'test')
+    theme = tmp_path / '.streamlit' / 'config.toml'
+    theme.parent.mkdir()
+    theme.write_text('[theme]\nbase="dark"\n')
+    personal = tmp_path / 'agent' / 'jobs' / 'personal.json'
+    personal.parent.mkdir(parents=True)
+    personal.write_text(json.dumps({'workspace_id': w, 'status': 'completed', 'updated_at': time.time()}))
+    apply_cleanup(store, cleanup_plan(store, '', 'application'), 'RESET DATAFORGE')
+    assert theme.is_file() and personal.is_file()
+    store.close()

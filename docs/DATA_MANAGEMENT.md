@@ -30,7 +30,8 @@ Source blobs are shared by hash. Removing inventory does not immediately delete 
 bytes. Old anonymous parser results can retain source-derived fragments until shared cache
 cleanup. To remove unreferenced copies, clear shared cache, then inspect orphan blobs.
 Runtime backups retain prior source data and must be managed separately. Application reset
-does not recursively remove the data-home directory. Empty directories may remain.
+does not recursively remove the data-home directory. Theme configuration is preserved because
+the chosen data home may overlap a source checkout. Empty directories may remain.
 
 New cleanup operations commit database changes transactionally before deleting files.
 An interrupted filesystem phase can leave harmless unreferenced files; results list retained

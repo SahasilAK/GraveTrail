@@ -37,7 +37,7 @@ def checked_path(home, relative):
 
 def _job_files(store):
     directory = checked_path(store.home, 'agent/jobs')
-    paths = sorted(directory.glob('*.json')) if directory.exists() else []
+    paths = sorted(p for p in directory.glob('*.json') if re.fullmatch(r'[a-f0-9]{32}\.json', p.name)) if directory.exists() else []
     if len(paths) > 1000:
         raise ValueError('Job inventory exceeds 1000 records; repair storage before maintenance')
     return paths
@@ -104,7 +104,7 @@ def _files(store, workspace, category):
             if path.is_file():
                 files.append(path)
     if category == 'application':
-        for relative in ('agent/audit.jsonl', 'agent/audit.previous.jsonl', '.streamlit/config.toml'):
+        for relative in ('agent/audit.jsonl', 'agent/audit.previous.jsonl'):
             path = checked_path(store.home, relative)
             if path.is_file():
                 files.append(path)
