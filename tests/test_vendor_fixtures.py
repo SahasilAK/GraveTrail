@@ -14,10 +14,11 @@ EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("dialect", EXPECTED)
-def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tmp_path, dialect):
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["LF", "CRLF"])
+def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tmp_path, dialect, newline):
     expected = EXPECTED[dialect]
     path = FIXTURES / expected.get("file", dialect + ".sql")
-    original = path.read_bytes()
+    original = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
     code = original.decode("utf-8")
     store = Store(tmp_path)
     try:
@@ -36,8 +37,8 @@ def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tm
             asset = next(a for a in assets if a["name"] == table)
             assert {u["column_name"] for u in column_report(store, w, asset["asset_id"])} == set(columns)
         for edge in store.edges(w):
-            span = "\n".join(code.splitlines()[edge["start_line"] - 1:edge["end_line"]])
-            assert edge["code"] == span
+            assert edge["code"] in code
+            assert edge["code"].splitlines() == code.splitlines()[edge["start_line"] - 1:edge["end_line"]]
             assert edge["source_hash"] == store.files(w)[0]["content_hash"]
         assert analyze(store, w)["cached"] == 1
         assert store.original(store.files(w)[0]["file_id"]) == original

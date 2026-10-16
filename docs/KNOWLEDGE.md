@@ -21,3 +21,6 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `TESTING.md` — Testing. Maintained documentation; consult implementation status for verification boundaries.
 - `TROUBLESHOOTING.md` — Troubleshooting. Maintained documentation; consult implementation status for verification boundaries.
 - `USER_GUIDE.md` — User guide. Maintained documentation; consult implementation status for verification boundaries.
+
+Latest verification/accounting lives in plans/REQUIREMENT_MATRIX.md and IMPLEMENTATION_STATUS;
+older numerical results in guides are historical. Parser7 preserves exact SAS block evidence.

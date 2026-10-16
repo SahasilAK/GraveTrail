@@ -41,11 +41,21 @@ approval pauses (ADR 009). Preserve the fourteen themes and the user's active co
 - [x] Preserve exact original SAS block snippets rather than reconstructed token joins.
 - [x] Close audited storage-location selection gap: explicit startup-allowed locations,
   session-scoped selection, no data migration, isolated/reopened stores and safe failures.
-- [ ] Requirement-by-requirement accounting with code/tests and external verification status.
-- [ ] Clean install, package, UI workflows, benchmark, standalone HTML, Docker/CI where available.
+- [x] Requirement-by-requirement accounting with code/tests and external verification status.
+- [x] Clean install, package, UI workflows, benchmark, standalone HTML, Docker/CI where available.
 - [ ] Stable live OmniRoute synthetic grounding/merge/persistence check using named env secrets.
   No repeated unreliable automatic routes or relaxed validation. Record exact external blockers.
 
 Each task uses failing behavioral tests, implementation, full suite, focused UI checks,
 self-review and documentation. Do not mark a checkbox without its evidence; if execution
 limits intervene, leave the precise next action in IMPLEMENTATION_STATUS.md.
+
+
+## Final gate state — 2026-10-16
+
+Implementation sections1–5 and audited storage/UI/evidence gaps are complete and committed.
+Final main/clean suites both220 passed,1 skipped; Ruff/lock/build/wheel import and actual clean
+UI import/analysis/reopen passed. REQUIREMENT_MATRIX.md records tested coverage and limitations.
+The live auto-only checkbox remains open: latest retry failed during discovery; port20128 had no listener. Docker
+engine, remote CI and direct offline file-browser interaction remain unavailable/unverified;
+no all-external-gates-green claim. Do not restart delivered slices to address these gates.

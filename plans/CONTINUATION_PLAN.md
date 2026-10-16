@@ -4,7 +4,7 @@ The original six implementation stages delivered the core workflow, not every de
 master requirement. Preserve that implementation. The user's autonomous execution and
 per-feature tested commits still apply; preserve the unrelated `.gitignore` edit.
 
-## Current execution order
+## Historical execution order — completed earlier
 
 1. **Live OmniRoute compatibility and repeatable verification.** Use the user-provided
    loopback endpoint and an environment variable credential. Discovery works. A live model
@@ -71,7 +71,7 @@ per-feature tested commits still apply; preserve the unrelated `.gitignore` edit
    Complete suite: 127 tests pass in normal and clean Python 3.11 environments; Ruff/lock/build
    pass. No new live gateway call. Screenshot `.dataforge/verification/unresolved-review.png`.
 
-## Remaining backlog beyond these slices
+## Historical backlog — superseded by REQUIREMENT_MATRIX.md
 
 User-requested theme slice: add eight explicit Ocean/Forest/Amethyst/Graphite dark/light
 presets in Settings Visualization. Dark choices set native appearance directly rather than
@@ -124,3 +124,7 @@ next vendor fixtures and final acceptance/package accounting. See IMPLEMENTATION
 
 2026-10-16: seven labeled vendor/SAS fixture cases added; parser6 fixes SELECT INTO, SQL
 Server temporary identifier prefixes and Teradata volatile CTAS. Next final acceptance checks.
+
+Final2026-10-16 audit: implementation slices and audited UI/storage/evidence gaps are delivered.
+REQUIREMENT_MATRIX.md is the authoritative remaining acceptance ledger. Earlier Next/backlog
+items above are historical. External auto-route, Docker/CI and offline browser gates remain.

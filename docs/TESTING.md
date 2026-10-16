@@ -50,3 +50,12 @@ and merges via synthetic HTTP transport. UI state holds a record ID. Actual brow
 synthetic unresolved SQL, analyzed it and adjusted the focused line preview without provider use.
 Latest complete result: 127 tests pass in both normal and clean Python 3.11 environments;
 Ruff, lock checks and wheel/source builds pass.
+
+
+Final completion checks are recorded in plans/REQUIREMENT_MATRIX.md and the latest
+IMPLEMENTATION_STATUS entry. New regressions cover task-specific advisory grounding, AI
+admission/chunks, settings/cache preservation, recoverable staging cleanup, supplied job scope,
+seven labeled vendor/SAS cases in LF and CRLF, storage isolation, inventory refresh and exact
+SAS evidence. Historical test counts above describe earlier stages. Current auto-only OmniRoute
+attempt failed during discovery with no listener on port20128; prior fixed-route success predates that instruction. Docker engine
+and direct file-browser interaction are unavailable/unverified, not passing release gates.

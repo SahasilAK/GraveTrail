@@ -32,9 +32,9 @@ accuracy or production deployment certification is claimed.
 
 ## Current verification
 
-- Main implementation suite:220 passed,1 skipped in25.21s; Ruff/lock checks pass. The earlier
-  clean-source219-test gate passed before the final direction fix; updated clean/package gates
-  are recorded in the final entry below.
+- Final main checkout:220 passed,1 skipped in25.21s. Final clean source install:220 passed,
+  1 skipped in25.06s. Ruff passes in both environments; lock validation and package builds pass.
+  Installed wheel imports from site-packages with Python -I; parser7/advisory schemas verified.
 - Actual isolated running UI verified settings, advisory reopening, cleanup/restore, storage
   switch/back, vendor import/analysis, exact selectors, graph evidence and tree/source panels.
   Primary home, imported source data and active theme/configuration were preserved.
@@ -44,8 +44,9 @@ accuracy or production deployment certification is claimed.
 
 ## External gates and intentional boundaries
 
-- OmniRoute literal model auto failed its latest connection check before source assistance;
-  discovery advertised964 IDs including auto/... aliases but no literal auto. Do not substitute
+- Latest OmniRoute auto attempt failed during model discovery in4.15s. Port20128 had no
+  local TCP listener; the named credential is present. Earlier discovery advertised964 IDs
+  including auto/... aliases but no literal auto. Do not substitute
   fixed models. Historical fixed-route success predates the user's auto-only instruction.
   Re-run scripts/verify_llm.py after gateway routing changes; use OMNIROUTE_API_KEY, never
   persist/print its value. Task-specific new advisory schemas remain synthetic-HTTP verified.
@@ -159,7 +160,7 @@ project-specific parser case, not restarting completed implementation slices.
   Rebuilt wheel installed into the clean environment; Python -I imported new queue/maintenance
   modules and validated bundled prompts independently of editable repository source.
 
-## Next session entry point
+## Historical session entry point — superseded by current Resume instructions
 
 Task-specific AI contracts, bounded resources, and remaining settings are now implemented.
 Resume with explicit job/session identity, broader vendor fixtures and requirement-by-requirement acceptance accounting.
@@ -435,3 +436,46 @@ unverified; clean installation/packaging must be rerun after these new slices.
   .dataforge/verification/downstream-source-scope.png. Final full test result follows.
 - Final source-direction verification:220 tests passed,1 skipped in25.21s; Ruff clean; reviewer
   cleared the fix after11 focused tests.
+
+
+## Final local acceptance — 2026-10-16
+
+- Section-by-section master accounting is in REQUIREMENT_MATRIX.md. Completed implementation
+  is bounded static analysis; external release gates remain explicit rather than marked green.
+- Main checkout220 passed/1 skipped in25.21s; clean Python3.11.16 source-distribution environment
+  installed all52 locked packages offline and passed220/1 skipped in25.06s. Ruff clean in both,
+  uv lock --check clean. Windows symlink-creation test is the privilege-related skip.
+- Seven labeled vendor/SAS examples exercised in LF and CRLF. Fixed a test-only LF assumption
+  after proving that original CRLF snippets were correctly preserved;14 fixture cases pass.
+- Wheel/sdist rebuilt under .dataforge/verification/final-dist. Source allowlist excludes runtime
+  homes/databases. Installed wheel with --no-deps --reinstall, then Python -I verified parser7,
+  imported site-packages location and bundled column/explanation schemas. No hidden editable
+  source dependency in that check. Clean installed-wheel server uses separate home/port8503.
+- Actual clean browser imported delivered scenario directory:7 accepted,2 documentation files
+  skipped;9 assets/7 dependencies,6 success/1 expected macro-warning partial,0 pending. Explorer
+  selected mart.customer_summary, rendered collapsed tree and both SAS evidence statements.
+  Restart reopened the same persisted workspace. Current primary8501 health also returned200.
+- Final synthetic500-file benchmark:15.8705s import,2.1065s cold,0.8708s warm,500 cache hits,
+  traversal0.0969ms, precision/recall/evidence1.0 for the labeled chain only.
+- Docker runtime unavailable (Linux engine pipe absent); no remote CI run. Direct offline file
+  browser interaction unverified. Latest OmniRoute auto retry failed during discovery; no local listener on20128.
+  No substitution or weakened grounding. See LLM_LIVE_RESULTS.json.
+- All code groups were independently reviewed, tested, UI-exercised and locally committed.
+  Remaining work is external acceptance or newly demonstrated project-specific coverage.
+
+
+## Final continuation handoff — 2026-10-16
+
+- User resumed continuation. Retried only literal auto at configured endpoint with existing
+  named environment credential. Checker failed ProviderError in4.15s during discovery, before
+  connection/source assistance. Confirmed no local TCP listener on20128; credential present.
+  LLM_LIVE_RESULTS.json records this latest failure. Earlier964-model discovery is historical.
+- App processes had stopped between turns. Restarted primary8501 with same data home; health200.
+  Before restart, preserved counts:1 workspace,7 source files,9 assets,7 edges,2 analysis runs;
+  schema4. Current execution session88647 owns the Streamlit server. No theme/config change.
+- Current80 application/test/fixture files hash-match the final clean tested source artifact;
+  therefore220-pass main/clean results still apply. Ruff remains clean. Final installed-wheel
+  UI also reopened persisted data and showed3 direct columns/3 references from02_summary.sql.
+- Final report and module knowledge updated; remaining incomplete gate is live auto-provider
+  validation after gateway availability is restored, plus documented Docker/remoteCI/offline
+  browser verification. No additional product code changes are pending.

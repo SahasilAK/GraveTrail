@@ -5,9 +5,9 @@ The committed JSON records environment versions, cold/warm import/analysis, focu
 evidence coverage and labeled synthetic precision/recall. These metrics describe the generated
 SQL-chain workload only; they are not a guarantee for arbitrary SQL/SAS projects.
 
-Recorded Windows/Python 3.11.16 run (500 files, 501 assets, 500 edges): import 12.532 s;
-cold analysis 1.9221 s; cached refresh 0.6712 s with all 500 parses skipped; focused traversal
-mean 0.0849 ms (21 nodes). Labeled synthetic precision/recall and evidence coverage were 100%.
+Recorded Windows/Python 3.11.16 run (500 files, 501 assets, 500 edges): import 15.8705 s;
+cold analysis 2.1065 s; cached refresh 0.8708 s with all 500 parses skipped; focused traversal
+mean 0.0969 ms (21 nodes). Labeled synthetic precision/recall and evidence coverage were 100%.
 Import time includes local immutable blob writes and transaction costs on this host.
 
 Parser results cache by parser version, byte hash, relative path and parsing settings. Unchanged
@@ -18,7 +18,7 @@ immutable snapshots allow concurrent import without changing the analysis input.
 Database writes are batched. Workspace/file indexes support common filters. Graph caching uses
 completed-run revision keys, a five-minute TTL and 32-entry cap. Source selectors fetch metadata
 before lazily loading a selected file. Full raw inventory content is not copied into session state.
-CSV metadata streams records and samples only 25 rows; it never loads a CSV DataFrame.
+CSV metadata streams records and samples a configured0–100 rows (default25); it never loads a CSV DataFrame.
 
 Defaults: 10,000 files, 20 MB/file, 100 MB compressed ZIP, 200 MB decompressed/import total,
 200:1 ZIP entry ratio, 4,096 CSV columns and 1,000,000 characters/record (csv's field limit also

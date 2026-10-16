@@ -5,8 +5,7 @@
   "credential_variable": "OMNIROUTE_API_KEY",
   "synthetic_sources_only": true,
   "checks": [],
-  "discovered_models": 964,
   "status": "failed",
   "error_type": "ProviderError",
-  "duration_seconds": 7.29
+  "duration_seconds": 4.15
 }
