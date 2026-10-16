@@ -10,7 +10,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `__init__.py` — Package marker; no business behavior.
 - `assistance.py` — Explicit source-range/task AI action with hash-pinned preview and durable result ID; delegates validated/quarantined response presentation and inferred merge.
 - `assistance_result.py` — Reads AI record by workspace/ID, displays quarantine/validated result/usage and separately merges inferred claims with refresh; no source/response copies in session state.
-- `common.py` — Shared context/store/graph caches, exact asset/source choices reset when IDs leave current options; styled graph v2 component, downloads and original-version viewer with lazy complete source and workspace line-number preferences.
+- `common.py` — Shared context/store/graph caches with missing-asset lineage warnings, exact asset/source choices reset when IDs leave current options; styled graph v2 component, downloads and original-version viewer with lazy complete source and workspace line-number preferences.
 - `lineage_tree.py` — Full-width compact indented lineage rows with inline file paths, level labels, scoped theme-aware tree guides, Expand all/Collapse all and optional relationship details. Native branches stay lazy, depth/entry-bounded and cycle-safe; imported labels are Markdown-escaped. Stores controls only.
 - `provider_settings.py` — Profile forms, env-key references, connection/model discovery and task/fallback routing; no secret-value storage.
 - `themes.py` — Fourteen native presets: original eight unchanged plus six additive orange/Nord/Rose/Sand/Mint choices. TOML-aware atomic config updates, detection and bounded reload acknowledgement. Applies only on explicit request, app-wide.

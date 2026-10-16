@@ -48,3 +48,20 @@ def test_path_limits_and_cycles_are_explicit_boundaries():
     limited = graph.path_report("c", limit=1, depth=10)
     assert limited["truncated"] and len(limited["paths"]) == 1
     assert graph.path_report("missing")["paths"] == []
+
+
+def test_missing_edge_endpoints_remain_diagnostics_without_anonymous_nodes():
+    assets = [{"asset_id": n, "name": n, "kind": "table", "temporary": False}
+              for n in ["raw", "mart"]]
+    edges = [{"source_id": s, "target_id": t, "edge_id": s + t,
+              "relative_path": "job.sql", "statement_id": "statement"}
+             for s, t in [("raw", "mart"), ("missing", "mart"), ("raw", "missing")]]
+    graph = LineageGraph(assets, edges)
+    assert graph.search("") == assets
+    assert set(graph.nodes) == {"raw", "mart"}
+    assert list(graph.graph.edges) == [("raw", "mart")]
+    assert graph.unresolved_edges == edges[1:]
+    focused = graph.simplified().focus("mart")
+    assert focused.unresolved_edges == edges[1:]
+    assert focused.path_report("mart")["truncated"]
+    assert len(focused.lineage_rows()) == 1

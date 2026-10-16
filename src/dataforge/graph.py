@@ -11,6 +11,7 @@ from dataforge.asset_identity import asset_job, asset_label
 class LineageGraph:
     def __init__(self, assets: list[dict], edges: list[dict], min_confidence=0., include_inferred=True):
         self.graph = nx.DiGraph()
+        self.graph.graph["unresolved_edges"] = []
         self.truncated = False
         for a in assets:
             self.graph.add_node(a["asset_id"], **a)
@@ -18,6 +19,11 @@ class LineageGraph:
             if e.get("confidence", 1.) < min_confidence or (not include_inferred and e.get("status") == "inferred"):
                 continue
             s, t = e["source_id"], e["target_id"]
+            if s not in self.graph or t not in self.graph:
+                # NetworkX otherwise invents empty nodes that break every asset consumer.
+                self.unresolved_edges.append(e)
+                self.truncated = True
+                continue
             if self.graph.has_edge(s, t):
                 self.graph[s][t]["evidence"].append(e)
             else:
@@ -26,6 +32,10 @@ class LineageGraph:
     @property
     def nodes(self):
         return self.graph.nodes
+
+    @property
+    def unresolved_edges(self):
+        return self.graph.graph.get("unresolved_edges", [])
 
     @classmethod
     def _from_graph(cls, graph, truncated=False):
@@ -42,7 +52,7 @@ class LineageGraph:
             return self._from_graph(nx.DiGraph())
         seen = {asset}
         queue = deque([(asset, 0)])
-        truncated = False
+        truncated = self.truncated
         while queue:
             node, level = queue.popleft()
             if level >= depth:
@@ -86,7 +96,7 @@ class LineageGraph:
                         *left.get("intermediates", []), asset_label(attrs), *right.get("intermediates", [])]))
                     graph.add_edge(source, target, evidence=list(evidence.values()), intermediates=intermediate)
             graph.remove_node(node)
-        return self._from_graph(graph)
+        return self._from_graph(graph, self.truncated)
 
     def lineage_rows(self):
         components = list(nx.strongly_connected_components(self.graph))

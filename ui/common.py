@@ -69,15 +69,20 @@ def load_graph(store, workspace):
         for k, v in AnalysisPreferences().model_dump().items()})
     if preferences.min_lineage_confidence > 0 or not preferences.include_inferred:
         st.caption(f"Lineage view filters: minimum confidence {preferences.min_lineage_confidence:.2f}; inferred relationships {'included' if preferences.include_inferred else 'hidden'}. Graph exports use these filters. Stored facts remain intact.")
-    return _cached_graph(str(store.home), workspace, latest[0]["run_id"] if latest else "empty",
-                         preferences.min_lineage_confidence, preferences.include_inferred)
+    graph = _cached_graph(str(store.home), workspace, latest[0]["run_id"] if latest else "empty",
+                          preferences.min_lineage_confidence, preferences.include_inferred)
+    if graph.unresolved_edges:
+        st.warning(f"{len(graph.unresolved_edges)} relationships reference missing assets and cannot be displayed. "
+                   "Lineage is incomplete. Rebuild lineage in Lineage builder to regenerate asset metadata.")
+    return graph
 
 
 @st.cache_resource(max_entries=32, ttl=300)
 def _cached_graph(home, workspace, revision, min_confidence=0., include_inferred=True):
     store = get_store(home)
     with store.lock:
-        return LineageGraph(store.assets(workspace), store.edges(workspace), min_confidence, include_inferred)
+        assets, edges = store.assets(workspace), store.edges(workspace)
+        return LineageGraph(assets, edges, min_confidence, include_inferred)
 
 
 def choose_asset(graph, key):

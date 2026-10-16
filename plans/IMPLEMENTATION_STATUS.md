@@ -495,3 +495,22 @@ unverified; clean installation/packaging must be rerun after these new slices.
   downstream, Expand all/Collapse all and descendant disappearance. Screenshot:
   .dataforge/verification/lineage-tree-redesign.png. Synthetic data stays in separate verification
   home; primary data/theme/master prompt untouched. Scoped CSS relies on Streamlit expander DOM.
+
+
+## Missing asset metadata recovery — 2026-10-16
+
+- Reproduced user KeyError(name): NetworkX implicitly creates attribute-less endpoints when
+  relationships reference assets absent from the loaded asset list. Graph construction now
+  retains those edges as unresolved diagnostics, excludes anonymous nodes and propagates
+  incomplete state through focused/simplified/path views. Shared UI displays a rebuild warning.
+- Deeper live cause: DuckDB1.5.6 optimized workspace WHERE queries returned zero rows despite
+  matching rows existing. Disabling the optimizer returned7 files/9 assets/7 edges. ANALYZE and
+  disabling index scans did not repair the discrepancy. Cause of the bad optimizer metadata
+  is unknown; no dependency or global optimization settings were changed.
+- Stopped the app for safe backup, exported all tables with optimization disabled, imported
+  into a fresh database and verified every row of every table exactly against the backup.
+  Normal optimized workspace queries then returned7/9/7. Installed the repaired database and
+  restarted8501. Originals/blobs untouched. Recovery backup:
+  .dataforge/verification/before-query-metadata-repair.duckdb; export/repaired copy retained.
+- Automated:223 passed/1 existing skip in27.19s, plus added explorer missing-asset integration
+  regression (2 explorer tests pass);8 graph/tree/source tests pass and Ruff clean.
