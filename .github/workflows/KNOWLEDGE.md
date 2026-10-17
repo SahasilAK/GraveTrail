@@ -5,7 +5,7 @@ All Linux jobs pin ubuntu-24.04. Action releases are commit-pinned and use Node2
 including the nested upload action in the Pages composite; test commands also install Node24.
 
 ## Files
-- `tests.yml` — uv lock install, Ruff and pytest on Windows/Linux Python 3.11/3.12; Node enables JS syntax regression.
+- `tests.yml` — Pull-request-only uv lock install, Ruff and pytest on Windows/Linux Python 3.11/3.12; branch pushes do not launch duplicate test runs. Node enables JS syntax regression.
 - `security.yml` — Read-only push/PR/weekly/manual scans: checksum-pinned Gitleaks checks full reachable history and archived tracked files/nested ZIPs using root .gitleaks.toml; pinned pip-audit checks every locked group/extra across Windows/Linux Python 3.11/3.12. Findings fail jobs; secrets are redacted and checkout credentials are not persisted.
 - `release.yml` — Version-tag/manual native Windows/Linux/macOS builds, suite and real wheel/executable smoke; Linux container build/persistence; checksummed Actions artifacts. No remote runs/publication implied.
 
