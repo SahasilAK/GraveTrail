@@ -38,6 +38,8 @@ The authoritative product specification is `docs/prompts/MASTER_PROMPT.md`. Read
 - Commands: `uv sync --extra dev`; `uv run pytest`; `uv run ruff check .`;
   `uv run streamlit run app.py --server.address 127.0.0.1`.
 - Do not overwrite the user's preexisting `.gitignore` edits. Do not change the master prompt.
+- New branches must use `feature/`, `bugfix/`, or another task-appropriate prefix
+  (such as `docs/`, `chore/`, or `refactor/`). Never use the `codex/` prefix.
 - Commit every feature or coherent feature group after testing, with a descriptive
   Conventional Commit message. Do not include unrelated user edits.
 
