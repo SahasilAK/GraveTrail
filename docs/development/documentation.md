@@ -26,7 +26,7 @@ scripts/docs/                Build, link and publication inspection
 Existing uppercase reference files retain their original URLs. Section indexes organize
 them without duplicating their technical content. Keep one authoritative explanation
 and link to it from the relevant workflow. Internal prompts, plans, review reports and
-`KNOWLEDGE.md` maps remain repository context; they are not documentation site pages.
+`KNOWLEDGE.md` maps remain ignored local context; they are not published or tracked.
 
 ## Change or add a page
 

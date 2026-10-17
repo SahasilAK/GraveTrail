@@ -100,5 +100,5 @@ MCP maintenance stays read-only. Reading settings/recoveries never triggers auto
 Runtime reset and schema removal remain separate operations.
 
 The checked-in [capability fixture](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/tests/fixtures/parity_capabilities.json) is tested against
-actual Typer routes/help, MCP schemas and authorization. [Parity acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md)
-records full tests, actual transports, running UI, both real ZIPs, live checks and open gates.
+actual Typer routes/help, MCP schemas and authorization. The [testing guide](TESTING.md)
+describes parity checks for transports, the running UI, both real ZIPs and live providers.

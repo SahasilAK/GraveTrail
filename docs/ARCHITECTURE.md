@@ -97,4 +97,4 @@ launching build tools with an allowlisted environment and recording artifact has
 Checksums prove file integrity, not publisher authenticity or runtime correctness. Native
 artifacts need native runner smoke tests. Docker runs the installed wheel as a non-root user
 with persistent `/data`. UI and MCP are alternative owners of a home, not concurrent services
-against one DuckDB file. See [verification status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md).
+against one DuckDB file. See [build verification](BUILD_AND_RELEASE.md).

@@ -17,8 +17,8 @@ services for the UI, CLI and MCP server. Start with the
 
 Browse the [source tree](https://github.com/SahasilAK/dataforge-engineering-hub/tree/main/src/dataforge)
 and [test tree](https://github.com/SahasilAK/dataforge-engineering-hub/tree/main/tests)
-for concrete examples. Repository-specific contribution instructions are in
-[AGENTS.md](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/AGENTS.md).
+for concrete examples. Repository-specific contribution instructions are in the
+[contribution guide](contributing.md).
 
 ## Engineering contracts
 
@@ -43,7 +43,7 @@ for concrete examples. Repository-specific contribution instructions are in
 | Run meaningful regression checks | [Testing](../TESTING.md) |
 | Build wheels, containers or native bundles | [Build and release](../BUILD_AND_RELEASE.md) |
 | Investigate safety boundaries | [Security](../SECURITY.md) and [data management](../DATA_MANAGEMENT.md) |
-| Review dated verification and remaining gates | [Implementation status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md) |
+| Review verification requirements and release gates | [Testing](../TESTING.md) and [build verification](../BUILD_AND_RELEASE.md) |
 
 Keep documentation claims tied to what was actually tested. A mocked provider response,
 successful build or source-level test does not establish live provider availability,

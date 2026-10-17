@@ -1,7 +1,7 @@
 # DataForge Setup and Deployment
 
 This is the main installation and operations reference. For recorded verification and
-remaining release gates, see [implementation status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md).
+remaining release gates, see [build verification](BUILD_AND_RELEASE.md).
 
 ## 1. Introduction
 
@@ -253,7 +253,7 @@ See [build and release](BUILD_AND_RELEASE.md) for reusable smoke scripts and CI 
 
 For supplied SQL/SAS projects, import either ZIP in `tests/sample_data/`, select only its
 script extension and search `pub.all_kpis` after analysis. Fixture expectations, parser
-limits and acceptance details are in [sample data knowledge](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/tests/sample_data/KNOWLEDGE.md)
+limits and acceptance details are in [testing guide](TESTING.md)
 and [agent workflows](AGENT_WORKFLOWS.md).
 
 Host access is configured before startup. PowerShell example:
@@ -529,9 +529,10 @@ with Docker administrative privileges or data-home filesystem access remains tru
 
 ## 16. Development and contribution
 
-Read [AGENTS.md](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/AGENTS.md), the product specification when supplied in your checkout,
-[implementation status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md) and
-[implementation guide](IMPLEMENTATION_GUIDE.md) before changing behavior.
+Read the [contribution guide](development/contributing.md),
+[build verification](BUILD_AND_RELEASE.md) and [implementation guide](IMPLEMENTATION_GUIDE.md)
+before changing behavior. Agent instructions, product specifications and implementation
+records may also be supplied as ignored local working files.
 
 | Path | Responsibility |
 | --- | --- |
@@ -540,7 +541,7 @@ Read [AGENTS.md](https://github.com/SahasilAK/dataforge-engineering-hub/blob/mai
 | `prompts/` | Versioned grounded-assistance templates and schemas |
 | `tests/` | Unit/integration/UI tests, fixtures and supplied SQL/SAS projects |
 | `scripts/`, `.github/workflows/` | Verification, build entry scripts and automation |
-| `docs/`, `plans/` | Operating guides, design, evidence and implementation tracking |
+| `docs/` | Operating guides, design and verification guidance |
 
 ```sh
 uv sync --locked --extra dev
@@ -601,4 +602,4 @@ Review dependency licenses when redistributing a bundled application.
 
 ## CLI and MCP UI coverage
 
-The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `dataforge capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source acceptance is recorded in [parity acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md).
+The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `dataforge capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source verification commands are in the [testing guide](TESTING.md).

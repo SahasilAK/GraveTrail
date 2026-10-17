@@ -1,7 +1,9 @@
 # Implementation guide
 
-Start with `AGENTS.md`, the authoritative `docs/prompts/MASTER_PROMPT.md` and
-`plans/IMPLEMENTATION_STATUS.md`. `plans/MASTER_PLAN.md` maps deliverables and gates.
+Start with the [development overview](development/index.md) and [testing guide](TESTING.md).
+When supplied locally, also read `AGENTS.md`, the authoritative `docs/prompts/MASTER_PROMPT.md`
+and `plans/IMPLEMENTATION_STATUS.md`. Agent instructions, plans and knowledge maps are
+ignored local working files and are not required for a clean checkout.
 
 Install with `uv sync --locked --extra dev`. Start `uv run dataforge-ui` from the repo
 root (direct `uv run streamlit run app.py` remains available). Use `uv run pytest -q` and

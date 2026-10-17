@@ -53,8 +53,8 @@ Latest complete result: 127 tests pass in both normal and clean Python 3.11 envi
 Ruff, lock checks and wheel/source builds pass.
 
 
-Final completion checks are recorded in plans/REQUIREMENT_MATRIX.md and the latest
-IMPLEMENTATION_STATUS entry. New regressions cover task-specific advisory grounding, AI
+Local completion records, when supplied, live in the ignored plans directory.
+Regression tests cover task-specific advisory grounding, AI
 admission/chunks, settings/cache preservation, recoverable staging cleanup, supplied job scope,
 seven labeled vendor/SAS cases in LF and CRLF, storage isolation, inventory refresh and exact
 SAS evidence. Historical test counts above describe earlier stages. A Windows wheel and Linux
@@ -70,8 +70,8 @@ Run the four `tests/test_agent_*.py` modules for standalone CLI/MCP parity, actu
 stdio/HTTP, permissions/budgets, persisted/background jobs, source boundaries and Settings
 AppTest. Run `scripts/verify_agents.py` with an isolated --home and --output for both supplied
 SQL/SAS ZIPs and representative token estimates. It executes no imported source and records
-exact SAS FORMAT-modifier evidence and the remaining static-analysis diagnostics. See plans/AGENT_ACCEPTANCE.md.
+exact SAS FORMAT-modifier evidence and the remaining static-analysis diagnostics. Retain the generated report locally for review.
 
 ## CLI/MCP UI parity verification
 
-Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The keyed 46-ID fixture is checked against actual CLI help and MCP schemas; new network/mutation tools must reject a read-only launch. Provider mocks are repeatable and require no keys. `uv run python scripts/verify_parity.py --home NEW_ISOLATED_HOME --output NEW_REPORT.json` exercises both supplied ZIPs through CLI/service/actual MCP and owner reopen, including every original byte/hash, exact logical edges, seven layers/all16 roots and warm cache reuse. Never point destructive tests at an existing user home. See [dated acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md) for running UI/live/transport evidence and unexecuted gates.
+Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The keyed 46-ID fixture is checked against actual CLI help and MCP schemas; new network/mutation tools must reject a read-only launch. Provider mocks are repeatable and require no keys. `uv run python scripts/verify_parity.py --home NEW_ISOLATED_HOME --output NEW_REPORT.json` exercises both supplied ZIPs through CLI/service/actual MCP and owner reopen, including every original byte/hash, exact logical edges, seven layers/all16 roots and warm cache reuse. Never point destructive tests at an existing user home. Record running UI/live/transport evidence and unexecuted gates in the local report.

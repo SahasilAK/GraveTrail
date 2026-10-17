@@ -13,13 +13,13 @@ for vulnerabilities.
 git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
 cd dataforge-engineering-hub
 uv sync --locked --extra dev
-git switch -c codex/describe-the-change
+git switch -c feature/describe-the-change
 ```
 
-Use Python 3.11 or newer. Read repository guidance, the authoritative product
-specification in the checkout, and the current
-[implementation status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md)
-before changing behavior. The [development overview](index.md) maps the layers and
+Use Python 3.11 or newer. Read the [implementation guide](../IMPLEMENTATION_GUIDE.md)
+before changing behavior. If supplied locally, also read the agent instructions,
+product specification and implementation status. Use `feature/`, `bugfix/`, or another
+task-appropriate branch prefix; never use `codex/`. The [development overview](index.md) maps the layers and
 links to extension contracts. Preserve unrelated work in your checkout.
 
 ## Make a bounded change
@@ -73,7 +73,7 @@ See [testing](../TESTING.md) for commands and test boundaries.
 
 1. Describe the problem, the resulting behavior and any compatibility/data implications.
 2. Include exact verification commands and results; identify skipped or unavailable checks.
-3. Update affected user/technical documentation and repository status/context maps.
+3. Update affected user/technical documentation and any local status/context maps.
 4. Review the diff for unrelated edits, runtime files, credentials and private source.
 5. Commit each tested feature or coherent feature group with a descriptive Conventional
    Commit message, such as `fix: retain source version in evidence exports`.

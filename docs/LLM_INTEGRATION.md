@@ -137,7 +137,8 @@ at connection with HTTP503: `Maximum combo retry limit reached`,28 attempted can
 a pool of787, `terminalReason=max_attempts_exceeded`. This is gateway candidate exhaustion,
 which output normalization cannot repair. Individual upstream failure reasons remain unknown.
 No preprocessing/prompt/schema change was made. Further live calls stopped per user request.
-See `plans/LLM_LIVE_RESULTS.json` for safe metadata without raw output or credentials.
+The command writes safe metadata to the ignored local `plans/LLM_LIVE_RESULTS.json`,
+without raw output or credentials.
 That dated attempt left the full live gate open.
 
-Current bounded acceptance on 2026-10-17 passed discovery (915 models), connection, synthetic SQL and SAS exact-quote validation, inferred merge, graph refresh and owner reopen in 33.8 seconds. It used `http://localhost:20128/v1`, `auto/best-reasoning` and the existing read-only `OMNIROUTE_API_KEY` launch reference. No fixed route or validation change was used. See [parity acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md); earlier failures remain historical evidence, and this result does not promise continuing provider availability.
+Current bounded acceptance on 2026-10-17 passed discovery (915 models), connection, synthetic SQL and SAS exact-quote validation, inferred merge, graph refresh and owner reopen in 33.8 seconds. It used `http://localhost:20128/v1`, `auto/best-reasoning` and the existing read-only `OMNIROUTE_API_KEY` launch reference. No fixed route or validation change was used. See [provider verification guidance](TESTING.md); earlier failures remain historical evidence, and this result does not promise continuing provider availability.

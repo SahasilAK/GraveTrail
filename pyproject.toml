@@ -43,8 +43,8 @@ path = "scripts/build/hatch_assets.py"
 exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "plans/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "mkdocs.yml", "AGENTS.md", "KNOWLEDGE.md", ".kbignore", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
-exclude = ["docs/prompts/**", "docs/plans/**", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
+include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
+exclude = ["docs/prompts/**", "docs/plans/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]
 "scripts/build/hatch_assets.py" = "scripts/build/hatch_assets.py"
@@ -52,7 +52,6 @@ exclude = ["docs/prompts/**", "docs/plans/**", "**/__pycache__/**", "**/*.pyc", 
 "scripts/build/build_executable.py" = "scripts/build/build_executable.py"
 "scripts/build/smoke.py" = "scripts/build/smoke.py"
 "scripts/build/smoke_docker.py" = "scripts/build/smoke_docker.py"
-"scripts/build/KNOWLEDGE.md" = "scripts/build/KNOWLEDGE.md"
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
