@@ -11,6 +11,11 @@ from typing import Annotated
 import duckdb
 import typer
 
+from dataforge.agent.cli_ai import register as register_ai
+from dataforge.agent.cli_reports import register as register_reports
+from dataforge.agent.cli_reports import register_maintenance
+from dataforge.agent.cli_settings import register as register_settings
+from dataforge.agent.cli_settings import register_application
 from dataforge.agent.contracts import (
     AccessPolicy,
     AgentError,
@@ -51,6 +56,12 @@ def configure(ctx: typer.Context,
               json_output: bool = typer.Option(False, "--json", help="Compact structured JSON output."),
               quiet: bool = typer.Option(False, "--quiet", "-q"),
               allow_write: bool = typer.Option(False, help="Explicitly authorize mutations for this launch."),
+              allow_config_write: bool = typer.Option(False),
+              allow_llm: bool = typer.Option(False),
+              allowed_llm_origin: list[str] = typer.Option(None),
+              allowed_credential_ref: list[str] = typer.Option(None),
+              allow_application_config: bool = typer.Option(False),
+              allow_admin: bool = typer.Option(False, help="Local CLI administration only; cannot be used by MCP."),
               allowed_workspace: list[str] = typer.Option(None, help="Restrict to these workspace IDs; repeatable."),
               allowed_root: list[Path] = typer.Option(None, help="Authorized import root; repeatable."),
               limit: int = typer.Option(50, min=1, max=500), cursor: str = typer.Option(None),
@@ -64,7 +75,9 @@ def configure(ctx: typer.Context,
     ctx.obj = {"home": (home or default_home(source=application_root().name != '_app' and not getattr(sys, 'frozen', False))).resolve(),
                "json": json_output, "quiet": quiet, "output": output,
                "policy": AccessPolicy(allow_write, tuple(allowed_workspace) if allowed_workspace else None,
-                                      tuple(str(p.resolve()) for p in roots)),
+                                      tuple(str(p.resolve()) for p in roots),
+                                      allow_config_write, allow_llm, tuple(allowed_llm_origin or ()),
+                                      tuple(allowed_credential_ref or ()), allow_application_config, allow_admin),
                "options": {"limit": limit, "cursor": cursor, "max_depth": max_depth,
                            "max_items": max_items, "max_chars": max_chars, "detail_level": detail,
                            "collapse_temporary": collapse_temporary}}
@@ -94,6 +107,12 @@ def emit(ctx, result):
             typer.echo(f"{key}: {compact(value) if isinstance(value, (dict, list)) else value}")
 
 
+@app.command()
+def capabilities(ctx: typer.Context, workspace: str = typer.Option('')):
+    """Discover permitted operations and explicit policy restrictions; follow next_cursor."""
+    invoke(ctx, 'capabilities', workspace)
+
+
 def fail(ctx, exc):
     # Errors never write an output artifact or include exception internals such as SQL/paths.
     typer.echo(compact(exc.response()))
@@ -106,6 +125,7 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
     store = service = None
     try:
         config = ctx.obj
+        download_to = arguments.pop('download_to', None)
         if action == "job":
             if not config["policy"].permits(workspace_id):
                 raise AgentError("forbidden", "Workspace is not authorized")
@@ -126,6 +146,19 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
         else:
             store = Store(config["home"])
             service = AgentService(store, config["policy"])
+            if arguments.pop('credential_prompt', False):
+                from dataforge.connections import RuntimeConnections
+                from dataforge.provider_service import authorize_provider, get_profile
+                profile_id = arguments.get('profile_id', '')
+                if action == 'ai_request':
+                    profile_id = store.setting(workspace_id, 'task_models', {}).get(arguments['task']) or store.setting(workspace_id, 'default_profile', '')
+                profile = get_profile(store, workspace_id, profile_id)
+                service._workspace(workspace_id, write=True)
+                authorize_provider(store, service.policy, workspace_id, profile)
+                manager = RuntimeConnections()
+                manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True))
+                service.runtime_connections[(workspace_id, profile_id)] = manager
+                service.runtime_profiles[(workspace_id, profile_id)] = profile.model_dump_json()
             if background:
                 service._workspace(workspace_id, write=True)
                 QueryOptions.model_validate(config["options"])
@@ -150,6 +183,25 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 result = {"job_id": record["job_id"], "status": "queued"}
             else:
                 result = service.call(action, workspace_id, options=config["options"], **arguments)
+                if download_to is not None:
+                    import base64
+                    import hashlib
+                    artifact_id = result['artifact_id']
+                    digest = hashlib.sha256()
+                    offset = 0
+                    with download_to.open('xb') as stream:
+                        while True:
+                            chunk = service.call('artifact_read', workspace_id, options=config['options'], artifact_id=artifact_id, offset=offset)
+                            data = base64.b64decode(chunk['data'])
+                            stream.write(data)
+                            digest.update(data)
+                            offset = chunk['next_offset']
+                            if chunk['complete']:
+                                break
+                    if offset != chunk['bytes'] or digest.hexdigest() != chunk['sha256']:
+                        raise AgentError('conflict', 'Downloaded artifact checksum failed')
+                    result = {'artifact_id': artifact_id, 'destination': str(download_to), 'bytes': offset,
+                              'sha256': digest.hexdigest(), 'complete': chunk['artifact_complete']}
                 if action in {"ingest", "analyze"}:
                     service.jobs.wait(result["job_id"], workspace_id)
                     result = service.job_status(workspace_id, result["job_id"], config["options"])
@@ -232,8 +284,10 @@ def search_assets(ctx: typer.Context, workspace: Workspace, query: str = ""):
 
 
 @columns_app.command("usage")
-def columns(ctx: typer.Context, asset: str, workspace: Workspace):
-    invoke(ctx, "columns", workspace, asset=asset)
+def columns(ctx: typer.Context, asset: str, workspace: Workspace, column_query: str = '',
+            usage_type: str = '', file_id: str = '', group_by: str = 'none'):
+    invoke(ctx, "columns", workspace, asset=asset, column_query=column_query,
+           usage_type=usage_type, file_id=file_id, group_by=group_by)
 
 
 @source_app.command("list")
@@ -249,8 +303,8 @@ def source(ctx: typer.Context, workspace: Workspace, file_id: str = None, statem
 
 
 @source_app.command("search")
-def search_source(ctx: typer.Context, query: str, workspace: Workspace):
-    invoke(ctx, "search_code", workspace, query=query)
+def search_source(ctx: typer.Context, query: str, workspace: Workspace, include_matches: bool = False):
+    invoke(ctx, "search_code", workspace, query=query, include_matches=include_matches)
 
 
 @app.command("issues")
@@ -274,8 +328,12 @@ def export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = "
 
 
 @exports_app.command("read")
-def result(ctx: typer.Context, result_id: str, workspace: Workspace, format: str = "json"):
-    invoke(ctx, "result", workspace, result_id=result_id, format=format)
+def result(ctx: typer.Context, result_id: str, workspace: Workspace, format: str = "json",
+           binary: bool = False, offset: int = 0, length: int = 16384):
+    if binary:
+        invoke(ctx, 'artifact_read', workspace, artifact_id=result_id, offset=offset, length=length)
+    else:
+        invoke(ctx, "result", workspace, result_id=result_id, format=format)
 
 
 @batch_app.command("lineage")
@@ -303,7 +361,7 @@ def cleanup_inspect(ctx: typer.Context, workspace: Workspace):
 
 def _cleanup_command(category):
     def command(ctx: typer.Context, workspace: Workspace, dry_run: bool = True,
-                preview: Path = None, confirm: str = '', backup: bool = False,
+                preview: Path = None, confirm: str = '', backup: bool = True,
                 file_id: list[str] = typer.Option(None), run_id: str = None):
         """Defaults to dry-run. Apply with --no-dry-run --preview FILE --confirm WORKSPACE_NAME."""
         if dry_run:
@@ -378,6 +436,13 @@ def ui(ctx: typer.Context):
     from dataforge.launcher import main
     main(['--home', str(ctx.obj['home']), *ctx.args])
 
+
+
+register_settings(app, workspace_app, invoke, fail)
+register_application(app, invoke)
+register_ai(app, invoke, fail)
+register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
+register_maintenance(app, maintenance_app, invoke, fail)
 
 if __name__ == "__main__":
     app()

@@ -118,7 +118,9 @@ def test_mcp_cleanup_is_read_only_even_with_write_policy(tmp_path):
     async def check():
         tools = {t.name: t for t in await server.list_tools()}
         assert tools['preview_cleanup'].annotations.readOnlyHint
-        assert not any('apply' in name or 'delete' in name for name in tools)
+        # Application theme apply is explicitly permitted by its independent launch grant.
+        assert {name for name in tools if 'apply' in name or 'delete' in name} == {'apply_application_theme'}
+        assert not {'archive_history', 'restore_history', 'cleanup_temporary', 'backup', 'checkpoint'} & tools.keys()
         result = await server.call_tool('preview_cleanup', {'workspace_id': w, 'category': 'lineage'})
         assert result.structuredContent['records']['edges'] == 1
         assert store.edges(w)

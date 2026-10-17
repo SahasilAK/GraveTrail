@@ -172,6 +172,7 @@ upgrades. Logical row deletion/checkpointing does not promise physical disk shri
 - [Setup and deployment](docs/SETUP_AND_DEPLOYMENT.md): installation, builds, credentials, operations and recovery.
 - [User guide](docs/USER_GUIDE.md): UI workflow and evidence inspection.
 - [CLI guide](docs/CLI_GUIDE.md) and [MCP integration](docs/MCP_INTEGRATION.md): agent access, policy and examples.
+- [Complete CLI/MCP capability matrix](docs/CLI_MCP_CAPABILITIES.md): all 46 UI IDs, actual routes and explicit restrictions.
 - [Architecture](docs/ARCHITECTURE.md) and [implementation guide](docs/IMPLEMENTATION_GUIDE.md): module boundaries and development.
 - [Testing](docs/TESTING.md) and [implementation status](plans/IMPLEMENTATION_STATUS.md): evidence and remaining gates.
 

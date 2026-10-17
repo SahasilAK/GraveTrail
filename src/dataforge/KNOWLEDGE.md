@@ -41,3 +41,20 @@ globally or persist it. `docs/SECURE_CONFIGURATION.md` describes limits and envi
 
 AI admission now covers source reads through result commit; maintenance reserves the home
 against new requests. Whole-home backups require unrestricted local authorization.
+
+- `settings_service.py` — section schemas, content revisions, atomic validated patches, privilege tightening and bounded JSON input; UI uses local-human authority.
+
+- `provider_service.py` — validated profile/routing CRUD, exact origin/reference authorization, per-profile runtime bindings and bounded model/test adapter operations.
+
+- `ai_service.py` — offline chunks/diagnostic review, hash/job-pinned synchronous assistance with per-fallback authorization, durable metadata/detail/activity and idempotent inferred merge with refresh-failure reporting.
+
+- `reporting.py` — shared dictionary/provenance, health, original-evidence integrity, literal SQL/SAS matches and scoped history/inventory reports; all queries are offline.
+
+- `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifact creation, guarded managed paths and scoped/checksummed budgeted base64 reads.
+
+- `theme_configuration.py` — exact existing14 preset palettes, detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.
+
+Provider runtime bindings include a saved-profile fingerprint: profile edits invalidate old credentials,
+including edits by another adapter. Fallbacks resolve their own approved credentials. AI pins hash/job
+again when constructing the request. Graph/path reports enrich stored edges with original evidence and
+mark cycle boundaries incomplete. General cleanup cannot opt out of its full-home backup.

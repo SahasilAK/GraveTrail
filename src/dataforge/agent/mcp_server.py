@@ -17,6 +17,8 @@ from dataforge.connections import current_connections
 
 
 def create_server(service: AgentService, host="127.0.0.1", port=8765):
+    if service.policy.allow_admin:
+        raise AgentError('requires_local_admin', 'MCP cannot use --allow-admin; use a local CLI invocation')
     server = FastMCP("DataForge", instructions=(
         "Query stored engineering metadata locally. Resolve ambiguous names with search_assets. "
         "Default summary results contain no source. Request evidence only when needed. "
@@ -50,7 +52,7 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call('cleanup_inspect', workspace_id)
 
     @server.tool(annotations=read)
-    async def preview_cleanup(workspace_id: str, category: Literal['sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace'],
+    async def preview_cleanup(workspace_id: str, category: Literal['sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace', 'cache', 'orphans', 'application'],
                               file_ids: list[str] | None = None, run_id: str | None = None) -> CallToolResult:
         """Dry-run only. A local human must apply destructive cleanup through UI or CLI confirmation."""
         return await call('cleanup_preview', workspace_id, category=category, file_ids=file_ids, run_id=run_id)
@@ -103,9 +105,9 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call("batch", workspace_id, options, assets=assets, direction=direction)
 
     @server.tool(annotations=read)
-    async def get_column_usage(workspace_id: str, asset: str, options: QueryOptions | None = None) -> CallToolResult:
+    async def get_column_usage(workspace_id: str, asset: str, column_query: str = "", usage_type: str = "", file_id: str = "", group_by: str = "none", options: QueryOptions | None = None) -> CallToolResult:
         """Get persisted direct column usage with optional evidence."""
-        return await call("columns", workspace_id, options, asset=asset)
+        return await call("columns", workspace_id, options, asset=asset, column_query=column_query, usage_type=usage_type, file_id=file_id, group_by=group_by)
 
     @server.tool(annotations=read)
     async def get_source_evidence(workspace_id: str, file_id: str | None = None, statement_id: str | None = None,
@@ -117,9 +119,9 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
                     operation_id=operation_id, start_line=start_line, end_line=end_line, full=full)
 
     @server.tool(annotations=read)
-    async def search_source_code(workspace_id: str, query: str = "", options: QueryOptions | None = None) -> CallToolResult:
+    async def search_source_code(workspace_id: str, query: str = "", include_matches: bool = False, options: QueryOptions | None = None) -> CallToolResult:
         """List file references, optionally matching literal code; source content stays local."""
-        return await call("search_code" if query else "files", workspace_id, options, query=query)
+        return await call("search_code" if query else "files", workspace_id, options, query=query, **({"include_matches": include_matches} if query else {}))
 
     @server.tool(annotations=read)
     async def analyze_impact(workspace_id: str, asset: str, options: QueryOptions | None = None) -> CallToolResult:
@@ -140,10 +142,317 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call("export", workspace_id, options, asset=asset, format=format, direction=direction)
 
     @server.tool(annotations=read)
-    async def get_export(workspace_id: str, result_id: str, format: Literal["json", "csv", "html"] = "json",
-                   options: QueryOptions | None = None) -> CallToolResult:
-        """Read an explicitly selected, workspace-scoped bounded export."""
+    async def get_export(workspace_id: str, result_id: str = "", format: Literal["json", "csv", "html"] = "json",
+                   options: QueryOptions | None = None, artifact_id: str = '', offset: int = 0, length: int = 16384) -> CallToolResult:
+        """Read legacy text export, or an artifact_id as bounded base64 bytes. Source revocation applies at every read."""
+        if artifact_id and result_id:
+            result = AgentError('validation_failed', 'Choose exactly one artifact_id or result_id').response()
+            return CallToolResult(content=[TextContent(type='text', text=compact(result))], structuredContent=result, isError=True)
+        if artifact_id:
+            return await call('artifact_read', workspace_id, options, artifact_id=artifact_id, offset=offset, length=length)
         return await call("result", workspace_id, options, result_id=result_id, format=format)
+
+    @server.tool(annotations=read)
+    async def get_capabilities(workspace_id: str = '', options: QueryOptions | None = None) -> CallToolResult:
+        """Discover versioned operations, required permissions and local-only restrictions."""
+        return await call('capabilities', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_settings_schema(workspace_id: str, section: str | None = None) -> CallToolResult:
+        """Discover section schemas/defaults; omit section to list sections. Offline."""
+        return await call('settings_schema', workspace_id, section=section)
+
+    @server.tool(annotations=read)
+    async def get_workspace_settings(workspace_id: str, section: str) -> CallToolResult:
+        """Read validated preferences and current settings_revision."""
+        return await call('settings_get', workspace_id, section=section)
+
+    @server.tool(annotations=write)
+    async def update_workspace_settings(workspace_id: str, section: str, values: dict, expected_revision: str) -> CallToolResult:
+        """Atomic typed patch; privacy/access widening requires local administrator, never MCP."""
+        return await call('settings_update', workspace_id, section=section, values=values, expected_revision=expected_revision)
+
+    @server.tool(annotations=write)
+    async def update_workspace(workspace_id: str, name: str, description: str, expected_revision: str) -> CallToolResult:
+        """Edit workspace identity with a configuration revision guard."""
+        return await call('workspace_update', workspace_id, name=name, description=description, expected_revision=expected_revision)
+
+    @server.tool(annotations=read)
+    async def export_workspace_configuration(workspace_id: str) -> CallToolResult:
+        """Safe v2 configuration; excludes profiles, secrets, privacy, source and history."""
+        return await call('config_export', workspace_id)
+
+    @server.tool(annotations=write)
+    async def import_workspace_configuration(configuration: dict) -> CallToolResult:
+        """Create a new workspace from bounded v1/v2 configuration; unrestricted launch required."""
+        return await call('config_import', configuration=configuration)
+
+    network = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=True)
+
+    @server.tool(annotations=read)
+    async def list_provider_profiles(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list provider profiles; requires independent launch grants. Never supply raw credentials."""
+        return await call('providers_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_provider_profile(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get provider profile; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_get', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def save_provider_profile(workspace_id: str, profile: dict, expected_revision: str, profile_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """save provider profile; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_save', workspace_id, options, profile=profile, expected_revision=expected_revision, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def remove_provider_profile(workspace_id: str, profile_id: str, expected_revision: str, options: QueryOptions | None = None) -> CallToolResult:
+        """remove provider profile; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_remove', workspace_id, options, profile_id=profile_id, expected_revision=expected_revision)
+
+    @server.tool(annotations=read)
+    async def get_model_routing(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get model routing; requires independent launch grants. Never supply raw credentials."""
+        return await call('routing_get', workspace_id, options)
+
+    @server.tool(annotations=write)
+    async def update_model_routing(workspace_id: str, values: dict, expected_revision: str, options: QueryOptions | None = None) -> CallToolResult:
+        """update model routing; requires independent launch grants. Never supply raw credentials."""
+        return await call('routing_update', workspace_id, options, values=values, expected_revision=expected_revision)
+
+    @server.tool(annotations=read)
+    async def get_runtime_connection_status(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get runtime connection status; requires independent launch grants. Never supply raw credentials."""
+        return await call('runtime_status', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def connect_runtime_reference(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """connect runtime reference; requires independent launch grants. Never supply raw credentials."""
+        return await call('runtime_connect', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=write)
+    async def clear_runtime_connection(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """clear runtime connection; requires independent launch grants. Never supply raw credentials."""
+        return await call('runtime_clear', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=network)
+    async def discover_provider_models(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """discover provider models; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_models', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=network)
+    async def test_provider_connection(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """test provider connection; requires independent launch grants. Never supply raw credentials."""
+        return await call('provider_test', workspace_id, options, profile_id=profile_id)
+
+    @server.tool(annotations=read)
+    async def preview_ai_chunks(workspace_id: str, file_id: str, first: int, last: int, task: str, options: QueryOptions | None = None) -> CallToolResult:
+        """preview ai chunks; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_chunks', workspace_id, options, file_id=file_id, first=first, last=last, task=task)
+
+    @server.tool(annotations=read)
+    async def list_review_candidates(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list review candidates; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('review_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def preview_diagnostic_review(workspace_id: str, diagnostic_id: str, first: int | None = None, last: int | None = None, options: QueryOptions | None = None) -> CallToolResult:
+        """preview diagnostic review; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('review_preview', workspace_id, options, diagnostic_id=diagnostic_id, first=first, last=last)
+
+    @server.tool(annotations=network)
+    async def request_diagnostic_review(workspace_id: str, diagnostic_id: str, expected_hash: str, first: int, last: int, expected_job: str = "workspace", options: QueryOptions | None = None) -> CallToolResult:
+        """request diagnostic review; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('review_request', workspace_id, options, diagnostic_id=diagnostic_id, expected_hash=expected_hash, first=first, last=last, expected_job=expected_job)
+
+    @server.tool(annotations=network)
+    async def request_ai_assistance(workspace_id: str, file_id: str, first: int, last: int, task: str, expected_hash: str, expected_job: str = "workspace", options: QueryOptions | None = None) -> CallToolResult:
+        """request ai assistance; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_request', workspace_id, options, file_id=file_id, first=first, last=last, task=task, expected_hash=expected_hash, expected_job=expected_job)
+
+    @server.tool(annotations=read)
+    async def list_ai_results(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list ai results; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_results', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_ai_result(workspace_id: str, record_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get ai result; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_result', workspace_id, options, record_id=record_id)
+
+    @server.tool(annotations=read)
+    async def get_ai_activity(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get ai activity; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_activity', workspace_id, options)
+
+    @server.tool(annotations=write)
+    async def merge_ai_claims(workspace_id: str, record_id: str, refresh: bool = True, options: QueryOptions | None = None) -> CallToolResult:
+        """merge ai claims; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
+        return await call('ai_merge', workspace_id, options, record_id=record_id, refresh=refresh)
+
+    @server.tool(annotations=read)
+    async def get_data_dictionary(workspace_id: str, query: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get data dictionary; stored facts only, with scope/freshness/budget guards."""
+        return await call('dictionary', workspace_id, options, query=query)
+
+    @server.tool(annotations=read)
+    async def get_asset_schema(workspace_id: str, asset: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get asset schema; stored facts only, with scope/freshness/budget guards."""
+        return await call('asset_schema', workspace_id, options, asset=asset)
+
+    @server.tool(annotations=read)
+    async def get_workspace_health(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get workspace health; stored facts only, with scope/freshness/budget guards."""
+        return await call('health', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def validate_stored_lineage(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """validate stored lineage; stored facts only, with scope/freshness/budget guards."""
+        return await call('lineage_validate', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def list_analysis_runs(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list analysis runs; stored facts only, with scope/freshness/budget guards."""
+        return await call('runs_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_analysis_run(workspace_id: str, run_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get analysis run; stored facts only, with scope/freshness/budget guards."""
+        return await call('run_get', workspace_id, options, run_id=run_id)
+
+    @server.tool(annotations=read)
+    async def list_ingestion_runs(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list ingestion runs; stored facts only, with scope/freshness/budget guards."""
+        return await call('ingestions_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_ingestion_run(workspace_id: str, ingestion_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get ingestion run; stored facts only, with scope/freshness/budget guards."""
+        return await call('ingestion_get', workspace_id, options, ingestion_id=ingestion_id)
+
+    @server.tool(annotations=read)
+    async def compare_analysis_runs(workspace_id: str, before: str, after: str, options: QueryOptions | None = None) -> CallToolResult:
+        """compare analysis runs; stored facts only, with scope/freshness/budget guards."""
+        return await call('runs_compare', workspace_id, options, before=before, after=after)
+
+    @server.tool(annotations=read)
+    async def get_source_metadata(workspace_id: str, file_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """get source metadata; stored facts only, with scope/freshness/budget guards."""
+        return await call('source_metadata', workspace_id, options, file_id=file_id)
+
+    @server.tool(annotations=read)
+    async def get_dependency_paths(workspace_id: str, asset: str, direction: str = "upstream", max_paths: int = 50, options: QueryOptions | None = None) -> CallToolResult:
+        """get dependency paths; bounded logical dependencies, not runtime execution order."""
+        return await call('paths', workspace_id, options, asset=asset, direction=direction, max_paths=max_paths)
+
+    @server.tool(annotations=read)
+    async def get_lineage_steps(workspace_id: str, asset: str, direction: str = "upstream", options: QueryOptions | None = None) -> CallToolResult:
+        """get lineage steps; bounded logical dependencies, not runtime execution order."""
+        return await call('steps', workspace_id, options, asset=asset, direction=direction)
+
+    @server.tool(annotations=read)
+    async def get_graph_data(workspace_id: str, asset: str, direction: str = "upstream", view: str = "nodes", node_id: str = "", edge_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get graph data; bounded logical dependencies, not runtime execution order."""
+        return await call('graph_view', workspace_id, options, asset=asset, direction=direction, view=view, node_id=node_id, edge_id=edge_id)
+
+    @server.tool(annotations=write)
+    async def export_graph(workspace_id: str, asset: str, format: Literal['json', 'html'] = 'html', direction: str = 'upstream', options: QueryOptions | None = None) -> CallToolResult:
+        """Create offline graph artifact; get_export retrieves bounded binary chunks. Source permission required."""
+        return await call('artifact_create', workspace_id, options, kind='graph', format=format, selection={'asset': asset, 'direction': direction})
+
+    @server.tool(annotations=write)
+    async def export_dependency_paths(workspace_id: str, asset: str, format: Literal['json', 'csv'] = 'json', direction: str = 'upstream', max_paths: int = 50, options: QueryOptions | None = None) -> CallToolResult:
+        """Create exact-evidence dependency path artifact with boundary/completeness flags."""
+        return await call('artifact_create', workspace_id, options, kind='paths', format=format, selection={'asset': asset, 'direction': direction, 'max_paths': max_paths})
+
+    @server.tool(annotations=write)
+    async def export_source_bundle(workspace_id: str, selection: dict, options: QueryOptions | None = None) -> CallToolResult:
+        """Create ZIP from typed explicit file_ids/versions or an asset/direction. No caller output path."""
+        return await call('artifact_create', workspace_id, options, kind='source-bundle', format='zip', selection=selection)
+
+    @server.tool(annotations=write)
+    async def export_original_source(workspace_id: str, file_id: str, content_hash: str = '', options: QueryOptions | None = None) -> CallToolResult:
+        """Create an original-byte source artifact pinned to a current or referenced historical hash."""
+        return await call('artifact_create', workspace_id, options, kind='original-source', format='raw', selection={'file_id': file_id, 'content_hash': content_hash})
+
+    @server.tool(annotations=write)
+    async def export_report(workspace_id: str, kind: Literal['inventory', 'dictionary', 'columns', 'impact', 'code-search', 'run-comparison'], format: Literal['json', 'csv', 'html'], selection: dict, options: QueryOptions | None = None) -> CallToolResult:
+        """Create a typed report artifact using the documented kind/format allowlist. No ZIP/HTML inline."""
+        return await call('artifact_create', workspace_id, options, kind=kind, format=format, selection=selection)
+
+    @server.tool(annotations=write)
+    async def export_ai_result(workspace_id: str, record_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """Create source-gated advisory/result JSON artifact; no secret export."""
+        return await call('artifact_create', workspace_id, options, kind='ai-result', format='json', selection={'record_id': record_id})
+
+    @server.tool(annotations=read)
+    async def preview_history_archive(workspace_id: str, keep_runs: int = 20, keep_imports: int = 20, batch_size: int = 25, options: QueryOptions | None = None) -> CallToolResult:
+        """preview history archive; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('history_preview', workspace_id, options, keep_runs=keep_runs, keep_imports=keep_imports, batch_size=batch_size)
+
+    @server.tool(annotations=read)
+    async def list_history_archives(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list history archives; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('history_archives', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def preview_staging_cleanup(workspace_id: str, age_hours: int = 24, options: QueryOptions | None = None) -> CallToolResult:
+        """preview staging cleanup; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('staging_preview', workspace_id, options, age_hours=age_hours)
+
+    @server.tool(annotations=read)
+    async def list_staging_recoveries(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list staging recoveries; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('staging_recoveries', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def inspect_database_maintenance(options: QueryOptions | None = None) -> CallToolResult:
+        """inspect database maintenance; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('database_inspect', "", options)
+
+    @server.tool(annotations=read)
+    async def list_runtime_backups(options: QueryOptions | None = None) -> CallToolResult:
+        """list runtime backups; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('backups_list', "", options)
+
+    @server.tool(annotations=read)
+    async def list_theme_presets(options: QueryOptions | None = None) -> CallToolResult:
+        """list theme presets; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('theme_list', "", options)
+
+    @server.tool(annotations=read)
+    async def get_application_theme(options: QueryOptions | None = None) -> CallToolResult:
+        """get application theme; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('theme_get', "", options)
+
+    @server.tool(annotations=write)
+    async def apply_application_theme(name: str, options: QueryOptions | None = None) -> CallToolResult:
+        """apply application theme; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('theme_apply', "", options, name=name)
+
+    @server.tool(annotations=read)
+    async def get_application_logging(options: QueryOptions | None = None) -> CallToolResult:
+        """get application logging; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('logging_get', "", options)
+
+    @server.tool(annotations=write)
+    async def update_application_logging(level: Literal["DEBUG", "INFO", "WARNING", "ERROR"], options: QueryOptions | None = None) -> CallToolResult:
+        """update application logging; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('logging_update', "", options, level=level)
+
+    @server.tool(annotations=read)
+    async def get_runtime_info(workspace_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get runtime info; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('runtime_info', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_agent_setup(workspace_id: str, client: str = "codex", transport: str = "stdio", tool_name: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get agent setup; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('agent_setup', workspace_id, options, client=client, transport=transport, tool_name=tool_name)
+
+    @server.tool(annotations=read)
+    async def test_local_agent_access(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """test local agent access; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('agent_self_test', workspace_id, options)
 
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:

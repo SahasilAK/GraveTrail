@@ -48,6 +48,9 @@ class ParsingSettings(BaseModel):
     def folder_dialects_known(cls, value):
         if any(d not in Dialect.classes for d in value.values()):
             raise ValueError("Unknown SQL dialect in folder mappings")
+        if any(not prefix or prefix.startswith('/') or '\\' in prefix or ':' in prefix
+               or '..' in prefix.split('/') for prefix in value):
+            raise ValueError('Dialect folder prefixes must be safe relative folders')
         return value
 
     @field_validator("dialect_by_extension")

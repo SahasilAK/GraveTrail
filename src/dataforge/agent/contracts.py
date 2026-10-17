@@ -29,6 +29,25 @@ class AccessPolicy:
     allow_write: bool = False
     workspaces: tuple[str, ...] | None = None
     import_roots: tuple[str, ...] = ()
+    allow_config_write: bool = False
+    allow_llm: bool = False
+    allowed_llm_origins: tuple[str, ...] = ()
+    allowed_credential_refs: tuple[str, ...] = ()
+    allow_application_config: bool = False
+    allow_admin: bool = False
+
+    def require(self, effect: str):
+        permitted = {
+            'config': self.allow_write and self.allow_config_write,
+            'network': self.allow_write and self.allow_llm,
+            'application': self.allow_write and self.allow_config_write
+                and self.allow_application_config and self.workspaces is None,
+            'admin': self.allow_write and self.allow_config_write
+                and self.allow_admin and self.workspaces is None,
+        }
+        if not permitted.get(effect, False):
+            code = 'network_not_allowed' if effect == 'network' else 'requires_local_admin'
+            raise AgentError(code, f'{effect} requires explicit local launch authorization')
 
     def permits(self, workspace: str):
         return self.workspaces is None or workspace in self.workspaces
@@ -54,7 +73,7 @@ class QueryOptions(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
     enabled: bool = True
     allow_write: bool = True
     allow_source: bool = True

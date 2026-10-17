@@ -9,8 +9,7 @@ invalid source blobs. No embedding index or runtime knowledge base is implemente
 Choose a category, optionally select source files or an unreferenced history run, then
 **Preview cleanup**. Review every affected table and runtime file. Type the workspace name
 to apply; shared cache/orphan cleanup requires `CLEAN SHARED DATA`, and full reset requires
-`RESET DATAFORGE`. A changed database or file invalidates the preview. Backup is selected
-by default. No operation runs simply by selecting a category.
+`RESET DATAFORGE`. A changed database or file invalidates the preview. A successful full-home backup is mandatory before general cleanup and cannot be disabled. No operation runs simply by selecting a category.
 
 | Operation | Effect |
 | --- | --- |

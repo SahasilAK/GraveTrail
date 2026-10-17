@@ -23,6 +23,7 @@ MANAGED_FILE = re.compile(
     r'|history-recovery/[a-f0-9]{32}/[a-f0-9]{32}\.(?:json|tmp)'
     r'|agent/(?:jobs|access)/[a-f0-9]{32}(?:\.[a-f0-9]{32})?\.(?:json|tmp)'
     r'|agent/results/[a-f0-9]{32}/[a-f0-9]{32}\.(?:json|csv|html)'
+    r'|agent/artifacts/[a-f0-9]{32}/[a-f0-9]{32}\.(?:json|bin)'
     r'|agent/audit(?:\.previous)?\.jsonl)'
 )
 

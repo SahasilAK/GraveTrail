@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 from collections import Counter
+from contextlib import nullcontext
 from dataclasses import asdict
 
 from pydantic import ValidationError
@@ -20,31 +21,62 @@ from dataforge.agent.contracts import (
 )
 from dataforge.agent.jobs import Jobs, status_result
 from dataforge.agent.paging import page
+from dataforge.ai_service import READS as AI_READS
+from dataforge.ai_service import WRITES as AI_WRITES
+from dataforge.ai_service import AIOperations
+from dataforge.artifacts import READS as ARTIFACT_READS
+from dataforge.artifacts import WRITES as ARTIFACT_WRITES
+from dataforge.artifacts import ArtifactOperations
 from dataforge.asset_identity import asset_label
 from dataforge.configuration import ParsingSettings
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
+from dataforge.provider_service import READS as PROVIDER_READS
+from dataforge.provider_service import WRITES as PROVIDER_WRITES
+from dataforge.provider_service import ProviderOperations
+from dataforge.reporting import READS as REPORT_READS
+from dataforge.reporting import ReportOperations
 
-WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply"}
+WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
+          'settings_update', 'workspace_update', 'config_import', 'history_archive', 'history_restore',
+          'staging_clean', 'staging_restore'} | PROVIDER_WRITES | AI_WRITES | ARTIFACT_WRITES
+MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', 'staging_recoveries',
+                     'database_inspect', 'backups_list'}
+APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
+WRITES |= {'theme_apply', 'logging_update'}
+LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge'}
 
 
-class AgentService:
+class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations):
     def __init__(self, store, policy: AccessPolicy | None = None):
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
+        self.runtime_connections = {}
+        self.runtime_profiles = {}
+        self.provider_transport = None
+        import os
+        from pathlib import Path
+
+        from dataforge.launcher import application_root
+        self.theme_config_path = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(application_root() / '.streamlit/config.toml')))
+        self.configured_storage = os.environ.get('DATAFORGE_STORAGE_LOCATIONS', '')
 
     def close(self):
+        for manager in self.runtime_connections.values():
+            manager.clear()
+        self.runtime_connections.clear()
+        self.runtime_profiles.clear()
         self.jobs.close()
 
-    def _workspace(self, workspace, write=False, source=False):
+    def _workspace(self, workspace, write=False, source=False, administrator=False):
         if not self.policy.permits(workspace):
             raise AgentError("forbidden", "Workspace access is not authorized")
         matches = self.store.rows("SELECT workspace_id,name FROM workspaces WHERE workspace_id=?", [workspace])
         if not matches:
             raise AgentError("not_found", "Workspace does not exist; use its exact workspace_id")
         settings = AgentSettings.from_store(self.store, workspace)
-        if not settings.enabled or (write and (not self.policy.allow_write or not settings.allow_write)):
+        if not administrator and (not settings.enabled or (write and (not self.policy.allow_write or not settings.allow_write))):
             raise AgentError("forbidden", "Agent access or mutation is disabled for this launch/workspace")
         if source and not settings.allow_source:
             raise AgentError("forbidden", "Source retrieval is disabled for this workspace")
@@ -65,26 +97,46 @@ class AgentService:
         if action not in {"workspaces", "create_workspace", "summary", "assets", "files", "issues",
                           "lineage", "impact", "batch", "columns", "source", "search_code",
                           "ingest", "analyze", "job", "export", "result",
-                          "cleanup_inspect", "cleanup_preview", "cleanup_apply"}:
+                          "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
+                          'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
+                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
             if action == "job":
                 return self.job_status(workspace_id, arguments["job_id"], options)
-            with self.store.lock:
-                if action in {"workspaces", "create_workspace"}:
+            if action == 'agent_self_test':
+                settings = self._workspace(workspace_id)
+                values = {**(options or {})}
+                values['max_chars'] = min(values.get('max_chars', settings.max_chars), settings.max_chars)
+                opts = QueryOptions.model_validate(values)
+                result = self._agent_self_test(workspace_id, opts, **arguments)
+                if len(compact(result)) > opts.max_chars:
+                    raise AgentError('budget_too_small', 'Local handler result exceeds response budget')
+                if settings.audit_reads:
+                    self.audit(workspace_id, action, 'accepted')
+                return result
+            with nullcontext() if action in LONG_ACTIONS else self.store.lock:
+                if action in {"workspaces", "create_workspace", 'config_import', 'database_inspect', 'backups_list'} or action in APPLICATION_ACTIONS or (action == 'capabilities' and not workspace_id):
                     settings = AgentSettings()
+                    if action == 'runtime_info' and workspace_id:
+                        settings = self._workspace(workspace_id)
                     if write and (not self.policy.allow_write or self.policy.workspaces is not None):
                         raise AgentError("forbidden", "Workspace creation requires unrestricted explicit write access")
                 else:
+                    administrator = self.policy.allow_admin and action in {'settings_get', 'settings_schema', 'settings_update'}
+                    if administrator:
+                        self.policy.require('admin')
                     settings = self._workspace(workspace_id, write=write,
-                        source=action in {"source", "result"} or (options or {}).get("detail_level") == "detailed")
+                        source=action in {"source", "result"} or (options or {}).get("detail_level") == "detailed",
+                        administrator=administrator)
                 values = {"detail_level": settings.default_detail, **(options or {})}
                 values["max_chars"] = min(values.get("max_chars", settings.max_chars), settings.max_chars)
                 opts = QueryOptions.model_validate(values)
                 if opts.detail_level == "detailed" and not settings.allow_source:
                     raise AgentError("forbidden", "Detailed source retrieval is disabled")
                 result = getattr(self, "_" + action)(workspace_id, opts, **arguments)
+                result = json.loads(compact(result))
                 if len(compact(result)) > opts.max_chars:
                     raise AgentError("budget_too_small", "Response exceeds max_chars; narrow the request or increase the budget")
                 if write or settings.audit_reads:
@@ -99,6 +151,114 @@ class AgentService:
         except OSError:
             raise AgentError("io_error", "Local file operation failed; check access and available storage") from None
 
+    def _theme_list(self, w, opts):
+        from dataforge.theme_configuration import PRESETS
+        return self._page('', opts, 'themes', [{'name': name, 'base': p['base']} for name, p in PRESETS.items()])
+
+    def _theme_get(self, w, opts):
+        from dataforge.theme_configuration import current_preset
+        if w or self.policy.workspaces is not None:
+            raise AgentError('requires_local_admin', 'Application theme requires unrestricted launch without a workspace argument')
+        configured = current_preset(self.theme_config_path) if self.theme_config_path.is_file() else None
+        return {'configured': configured, 'detected': configured, 'loaded': None,
+                'reload_required': True, 'note': 'Loaded UI appearance is unavailable to a separate CLI/MCP process'}
+
+    def _theme_apply(self, w, opts, name):
+        from dataforge.theme_configuration import apply_preset
+        self.policy.require('application')
+        if w:
+            raise AgentError('validation_failed', 'Application operations do not accept workspace IDs')
+        apply_preset(self.theme_config_path, name)
+        return self._theme_get(w, opts)
+
+    def _logging_get(self, w, opts):
+        if w or self.policy.workspaces is not None:
+            raise AgentError('requires_local_admin', 'Application logging requires unrestricted launch without a workspace argument')
+        return {'level': self.store.setting('__application__', 'log_level', 'INFO'), 'scope': 'application'}
+
+    def _logging_update(self, w, opts, level):
+        from dataforge.logging_config import save_application_logging
+        self.policy.require('application')
+        self._logging_get(w, opts)
+        save_application_logging(self.store, level)
+        return {**self._logging_get(w, opts), 'reload_required': True}
+
+    def _runtime_info(self, w, opts):
+        from dataforge.storage_locations import allowed_homes
+        result = {'ownership': 'One DuckDB owning process per home', 'live_switch': False,
+                  'switch': 'Relaunch CLI/MCP with an authorized --home; UI changes only its browser session'}
+        if self.policy.workspaces is None:
+            result.update(home=str(self.store.home), allowed_homes=allowed_homes(self.store.home, self.configured_storage))
+        return result
+
+    def _agent_setup(self, w, opts, client='codex', transport='stdio', tool_name=''):
+        import asyncio
+        import sys
+
+        from dataforge.agent.mcp_server import create_server
+        if client not in {'codex', 'claude'} or transport not in {'stdio', 'streamable-http'}:
+            raise AgentError('validation_failed', 'Use codex/claude and stdio/streamable-http')
+        tools = asyncio.run(create_server(self).list_tools())
+        args = [] if getattr(sys, 'frozen', False) else ['-m', 'dataforge.cli']
+        args += ['--home', str(self.store.home), '--allowed-workspace', w, 'mcp']
+        stdio = {'command': sys.executable, 'args': args}
+        result = {'stdio': stdio, 'client': client, 'transport': transport,
+                  'codex_toml': '[mcp_servers.dataforge]\ncommand = ' + json.dumps(sys.executable) + '\nargs = ' + json.dumps(args),
+                  'claude': {'mcpServers': {'dataforge': stdio}},
+                  'http': {'url': 'http://127.0.0.1:8765/mcp', 'bearer_reference': 'DATAFORGE_MCP_TOKEN',
+                           'authentication': 'pre-provisioned bearer; external TLS reverse proxy required'},
+                  'tools': [t.name for t in tools], 'ownership': 'Stop any other owner before launching an external client'}
+        if tool_name:
+            matches = [t for t in tools if t.name == tool_name]
+            if not matches:
+                raise AgentError('not_found', 'Unknown tool schema')
+            result = {'tool': matches[0].model_dump(mode='json')}
+        return result
+
+    def _agent_self_test(self, w, opts):
+        import asyncio
+
+        from dataforge.agent.mcp_server import create_server
+        result = asyncio.run(create_server(self).call_tool('get_workspace_summary', {'workspace_id': w}))
+        if result.isError:
+            raise AgentError(result.structuredContent['error']['code'], 'Local MCP handler check failed')
+        return {'passed': True, 'method': 'in_process_mcp_handler', 'summary': result.structuredContent,
+                'note': 'External stdio/HTTP connectivity is a separate client test'}
+
+    def _capabilities(self, w, opts):
+        from dataforge.agent.capabilities import capability_catalog
+        return self._page(w, opts, 'capabilities', capability_catalog(self, w), schema_version=1)
+
+    def _settings_schema(self, w, opts, section=None):
+        from dataforge.settings_service import settings_schema
+        return settings_schema(section)
+
+    def _settings_get(self, w, opts, section):
+        from dataforge.settings_service import read_settings
+        return read_settings(self.store, w, section)
+
+    def _settings_update(self, w, opts, section, values, expected_revision):
+        from dataforge.settings_service import update_settings
+        return update_settings(self.store, self.policy, w, section, values, expected_revision)
+
+    def _workspace_update(self, w, opts, name, description, expected_revision):
+        from dataforge.settings_service import check_revision, revision
+        self.policy.require('config')
+        check_revision(self.store, w, expected_revision)
+        self.store.update_workspace(w, name, description)
+        return {'workspace_id': w, 'settings_revision': revision(self.store, w)}
+
+    def _config_export(self, w, opts):
+        from dataforge.configuration import export_workspace_configuration
+        return {'configuration': json.loads(export_workspace_configuration(self.store, w))}
+
+    def _config_import(self, w, opts, configuration):
+        from dataforge.configuration import import_workspace_configuration
+        self.policy.require('config')
+        if self.policy.workspaces is not None:
+            raise AgentError('forbidden', 'Configuration import creates a new workspace; unrestricted launch required')
+        return {'workspace_id': import_workspace_configuration(self.store, compact(configuration))}
+
     def _revision(self, w):
         files = self.store.rows("SELECT file_id,content_hash,parsing_status FROM source_files WHERE workspace_id=? ORDER BY file_id", [w])
         runs = self.store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [w])
@@ -110,12 +270,18 @@ class AgentService:
                  ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace')}
         return {'workspace_id': w, 'categories': {key: {'records': p['records'],
                 'logical_bytes_estimate': p['logical_bytes_estimate'], 'file_bytes': p['file_bytes']}
-                for key, p in plans.items()}, 'notes': next(iter(plans.values()))['notes']}
+                for key, p in plans.items()}, 'notes': next(iter(plans.values()))['notes'],
+                'restricted_categories': {'cache': 'requires_local_ui', 'orphans': 'requires_local_ui',
+                                          'application': 'requires_local_ui'}}
 
     def _cleanup_preview(self, w, opts, category='lineage', file_ids=None, run_id=None):
         from dataforge.cleanup import cleanup_plan
         if category in {'application', 'cache', 'orphans'}:
-            raise AgentError('forbidden', 'Shared cleanup requires the local human maintenance interface')
+            if self.policy.workspaces is not None or not self.policy.allow_application_config:
+                raise AgentError('requires_local_ui', 'Shared cleanup inspection requires an unrestricted application-authorized launch; apply in Settings UI')
+            plan = cleanup_plan(self.store, '', category)
+            return {'category': category, 'records': plan['records'], 'logical_bytes_estimate': plan['logical_bytes_estimate'],
+                    'file_bytes': plan['file_bytes'], 'restriction': 'requires_local_ui', 'notes': plan['notes']}
         return cleanup_plan(self.store, w, category, file_ids, run_id)
 
     def _cleanup_apply(self, w, opts, preview, confirmation='', backup_first=False):
@@ -124,7 +290,100 @@ class AgentService:
             raise AgentError('forbidden', 'Whole-home backup requires unrestricted local access')
         if preview.get('workspace_id') != w or preview.get('category') in {'application', 'cache', 'orphans'}:
             raise AgentError('forbidden', 'Cleanup preview is outside the permitted workspace')
+        if not backup_first:
+            raise AgentError('validation_failed', 'General cleanup requires a full-home backup; pass the explicit backup option')
         return apply_cleanup(self.store, preview, confirmation, backup_first)
+
+    def _history_preview(self, w, opts, keep_runs=20, keep_imports=20, batch_size=25):
+        from dataforge.cleanup import checked_path
+        from dataforge.maintenance import history_plan
+        checked_path(self.store.home, 'history-recovery/' + w)
+        plan = {'workspace_id': w, 'keep_runs': keep_runs, 'keep_imports': keep_imports, 'batch_size': batch_size,
+                **history_plan(self.store, w, keep_runs, keep_imports, batch_size)}
+        plan['token'] = hashlib.sha256(compact(plan).encode()).hexdigest()
+        return plan
+
+    def _maintenance_confirmation(self, w, confirmation):
+        name = self.store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [w])[0]['name']
+        if name != confirmation:
+            raise AgentError('validation_failed', 'Type the exact current workspace name to confirm local maintenance')
+        if self.policy.workspaces is not None:
+            raise AgentError('forbidden', 'Recoverable full-home backup requires an unrestricted local launch')
+
+    def _history_archive(self, w, opts, preview, confirmation):
+        from dataforge.database_maintenance import backup
+        from dataforge.maintenance import archive_history
+        self._maintenance_confirmation(w, confirmation)
+        current = self._history_preview(w, opts, preview['keep_runs'], preview['keep_imports'], preview['batch_size'])
+        if current != preview:
+            raise AgentError('conflict', 'History eligibility changed; refresh preview')
+        backup_id = backup(self.store).stem
+        result = archive_history(self.store, w, preview['keep_runs'], preview['keep_imports'], preview['batch_size'])
+        return {**result, 'backup_id': backup_id}
+
+    def _history_archives(self, w, opts):
+        from dataforge.cleanup import checked_path
+        from dataforge.maintenance import list_archives
+        checked_path(self.store.home, 'history-recovery/' + w)
+        return self._page(w, opts, 'history_archives', list_archives(self.store, w))
+
+    def _history_restore(self, w, opts, archive_id, confirmation):
+        from dataforge.cleanup import checked_path
+        from dataforge.maintenance import restore_history
+        self._maintenance_confirmation(w, confirmation)
+        checked_path(self.store.home, 'history-recovery/' + w)
+        return restore_history(self.store, w, archive_id)
+
+    def _staging_preview(self, w, opts, age_hours=24):
+        from dataforge.temporary_cleanup import temporary_plan
+        plan = {'workspace_id': w, 'age_hours': age_hours, **temporary_plan(self.store, w, age_hours)}
+        plan['token'] = hashlib.sha256(compact(plan).encode()).hexdigest()
+        return plan
+
+    def _staging_clean(self, w, opts, preview, confirmation, names=None):
+        from dataforge.database_maintenance import backup
+        from dataforge.temporary_cleanup import cleanup_temporary
+        self._maintenance_confirmation(w, confirmation)
+        current = self._staging_preview(w, opts, preview['age_hours'])
+        if current != preview:
+            raise AgentError('conflict', 'Staging identities changed; refresh preview')
+        selected = [f for f in current['files'] if names is None or f['name'] in names]
+        if not selected or (names is not None and set(names) - {f['name'] for f in selected}):
+            raise AgentError('validation_failed', 'Select files from the fresh staging preview')
+        backup_id = backup(self.store).stem
+        return {**cleanup_temporary(self.store, w, selected, current['age_hours']), 'backup_id': backup_id}
+
+    def _staging_recoveries(self, w, opts):
+        from dataforge.temporary_cleanup import temporary_recoveries
+        return self._page(w, opts, 'staging_recoveries', temporary_recoveries(self.store, w))
+
+    def _staging_restore(self, w, opts, recovery_id, confirmation):
+        from dataforge.temporary_cleanup import restore_temporary
+        self._maintenance_confirmation(w, confirmation)
+        return restore_temporary(self.store, w, recovery_id)
+
+    def _global_metadata(self, w):
+        if w or self.policy.workspaces is not None or not self.policy.allow_application_config:
+            raise AgentError('requires_local_admin', 'Whole-home metadata requires unrestricted --allow-application-config; no workspace argument')
+
+    def _database_inspect(self, w, opts):
+        from dataforge.database_maintenance import inspect_database
+        self._global_metadata(w)
+        return inspect_database(self.store)
+
+    def _backups_list(self, w, opts):
+        import re
+
+        from dataforge.cleanup import checked_path
+        self._global_metadata(w)
+        directory = checked_path(self.store.home, 'backups')
+        files = sorted(directory.glob('*.zip')) if directory.exists() else []
+        items = []
+        for path in files[:1001]:
+            if re.fullmatch('[a-f0-9]{32}', path.stem):
+                path = checked_path(self.store.home, path.relative_to(self.store.home))
+                items.append({'backup_id': path.stem, 'bytes': path.stat().st_size, 'download': 'local CLI/UI only'})
+        return self._page(w, opts, 'backups', items[:1000], boundaries=['backup_limit'] if len(files) > 1000 else [])
 
     def _current(self, w):
         files = self.store.files(w)
@@ -189,7 +448,7 @@ class AgentService:
         return self._page(w, opts, ["assets", query], items, analysis_current=self._current(w))
 
     def _files(self, w, opts, query=""):
-        fields = ("file_id", "relative_path", "extension", "parsing_status", "line_count", "content_hash")
+        fields = ("file_id", "relative_path", "extension", "parsing_status", "line_count", "content_hash", "file_size", "encoding")
         return self._page(w, opts, ["files", query], [{k: f[k] for k in fields}
             for f in self.store.files(w) if query.casefold() in f["relative_path"].casefold()])
 
@@ -203,9 +462,10 @@ class AgentService:
 
     def _graph(self, w, opts, keep):
         assets = self.store.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY asset_id LIMIT 20001", [w])
-        edges = self.store.rows("SELECT * FROM edges WHERE workspace_id=? ORDER BY edge_id LIMIT 100001", [w])
+        edges = self.store.rows("SELECT edge_id FROM edges WHERE workspace_id=? ORDER BY edge_id LIMIT 100001", [w])
         if len(assets) > 20000 or len(edges) > 100000:
             raise AgentError("resource_limit", "Graph exceeds 20,000 assets or 100,000 evidence edges")
+        edges = self.store.edges(w)
         graph = LineageGraph(assets, edges, self.store.setting(w, "min_lineage_confidence", 0.),
                              self.store.setting(w, "include_inferred", True))
         collapse = opts.collapse_temporary
@@ -288,17 +548,28 @@ class AgentService:
         return {"workspace_id": w, "results": results, "processed": len(results), "requested": len(assets),
                 "complete": complete, "remaining_assets": assets[len(results):]}
 
-    def _columns(self, w, opts, asset):
+    def _columns(self, w, opts, asset, column_query='', usage_type='', file_id='', group_by='none'):
         from dataforge.services import column_report
+        if group_by not in {'none', 'file', 'usage_type'} or any(len(value) > 1024 for value in (column_query, usage_type, file_id)):
+            raise AgentError('validation_failed', 'Invalid direct-column filter/grouping')
         selected = self._asset(w, asset)
         rows = column_report(self.store, w, selected["asset_id"])
+        rows = [r for r in rows if column_query.casefold() in r['column_name'].casefold()
+                and (not usage_type or usage_type.casefold() in r['context'].casefold())
+                and (not file_id or r['file_id'] == file_id)]
         fields = ("column_name", "context", "status", "statement_id", "file_id")
         if opts.detail_level != "summary":
             fields += ("relative_path", "start_line", "end_line", "operation_id", "source_hash")
         if opts.detail_level == "detailed":
             fields += ("code", "expression")
-        return self._page(w, opts, ["columns", selected["asset_id"]], [{k: r[k] for k in fields} for r in rows],
-                          asset_id=selected["asset_id"], analysis_current=self._current(w))
+        items = [{k: r[k] for k in fields} for r in rows]
+        if group_by != 'none':
+            for item, row in zip(items, rows):
+                item['group'] = row['relative_path'] if group_by == 'file' else row['context']
+            items.sort(key=lambda item: (item['group'], item['column_name']))
+        return self._page(w, opts, ["columns", selected["asset_id"], column_query, usage_type, file_id, group_by], items,
+                          asset_id=selected["asset_id"], unique_columns=len({r['column_name'] for r in rows}),
+                          group_by=group_by, analysis_current=self._current(w))
 
     def _statement(self, w, statement_id):
         rows = self.store.rows("""SELECT s.statement_id,s.file_id,s.start_line,s.end_line,s.code,
@@ -337,7 +608,13 @@ class AgentService:
                  for i in range(start - 1, end, 20)]
         return self._page(w, opts, ["source", file_id, start, end], items)
 
-    def _search_code(self, w, opts, query):
+    def _search_code(self, w, opts, query, include_matches=False):
+        if include_matches:
+            from dataforge.reporting import code_matches
+            self._workspace(w, source=True)
+            matches = code_matches(self.store, w, query, opts.max_items + 1)
+            return self._page(w, opts, ['code_matches', query], matches[:opts.max_items],
+                boundaries=['items'] if len(matches) > opts.max_items else [], analysis_current=self._current(w))
         if not query or len(query) > 256:
             raise AgentError("invalid_argument", "Code search requires 1–256 literal characters")
         rows = self.store.rows("""SELECT file_id,relative_path,content_hash,line_count FROM source_files
@@ -351,13 +628,13 @@ class AgentService:
             ids = arguments.get("file_ids")
             if ids is not None:
                 known = {f["file_id"] for f in self.store.files(w)}
-                if not ids or not set(ids) <= known or len(ids) > 10000:
+                if not ids or not set(ids) <= known or len(ids) > 100000:
                     raise AgentError("invalid_argument", "Selected files must belong to the workspace")
             result = analyze(self.store, w, ids, arguments.get("force", False), progress=progress)
         elif operation == "ingest":
             path = self.policy.import_path(arguments["path"])
             extensions = {"." + e.lstrip(".").lower() for e in arguments["extensions"]}
-            limits = Limits(max_files=min(10000, int(self.store.setting(w, "max_files", 10000))),
+            limits = Limits(max_files=min(100000, max(1, int(self.store.setting(w, "max_files", 10000)))),
                             max_file_bytes=min(100, int(self.store.setting(w, "max_file_mb", 20))) * 1024 * 1024)
             importer = Importer(self.store, w, self.policy.import_roots, limits)
             report_progress = (lambda report: progress(min(.99, report.discovered / limits.max_files), "Importing")) if progress else None

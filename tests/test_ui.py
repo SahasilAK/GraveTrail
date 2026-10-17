@@ -62,7 +62,7 @@ def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):
         assert not app.exception, (path, [e.message for e in app.exception])
     app.switch_page("ui/pages/explorer.py").run()
     app.text_input(key="asset_search_lineage").set_value("orders").run()
-    chooser = app.selectbox(key="asset_choice_lineage")
+    chooser = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     assert chooser.value is None
     assert len(chooser.options) == 3
     chooser.select(chooser.options[0]).run()
@@ -122,7 +122,7 @@ def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/columns.py").run()
     app.text_input(key="asset_search_columns").set_value("raw.a").run()
-    choice = app.selectbox(key="asset_choice_columns")
+    choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     choice.select(choice.options[0]).run()
     assert not app.exception
     assert app.metric[0].value == "2"
@@ -202,7 +202,7 @@ def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(t
     assert saved.setting(other, "graph_labels") is None
     app.switch_page("ui/pages/explorer.py").run()
     app.text_input(key="asset_search_lineage").set_value("raw.a").run()
-    choice = app.selectbox(key="asset_choice_lineage")
+    choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     choice.select(choice.options[0]).run()
     assert not app.exception
     assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "downstream"
@@ -216,9 +216,9 @@ def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(t
     assert len(app.code) == 2
     app.selectbox(key="workspace").set_value(other).run()
     assert not app.exception
-    assert app.selectbox(key="asset_choice_lineage").value is None
+    assert next(c for c in app.selectbox if c.label == "Choose an exact asset").value is None
     app.text_input(key="asset_search_lineage").set_value("mart.x").run()
-    choice = app.selectbox(key="asset_choice_lineage")
+    choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     choice.select(choice.options[0]).run()
     assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "upstream"
     assert next(n for n in app.toggle if n.label == "Collapse temporary steps").value is True

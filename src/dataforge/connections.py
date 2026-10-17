@@ -31,6 +31,10 @@ class RuntimeConnections:
             raise ValueError('Enter a nonempty, single-line runtime credential')
         self._credentials[name] = (secret, None if ttl is None else time.monotonic() + ttl)
 
+    def registered(self, name: str) -> bool:
+        value = self._credentials.get(name)
+        return bool(value and (value[1] is None or value[1] > time.monotonic()))
+
     def resolve(self, name: str) -> str:
         credential = self._credentials.get(name)
         if credential:

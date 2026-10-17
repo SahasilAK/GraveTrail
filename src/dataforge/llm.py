@@ -281,7 +281,7 @@ def redact(text: str) -> str:
 
 
 def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
-           transport=None, expected_hash=None, cancelled=None):
+           transport=None, expected_hash=None, cancelled=None, expected_job=None):
     if cancelled and cancelled():
         raise InterruptedError('AI request cancelled before transmission')
     resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
@@ -294,10 +294,10 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
                     'result': None, 'usage': {}, 'retryable': False}
         stack.enter_context(connection_scope(current_connections()))
         return _assist(store, workspace, profile, file_id, first, last, task, profile_id,
-                       transport, expected_hash, cancelled)
+                       transport, expected_hash, cancelled, expected_job)
 
 
-def _assist(store, workspace, profile, file_id, first, last, task, profile_id, transport, expected_hash, cancelled):
+def _assist(store, workspace, profile, file_id, first, last, task, profile_id, transport, expected_hash, cancelled, expected_job=None):
     if cancelled and cancelled():
         raise InterruptedError("AI request cancelled before transmission")
     if task not in TASKS:
@@ -329,6 +329,8 @@ def _assist(store, workspace, profile, file_id, first, last, task, profile_id, t
     prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
     settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
     job = source_job(source, settings)
+    if expected_job is not None and job != expected_job:
+        raise ValueError("Source job changed; refresh the evidence preview before requesting assistance")
     known = {a["name"] for a in unambiguous_job_assets(store.assets(workspace), job).values()}
     user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
                 "start_line": first, "end_line": last, "known_assets": sorted(known), "source": focused,
@@ -418,7 +420,7 @@ def _merge_claims(store, workspace, record_id):
     return len(response.claims)
 
 
-def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None, cancelled=None):
+def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None, cancelled=None, authorize=None, expected_job=None):
     profiles = {r["profile_id"]: Profile.model_validate_json(r["config"])
                 for r in store.rows("SELECT * FROM llm_profiles WHERE workspace_id=?", [workspace])}
     assignments = store.setting(workspace, "task_models", {})
@@ -435,8 +437,10 @@ def assist_task(store, workspace, file_id, first, last, task, transport=None, ex
         # Fallback never silently changes the recipient host or authentication audience.
         if urlparse(profile.base_url).netloc != urlparse(first_profile.base_url).netloc:
             continue
+        if authorize:
+            profile = authorize(pid, profile)
         result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
-                        expected_hash=expected_hash, cancelled=cancelled)
+                        expected_hash=expected_hash, cancelled=cancelled, expected_job=expected_job)
         if not result["retryable"]:
             return result
     return result

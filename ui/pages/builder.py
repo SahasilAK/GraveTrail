@@ -85,7 +85,8 @@ if files:
         except Exception as exc:
             st.error(f"Analysis failed ({type(exc).__name__}). Previous committed lineage was retained.")
     if validate:
-        invalid = [e for e in store.edges(w) if not e["code"] or e["start_line"] < 1 or not 0 <= e["confidence"] <= 1]
+        from dataforge.reporting import validate_lineage_evidence
+        invalid = validate_lineage_evidence(store, w)['invalid']
         (st.error if invalid else st.success)(f"Validation: {len(invalid)} invalid evidence records")
     diagnostics = store.diagnostics(w)
     visibility = store.setting(w, "diagnostic_visibility", "all")

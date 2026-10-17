@@ -1,8 +1,8 @@
 """Focused, user-triggered AI assistance over imported source evidence."""
 import streamlit as st
 
+from dataforge.ai_service import preview_ai_evidence
 from dataforge.llm import TASKS, assist_task
-from dataforge.llm_resources import context_chunks
 from ui.assistance_result import render_result
 
 
@@ -27,8 +27,7 @@ def render(store, workspace):
     task = st.selectbox("Analysis task", TASKS, format_func=lambda x: x.replace("_", " ").capitalize())
     if st.checkbox("Preview selection as statement chunks", key="ai_chunks_" + workspace):
         try:
-            chunks = context_chunks(source["raw_content"], source["extension"], int(first), int(last),
-                                    int(store.setting(workspace, "llm_chunk_chars", 4000)))
+            chunks = preview_ai_evidence(store, workspace, fid, int(first), int(last), task)['chunks']
         except ValueError as exc:
             st.warning(str(exc))
             return

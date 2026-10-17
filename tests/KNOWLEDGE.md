@@ -41,3 +41,15 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_ui.py` — Page/workspace/provider flows, complete fourteen-theme dropdown, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
 - `test_workflow.py` — Behavioral regression tests for workflow. Run with pytest; temporary runtime data only.
 - `test_workspace_configuration.py` — Workspace edits preserve identity/data; safe v1/v2 configuration portability, resource validation, isolation and injected-failure rollback.
+
+- `test_parity_contracts.py` — complete catalog IDs/cursors, actual MCP/CLI discovery and independent/scoped launch authorization.
+
+- `test_parity_settings.py` — Seven typed schemas/defaults/ranges, atomic revisions, privilege non-escalation and local admin recovery; rejects process-cap/launch-policy patches.
+- `test_parity_providers.py` — Approved origin/reference checks, runtime isolation/profile-edit invalidation, sanitized mocks, no environment mutation and immediate concurrent admission.
+- `test_parity_ai.py` — All five tasks through actual MCP handlers, exact hash/job race refusal, per-fallback credentials, explicit idempotent merge and concurrent refresh storage access.
+- `test_parity_reports.py` — Scoped dictionary/schema/history/evidence, CLI exact literal matches and configured >10k ZIP discovery admission.
+- `test_parity_artifacts.py` — Exact raw bytes/hashes/chunks/ZIP, source revocation, scoped IDs, CLI exclusive output, enriched graph/path evidence, combined tree and cycle incompleteness.
+- `test_parity_maintenance.py` — Read-side effect absence, mandatory backup guards, fresh local archive/recovery in disposable homes; general cleanup backup opt-out refused.
+- `test_parity_runtime.py` — Fourteen shared themes/TOML preservation, actual logging/setup/self-test MCP, application scope and CLI settings.
+- `test_parity_coverage.py` — Every keyed catalog field/CLI route/help/MCP schema and all mutation/network tool denials under a read-only launch.
+- `test_parity_ui.py` — Equal asset labels across workspaces retain selectable widget identity, reproducing the real-browser regression.

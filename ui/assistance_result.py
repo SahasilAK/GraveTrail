@@ -3,8 +3,9 @@ import json
 
 import streamlit as st
 
+from dataforge.agent.contracts import AgentError
+from dataforge.ai_service import merge_ai_result
 from dataforge.asset_identity import source_job
-from dataforge.llm import merge_claims
 from dataforge.services import analyze
 
 
@@ -63,8 +64,8 @@ def render_result(store, workspace, state_key):
         if record["outcome"] == "validated" and details["result"]["claims"]:
             if st.button("Merge grounded relationships as inferred", key=state_key + "_merge_" + record_id):
                 try:
-                    count = merge_claims(store, workspace, record_id)
-                except ValueError as exc:
+                    count = merge_ai_result(store, workspace, record_id, refresh=False)['merged']
+                except (ValueError, AgentError) as exc:
                     st.error(str(exc))
                 else:
                     try:
