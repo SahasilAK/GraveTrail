@@ -100,10 +100,12 @@ There is one concurrent documentation run per branch/PR. A newer run cancels an 
 one for that branch. Only trusted `main` runs can upload the Pages artifact and deploy;
 PR validation has `contents: read` and receives no deployment secrets or write grants.
 
-The workflow uses official `actions/configure-pages@v5`,
-`actions/upload-pages-artifact@v4`, and `actions/deploy-pages@v4`, following
+The workflow pins Node.js 24-compatible releases of official `actions/configure-pages@v6`,
+`actions/upload-pages-artifact@v5`, and `actions/deploy-pages@v5` to commit SHAs, following
 [GitHub's custom workflow guidance](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 Dependencies are installed from `uv.lock` with `--locked --only-group docs`.
+Linux jobs use `ubuntu-24.04` explicitly so the `ubuntu-latest` migration to Ubuntu 26.04
+does not change their operating system automatically.
 
 ## Optional custom domain
 

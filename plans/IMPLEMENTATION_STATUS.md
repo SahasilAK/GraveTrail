@@ -894,3 +894,25 @@ unverified; clean installation/packaging must be rerun after these new slices.
   1100-level envelope, displays the controlled ProviderError notice and keeps settings
   usable. No external provider, real credentials, primary home, master prompt or release
   artifacts were changed. These are local Windows results; remote Actions rerun is pending.
+
+## GitHub Actions runtime warning maintenance — 2026-10-17
+
+- User confirmed the sanitization fix passes hosted CI, then reported Node20 action-runtime
+  warnings and the ubuntu-latest migration notice. Node installed for test commands is
+  separate from each action's declared JavaScript runtime.
+- Updated tests/release/documentation workflows to verified commit-pinned checkout7.0.1,
+  setup-node7.1.0, setup-uv10.3.0, upload-artifact7.0.2, configure-pages6.0.0,
+  upload-pages-artifact5.0.0 and deploy-pages5.0.1. Pages' nested upload-artifact7.0.0
+  also declares Node24. Existing inputs and artifact/deployment permissions are preserved.
+- Every Linux job/matrix entry now explicitly uses ubuntu-24.04, preserving the current OS
+  baseline across the announced October19–November19 ubuntu-latest migration to26.04.
+  Windows/macOS matrices, Python versions, workflow triggers and deployment gates are unchanged.
+- Verified all8 direct/nested pinned action manifests declare Node24 or the expected
+  composite; all supplied action inputs exist. Official release notes were reviewed for
+  compatibility, and workflow structure comparison preserves existing job behavior.
+- actionlint1.7.12 passes all3 workflows (official binary checksum verified). Documentation
+  strict build validates36 public pages/7 assets/146 search entries;4 focused documentation
+  tests, Ruff and diff checks pass. No application code changed; native/container builds,
+  running UI and hosted execution were not repeated for this workflow-only change.
+- Pages deployment guide and affected knowledge maps updated. Hosted Actions must run the
+  new commit after push to establish that these warnings are absent remotely.
