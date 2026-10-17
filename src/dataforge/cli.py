@@ -15,6 +15,7 @@ from dataforge.agent.cli_ai import register as register_ai
 from dataforge.agent.cli_reports import register as register_reports
 from dataforge.agent.cli_reports import register_maintenance
 from dataforge.agent.cli_settings import register as register_settings
+from dataforge.agent.cli_settings import register_application
 from dataforge.agent.contracts import (
     AccessPolicy,
     AgentError,
@@ -437,6 +438,7 @@ def ui(ctx: typer.Context):
 
 
 register_settings(app, workspace_app, invoke, fail)
+register_application(app, invoke)
 register_ai(app, invoke, fail)
 register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
 register_maintenance(app, maintenance_app, invoke, fail)

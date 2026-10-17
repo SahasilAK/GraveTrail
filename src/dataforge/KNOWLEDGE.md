@@ -51,3 +51,5 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 - `reporting.py` — shared dictionary/provenance, health, original-evidence integrity, literal SQL/SAS matches and scoped history/inventory reports; all queries are offline.
 
 - `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifact creation, guarded managed paths and scoped/checksummed budgeted base64 reads.
+
+- `theme_configuration.py` — exact existing14 preset palettes, detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.

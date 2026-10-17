@@ -42,6 +42,8 @@ WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
           'staging_clean', 'staging_restore'} | PROVIDER_WRITES | AI_WRITES | ARTIFACT_WRITES
 MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', 'staging_recoveries',
                      'database_inspect', 'backups_list'}
+APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
+WRITES |= {'theme_apply', 'logging_update'}
 
 
 class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations):
@@ -50,6 +52,12 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         self.jobs = Jobs(store.home)
         self.runtime_connections = {}
         self.provider_transport = None
+        import os
+        from pathlib import Path
+
+        from dataforge.launcher import application_root
+        self.theme_config_path = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(application_root() / '.streamlit/config.toml')))
+        self.configured_storage = os.environ.get('DATAFORGE_STORAGE_LOCATIONS', '')
 
     def close(self):
         for manager in self.runtime_connections.values():
@@ -87,15 +95,28 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import'} | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS:
+                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
             if action == "job":
                 return self.job_status(workspace_id, arguments["job_id"], options)
+            if action == 'agent_self_test':
+                settings = self._workspace(workspace_id)
+                values = {**(options or {})}
+                values['max_chars'] = min(values.get('max_chars', settings.max_chars), settings.max_chars)
+                opts = QueryOptions.model_validate(values)
+                result = self._agent_self_test(workspace_id, opts, **arguments)
+                if len(compact(result)) > opts.max_chars:
+                    raise AgentError('budget_too_small', 'Local handler result exceeds response budget')
+                if settings.audit_reads:
+                    self.audit(workspace_id, action, 'accepted')
+                return result
             with self.store.lock:
-                if action in {"workspaces", "create_workspace", 'config_import', 'database_inspect', 'backups_list'} or (action == 'capabilities' and not workspace_id):
+                if action in {"workspaces", "create_workspace", 'config_import', 'database_inspect', 'backups_list'} or action in APPLICATION_ACTIONS or (action == 'capabilities' and not workspace_id):
                     settings = AgentSettings()
+                    if action == 'runtime_info' and workspace_id:
+                        settings = self._workspace(workspace_id)
                     if write and (not self.policy.allow_write or self.policy.workspaces is not None):
                         raise AgentError("forbidden", "Workspace creation requires unrestricted explicit write access")
                 else:
@@ -121,6 +142,80 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             raise AgentError("invalid_argument", "Invalid request arguments", reason=type(exc).__name__) from None
         except OSError:
             raise AgentError("io_error", "Local file operation failed; check access and available storage") from None
+
+    def _theme_list(self, w, opts):
+        from dataforge.theme_configuration import PRESETS
+        return self._page('', opts, 'themes', [{'name': name, 'base': p['base']} for name, p in PRESETS.items()])
+
+    def _theme_get(self, w, opts):
+        from dataforge.theme_configuration import current_preset
+        if w or self.policy.workspaces is not None:
+            raise AgentError('requires_local_admin', 'Application theme requires unrestricted launch without a workspace argument')
+        configured = current_preset(self.theme_config_path) if self.theme_config_path.is_file() else None
+        return {'configured': configured, 'detected': configured, 'loaded': None,
+                'reload_required': True, 'note': 'Loaded UI appearance is unavailable to a separate CLI/MCP process'}
+
+    def _theme_apply(self, w, opts, name):
+        from dataforge.theme_configuration import apply_preset
+        self.policy.require('application')
+        if w:
+            raise AgentError('validation_failed', 'Application operations do not accept workspace IDs')
+        apply_preset(self.theme_config_path, name)
+        return self._theme_get(w, opts)
+
+    def _logging_get(self, w, opts):
+        if w or self.policy.workspaces is not None:
+            raise AgentError('requires_local_admin', 'Application logging requires unrestricted launch without a workspace argument')
+        return {'level': self.store.setting('__application__', 'log_level', 'INFO'), 'scope': 'application'}
+
+    def _logging_update(self, w, opts, level):
+        from dataforge.logging_config import save_application_logging
+        self.policy.require('application')
+        self._logging_get(w, opts)
+        save_application_logging(self.store, level)
+        return {**self._logging_get(w, opts), 'reload_required': True}
+
+    def _runtime_info(self, w, opts):
+        from dataforge.storage_locations import allowed_homes
+        result = {'ownership': 'One DuckDB owning process per home', 'live_switch': False,
+                  'switch': 'Relaunch CLI/MCP with an authorized --home; UI changes only its browser session'}
+        if self.policy.workspaces is None:
+            result.update(home=str(self.store.home), allowed_homes=allowed_homes(self.store.home, self.configured_storage))
+        return result
+
+    def _agent_setup(self, w, opts, client='codex', transport='stdio', tool_name=''):
+        import asyncio
+        import sys
+
+        from dataforge.agent.mcp_server import create_server
+        if client not in {'codex', 'claude'} or transport not in {'stdio', 'streamable-http'}:
+            raise AgentError('validation_failed', 'Use codex/claude and stdio/streamable-http')
+        tools = asyncio.run(create_server(self).list_tools())
+        args = [] if getattr(sys, 'frozen', False) else ['-m', 'dataforge.cli']
+        args += ['--home', str(self.store.home), '--allowed-workspace', w, 'mcp']
+        stdio = {'command': sys.executable, 'args': args}
+        result = {'stdio': stdio, 'client': client, 'transport': transport,
+                  'codex_toml': '[mcp_servers.dataforge]\ncommand = ' + json.dumps(sys.executable) + '\nargs = ' + json.dumps(args),
+                  'claude': {'mcpServers': {'dataforge': stdio}},
+                  'http': {'url': 'http://127.0.0.1:8765/mcp', 'bearer_reference': 'DATAFORGE_MCP_TOKEN',
+                           'authentication': 'pre-provisioned bearer; external TLS reverse proxy required'},
+                  'tools': [t.name for t in tools], 'ownership': 'Stop any other owner before launching an external client'}
+        if tool_name:
+            matches = [t for t in tools if t.name == tool_name]
+            if not matches:
+                raise AgentError('not_found', 'Unknown tool schema')
+            result = {'tool': matches[0].model_dump(mode='json')}
+        return result
+
+    def _agent_self_test(self, w, opts):
+        import asyncio
+
+        from dataforge.agent.mcp_server import create_server
+        result = asyncio.run(create_server(self).call_tool('get_workspace_summary', {'workspace_id': w}))
+        if result.isError:
+            raise AgentError(result.structuredContent['error']['code'], 'Local MCP handler check failed')
+        return {'passed': True, 'method': 'in_process_mcp_handler', 'summary': result.structuredContent,
+                'note': 'External stdio/HTTP connectivity is a separate client test'}
 
     def _capabilities(self, w, opts):
         from dataforge.agent.capabilities import capability_catalog

@@ -159,15 +159,14 @@ elif tab == "Visualization":
             st.rerun()
     st.caption("Defaults apply when opening Explorer. Graph appearance is included in offline HTML/JSON and safe workspace configuration transfers. Switch light/dark appearance from the application menu.")
 elif tab == "Security and privacy":
-    from dataforge.logging_config import configure_logging
+    from dataforge.logging_config import save_application_logging
     with st.form("application_logging"):
         levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
         log_level = st.selectbox("Application log level", levels,
             index=levels.index(store.setting("__application__", "log_level", "INFO")))
         st.caption("Applies across workspaces in this data home and survives restart. Source content and credentials remain excluded from structured event fields; full AI interaction storage is controlled separately below.")
         if st.form_submit_button("Save logging level"):
-            configure_logging(log_level)
-            store.set_setting("__application__", "log_level", log_level)
+            save_application_logging(store, log_level)
             st.session_state["settings_notice_" + w] = "Application logging level saved"
             st.rerun()
     st.caption("Host directory access is restricted to these configured roots:")

@@ -47,3 +47,52 @@ def register(app, workspace_app, invoke, fail):
         except (OSError, ValueError, AgentError):
             return fail(ctx, AgentError('validation_failed', 'Expected a bounded configuration JSON object'))
         invoke(ctx, 'config_import', configuration=payload)
+
+
+def register_application(app, invoke):
+    application = typer.Typer(help='Application scope; mutation requires unrestricted write/config/application grants.')
+    theme = typer.Typer(help='Fourteen presets; loaded UI state is unavailable to this process.')
+    logging = typer.Typer(help='Home-wide persisted log level; no log-content access.')
+    runtime = typer.Typer(help='Runtime owner/home context; switching requires a new invocation.')
+    agent = typer.Typer(help='Actual schemas, credential-free client examples and local MCP handler self-test.')
+    app.add_typer(application, name='application')
+    app.add_typer(runtime, name='runtime')
+    app.add_typer(agent, name='agent')
+    application.add_typer(theme, name='theme')
+    application.add_typer(logging, name='logging')
+
+    @theme.command('list')
+    def themes(ctx: typer.Context):
+        invoke(ctx, 'theme_list')
+
+    @theme.command('get')
+    def get_theme(ctx: typer.Context):
+        invoke(ctx, 'theme_get')
+
+    @theme.command('apply')
+    def apply_theme(ctx: typer.Context, name: str):
+        invoke(ctx, 'theme_apply', name=name)
+
+    @logging.command('get')
+    def get_logging(ctx: typer.Context):
+        invoke(ctx, 'logging_get')
+
+    @logging.command('update')
+    def update_logging(ctx: typer.Context, level: str):
+        invoke(ctx, 'logging_update', level=level)
+
+    @runtime.command('info')
+    def info(ctx: typer.Context, workspace: str = ''):
+        invoke(ctx, 'runtime_info', workspace)
+
+    @agent.command('inspect')
+    def inspect(ctx: typer.Context, workspace: Workspace, tool_name: str = ''):
+        invoke(ctx, 'agent_setup', workspace, tool_name=tool_name)
+
+    @agent.command('client-config')
+    def client_config(ctx: typer.Context, workspace: Workspace, client: str = 'codex', transport: str = 'stdio'):
+        invoke(ctx, 'agent_setup', workspace, client=client, transport=transport)
+
+    @agent.command('self-test')
+    def self_test(ctx: typer.Context, workspace: Workspace):
+        invoke(ctx, 'agent_self_test', workspace)

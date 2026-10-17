@@ -414,6 +414,46 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         """list runtime backups; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
         return await call('backups_list', "", options)
 
+    @server.tool(annotations=read)
+    async def list_theme_presets(options: QueryOptions | None = None) -> CallToolResult:
+        """list theme presets; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('theme_list', "", options)
+
+    @server.tool(annotations=read)
+    async def get_application_theme(options: QueryOptions | None = None) -> CallToolResult:
+        """get application theme; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('theme_get', "", options)
+
+    @server.tool(annotations=write)
+    async def apply_application_theme(name: str, options: QueryOptions | None = None) -> CallToolResult:
+        """apply application theme; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('theme_apply', "", options, name=name)
+
+    @server.tool(annotations=read)
+    async def get_application_logging(options: QueryOptions | None = None) -> CallToolResult:
+        """get application logging; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('logging_get', "", options)
+
+    @server.tool(annotations=write)
+    async def update_application_logging(level: Literal["DEBUG", "INFO", "WARNING", "ERROR"], options: QueryOptions | None = None) -> CallToolResult:
+        """update application logging; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('logging_update', "", options, level=level)
+
+    @server.tool(annotations=read)
+    async def get_runtime_info(workspace_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get runtime info; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('runtime_info', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def get_agent_setup(workspace_id: str, client: str = "codex", transport: str = "stdio", tool_name: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get agent setup; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('agent_setup', workspace_id, options, client=client, transport=transport, tool_name=tool_name)
+
+    @server.tool(annotations=read)
+    async def test_local_agent_access(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """test local agent access; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
+        return await call('agent_self_test', workspace_id, options)
+
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:
         """First compact permitted workspace page; use tools for continuation."""

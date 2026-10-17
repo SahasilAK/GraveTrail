@@ -28,3 +28,8 @@ def configure_logging(level="INFO"):
         logger.addHandler(handler)
     logger.setLevel(level)
     logger.propagate = False
+
+
+def save_application_logging(store, level):
+    configure_logging(level)
+    store.set_setting('__application__', 'log_level', level)
