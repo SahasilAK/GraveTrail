@@ -74,7 +74,7 @@ def read_settings(store, workspace, section):
     if section == 'agent_access':
         values = AgentSettings.from_store(store, workspace).model_dump()
     elif section == 'temporary_cleanup':
-        values = {'enabled': store.setting(workspace, 'auto_temporary_cleanup', False)}
+        values = {'enabled': store.setting(workspace, 'auto_cleanup_temporary', False)}
     else:
         values = {key: store.setting(workspace, key, value) for key, value in model().model_dump().items()}
     return {'schema_version': 1, 'section': section, 'scope': 'workspace',
@@ -108,7 +108,7 @@ def update_settings(store, policy, workspace, section, values, expected_revision
             if section == 'agent_access':
                 AgentSettings.model_validate(after).save(store, workspace)
             elif section == 'temporary_cleanup':
-                store.set_setting(workspace, 'auto_temporary_cleanup', after['enabled'])
+                store.set_setting(workspace, 'auto_cleanup_temporary', after['enabled'])
             else:
                 for key in changed:
                     store.set_setting(workspace, key, after[key])

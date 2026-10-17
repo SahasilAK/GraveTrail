@@ -38,7 +38,10 @@ from dataforge.reporting import READS as REPORT_READS
 from dataforge.reporting import ReportOperations
 
 WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
-          'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES | AI_WRITES | ARTIFACT_WRITES
+          'settings_update', 'workspace_update', 'config_import', 'history_archive', 'history_restore',
+          'staging_clean', 'staging_restore'} | PROVIDER_WRITES | AI_WRITES | ARTIFACT_WRITES
+MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', 'staging_recoveries',
+                     'database_inspect', 'backups_list'}
 
 
 class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations):
@@ -84,14 +87,14 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES | AI_READS | AI_WRITES | REPORT_READS | ARTIFACT_READS | ARTIFACT_WRITES:
+                          'config_export', 'config_import'} | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
             if action == "job":
                 return self.job_status(workspace_id, arguments["job_id"], options)
             with self.store.lock:
-                if action in {"workspaces", "create_workspace", 'config_import'} or (action == 'capabilities' and not workspace_id):
+                if action in {"workspaces", "create_workspace", 'config_import', 'database_inspect', 'backups_list'} or (action == 'capabilities' and not workspace_id):
                     settings = AgentSettings()
                     if write and (not self.policy.allow_write or self.policy.workspaces is not None):
                         raise AgentError("forbidden", "Workspace creation requires unrestricted explicit write access")
@@ -164,12 +167,18 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                  ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace')}
         return {'workspace_id': w, 'categories': {key: {'records': p['records'],
                 'logical_bytes_estimate': p['logical_bytes_estimate'], 'file_bytes': p['file_bytes']}
-                for key, p in plans.items()}, 'notes': next(iter(plans.values()))['notes']}
+                for key, p in plans.items()}, 'notes': next(iter(plans.values()))['notes'],
+                'restricted_categories': {'cache': 'requires_local_ui', 'orphans': 'requires_local_ui',
+                                          'application': 'requires_local_ui'}}
 
     def _cleanup_preview(self, w, opts, category='lineage', file_ids=None, run_id=None):
         from dataforge.cleanup import cleanup_plan
         if category in {'application', 'cache', 'orphans'}:
-            raise AgentError('forbidden', 'Shared cleanup requires the local human maintenance interface')
+            if self.policy.workspaces is not None or not self.policy.allow_application_config:
+                raise AgentError('requires_local_ui', 'Shared cleanup inspection requires an unrestricted application-authorized launch; apply in Settings UI')
+            plan = cleanup_plan(self.store, '', category)
+            return {'category': category, 'records': plan['records'], 'logical_bytes_estimate': plan['logical_bytes_estimate'],
+                    'file_bytes': plan['file_bytes'], 'restriction': 'requires_local_ui', 'notes': plan['notes']}
         return cleanup_plan(self.store, w, category, file_ids, run_id)
 
     def _cleanup_apply(self, w, opts, preview, confirmation='', backup_first=False):
@@ -178,7 +187,100 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             raise AgentError('forbidden', 'Whole-home backup requires unrestricted local access')
         if preview.get('workspace_id') != w or preview.get('category') in {'application', 'cache', 'orphans'}:
             raise AgentError('forbidden', 'Cleanup preview is outside the permitted workspace')
+        if not backup_first:
+            raise AgentError('validation_failed', 'General cleanup requires a full-home backup; pass the explicit backup option')
         return apply_cleanup(self.store, preview, confirmation, backup_first)
+
+    def _history_preview(self, w, opts, keep_runs=20, keep_imports=20, batch_size=25):
+        from dataforge.cleanup import checked_path
+        from dataforge.maintenance import history_plan
+        checked_path(self.store.home, 'history-recovery/' + w)
+        plan = {'workspace_id': w, 'keep_runs': keep_runs, 'keep_imports': keep_imports, 'batch_size': batch_size,
+                **history_plan(self.store, w, keep_runs, keep_imports, batch_size)}
+        plan['token'] = hashlib.sha256(compact(plan).encode()).hexdigest()
+        return plan
+
+    def _maintenance_confirmation(self, w, confirmation):
+        name = self.store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [w])[0]['name']
+        if name != confirmation:
+            raise AgentError('validation_failed', 'Type the exact current workspace name to confirm local maintenance')
+        if self.policy.workspaces is not None:
+            raise AgentError('forbidden', 'Recoverable full-home backup requires an unrestricted local launch')
+
+    def _history_archive(self, w, opts, preview, confirmation):
+        from dataforge.database_maintenance import backup
+        from dataforge.maintenance import archive_history
+        self._maintenance_confirmation(w, confirmation)
+        current = self._history_preview(w, opts, preview['keep_runs'], preview['keep_imports'], preview['batch_size'])
+        if current != preview:
+            raise AgentError('conflict', 'History eligibility changed; refresh preview')
+        backup_id = backup(self.store).stem
+        result = archive_history(self.store, w, preview['keep_runs'], preview['keep_imports'], preview['batch_size'])
+        return {**result, 'backup_id': backup_id}
+
+    def _history_archives(self, w, opts):
+        from dataforge.cleanup import checked_path
+        from dataforge.maintenance import list_archives
+        checked_path(self.store.home, 'history-recovery/' + w)
+        return self._page(w, opts, 'history_archives', list_archives(self.store, w))
+
+    def _history_restore(self, w, opts, archive_id, confirmation):
+        from dataforge.cleanup import checked_path
+        from dataforge.maintenance import restore_history
+        self._maintenance_confirmation(w, confirmation)
+        checked_path(self.store.home, 'history-recovery/' + w)
+        return restore_history(self.store, w, archive_id)
+
+    def _staging_preview(self, w, opts, age_hours=24):
+        from dataforge.temporary_cleanup import temporary_plan
+        plan = {'workspace_id': w, 'age_hours': age_hours, **temporary_plan(self.store, w, age_hours)}
+        plan['token'] = hashlib.sha256(compact(plan).encode()).hexdigest()
+        return plan
+
+    def _staging_clean(self, w, opts, preview, confirmation, names=None):
+        from dataforge.database_maintenance import backup
+        from dataforge.temporary_cleanup import cleanup_temporary
+        self._maintenance_confirmation(w, confirmation)
+        current = self._staging_preview(w, opts, preview['age_hours'])
+        if current != preview:
+            raise AgentError('conflict', 'Staging identities changed; refresh preview')
+        selected = [f for f in current['files'] if names is None or f['name'] in names]
+        if not selected or (names is not None and set(names) - {f['name'] for f in selected}):
+            raise AgentError('validation_failed', 'Select files from the fresh staging preview')
+        backup_id = backup(self.store).stem
+        return {**cleanup_temporary(self.store, w, selected, current['age_hours']), 'backup_id': backup_id}
+
+    def _staging_recoveries(self, w, opts):
+        from dataforge.temporary_cleanup import temporary_recoveries
+        return self._page(w, opts, 'staging_recoveries', temporary_recoveries(self.store, w))
+
+    def _staging_restore(self, w, opts, recovery_id, confirmation):
+        from dataforge.temporary_cleanup import restore_temporary
+        self._maintenance_confirmation(w, confirmation)
+        return restore_temporary(self.store, w, recovery_id)
+
+    def _global_metadata(self, w):
+        if w or self.policy.workspaces is not None or not self.policy.allow_application_config:
+            raise AgentError('requires_local_admin', 'Whole-home metadata requires unrestricted --allow-application-config; no workspace argument')
+
+    def _database_inspect(self, w, opts):
+        from dataforge.database_maintenance import inspect_database
+        self._global_metadata(w)
+        return inspect_database(self.store)
+
+    def _backups_list(self, w, opts):
+        import re
+
+        from dataforge.cleanup import checked_path
+        self._global_metadata(w)
+        directory = checked_path(self.store.home, 'backups')
+        files = sorted(directory.glob('*.zip')) if directory.exists() else []
+        items = []
+        for path in files[:1001]:
+            if re.fullmatch('[a-f0-9]{32}', path.stem):
+                path = checked_path(self.store.home, path.relative_to(self.store.home))
+                items.append({'backup_id': path.stem, 'bytes': path.stat().st_size, 'download': 'local CLI/UI only'})
+        return self._page(w, opts, 'backups', items[:1000], boundaries=['backup_limit'] if len(files) > 1000 else [])
 
     def _current(self, w):
         files = self.store.files(w)

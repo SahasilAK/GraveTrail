@@ -13,6 +13,7 @@ import typer
 
 from dataforge.agent.cli_ai import register as register_ai
 from dataforge.agent.cli_reports import register as register_reports
+from dataforge.agent.cli_reports import register_maintenance
 from dataforge.agent.cli_settings import register as register_settings
 from dataforge.agent.contracts import (
     AccessPolicy,
@@ -358,7 +359,7 @@ def cleanup_inspect(ctx: typer.Context, workspace: Workspace):
 
 def _cleanup_command(category):
     def command(ctx: typer.Context, workspace: Workspace, dry_run: bool = True,
-                preview: Path = None, confirm: str = '', backup: bool = False,
+                preview: Path = None, confirm: str = '', backup: bool = True,
                 file_id: list[str] = typer.Option(None), run_id: str = None):
         """Defaults to dry-run. Apply with --no-dry-run --preview FILE --confirm WORKSPACE_NAME."""
         if dry_run:
@@ -438,6 +439,7 @@ def ui(ctx: typer.Context):
 register_settings(app, workspace_app, invoke, fail)
 register_ai(app, invoke, fail)
 register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
+register_maintenance(app, maintenance_app, invoke, fail)
 
 if __name__ == "__main__":
     app()

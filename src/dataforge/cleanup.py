@@ -89,13 +89,14 @@ def _files(store, workspace, category):
     scopes = []
     if category in {'sources', 'reset', 'workspace', 'application'}:
         ids = [r['workspace_id'] for r in store.workspaces()] if category == 'application' else [workspace]
-        scopes = [f'{folder}/{wid}' for wid in ids for folder in ('history-recovery', 'agent/results')]
+        scopes = [f'{folder}/{wid}' for wid in ids for folder in ('history-recovery', 'agent/results', 'agent/artifacts')]
     for relative in scopes:
         directory = checked_path(store.home, relative)
         if directory.exists():
             for path in directory.iterdir():
                 checked_path(store.home, path.relative_to(store.home))
-                if path.is_file() and re.fullmatch(r'[a-f0-9]{32}\.(json|tmp|csv|html)', path.name):
+                pattern = r'[a-f0-9]{32}\.(json|bin)' if relative.startswith('agent/artifacts/') else r'[a-f0-9]{32}\.(json|tmp|csv|html)'
+                if path.is_file() and re.fullmatch(pattern, path.name):
                     files.append(path)
     if category in {'workspace', 'application'}:
         ids = [r['workspace_id'] for r in store.workspaces()] if category == 'application' else [workspace]

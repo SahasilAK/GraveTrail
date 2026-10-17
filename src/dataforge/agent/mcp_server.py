@@ -52,7 +52,7 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call('cleanup_inspect', workspace_id)
 
     @server.tool(annotations=read)
-    async def preview_cleanup(workspace_id: str, category: Literal['sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace'],
+    async def preview_cleanup(workspace_id: str, category: Literal['sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace', 'cache', 'orphans', 'application'],
                               file_ids: list[str] | None = None, run_id: str | None = None) -> CallToolResult:
         """Dry-run only. A local human must apply destructive cleanup through UI or CLI confirmation."""
         return await call('cleanup_preview', workspace_id, category=category, file_ids=file_ids, run_id=run_id)
@@ -383,6 +383,36 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
     async def export_ai_result(workspace_id: str, record_id: str, options: QueryOptions | None = None) -> CallToolResult:
         """Create source-gated advisory/result JSON artifact; no secret export."""
         return await call('artifact_create', workspace_id, options, kind='ai-result', format='json', selection={'record_id': record_id})
+
+    @server.tool(annotations=read)
+    async def preview_history_archive(workspace_id: str, keep_runs: int = 20, keep_imports: int = 20, batch_size: int = 25, options: QueryOptions | None = None) -> CallToolResult:
+        """preview history archive; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('history_preview', workspace_id, options, keep_runs=keep_runs, keep_imports=keep_imports, batch_size=batch_size)
+
+    @server.tool(annotations=read)
+    async def list_history_archives(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list history archives; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('history_archives', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def preview_staging_cleanup(workspace_id: str, age_hours: int = 24, options: QueryOptions | None = None) -> CallToolResult:
+        """preview staging cleanup; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('staging_preview', workspace_id, options, age_hours=age_hours)
+
+    @server.tool(annotations=read)
+    async def list_staging_recoveries(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """list staging recoveries; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('staging_recoveries', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def inspect_database_maintenance(options: QueryOptions | None = None) -> CallToolResult:
+        """inspect database maintenance; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('database_inspect', "", options)
+
+    @server.tool(annotations=read)
+    async def list_runtime_backups(options: QueryOptions | None = None) -> CallToolResult:
+        """list runtime backups; metadata only. Mutations/recovery/backup downloads require local CLI/UI."""
+        return await call('backups_list', "", options)
 
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:

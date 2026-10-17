@@ -4,6 +4,8 @@ from typing import Annotated
 
 import typer
 
+from dataforge.settings_service import read_json_file
+
 Workspace = Annotated[str, typer.Option('--workspace', '-w')]
 
 
@@ -93,3 +95,78 @@ def register(app, workspace_app, assets_app, lineage_app, source_app, exports_ap
                query: str = '', before: str = '', after: str = '', record_id: str = ''):
         invoke(ctx, 'artifact_create', workspace, kind=kind, format=format,
             selection={'asset': asset, 'query': query, 'before': before, 'after': after, 'record_id': record_id})
+
+
+def register_maintenance(app, maintenance_app, invoke, fail):
+    history = typer.Typer(help='Local guarded history archive/recovery; metadata previews are read-only.')
+    staging = typer.Typer(help='Local guarded stale staging cleanup/recovery; never automatic on CLI/MCP reads.')
+    app.add_typer(history, name='history')
+    app.add_typer(staging, name='staging')
+
+    @history.command('preview')
+    def history_preview(ctx: typer.Context, workspace: Workspace, keep_runs: int = 20, keep_imports: int = 20, batch_size: int = 25):
+        invoke(ctx, 'history_preview', workspace, keep_runs=keep_runs, keep_imports=keep_imports, batch_size=batch_size)
+
+    @history.command('archives')
+    def archives(ctx: typer.Context, workspace: Workspace):
+        invoke(ctx, 'history_archives', workspace)
+
+    @history.command('archive')
+    def archive(ctx: typer.Context, preview: Path, workspace: Workspace, confirm: str = ''):
+        invoke(ctx, 'history_archive', workspace, preview=read_json_file(preview), confirmation=confirm)
+
+    @history.command('restore')
+    def history_restore(ctx: typer.Context, archive_id: str, workspace: Workspace, confirm: str = ''):
+        invoke(ctx, 'history_restore', workspace, archive_id=archive_id, confirmation=confirm)
+
+    @staging.command('preview')
+    def staging_preview(ctx: typer.Context, workspace: Workspace, age_hours: int = 24):
+        invoke(ctx, 'staging_preview', workspace, age_hours=age_hours)
+
+    @staging.command('clean')
+    def clean(ctx: typer.Context, preview: Path, workspace: Workspace, confirm: str = '', name: list[str] = typer.Option(None), expired: bool = False):
+        # --expired still consumes a saved24h preview and explicit confirmation.
+        payload = read_json_file(preview)
+        if expired and payload.get('age_hours') != 24:
+            from dataforge.agent.contracts import AgentError
+            return fail(ctx, AgentError('validation_failed', '--expired requires a24h saved preview'))
+        invoke(ctx, 'staging_clean', workspace, preview=payload, confirmation=confirm, names=name)
+
+    @staging.command('recoveries')
+    def recoveries(ctx: typer.Context, workspace: Workspace):
+        invoke(ctx, 'staging_recoveries', workspace)
+
+    @staging.command('restore')
+    def staging_restore(ctx: typer.Context, recovery_id: str, workspace: Workspace, confirm: str = ''):
+        invoke(ctx, 'staging_restore', workspace, recovery_id=recovery_id, confirmation=confirm)
+
+    @maintenance_app.command('backups')
+    def backups(ctx: typer.Context):
+        invoke(ctx, 'backups_list')
+
+    @maintenance_app.command('download')
+    def backup_download(ctx: typer.Context, backup_id: str, destination: Path):
+        import hashlib
+        import re
+        import shutil
+
+        from dataforge.agent.contracts import AgentError
+        from dataforge.cleanup import checked_path
+        from dataforge.database_maintenance import MAX_BACKUP_BYTES
+        policy = ctx.obj['policy']
+        if policy.workspaces is not None or not policy.allow_application_config:
+            return fail(ctx, AgentError('requires_local_admin', 'Backup download requires unrestricted --allow-application-config'))
+        if not re.fullmatch('[a-f0-9]{32}', backup_id):
+            return fail(ctx, AgentError('not_found', 'Unknown backup ID'))
+        try:
+            source = checked_path(ctx.obj['home'], 'backups/' + backup_id + '.zip')
+            if not source.is_file() or source.stat().st_size > MAX_BACKUP_BYTES:
+                raise ValueError('Invalid backup')
+            with source.open('rb') as stream, destination.open('xb') as output:
+                shutil.copyfileobj(stream, output, 65536)
+            with destination.open('rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        except (ValueError, OSError):
+            return fail(ctx, AgentError('io_error', 'Backup unavailable or destination already exists'))
+        from dataforge.agent.contracts import compact
+        typer.echo(compact({'backup_id': backup_id, 'bytes': destination.stat().st_size, 'sha256': digest}))

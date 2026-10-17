@@ -108,7 +108,8 @@ def render(store, workspace):
                                 value=store.setting(workspace, 'auto_cleanup_temporary', False))
         st.caption('Opt-in; only app-created staging files older than 24 hours, at most 100 / 25 MB per visit. A recoverable database copy is retained. Active jobs block deletion.')
         if st.form_submit_button('Save temporary cleanup preference'):
-            store.set_setting(workspace, 'auto_cleanup_temporary', automatic)
+            from dataforge.settings_service import save_ui_settings
+            save_ui_settings(store, workspace, 'temporary_cleanup', {'enabled': automatic})
     if automatic:
         try:
             plan = temporary_plan(store, workspace)
