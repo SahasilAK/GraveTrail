@@ -25,6 +25,9 @@ dependencies = [
 dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
 build = ["pyinstaller>=6.22,<7"]
 
+[dependency-groups]
+docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.7", "pymdown-extensions==12.3"]
+
 [project.scripts]
 dataforge = "dataforge.cli:app"
 dataforge-ui = "dataforge.launcher:main"
@@ -40,7 +43,7 @@ path = "scripts/build/hatch_assets.py"
 exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "plans/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "AGENTS.md", "KNOWLEDGE.md", ".kbignore", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
+include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "plans/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "mkdocs.yml", "AGENTS.md", "KNOWLEDGE.md", ".kbignore", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
 exclude = ["docs/prompts/**", "docs/plans/**", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]

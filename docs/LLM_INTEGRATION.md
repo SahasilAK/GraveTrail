@@ -75,16 +75,16 @@ No live provider test is claimed without a reachable configured endpoint and cre
 
 ## OmniRoute live verification
 
-The configured local test gateway is `http://localhost:20128/v1`. Its credential is referenced
-as `OMNIROUTE_API_KEY`; its value is never stored in project files. On this Windows machine the
-user explicitly requested remembering the credential, so it is a Windows user environment
-variable. Existing terminals and app processes need the variable injected or a fresh launch
-after their parent environment refreshes. `OMNIROUTE_BASE_URL` stores the non-secret endpoint.
+The development verification endpoint is `http://localhost:20128/v1`, with model route
+`auto/best-reasoning`. The credential is referenced as `OMNIROUTE_API_KEY`; its value is
+never stored in project files. Supply this named read-only variable through the launching
+environment, or use masked session credentials in the UI. Session credentials are not
+persisted and must be supplied again after restart. Do not copy a credential into a profile,
+command argument, build artifact, or report.
 
-Run an opt-in check with an available model identifier:
+Run the opt-in check with that route and the existing launch variable available:
 
 ```powershell
-$env:OMNIROUTE_API_KEY = [Environment]::GetEnvironmentVariable('OMNIROUTE_API_KEY', 'User')
 uv run python scripts/verify_llm.py --model auto/best-reasoning --output plans/LLM_LIVE_RESULTS.json
 ```
 
@@ -140,4 +140,4 @@ No preprocessing/prompt/schema change was made. Further live calls stopped per u
 See `plans/LLM_LIVE_RESULTS.json` for safe metadata without raw output or credentials.
 That dated attempt left the full live gate open.
 
-Current bounded acceptance on 2026-10-17 passed discovery (915 models), connection, synthetic SQL and SAS exact-quote validation, inferred merge, graph refresh and owner reopen in 33.8 seconds. It used `http://localhost:20128/v1`, `auto/best-reasoning` and the existing read-only `OMNIROUTE_API_KEY` launch reference. No fixed route or validation change was used. See [parity acceptance](../plans/PARITY_ACCEPTANCE.md); earlier failures remain historical evidence, and this result does not promise continuing provider availability.
+Current bounded acceptance on 2026-10-17 passed discovery (915 models), connection, synthetic SQL and SAS exact-quote validation, inferred merge, graph refresh and owner reopen in 33.8 seconds. It used `http://localhost:20128/v1`, `auto/best-reasoning` and the existing read-only `OMNIROUTE_API_KEY` launch reference. No fixed route or validation change was used. See [parity acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md); earlier failures remain historical evidence, and this result does not promise continuing provider availability.

@@ -29,11 +29,12 @@ bounded ordered path exports, schema conflict/change/refresh handling and declar
 AppTest exercises schema-expanded columns, DDL source viewing and dictionary provenance.
 Actual browser tests also downloaded and checked five-step path JSON/CSV with original hashes.
 
-`scripts/verify_llm.py` is an explicit live test using synthetic SQL/SAS only. OmniRoute model
-discovery, UI connection and separate grounded SQL/SAS responses have passed; automatic model
-routes have also produced quarantined invalid output, so a full live check is not yet claimed
-green. A listed fixed model was not callable. See plans/LLM_LIVE_RESULTS.json and the
-implementation status rather than treating model-list membership as availability.
+`scripts/verify_llm.py` is an explicit live test using synthetic SQL/SAS only. The bounded
+2026-10-17 OmniRoute gate passed discovery, connection, SQL/SAS grounded claims, explicit
+inferred merges, refresh and owner reopen using `auto/best-reasoning` at
+`http://localhost:20128/v1` with the existing `OMNIROUTE_API_KEY` reference. Earlier runs
+recorded invalid output and gateway failures. A dated pass is not an availability guarantee;
+model-list membership does not establish callability. See the current implementation status.
 
 History tests cover archive/restore protection, v3 migration, bounded payloads, rollback and
 database recovery after filename loss/restart. Visualization checks cover strict preferences,
@@ -56,9 +57,11 @@ Final completion checks are recorded in plans/REQUIREMENT_MATRIX.md and the late
 IMPLEMENTATION_STATUS entry. New regressions cover task-specific advisory grounding, AI
 admission/chunks, settings/cache preservation, recoverable staging cleanup, supplied job scope,
 seven labeled vendor/SAS cases in LF and CRLF, storage isolation, inventory refresh and exact
-SAS evidence. Historical test counts above describe earlier stages. Current auto-only OmniRoute
-attempt failed during discovery with no listener on port20128; prior fixed-route success predates that instruction. Docker engine
-and direct file-browser interaction are unavailable/unverified, not passing release gates.
+SAS evidence. Historical test counts above describe earlier stages. A Windows wheel and Linux
+Docker build/run passed in earlier local verification; artifacts have not been rebuilt for
+every subsequent source change. Hosted release CI and native Linux/macOS executable acceptance
+remain separate gates. Standalone offline HTML interaction through a file-browser URL remains
+unexecuted. See [build verification](BUILD_AND_RELEASE.md) and current dated acceptance.
 
 
 ## Agent integration acceptance
@@ -71,4 +74,4 @@ exact SAS FORMAT-modifier evidence and the remaining static-analysis diagnostics
 
 ## CLI/MCP UI parity verification
 
-Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The keyed 46-ID fixture is checked against actual CLI help and MCP schemas; new network/mutation tools must reject a read-only launch. Provider mocks are repeatable and require no keys. `uv run python scripts/verify_parity.py --home NEW_ISOLATED_HOME --output NEW_REPORT.json` exercises both supplied ZIPs through CLI/service/actual MCP and owner reopen, including every original byte/hash, exact logical edges, seven layers/all16 roots and warm cache reuse. Never point destructive tests at an existing user home. See [dated acceptance](../plans/PARITY_ACCEPTANCE.md) for running UI/live/transport evidence and unexecuted gates.
+Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The keyed 46-ID fixture is checked against actual CLI help and MCP schemas; new network/mutation tools must reject a read-only launch. Provider mocks are repeatable and require no keys. `uv run python scripts/verify_parity.py --home NEW_ISOLATED_HOME --output NEW_REPORT.json` exercises both supplied ZIPs through CLI/service/actual MCP and owner reopen, including every original byte/hash, exact logical edges, seven layers/all16 roots and warm cache reuse. Never point destructive tests at an existing user home. See [dated acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md) for running UI/live/transport evidence and unexecuted gates.

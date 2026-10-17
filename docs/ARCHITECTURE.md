@@ -87,8 +87,9 @@ maintenance adds no destructive upgrade. See [setup and deployment](SETUP_AND_DE
 `launcher.py` finds the source app or packaged `_app` directory and launches the same
 Streamlit pages. Wheels include UI/component assets, prompt resources and default Streamlit
 configuration. Frozen bundles use the same launcher and expose CLI/MCP via `--cli`.
-Installed/frozen UI homes default to platform user-data locations; source/CLI defaults remain
-relative to the working directory unless explicitly configured. Installed theme configuration
+Installed/frozen launchers default to platform user-data locations; source launchers default
+to `.dataforge/` relative to the working directory unless explicitly configured. CLI/MCP
+uses the same home resolver. Installed theme configuration
 is copied once into the writable home instead of changing packaged assets.
 
 `build.py` provides Python, Docker and host executable targets, reading the project version,
@@ -96,4 +97,4 @@ launching build tools with an allowlisted environment and recording artifact has
 Checksums prove file integrity, not publisher authenticity or runtime correctness. Native
 artifacts need native runner smoke tests. Docker runs the installed wheel as a non-root user
 with persistent `/data`. UI and MCP are alternative owners of a home, not concurrent services
-against one DuckDB file. See [verification status](../plans/IMPLEMENTATION_STATUS.md).
+against one DuckDB file. See [verification status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md).

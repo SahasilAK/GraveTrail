@@ -4,6 +4,10 @@ Updated: 2026-10-17. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Current delivery state
 
+Documentation hub and GitHub Pages source implementation is delivered on
+`feature/git-pages-and-cleanups`; see the dated documentation entry below. Pages activation
+and deployment remain maintainer steps after PR review, not a claimed live publication.
+
 
 CLI/MCP UI parity source implementation is delivered across all nine slices. The actual
 46-ID catalog has36 implemented equivalents and10 explicit policy restrictions; no pending
@@ -821,3 +825,44 @@ unverified; clean installation/packaging must be rerun after these new slices.
   backup, removed only generated lineage, and UI restore created a new sibling home. Reopened
   that destination independently: original97 bytes exact,3 evidence edges including1 inferred
   claim and merged AI record preserved. No real provider was contacted by this UI harness.
+
+
+## Documentation hub and GitHub Pages — 2026-10-17
+
+- Implemented FEATURE_DOCUMENTATION_AND_GITHUB_PAGES on the requested branch. Rebuilt
+  README with truthful badges, source/pip/Docker/native entry points, fixture workflow,
+  grouped navigation, original SVG branding and authentic isolated SQL fixture screenshots.
+- Material for MkDocs 9.7.7 / MkDocs1.6.1 / pymdown12.3 are separately locked in the docs
+  dependency group; production requirements and application behavior are unchanged.
+ 36 public pages are organized into getting-started, user-guide, integrations,
+  architecture, deployment, development and troubleshooting hubs. Existing detailed
+  uppercase source URLs are retained. Website routes are lowercase to avoid Windows
+  case collisions. No empty REST API guide or fabricated release/coverage claims.
+- Public nav documents and seven named assets form the source allowlist. Strict build
+  checks rendered local links/anchors/resources/project prefixes, repository targets,
+  complete output inventory and146 search entries. Prompts, plans, review reports,
+  knowledge maps, runtime files and credentials are excluded from site/search output.
+- Added main-only official artifact Pages workflow, read-only PR validation, scoped deploy
+  permissions, concurrency, manual dispatch and locked docs-only installation. Verified
+  configure-pages5 / upload-pages-artifact4 / deploy-pages4 against GitHub guidance;
+  setup-uv10.3.0 is pinned by SHA. Only validated site/ is uploaded; no settings changed.
+- Added full activation/domain/troubleshooting/maintenance guides, contribution/security
+  entry points and sanitized issue/PR templates. Corrected stale installed-home, supplied
+  SAS job scope, provider verification and Docker-history prose; removed machine-specific
+  credential persistence instructions. Master prompt and .gitignore are untouched.
+- Verification: clean temporary docs-only environment installs/builds successfully;
+  sdist contains site config/tooling/root policies and excludes private/runtime inputs.
+  Full pytest324 passed /1 existing Windows privilege skip in61.16s; Ruff and lock checks
+  pass. Four focused publication/link/route regressions pass; independent review found
+  no actionable P1/P2 issues.18 real external non-repository documentation URLs return200;
+  repository blob references are checked locally and illustrative endpoint URLs are examples.
+- Running docs8018 browser: desktop light/dark, search15 matching backup documents,
+  Mermaid rendering and390px mobile homepage with no horizontal overflow. Running isolated
+  UI8518: real SQL fixture86 scripts/128 edges; CLI complete current upstream result has
+ 81 assets/all16 sources and no boundaries. UI exact pub.all_kpis selection, depth30 graph,
+  original source evidence and dashboard captured. No provider calls or primary-home changes.
+- Remaining manual step: review/merge PR, enable Settings → Pages → GitHub Actions and
+  run documentation on main. Repository is currently private: an eligible Pages plan is
+  required. Expected URL https://sahasilak.github.io/dataforge-engineering-hub/ is derived
+  from the verified remote; live deployment is not claimed. Existing native/release and
+  standalone-file-browser application gates above remain unchanged.

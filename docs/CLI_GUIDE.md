@@ -16,7 +16,8 @@ dataforge --home ./automation-data --allow-write lineage build --workspace WORKS
 dataforge --home ./automation-data --json --max-depth 30 lineage upstream pub.all_kpis --workspace WORKSPACE_ID
 ```
 
-Runtime files stay under `--home`, otherwise `DATAFORGE_HOME`, otherwise `.dataforge`.
+Runtime files stay under `--home`, otherwise `DATAFORGE_HOME`. Without either override,
+source launchers use `.dataforge/`; installed launchers use the platform user-data directory.
 Do not commit runtime databases or journals. DuckDB permits one owning process per
 home: stop Streamlit/MCP before a separate CLI opens its home, or choose another
 home. CLI reports `storage_busy`, exit 5, rather than bypassing the database lock.

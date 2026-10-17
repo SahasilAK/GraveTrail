@@ -31,3 +31,5 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 
 Storage selection is per-session and startup-allowlisted (DATAFORGE_STORAGE_LOCATIONS); app.py
 opens the validated home before workspace navigation. Default remains DATAFORGE_HOME.
+
+Documentation: `mkdocs.yml` and separate locked docs group build36 public pages with scripts/docs/build.py. CONTRIBUTING.md and SECURITY.md are root entry points. README is a product introduction with real fixture imagery. Site output is ignored/excluded; canonical uppercase guide sources remain.

@@ -33,9 +33,10 @@ outside the plain identifier rules are unresolved instead of tokenized into fabr
 DATALINES/CARDS (including 4-semicolon forms) are data payloads and are never parsed as code.
 
 Limitations: no SAS runtime, macro interpreter, PROC IML, general procedure output semantics,
-dynamic libraries, job scheduling/session boundaries or faithful execution order. Static WORK
-datasets are workspace scoped and can be ambiguous across independent jobs. Add separate
-workspaces for unrelated SAS sessions. Optional AI does not bypass evidence validation.
+dynamic libraries, automatic runtime session discovery or faithful execution order. Static WORK
+datasets use workspace and explicitly configured job/folder scope. Configure supplied job IDs
+in Parsing and lineage or use separate workspaces for unrelated sessions; absent that context,
+independent jobs can remain ambiguous. Optional AI does not bypass evidence validation.
 
 DATA/PROC evidence is sliced directly from the original source between statement offsets;
 spacing, blank lines, comments and same-line block boundaries remain intact. Inline-data

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450" role="img" aria-labelledby="title desc">
+  <title id="title">From source tables to reporting, with evidence</title>
+  <desc id="desc">raw.customers and raw.orders feed staging.customer_orders, then mart.customer_summary. A statement record links the relationship to transform.sql lines 12 through 24. Illustrative workflow, not an application screenshot.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="m2 2 6 3-6 3" fill="none" stroke="#698ba4" stroke-width="1.5"/></marker></defs>
+  <rect x="1" y="1" width="798" height="448" rx="18" fill="#edf4f8" stroke="#c7dbe8"/>
+  <g font-family="Segoe UI,Arial,sans-serif" fill="#46647a" font-size="15">
+    <text x="34" y="43">An investigation starts with a table.</text>
+    <text x="34" y="417">Illustrative lineage · Source evidence stays attached to every step.</text>
+  </g>
+  <g fill="none" stroke="#698ba4" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M220 110h42v75h38"/><path d="M220 260h42v-75h38"/>
+    <path d="M505 185h48v-75h23"/>
+  </g>
+  <path d="M405 218v38" fill="none" stroke="#b6532c" stroke-width="2" stroke-dasharray="5 5"/>
+  <g font-family="monospace" font-size="15">
+    <rect x="33" y="77" width="187" height="66" rx="8" fill="#fff" stroke="#b2cbdc"/>
+    <text x="49" y="115" fill="#244766">raw.customers</text>
+    <rect x="33" y="227" width="187" height="66" rx="8" fill="#fff" stroke="#b2cbdc"/>
+    <text x="49" y="265" fill="#244766">raw.orders</text>
+    <rect x="300" y="152" width="205" height="66" rx="8" fill="#244766"/>
+    <text x="316" y="178" fill="#dcebf5">staging.</text><text x="316" y="200" fill="#fff">customer_orders</text>
+    <rect x="576" y="77" width="190" height="66" rx="8" fill="#b6532c"/>
+    <text x="592" y="103" fill="#fff">mart.</text><text x="592" y="125" fill="#fff">customer_summary</text>
+    <rect x="300" y="259" width="325" height="106" rx="8" fill="#fff" stroke="#d6a184"/>
+    <text x="318" y="289" fill="#b6532c">transform.sql : 12–24</text>
+    <text x="318" y="317" fill="#244766">CREATE TABLE ... AS SELECT</text>
+    <text x="318" y="343" fill="#46647a" font-size="13">Original statement · Parser evidence</text>
+  </g>
+</svg>

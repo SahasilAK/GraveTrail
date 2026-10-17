@@ -3,9 +3,18 @@
 Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries; parser/security/testing guides state verified coverage and limitations.
 
 ## Subfolders
+- `getting-started/` — [getting-started/KNOWLEDGE.md](getting-started/KNOWLEDGE.md).
+- `user-guide/` — [user-guide/KNOWLEDGE.md](user-guide/KNOWLEDGE.md).
+- `integrations/` — [integrations/KNOWLEDGE.md](integrations/KNOWLEDGE.md).
+- `architecture/` — [architecture/KNOWLEDGE.md](architecture/KNOWLEDGE.md).
+- `deployment/` — [deployment/KNOWLEDGE.md](deployment/KNOWLEDGE.md).
+- `development/` — [development/KNOWLEDGE.md](development/KNOWLEDGE.md).
+- `troubleshooting/` — [troubleshooting/KNOWLEDGE.md](troubleshooting/KNOWLEDGE.md).
+- `assets/` — [assets/KNOWLEDGE.md](assets/KNOWLEDGE.md).
 - `prompts/` — [prompts/KNOWLEDGE.md](prompts/KNOWLEDGE.md).
 
 ## Files
+- `index.md` — Branded MkDocs landing page; section indexes organize canonical references without duplication. Only mkdocs.yml nav and named assets are published; REVIEW/prompts/plans/knowledge stay excluded.
 - `BUILD_AND_RELEASE.md` — Actual launcher/build options, native artifact contracts, Docker ownership/persistence, CI gates and dated tested/untested platform evidence.
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
 - `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.
@@ -37,7 +46,7 @@ Maintenance/deployment guidance: `connections.py` isolates session keys; broad c
 preview/apply guards, while older history/staging helpers remain separately recoverable.
 Shared parser cache/original blobs require explicit shared cleanup. Source/AI removal clears
 the dependent workspace graph; full runtime reset preserves backups/unrecognized files/schema.
-Backups restore only to a new home. Source/CLI and installed/frozen UI default homes differ;
+Backups restore only to a new home. Source and installed/frozen launcher default homes differ;
 pass explicit homes and respect one DuckDB owner. Platform/build evidence lives in status.
 
 - `CLI_MCP_CAPABILITIES.md` — Actual routes/tools for all46 IDs,36 implemented/10 policy-restricted, independent authority, source/artifact/retry/cleanup boundaries and acceptance links.

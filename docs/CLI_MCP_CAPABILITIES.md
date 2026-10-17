@@ -99,6 +99,6 @@ archives only into a new destination. Shared cache/orphan/application removal st
 MCP maintenance stays read-only. Reading settings/recoveries never triggers automatic cleanup.
 Runtime reset and schema removal remain separate operations.
 
-The checked-in [capability fixture](../tests/fixtures/parity_capabilities.json) is tested against
-actual Typer routes/help, MCP schemas and authorization. [Parity acceptance](../plans/PARITY_ACCEPTANCE.md)
+The checked-in [capability fixture](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/tests/fixtures/parity_capabilities.json) is tested against
+actual Typer routes/help, MCP schemas and authorization. [Parity acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md)
 records full tests, actual transports, running UI, both real ZIPs, live checks and open gates.

@@ -1,7 +1,7 @@
 # DataForge Setup and Deployment
 
 This is the main installation and operations reference. For recorded verification and
-remaining release gates, see [implementation status](../plans/IMPLEMENTATION_STATUS.md).
+remaining release gates, see [implementation status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md).
 
 ## 1. Introduction
 
@@ -230,7 +230,7 @@ Build subprocesses receive an allowlisted environment; source/package/image defi
 exclude runtime databases and common secret files. Inspect artifacts before distribution.
 
 Version comes from `pyproject.toml`. Keep `uv.lock` consistent when changing dependencies.
-The [release workflow](../.github/workflows/release.yml) supports matching `vVERSION` tags
+The [release workflow](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/.github/workflows/release.yml) supports matching `vVERSION` tags
 and manual dispatch, builds native artifacts on Windows/Linux/macOS runners, smoke-tests
 them, and uploads workflow artifacts. Its container job builds/tests the image and uploads
 metadata. It does not publish a GitHub Release or push an image. Observed remote execution
@@ -253,7 +253,7 @@ See [build and release](BUILD_AND_RELEASE.md) for reusable smoke scripts and CI 
 
 For supplied SQL/SAS projects, import either ZIP in `tests/sample_data/`, select only its
 script extension and search `pub.all_kpis` after analysis. Fixture expectations, parser
-limits and acceptance details are in [sample data knowledge](../tests/sample_data/KNOWLEDGE.md)
+limits and acceptance details are in [sample data knowledge](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/tests/sample_data/KNOWLEDGE.md)
 and [agent workflows](AGENT_WORKFLOWS.md).
 
 Host access is configured before startup. PowerShell example:
@@ -529,8 +529,8 @@ with Docker administrative privileges or data-home filesystem access remains tru
 
 ## 16. Development and contribution
 
-Read [AGENTS.md](../AGENTS.md), [the product specification](prompts/MASTER_PROMPT.md),
-[implementation status](../plans/IMPLEMENTATION_STATUS.md) and
+Read [AGENTS.md](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/AGENTS.md), the product specification when supplied in your checkout,
+[implementation status](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/IMPLEMENTATION_STATUS.md) and
 [implementation guide](IMPLEMENTATION_GUIDE.md) before changing behavior.
 
 | Path | Responsibility |
@@ -596,9 +596,9 @@ credentials remain available until the launching environment/process is changed.
 **Can I build every platform on Windows?** Executables are host-platform builds. Use
 appropriate Windows/Linux/macOS runners and test each native artifact before distribution.
 
-**What is the license?** The repository includes the [Apache License 2.0](../LICENSE).
+**What is the license?** The repository includes the [Apache License 2.0](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/LICENSE).
 Review dependency licenses when redistributing a bundled application.
 
 ## CLI and MCP UI coverage
 
-The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `dataforge capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source acceptance is recorded in [parity acceptance](../plans/PARITY_ACCEPTANCE.md).
+The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `dataforge capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source acceptance is recorded in [parity acceptance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/plans/PARITY_ACCEPTANCE.md).

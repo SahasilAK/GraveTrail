@@ -1,186 +1,155 @@
-# DataForge engineering hub
+<p align="center">
+  <img src="docs/assets/images/banner.svg" alt="DataForge engineering hub — Trace the path. Keep the proof." width="960">
+</p>
 
-A local-first Streamlit workspace for evidence-backed SQL/SAS lineage, direct column
-usage and engineering investigation. Import code, build a persistent dependency model,
-trace its source statements and export an interactive graph that works offline.
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%2B-244766" alt="Python 3.11 or newer"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-b6532c" alt="Apache License 2.0"></a>
+  <a href="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/tests.yml"><img src="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/tests.yml/badge.svg" alt="Application tests"></a>
+  <a href="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/docs.yml"><img src="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/docs.yml/badge.svg" alt="Documentation build and Pages deployment"></a>
+</p>
 
-## Installation & Setup
+<p align="center">
+  <a href="docs/index.md"><strong>Documentation hub</strong></a> ·
+  <a href="docs/getting-started/quick-start.md">Quick start</a> ·
+  <a href="docs/CLI_GUIDE.md">CLI</a> ·
+  <a href="docs/MCP_INTEGRATION.md">MCP</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-Read the [Complete Setup & Deployment Guide](docs/SETUP_AND_DEPLOYMENT.md) for Python,
-Docker, standalone executables, runtime credentials, backups, cleanup and troubleshooting.
+# Your scripts have a story. Follow it.
 
-| Method | Use |
+**DataForge engineering hub** is a local-first workspace for understanding SQL and SAS
+projects. Import a folder or ZIP, build table lineage, and follow every relationship back
+to the exact source statement. Find direct column references, investigate downstream
+impact, and share an interactive graph that works offline.
+
+Built for data engineers, analysts, architects, and developers working through unfamiliar
+pipelines, migrations, and change reviews. Deterministic analysis needs **no LLM, cloud
+account, or paid service**. Imported code is never executed.
+
+## From scattered scripts to source evidence
+
+| Investigate | What you get |
 | --- | --- |
-| Source + uv | Recommended for engineers working with this repository |
-| Python wheel | Install the packaged UI, CLI and MCP in a Python environment |
-| Docker | Run with a persistent volume and restricted host port |
-| Standalone bundle | Build a native directory bundle for the target OS; availability and verification vary by platform |
+| [Build lineage](docs/USER_GUIDE.md) | SQL AST parsing, dedicated SAS rules, CSV source metadata, and a persistent file inventory. |
+| [Explore dependencies](docs/user-guide/index.md) | Upstream/downstream trees, focused interactive graphs, cycle detection, and temporary-step collapse with provenance. |
+| [Inspect direct column usage](docs/USER_GUIDE.md) | References scoped to the selected source, including usage type, file, and exact lines. Unknown wildcards stay unknown. |
+| [Keep the evidence](docs/DATA_MODEL.md) | Original file bytes, statement ranges, extraction methods, and versioned analysis history. |
+| [Connect tools and agents](docs/integrations/index.md) | CLI and MCP queries over stored analysis, bounded responses, explicit permissions, and managed exports. |
+| [Add optional AI assistance](docs/LLM_INTEGRATION.md) | Configurable provider profiles and task routing; grounded output validation and explicit inferred-result merges. |
+| [Operate locally](docs/DATA_MANAGEMENT.md) | Independent workspaces, previewed cleanup, mandatory backups for general cleanup, and restore into a new data home. |
 
-### Quick start
+![Illustrative lineage: two source tables flow through staging to a reporting table, with source evidence attached](docs/assets/diagrams/lineage.svg)
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/). From the repository root:
+*A workflow illustration, not an application screenshot. Actual results come from your imported files.*
 
-```powershell
+<details>
+<summary><strong>See the application with the included SQL project</strong></summary>
+
+![Actual DataForge lineage explorer tracing pub.all_kpis upstream at depth 30](docs/assets/images/lineage-explorer.png)
+
+Captured from an isolated local workspace using the supplied SQL fixture. See the
+[user guide](docs/user-guide/index.md) for the dashboard and source-evidence viewer.
+
+</details>
+
+## Start in minutes
+
+Install [Git](https://git-scm.com/downloads), Python 3.11+, and
+[uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
+
+```sh
+git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
+cd dataforge-engineering-hub
 uv sync --locked --extra dev
 uv run dataforge-ui
 ```
 
-Open [DataForge](http://127.0.0.1:8501). The server binds to loopback. No paid service or
-LLM is required. Without uv: create/activate a Python virtual environment, run
-`python -m pip install -e ".[dev]"`, then `dataforge-ui`.
-Use `dataforge-ui --home PATH --port 8502` to choose storage/port. Installed and frozen
-UI builds default to a per-user data directory; the source launcher defaults to `.dataforge/`.
-Pass the same explicit `--home` to UI, CLI and MCP when working with one data home.
+Open [http://127.0.0.1:8501](http://127.0.0.1:8501). From the checkout, data is stored
+in ignored `.dataforge/`. Choose a location with `uv run dataforge-ui --home PATH`.
+Use the same explicit `--home` when switching between UI, CLI, and MCP; **one process
+owns each DuckDB home**. Installed launchers use the platform user-data directory.
 
-## First workflow
+Prefer pip? In a Python virtual environment, run `python -m pip install -e ".[dev]"`,
+then `dataforge-ui`. See the [installation guide](docs/SETUP_AND_DEPLOYMENT.md) for
+Windows, Linux, macOS, credentials, and troubleshooting.
 
-1. Open **Lineage builder**. Upload a ZIP, select a nested folder, or use **Host directory**.
-2. The default allowed host root is `tests/fixtures`; its `scenario` directory contains
-   real deterministic sample files when running from a checkout. Choose SQL/SAS/CSV extensions and import.
-3. Inspect the inventory, then select **Analyze all files**.
-4. In **Lineage explorer**, search `mart.customer_summary` and choose the exact match.
-   Expand upstream/downstream trees, collapse WORK stages, and click a graph edge for evidence.
-5. Inspect direct references in **Column usage**. Download CSV/JSON/HTML reports,
-   original source or an offline lineage graph.
+<details>
+<summary><strong>Docker or a standalone build</strong></summary>
 
-The sample yields nine assets and seven dependencies, including a deliberate cycle and an
-unresolved macro diagnostic. Results are parsed from the files; no sample graph is hardcoded.
-For larger acceptance projects, use the SQL/SAS ZIPs in `tests/sample_data/`, choose only
-their script extension and trace `pub.all_kpis`; see [fixture expectations and limits](tests/sample_data/KNOWLEDGE.md).
-
-## Agent and automation access
-
-The human-first UI now includes **Settings → Agent & Automation Access** with
-workspace permissions, response limits, local connection testing and copyable
-Codex/Claude Code configurations. Use `uv run dataforge --help` for the standalone
-CLI or `uv run dataforge --home ./automation-data mcp` for local MCP stdio.
-Both reuse the same deterministic stored analysis and default to compact summaries
-and read-only access. Imports/builds require explicit `--allow-write` and imports
-also require allowed roots. Authenticated Streamable HTTP is available for private
-clients; externally bound services require a TLS reverse proxy.
-
-Read [CLI guide](docs/CLI_GUIDE.md), [MCP setup](docs/MCP_INTEGRATION.md),
-[agent workflows](docs/AGENT_WORKFLOWS.md) and [token measurements](docs/TOKEN_OPTIMIZATION.md).
-DuckDB allows one owning process per runtime home; stop another owner or use a
-separate home. The supplied SQL/SAS ZIPs in `tests/sample_data` are described in the
-workflow guide. Both now match all 128 expected logical dependencies, including SAS
-PROC SQL `FORMAT=` expressions and temporary WORK collapsing.
-
-## Features
-
-- Isolated persistent workspaces, import history, complete source inventory and original bytes.
-- Safe ZIP/folder/allowed-root imports with hashing, encoding diagnostics and resource budgets.
-- SQL AST operations, CTEs/subqueries, scoped aliases and direct columns; dedicated SAS DATA,
-  PROC SQL and common procedure rules; streaming CSV metadata.
-- Incremental parser cache, atomic analysis replacement, run comparisons and versioned evidence.
-- Bounded upstream/downstream graphs and trees, cycles, temporary contraction with provenance.
-- Code search, data dictionary, impact reports and standalone interactive HTML graph export.
-- Optional provider profiles, model discovery/task routing, privacy gates and grounded AI
-  validation. Unsupported or invented claims are quarantined; merged claims remain inferred.
-- Native light/dark themes, source search, line ranges, copy and exact original downloads.
-- Previewed source/lineage/AI/history cleanup, workspace reset/deletion, shared cache/blob
-  maintenance, integrity checks and backups with restore into a new data home.
-- Session-only masked provider credentials, packaged UI/CLI/MCP launchers and a common
-  Python/Docker/native build interface with artifact manifests and checksums.
-
-Supported input formats are **SQL (`.sql`), SAS (`.sas`) and CSV (`.csv`)**. ZIP archives
-and browser folders preserve nested paths. CSV supplies source metadata, not executable code.
-
-## Local configuration
-
-```powershell
-$env:DATAFORGE_HOME = 'D:\DataForge\workspaces'
-$env:DATAFORGE_ALLOWED_ROOTS = 'D:\Engineering\jobs;D:\Engineering\exports'
-$env:DATAFORGE_STORAGE_LOCATIONS = 'D:\DataForge\archive;D:\DataForge\sandbox'
-uv run dataforge-ui
-```
-
-Settings → Storage and workspaces can open one of the startup-allowed storage locations
-for the current browser session. This preserves each directory independently. At most eight
-locations including DATAFORGE_HOME are accepted; additional locations must be absolute paths.
-On Linux/macOS, separate allowed roots and storage locations with `:`. Runtime defaults to `.dataforge/` and is
-excluded from Git. Settings → LLM providers stores credential **environment variable names**,
-never secret values. Enter masked session-only credentials or supply the named startup
-variable. New references default to `DATAFORGE_*`; existing explicitly named variables
-remain read-only. Clearing runtime credentials removes session entries; startup environment
-values remain available. Configure an API endpoint/model or a loopback Ollama/LM Studio instance.
-Remote requests are disabled by default. See [LLM configuration](docs/LLM_INTEGRATION.md).
-
-## Verify
-
-```powershell
-uv run pytest -q
-uv run ruff check .
-uv run python scripts/benchmark.py --files 500 --output plans/BENCHMARK_RESULTS.json
-```
-
-Tests cover secure import, persistence, parser accuracy, graph/column scopes, UI workflows,
-offline exports, AI protocols, malicious output, rollback and changed/concurrent imports.
-See [test coverage](docs/TESTING.md), [recorded performance](docs/PERFORMANCE.md) and
-[implementation status](plans/IMPLEMENTATION_STATUS.md).
-
-## Structure
-
-```text
-app.py                  Streamlit entry point
-src/dataforge/          domain, storage, ingestion, parsers, services, graph, exports, LLM
-ui/                     shared components and feature pages
-prompts/                versioned task prompts, examples and JSON schema
-tests/                  unit/integration/AppTest tests and deterministic scenario files
-scripts/                workload/provider/agent verification and distribution smoke tools
-docs/                   architecture, usage, parser coverage, security and extension guides
-plans/                  plan, decisions, acceptance criteria, measurements and resume status
-```
-
-Read [User guide](docs/USER_GUIDE.md), [Architecture](docs/ARCHITECTURE.md) and
-[Engineering guide](docs/IMPLEMENTATION_GUIDE.md). Future agents start with `AGENTS.md`.
-
-## Coverage boundaries
-
-This is static dependency analysis, not database/SAS execution. Dynamic SQL, runtime macros,
-stored procedures and SAS name literals beyond supported rules are diagnosed rather than
-guessed. Direct SAS variable usage is conservative; it is not a full SAS language compiler.
-Unknown wildcards remain unknown. Supplied job/session IDs separate temporary assets through Settings; runtime session discovery
-and repeated-write ordering require execution metadata. See [SQL](docs/SQL_PARSING.md) and
-[SAS](docs/SAS_PARSING.md) coverage. Live provider verification requires an available endpoint;
-the automated provider tests use protocol mocks. This local tool has no multi-user auth layer.
-
-## Container
+Build the container from this repository and retain data in a named volume:
 
 ```sh
 docker build -t dataforge:local .
 docker run --rm -p 127.0.0.1:8501:8501 -v dataforge-data:/data dataforge:local
 ```
 
-Docker execution is optional and must be verified on your Docker host. Mount allowed host
-input directories read-only and configure `DATAFORGE_ALLOWED_ROOTS` inside the container.
+Standalone directory bundles can be built for the host OS:
 
-## Security and privacy
+```sh
+uv run dataforge-build --target executable
+```
 
-Imported code is never executed. Host imports require allowed roots; archives and query
-responses have resource bounds. The UI is intended for one trusted local user and binds
-to loopback. It has no multi-user authentication layer. Remote LLM requests require explicit
-privacy permission; source originals, exports and backups may contain sensitive information.
-Protect the data home and inject credentials at runtime. See [security](docs/SECURITY.md).
+No public binary or registry image is assumed. Native builds require target-platform
+verification; see [builds and release limits](docs/BUILD_AND_RELEASE.md).
 
-Cleanup always starts with a preview. Shared cache/orphan cleanup affects the home;
-workspace deletion affects its selected workspace. Back up before destructive cleanup or
-upgrades. Logical row deletion/checkpointing does not promise physical disk shrinkage.
+</details>
 
-## Documentation and contribution
+## Try a real project
 
-- [Setup and deployment](docs/SETUP_AND_DEPLOYMENT.md): installation, builds, credentials, operations and recovery.
-- [User guide](docs/USER_GUIDE.md): UI workflow and evidence inspection.
-- [CLI guide](docs/CLI_GUIDE.md) and [MCP integration](docs/MCP_INTEGRATION.md): agent access, policy and examples.
-- [Complete CLI/MCP capability matrix](docs/CLI_MCP_CAPABILITIES.md): all 46 UI IDs, actual routes and explicit restrictions.
-- [Architecture](docs/ARCHITECTURE.md) and [implementation guide](docs/IMPLEMENTATION_GUIDE.md): module boundaries and development.
-- [Testing](docs/TESTING.md) and [implementation status](plans/IMPLEMENTATION_STATUS.md): evidence and remaining gates.
+1. Open **Lineage builder** and upload either project ZIP from [`tests/sample_data/`](tests/sample_data/).
+2. Select **only `.sql`** for the SQL ZIP or **only `.sas`** for the SAS ZIP, then import.
+3. Select **Analyze all files**. No provider configuration is needed.
+4. In **Lineage explorer**, search `pub.all_kpis`, select the exact asset, and explore
+   upstream with depth **30**. Trace seven ETL layers back to all **16 source tables**.
+5. Select a graph edge to inspect source evidence. Explore **Column usage** or download
+   a CSV/JSON report, original source bundle, or offline interactive HTML graph.
 
-Contributors should read [AGENTS.md](AGENTS.md), preserve evidence and unresolved diagnostics,
-run pytest/Ruff plus the affected running UI workflows, and update status/knowledge with
-each tested coherent feature group. Keep runtime data and credentials out of commits.
+The fixture expectations are 85 persistent tables and 128 logical lineage edges; SAS
+also includes 16 temporary WORK datasets. See the [walkthrough](docs/getting-started/quick-start.md)
+and [fixture verification limits](tests/sample_data/KNOWLEDGE.md).
 
-## License
+## Find your guide
 
-DataForge is distributed under the [Apache License 2.0](LICENSE). Bundled dependencies
-have their own licenses; review them when redistributing an executable or container.
+| Start here | Go deeper |
+| --- | --- |
+| [Getting started](docs/getting-started/index.md) | [Installation & deployment](docs/SETUP_AND_DEPLOYMENT.md) · [Configuration](docs/getting-started/configuration.md) |
+| [User guide](docs/user-guide/index.md) | [UI reference](docs/USER_GUIDE.md) · [Cleanup & recovery](docs/DATA_MANAGEMENT.md) |
+| [Integrations](docs/integrations/index.md) | [CLI](docs/CLI_GUIDE.md) · [MCP](docs/MCP_INTEGRATION.md) · [Capability matrix](docs/CLI_MCP_CAPABILITIES.md) · [LLM providers](docs/LLM_INTEGRATION.md) |
+| [Architecture](docs/architecture/overview.md) | [Lineage engine](docs/LINEAGE_ENGINE.md) · [SQL](docs/SQL_PARSING.md) · [SAS](docs/SAS_PARSING.md) · [Security](docs/SECURITY.md) |
+| [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Implementation status](plans/IMPLEMENTATION_STATUS.md) |
+| [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
+
+The hub also builds as a searchable documentation website with light/dark mode.
+Follow the [Pages activation guide](docs/deployment/github-pages.md) after merging the
+workflow; it explains how to find the published URL. GitHub Pages hosts the documentation;
+run the Streamlit application locally or on your own host.
+
+## Know the boundaries
+
+This is **static analysis**, not a database or SAS runtime. Dynamic SQL, runtime macros,
+ambiguous names, and unsupported syntax produce diagnostics rather than guessed edges.
+Direct column usage is separate from transitive column lineage. See the parser coverage guides.
+
+The UI is intended for one trusted local user and has no multi-user authentication layer.
+Remote AI requests require privacy permission. Supply secrets through masked session
+credentials or named read-only launch variables; never commit them. Exports and backups
+can contain source code. [Read the security guide](docs/SECURITY.md).
+
+## Build with us
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a focused improvement or
+[report a reproducible issue](https://github.com/SahasilAK/dataforge-engineering-hub/issues/new/choose).
+For security concerns, use [SECURITY.md](SECURITY.md). Development checks:
+
+```sh
+uv run pytest -q
+uv run ruff check .
+```
+
+DataForge uses [Streamlit](https://streamlit.io/), [SQLGlot](https://github.com/tobymao/sqlglot),
+[NetworkX](https://networkx.org/), and [DuckDB](https://duckdb.org/). Documentation is built
+with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
+
+Distributed under the [Apache License 2.0](LICENSE). Dependencies retain their own licenses.
