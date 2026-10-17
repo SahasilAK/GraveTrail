@@ -24,6 +24,26 @@ If a credential has already been exposed, revoke or rotate it with its provider.
 Removing a key from a message or a saved profile does not revoke the credential or
 remove existing copies of imported originals and backups.
 
+## Automated checks and repository settings
+
+The `security` workflow scans reachable Git history and the current tracked tree,
+including nested ZIP fixtures, with checksum-pinned Gitleaks. Only exact dummy
+redaction-test credentials in `tests/test_connections.py` are exempted. Findings
+are redacted in CI logs. It also audits all locked dependency groups and extras
+with pip-audit on Windows/Linux and Python 3.11/3.12. Both scans run on pushes,
+pull requests, weekly schedules and manual dispatch; findings fail the job.
+Scheduled runs use the default branch, so they begin after the workflow is merged.
+No project code or imported SQL/SAS is executed by these scan jobs.
+
+GitHub settings are separate from workflow files. Dependabot alerts were verified
+enabled with no open alerts on 2026-10-17. While the repository was private, GitHub
+reported secret scanning unavailable and returned 404 for private vulnerability
+reporting. After making the repository public, an administrator should enable
+private vulnerability reporting and verify secret scanning and push protection
+under **Settings → Advanced Security**. These checks do not change visibility or
+activate paid security products. This dated status is not a continuing assurance
+that no alerts exist.
+
 ## Scope and updates
 
 Reports about source ingestion, path/resource boundaries, evidence exports, credentials,

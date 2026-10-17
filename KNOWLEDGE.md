@@ -19,6 +19,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 ## Files
 - `.dockerignore` — Exclude runtime data, environments and caches from Docker build context.
 - `.gitattributes` — Repository text normalization policy.
+- `.gitleaks.toml` — Extend default secret detectors; only exact dummy redaction-test credentials in tests/test_connections.py are allowlisted, requiring both path and secret matches.
 - `.gitignore` — Source-control exclusions, including local runtime. Preserve separate preexisting user edits.
 - `.kbignore` — Knowledge scan exclusions; this scanner uses bare-name/glob patterns rather than trailing-slash directory patterns.
 - `AGENTS.md` — Repository conventions, authority, module navigation, verification commands, current OmniRoute auto/best-reasoning route and per-feature commit policy.

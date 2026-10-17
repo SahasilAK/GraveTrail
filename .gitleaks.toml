@@ -1,0 +1,14 @@
+title = "DataForge secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact dummy credentials used to test runtime redaction, including their history"
+condition = "AND"
+paths = ['''(?:^|[/!])tests/test_connections\.py$''']
+regexTarget = "secret"
+regexes = ['''^dummy-(?:environment-)?sensitive-123$''']
