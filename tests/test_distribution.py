@@ -72,7 +72,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
         (tmp_path / folder).mkdir(parents=True, exist_ok=True)
     (tmp_path / "scripts/build").mkdir(parents=True)
     shutil.copyfile(root / "scripts/build/hatch_assets.py", tmp_path / "scripts/build/hatch_assets.py")
-    for name in ('frozen_entry.py', 'build_executable.py', 'smoke.py', 'smoke_docker.py', 'KNOWLEDGE.md'):
+    for name in ('frozen_entry.py', 'build_executable.py', 'smoke.py', 'smoke_docker.py'):
         shutil.copyfile(root / 'scripts/build' / name, tmp_path / 'scripts/build' / name)
     (tmp_path / "src/dataforge/__init__.py").write_text("")
     (tmp_path / "ui/__init__.py").write_text("")
@@ -100,6 +100,10 @@ def test_source_distribution_includes_release_toolkit_and_compose(tmp_path):
                    check=True, capture_output=True, text=True, timeout=60)
     with tarfile.open(next(tmp_path.glob('*.tar.gz'))) as archive:
         names = archive.getnames()
+        for name in names:
+            relative = Path(name).parts[1:]
+            assert not any(part in {"plans", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
+                           for part in relative), name
         for expected in ('compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
                          'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py'):
             assert any(name.endswith('/' + expected) for name in names), expected

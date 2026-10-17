@@ -1,8 +1,0 @@
-.dataforge
-.venv-clean
-.knowledge-base
-.ruff_cache
-dist
-uv.lock
-*.egg-info
-site

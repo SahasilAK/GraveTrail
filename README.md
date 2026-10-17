@@ -108,7 +108,7 @@ verification; see [builds and release limits](docs/BUILD_AND_RELEASE.md).
 
 The fixture expectations are 85 persistent tables and 128 logical lineage edges; SAS
 also includes 16 temporary WORK datasets. See the [walkthrough](docs/getting-started/quick-start.md)
-and [fixture verification limits](tests/sample_data/KNOWLEDGE.md).
+and [fixture verification limits](docs/TESTING.md).
 
 ## Find your guide
 
@@ -118,7 +118,7 @@ and [fixture verification limits](tests/sample_data/KNOWLEDGE.md).
 | [User guide](docs/user-guide/index.md) | [UI reference](docs/USER_GUIDE.md) · [Cleanup & recovery](docs/DATA_MANAGEMENT.md) |
 | [Integrations](docs/integrations/index.md) | [CLI](docs/CLI_GUIDE.md) · [MCP](docs/MCP_INTEGRATION.md) · [Capability matrix](docs/CLI_MCP_CAPABILITIES.md) · [LLM providers](docs/LLM_INTEGRATION.md) |
 | [Architecture](docs/architecture/overview.md) | [Lineage engine](docs/LINEAGE_ENGINE.md) · [SQL](docs/SQL_PARSING.md) · [SAS](docs/SAS_PARSING.md) · [Security](docs/SECURITY.md) |
-| [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Implementation status](plans/IMPLEMENTATION_STATUS.md) |
+| [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Build verification](docs/BUILD_AND_RELEASE.md) |
 | [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
 
 The hub also builds as a searchable documentation website with light/dark mode.

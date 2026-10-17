@@ -188,3 +188,9 @@ AGENTS.md
 .dataforge/
 .venv-clean/
 .knowledge-base/
+
+# Local Codex instructions, context maps and implementation records
+.codex/
+.kbignore
+KNOWLEDGE.md
+/plans/
