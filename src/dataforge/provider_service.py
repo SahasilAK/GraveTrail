@@ -79,6 +79,16 @@ def authorize_provider(store, policy, workspace, profile):
 
 
 class ProviderOperations:
+    def _runtime_manager(self, w, profile_id, profile):
+        key = (w, profile_id)
+        manager = self.runtime_connections.get(key)
+        if manager is not None and self.runtime_profiles.get(key) != profile.model_dump_json():
+            manager.clear()
+            self.runtime_connections.pop(key, None)
+            self.runtime_profiles.pop(key, None)
+            return None
+        return manager
+
     def _public_profile(self, profile):
         data = profile.model_dump()
         if data['key_env'] not in self.policy.allowed_credential_refs:
@@ -107,6 +117,7 @@ class ProviderOperations:
             raise AgentError('conflict', 'Remove routing references before removing this profile')
         self.store.execute('DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [w, profile_id])
         manager = self.runtime_connections.pop((w, profile_id), None)
+        self.runtime_profiles.pop((w, profile_id), None)
         if manager:
             manager.clear()
         return {'removed': profile_id, 'settings_revision': revision(self.store, w)}
@@ -120,9 +131,10 @@ class ProviderOperations:
 
     def _runtime_status(self, w, opts, profile_id):
         profile = get_profile(self.store, w, profile_id)
+        manager = self._runtime_manager(w, profile_id, profile)
         approved = not profile.key_env or profile.key_env in self.policy.allowed_credential_refs
         return {'profile_id': profile_id, 'reference': profile.key_env if approved else '',
-                'approved': approved, 'connected': (w, profile_id) in self.runtime_connections,
+                'approved': approved, 'connected': manager is not None,
                 'restart': 'Bindings last only for this owning process; UI sessions are separate'}
 
     def _runtime_connect(self, w, opts, profile_id):
@@ -137,11 +149,13 @@ class ProviderOperations:
         if secret:
             manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)
         self.runtime_connections[(w, profile_id)] = manager
+        self.runtime_profiles[(w, profile_id)] = profile.model_dump_json()
         return self._runtime_status(w, opts, profile_id)
 
     def _runtime_clear(self, w, opts, profile_id):
         get_profile(self.store, w, profile_id)
         manager = self.runtime_connections.pop((w, profile_id), None)
+        self.runtime_profiles.pop((w, profile_id), None)
         if manager:
             manager.clear()
         return self._runtime_status(w, opts, profile_id)
@@ -149,7 +163,7 @@ class ProviderOperations:
     def _provider_operation(self, w, opts, profile_id, operation):
         profile = get_profile(self.store, w, profile_id)
         authorize_provider(self.store, self.policy, w, profile)
-        manager = self.runtime_connections.get((w, profile_id), RuntimeConnections())
+        manager = self._runtime_manager(w, profile_id, profile) or RuntimeConnections()
         if manager.registered('DATAFORGE_RUNTIME_CREDENTIAL'):
             profile = profile.model_copy(update={'key_env': 'DATAFORGE_RUNTIME_CREDENTIAL'})
         if profile.key_env and not manager.resolve(profile.key_env):
@@ -167,7 +181,9 @@ class ProviderOperations:
                         raise ValueError('Connection-test contract not satisfied')
                     result = {'connected': True, 'usage': usage}
                 return manager.sanitize({**result, 'duration': round(time.perf_counter() - started, 3)})
-        except (ValueError, ProviderError):
+        except (ValueError, ProviderError) as exc:
+            if isinstance(exc, ValueError) and ('requests are busy' in str(exc) or 'maintenance is active' in str(exc)):
+                raise AgentError('busy', 'Provider request capacity is occupied; retry after the active operation finishes') from None
             raise AgentError('provider_failed', 'Provider operation failed; check approved endpoint, credential, privacy and response contract') from None
         finally:
             if (w, profile_id) not in self.runtime_connections:

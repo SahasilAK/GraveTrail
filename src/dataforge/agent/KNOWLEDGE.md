@@ -1,7 +1,7 @@
 # src/dataforge/agent/
 
-Shared deterministic automation layer. CLI and MCP delegate to the existing services,
-Store, Importer, LineageGraph and exports; no source execution or LLM requests.
+Shared authorized automation layer. CLI and MCP delegate to the existing services,
+Store, Importer, LineageGraph, exports and explicit opt-in grounded AI; imported source is never executed.
 
 ## Files
 - `__init__.py` — Package marker.
@@ -23,8 +23,16 @@ requires an explicit evidence request or detailed response. Polling avoids long 
 
 AgentService exposes cleanup inspect/preview and policy-gated confirmed apply; restricted
 workspace policies cannot create whole-home backups. MCP registers inspect/preview only,
-never a destructive cleanup tool. CLI applies saved preview tokens under existing write gates.
+never a destructive cleanup tool. CLI applies fresh saved previews with explicit confirmation and mandatory full-home backup.
 
-- `capabilities.py` — 46-ID UI parity inventory, paginated discovery with explicit pending and policy restrictions; launch config/network/application grants are independent.
+- `capabilities.py` — 46-ID UI parity inventory, paginated discovery with implemented equivalents and explicit policy restrictions; launch config/network/application grants are independent.
 
 - `cli_settings.py` — explicit settings/schema and workspace identity/configuration Typer adapters; no arbitrary key execution.
+
+- `cli_ai.py` — Explicit providers/routing/runtime-reference and AI/review/result Typer adapters; hidden credentials are per invocation only.
+- `cli_reports.py` — Stored reports, managed artifacts, permitted local history/staging/backup operations; bounded JSON preview loading.
+
+Long provider/request/merge operations avoid holding Store.lock across network or analysis waits;
+per-request admission is immediate. Storage APIs retain their own locks; merge locks only checking/commit.
+MCP cannot accept local-admin launches or register maintenance mutations. Capability routes are checked
+against actual help/schemas by the keyed parity fixture.

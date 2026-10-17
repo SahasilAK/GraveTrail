@@ -48,3 +48,15 @@ def test_local_history_archive_requires_fresh_preview_confirmation_and_backup(tm
     finally:
         service.close()
         store.close()
+
+
+def test_shared_general_cleanup_refuses_backup_opt_out(tmp_path):
+    from dataforge.cleanup import apply_cleanup, cleanup_plan
+    store = Store(tmp_path)
+    w = store.create_workspace('backed up')
+    try:
+        preview = cleanup_plan(store, w, 'lineage')
+        with pytest.raises(ValueError, match='backup'):
+            apply_cleanup(store, preview, 'backed up', backup_first=False)
+    finally:
+        store.close()

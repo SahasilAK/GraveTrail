@@ -50,7 +50,8 @@ def render(store, workspace):
         st.json(preview)
         for note in preview['notes']:
             st.caption(note)
-        backup_first = st.checkbox('Create a full-home backup before cleanup', value=True)
+        backup_first = st.checkbox('Create a full-home backup before cleanup', value=True, disabled=True,
+                                   help='A recoverable full-home backup is required for general cleanup.')
         confirmation = st.text_input('Type ' + phrase + ' to confirm', key='cleanup_confirmation')
         if st.button('Apply previewed cleanup', disabled=confirmation != phrase):
             try:

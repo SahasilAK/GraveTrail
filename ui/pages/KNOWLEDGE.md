@@ -21,3 +21,7 @@ controls CSV sample0–100. Explorer tree tabs span the full width above the ste
 
 Explorer source scope follows active dependency tabs until an explicit graph selection; source
 scope caption explains the override, and changing tabs resets graph selection.
+
+Settings parsing/resources/visualization/privacy/agent access use shared section validators; local
+human UI authority may widen preferences. Builder evidence validation and tools dictionary/code search
+reuse reporting.py. Provider forms reuse profile/routing validation; UI session secrets remain separate.

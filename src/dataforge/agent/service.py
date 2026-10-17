@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 from collections import Counter
+from contextlib import nullcontext
 from dataclasses import asdict
 
 from pydantic import ValidationError
@@ -44,6 +45,7 @@ MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', '
                      'database_inspect', 'backups_list'}
 APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
 WRITES |= {'theme_apply', 'logging_update'}
+LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge'}
 
 
 class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations):
@@ -51,6 +53,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
         self.runtime_connections = {}
+        self.runtime_profiles = {}
         self.provider_transport = None
         import os
         from pathlib import Path
@@ -63,16 +66,17 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         for manager in self.runtime_connections.values():
             manager.clear()
         self.runtime_connections.clear()
+        self.runtime_profiles.clear()
         self.jobs.close()
 
-    def _workspace(self, workspace, write=False, source=False):
+    def _workspace(self, workspace, write=False, source=False, administrator=False):
         if not self.policy.permits(workspace):
             raise AgentError("forbidden", "Workspace access is not authorized")
         matches = self.store.rows("SELECT workspace_id,name FROM workspaces WHERE workspace_id=?", [workspace])
         if not matches:
             raise AgentError("not_found", "Workspace does not exist; use its exact workspace_id")
         settings = AgentSettings.from_store(self.store, workspace)
-        if not settings.enabled or (write and (not self.policy.allow_write or not settings.allow_write)):
+        if not administrator and (not settings.enabled or (write and (not self.policy.allow_write or not settings.allow_write))):
             raise AgentError("forbidden", "Agent access or mutation is disabled for this launch/workspace")
         if source and not settings.allow_source:
             raise AgentError("forbidden", "Source retrieval is disabled for this workspace")
@@ -112,7 +116,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                 if settings.audit_reads:
                     self.audit(workspace_id, action, 'accepted')
                 return result
-            with self.store.lock:
+            with nullcontext() if action in LONG_ACTIONS else self.store.lock:
                 if action in {"workspaces", "create_workspace", 'config_import', 'database_inspect', 'backups_list'} or action in APPLICATION_ACTIONS or (action == 'capabilities' and not workspace_id):
                     settings = AgentSettings()
                     if action == 'runtime_info' and workspace_id:
@@ -120,8 +124,12 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                     if write and (not self.policy.allow_write or self.policy.workspaces is not None):
                         raise AgentError("forbidden", "Workspace creation requires unrestricted explicit write access")
                 else:
+                    administrator = self.policy.allow_admin and action in {'settings_get', 'settings_schema', 'settings_update'}
+                    if administrator:
+                        self.policy.require('admin')
                     settings = self._workspace(workspace_id, write=write,
-                        source=action in {"source", "result"} or (options or {}).get("detail_level") == "detailed")
+                        source=action in {"source", "result"} or (options or {}).get("detail_level") == "detailed",
+                        administrator=administrator)
                 values = {"detail_level": settings.default_detail, **(options or {})}
                 values["max_chars"] = min(values.get("max_chars", settings.max_chars), settings.max_chars)
                 opts = QueryOptions.model_validate(values)
@@ -454,9 +462,10 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
 
     def _graph(self, w, opts, keep):
         assets = self.store.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY asset_id LIMIT 20001", [w])
-        edges = self.store.rows("SELECT * FROM edges WHERE workspace_id=? ORDER BY edge_id LIMIT 100001", [w])
+        edges = self.store.rows("SELECT edge_id FROM edges WHERE workspace_id=? ORDER BY edge_id LIMIT 100001", [w])
         if len(assets) > 20000 or len(edges) > 100000:
             raise AgentError("resource_limit", "Graph exceeds 20,000 assets or 100,000 evidence edges")
+        edges = self.store.edges(w)
         graph = LineageGraph(assets, edges, self.store.setting(w, "min_lineage_confidence", 0.),
                              self.store.setting(w, "include_inferred", True))
         collapse = opts.collapse_temporary
@@ -619,13 +628,13 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             ids = arguments.get("file_ids")
             if ids is not None:
                 known = {f["file_id"] for f in self.store.files(w)}
-                if not ids or not set(ids) <= known or len(ids) > 10000:
+                if not ids or not set(ids) <= known or len(ids) > 100000:
                     raise AgentError("invalid_argument", "Selected files must belong to the workspace")
             result = analyze(self.store, w, ids, arguments.get("force", False), progress=progress)
         elif operation == "ingest":
             path = self.policy.import_path(arguments["path"])
             extensions = {"." + e.lstrip(".").lower() for e in arguments["extensions"]}
-            limits = Limits(max_files=min(10000, int(self.store.setting(w, "max_files", 10000))),
+            limits = Limits(max_files=min(100000, max(1, int(self.store.setting(w, "max_files", 10000)))),
                             max_file_bytes=min(100, int(self.store.setting(w, "max_file_mb", 20))) * 1024 * 1024)
             importer = Importer(self.store, w, self.policy.import_roots, limits)
             report_progress = (lambda report: progress(min(.99, report.discovered / limits.max_files), "Importing")) if progress else None

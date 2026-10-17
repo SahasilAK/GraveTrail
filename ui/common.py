@@ -94,7 +94,8 @@ def choose_asset(graph, key):
     if len(matches) > 1:
         st.caption(f"{len(matches)} matches. Choose the exact asset to avoid ambiguous names.")
     mapping = {a["asset_id"]: a for a in matches}
-    choice_key = f"asset_choice_{key}"
+    # Identical labels across workspaces must not reuse the browser's old option index.
+    choice_key = f"asset_choice_{key}_{st.session_state.get('workspace', '')}"
     if st.session_state.get(choice_key) not in mapping:
         st.session_state.pop(choice_key, None)
     return st.selectbox("Choose an exact asset", list(mapping), index=None,

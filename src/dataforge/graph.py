@@ -153,6 +153,8 @@ class LineageGraph:
                     boundary = "depth"
                     report["truncated"] = True
             if boundary is not None:
+                if boundary == 'cycle':
+                    report['truncated'] = True
                 steps = []
                 for source, target in zip(path, path[1:]):
                     edge = self.graph[source][target]

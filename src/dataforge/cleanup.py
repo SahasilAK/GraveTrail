@@ -191,7 +191,7 @@ def cleanup_plan(store, workspace='', category='lineage', file_ids=None, run_id=
         return plan
 
 
-def apply_cleanup(store, preview, confirmation, backup_first=False):
+def apply_cleanup(store, preview, confirmation, backup_first=True):
     workspace, category = preview['workspace_id'], preview['category']
     with maintenance_guard(store, '' if category in {'application', 'cache', 'orphans'} else workspace):
         expected = store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [workspace]) if workspace else []
@@ -201,6 +201,8 @@ def apply_cleanup(store, preview, confirmation, backup_first=False):
         current = cleanup_plan(store, workspace, category, preview.get('file_ids'), preview.get('run_id'))
         if current['token'] != preview.get('token'):
             raise ValueError('Storage changed; refresh the cleanup preview')
+        if not backup_first:
+            raise ValueError('General cleanup requires a recoverable full-home backup')
         backup_path = None
         if backup_first:
             from dataforge.database_maintenance import _backup

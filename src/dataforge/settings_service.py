@@ -125,7 +125,10 @@ def save_ui_settings(store, workspace, section, values):
 def read_json_file(path):
     if path.is_symlink() or path.stat().st_size > 1024 * 1024:
         raise AgentError('validation_failed', 'Expected a regular UTF-8 JSON file at most 1 MB')
-    data = json.loads(path.read_text(encoding='utf-8'))
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (ValueError, RecursionError):
+        raise AgentError('validation_failed', 'Expected bounded valid UTF-8 JSON') from None
     if not isinstance(data, dict):
         raise AgentError('validation_failed', 'Expected a JSON object')
     return data

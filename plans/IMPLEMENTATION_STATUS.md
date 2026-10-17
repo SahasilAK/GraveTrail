@@ -1,8 +1,28 @@
 # DataForge implementation status
 
-Updated: 2026-10-16. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
+Updated: 2026-10-17. Authority: docs/prompts/MASTER_PROMPT.md (1,597 lines).
 
 ## Current delivery state
+
+
+CLI/MCP UI parity source implementation is delivered across all nine slices. The actual
+46-ID catalog has36 implemented equivalents and10 explicit policy restrictions; no pending
+catalog entries remain. See [PARITY_ACCEPTANCE.md](PARITY_ACCEPTANCE.md) for verification and
+remaining gates, and [user capability matrix](../docs/CLI_MCP_CAPABILITIES.md) for actual routes.
+Final full pytest:320 passed,1 existing Windows symlink privilege skip in57.10s; Ruff clean.
+Both supplied ZIPs preserve exact originals,128 logical edges,seven layers/all16 sources,
+and86 warm cache hits; SAS adds16 WORK assets/144 physical edges. Actual stdio/authenticated
+HTTP and typed handlers pass. The bounded2026-10-17 OmniRoute discovery/connection/SQL/SAS
+validate/merge/refresh/reopen check passed with auto/best-reasoning and the existing named
+launch reference. This supersedes the earlier dated live-gate failures below.
+
+Open acceptance gates: standalone downloaded offline HTML interaction is blocked by the
+browser tool's file-URL policy; HTML assets/escaping/JavaScript and actual UI download pass.
+New wheel/frozen/Docker release artifacts were not distributed or rebuilt for parity; installed
+artifact/native Linux/macOS/hosted release gates remain separate. MASTER_PROMPT, .gitignore,
+source ZIPs and primary homes/settings were preserved. Destructive tests use disposable homes.
+
+The following delivery narrative and dated entries preserve earlier verification history.
 
 Maintenance/deployment enhancement is implemented and locally verified; plan:
 MAINTENANCE_DEPLOYMENT_PLAN.md. Delivered previewed dependency-aware cleanup, session-only
@@ -759,3 +779,45 @@ unverified; clean installation/packaging must be rerun after these new slices.
 - Slice7: MCP history/staging/backup metadata and shared category previews remain read-only; no apply/restore/checkpoint/backup tool. Local CLI history/staging actions require fresh saved preview, current typed workspace name, unrestricted ownership and full-home backup before removal. General CLI cleanup now backs up by default and refuses --no-backup. Backup listing/download is unrestricted application-authorized local metadata/file access only; output is exclusive.30 maintenance/cleanup/recovery tests pass,1 existing Windows privilege skip. Existing UI automatic preference key preserved and shared validator reused; read requests never trigger it. New artifacts are recognized by backup/cleanup fixed-path allowlists.
 
 - Slice8: extracted exact14 theme presets/atomic TOML logic into non-Streamlit theme_configuration; UI retains native loaded-state/reload behavior. CLI/MCP application logging/theme writes require independent unrestricted startup application/config/write grants. Runtime info omits home/location paths for scoped launches; live switching is unavailable. Agent setup returns actual tool schemas, credential-free Codex/Claude examples and in-process MCP handler self-test without lock recursion.11 focused runtime/theme/logging/agent UI tests pass. Primary theme untouched. Final running UI, full regression, fixture, transport and coverage gates follow.
+
+
+## CLI/MCP parity final review and proof — 2026-10-17
+
+- Slice9 replaces proposed routes with the explicit actual46-ID inventory and keyed fixture.
+  Coverage tests resolve every CLI route/help and MCP schema, compare all catalog metadata,
+  and deny every registered mutation/network handler under a read-only launch.36 capabilities
+  are implemented; P02,S07,S09,W03,C01–C05,M01 retain documented policy restrictions.
+- Independent reviewer findings reproduced and fixed: runtime credential invalidation after
+  profile edits; per-fallback credential audience; store lock/network admission and merge
+  refresh lock inversion; combined graph tree traversal; exact path evidence and cycle
+  completeness; configured >10k input discovery. Source job is pinned again during AI request
+  construction. New regressions pass; errors remain bounded and credentials never persist.
+- General shared cleanup now requires successful full-home backup, including UI, and refuses
+  opt-out. UI asset chooser keys include workspace identity to fix equal SQL/SAS display labels.
+  The existing MCP maintenance assertion now distinguishes permitted application-theme apply
+  from forbidden maintenance mutations. This follows slice8's explicit application grant policy.
+- Full final pytest320 passed/1 privilege skip57.10s, Ruff clean, root CLI help and all catalog
+  subgroup helps/MCP schemas verified. Real SDK stdio and authenticated HTTP tests include
+  missing/bad bearer token, readonly configuration denial and HTTP64KB admission/413.
+- Fresh isolated scripts/verify_parity.py acceptance compares CLI/service/actual MCP/shared UI
+  dictionary and original evidence after owner close/reopen for both fixture ZIPs. Every
+  original byte/hash matches the ZIP. Deterministic checks make zero external provider calls.
+- Running8513 UI: SQL/SAS pub.all_kpis selections, all16 source tables at depth30, original
+  source inspection/download, offline graph download, dictionary/code search, evidence
+  validation0 invalid records, profile save/routing/clear, bounded review/chunk preview and
+  settings/setup/mandatory backup controls. Workspace-key fix verified across equal labels.
+- Live isolated synthetic OmniRoute gate passed in33.8s: discovery915, connection, one SQL
+  and one SAS validated inferred claim, explicit merges, refresh and owner reopen. Endpoint
+  http://localhost:20128/v1,model auto/best-reasoning,existing OMNIROUTE_API_KEY reference;
+  no alternate models, raw credential arguments, process environment mutations or prompt repairs.
+- Open gate remains explicit: browser automation rejects standalone file:// HTML; no bypass
+  attempted. Downloaded original SQL verified938 exact bytes/SHA256 against its fixture.
+  Offline HTML assets/escaping/JS tests pass, but standalone browser interaction is unexecuted.
+- No release artifact rebuild/distribution, primary-home mutation or MASTER_PROMPT change.
+  Historical live failures/build results above remain evidence of their dated runs only.
+
+- Additional running8514 mock-only UI acceptance: diagnostic request validated exact original
+  quotes, explicit inferred merge refreshed lineage; lineage cleanup produced a mandatory
+  backup, removed only generated lineage, and UI restore created a new sibling home. Reopened
+  that destination independently: original97 bytes exact,3 evidence edges including1 inferred
+  claim and merged AI record preserved. No real provider was contacted by this UI harness.

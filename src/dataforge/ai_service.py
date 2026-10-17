@@ -31,17 +31,18 @@ def preview_ai_evidence(store, workspace, file_id, first, last, task):
 
 
 def merge_ai_result(store, workspace, record_id, refresh=True):
-    records = store.rows('SELECT outcome,details,task FROM llm_records WHERE workspace_id=? AND record_id=?', [workspace, record_id])
-    if not records:
-        raise AgentError('not_found', 'AI result no longer retained in this workspace')
-    row = records[0]
-    if row['task'] not in {'sql_lineage', 'sas_lineage', 'lineage_validation'}:
-        raise AgentError('validation_failed', 'Advisory results cannot be merged')
-    already = row['outcome'] == 'merged'
-    try:
-        count = len(json.loads(row['details'])['result']['claims']) if already else merge_claims(store, workspace, record_id)
-    except ValueError:
-        raise AgentError('source_changed', 'Result is unvalidated, source/job changed or evidence no longer resolves; request a new review') from None
+    with store.lock:
+        records = store.rows('SELECT outcome,details,task FROM llm_records WHERE workspace_id=? AND record_id=?', [workspace, record_id])
+        if not records:
+            raise AgentError('not_found', 'AI result no longer retained in this workspace')
+        row = records[0]
+        if row['task'] not in {'sql_lineage', 'sas_lineage', 'lineage_validation'}:
+            raise AgentError('validation_failed', 'Advisory results cannot be merged')
+        already = row['outcome'] == 'merged'
+        try:
+            count = len(json.loads(row['details'])['result']['claims']) if already else merge_claims(store, workspace, record_id)
+        except ValueError:
+            raise AgentError('source_changed', 'Result is unvalidated, source/job changed or evidence no longer resolves; request a new review') from None
     result = {'record_id': record_id, 'merged': count, 'already_merged': already, 'refresh_required': not refresh}
     if refresh:
         try:
@@ -86,10 +87,13 @@ class AIOperations:
         def authorize(pid, profile):
             self._workspace(w, write=True, source=True)
             authorize_provider(self.store, self.policy, w, profile)
-            credentials = self.runtime_connections.get((w, pid), manager)
+            credentials = self._runtime_manager(w, pid, profile)
             if profile.key_env:
-                reference = 'DATAFORGE_RUNTIME_CREDENTIAL' if credentials.registered('DATAFORGE_RUNTIME_CREDENTIAL') else profile.key_env
-                secret = credentials.resolve(reference)
+                if credentials is not None:
+                    reference = 'DATAFORGE_RUNTIME_CREDENTIAL' if credentials.registered('DATAFORGE_RUNTIME_CREDENTIAL') else profile.key_env
+                    secret = credentials.resolve(reference)
+                else:
+                    secret = manager.resolve(profile.key_env)
                 if not secret:
                     raise AgentError('credential_unavailable', 'Approved provider credential unavailable')
                 manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)
@@ -99,7 +103,7 @@ class AIOperations:
         try:
             with connection_scope(manager):
                 result = assist_task(self.store, w, file_id, first, last, task,
-                    transport=self.provider_transport, expected_hash=expected_hash, authorize=authorize)
+                    transport=self.provider_transport, expected_hash=expected_hash, authorize=authorize, expected_job=expected_job)
             # Detailed result retrieval is a separate explicit, source-gated read.
             return {k: v for k, v in result.items() if k != 'result'}
         finally:

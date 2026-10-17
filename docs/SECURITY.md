@@ -30,7 +30,7 @@ transactional restore. Recovery checks detect accidental modification, not a mal
 who controls the database or can recompute hashes. Recovery bodies can contain configuration,
 snapshots and diagnostics; protect them with the rest of the data home. Maintenance serializes
 with analysis and preserves referenced records. Separate general cleanup operations are destructive
-and do not have these recovery guarantees; optional whole-home backup is their recovery path.
+and do not have these recovery guarantees; a mandatory whole-home backup is their recovery path.
 
 HTML exports encode embedded JSON and render names/code through textContent. HTML tables escape
 content. Source text uses Streamlit code widgets. CSV exports escape formula-leading values.

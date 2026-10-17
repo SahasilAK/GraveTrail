@@ -44,6 +44,11 @@ def test_original_binary_artifact_roundtrip_authorization_and_paths(tmp_path):
             assert archive.read('folder/q.sql') == original
         paths = service.call('paths', w, asset='mart.x')
         assert paths['items'][0]['boundary'] == 'root'
+        evidence = paths['items'][0]['steps'][0]['evidence'][0]
+        assert evidence['source_hash'] == hashlib.sha256(original).hexdigest()
+        assert evidence['relative_path'] == 'folder/q.sql' and evidence['start_line'] == 1
+        tree = service.call('graph_view', w, asset='mart.x', direction='combined', view='tree')
+        assert len(tree['items']) == 2
         html = service.call('artifact_create', w, kind='graph', format='html', selection={'asset': 'mart.x'})
         html_bytes = base64.b64decode(service.call('artifact_read', w, artifact_id=html['artifact_id'])['data'])
         assert b'mountGraph' in html_bytes and b'<script src=' not in html_bytes
@@ -73,3 +78,18 @@ def test_cli_original_download_never_overwrites(tmp_path):
     assert destination.read_bytes() == original
     second = CliRunner().invoke(app, args)
     assert second.exit_code != 0 and destination.read_bytes() == original
+
+
+def test_cycle_paths_are_explicitly_incomplete(tmp_path):
+    store = Store(tmp_path)
+    w = store.create_workspace('cycle')
+    Importer(store, w).files([('a.sql', b'create table a as select id from b; create table b as select id from a;')], {'.sql'})
+    analyze(store, w)
+    service = AgentService(store)
+    try:
+        result = service.call('paths', w, asset='a')
+        assert any(p['boundary'] == 'cycle' for p in result['items'])
+        assert not result['complete'] and result['boundaries']
+    finally:
+        service.close()
+        store.close()

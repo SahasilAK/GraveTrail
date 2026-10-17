@@ -12,7 +12,6 @@ from dataforge.agent.contracts import AgentError, compact
 from dataforge.cleanup import checked_path
 from dataforge.configuration import VisualizationSettings
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, report_html, source_bundle
-from dataforge.graph import LineageGraph
 from dataforge.reporting import code_matches, data_dictionary
 from dataforge.services import column_report
 
@@ -70,14 +69,7 @@ def write_artifact(store, workspace, kind, format, data, complete, source_versio
 class ArtifactOperations:
     def _artifact_graph(self, w, opts, asset, direction):
         selected = self._asset(w, asset)['asset_id']
-        self._graph(w, opts, selected)  # Reuse graph resource admission before loading exact evidence.
-        graph = LineageGraph(self.store.assets(w), self.store.edges(w),
-            self.store.setting(w, 'min_lineage_confidence', 0.), self.store.setting(w, 'include_inferred', True))
-        collapse = opts.collapse_temporary
-        if collapse is None:
-            collapse = self.store.setting(w, 'collapse_temporary', False)
-        if collapse:
-            graph = graph.simplified(keep=[selected])
+        graph = self._graph(w, opts, selected)
         focused = graph.focus(selected, direction, opts.max_depth, opts.max_items)
         # Focus bounds must remain visible even when they stop exactly at a depth boundary.
         depth_boundary = any(set(graph.graph.predecessors(n) if direction == 'upstream' else
@@ -126,7 +118,7 @@ class ArtifactOperations:
             traversal = graph.graph.reverse(copy=False) if direction == 'upstream' else (graph.graph.to_undirected(as_view=True) if direction == 'combined' else graph.graph)
             levels = nx.single_source_shortest_path_length(traversal, selected, cutoff=opts.max_depth)
             rows = [{'asset_id': n, 'name': graph.nodes[n]['name'], 'level': level,
-                     'neighbors': sorted(traversal.successors(n)), 'boundary': 'depth' if level == opts.max_depth else ''}
+                     'neighbors': sorted(traversal.neighbors(n)), 'boundary': 'depth' if level == opts.max_depth else ''}
                     for n, level in sorted(levels.items(), key=lambda x: (x[1], x[0]))]
         return self._page(w, opts, ['graph_view', asset, direction, view, node_id, edge_id], rows,
             analysis_current=self._current(w), boundaries=['graph_limit_or_depth'] if graph.truncated else [],

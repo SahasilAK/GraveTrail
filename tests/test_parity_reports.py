@@ -50,3 +50,28 @@ def test_cli_search_matches_requires_source_permission(tmp_path):
     result = CliRunner().invoke(app, ['--home', str(tmp_path), '--json', 'source', 'search', 'select', '-w', w, '--include-matches'])
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)['items'][0]['line'] == 1
+
+
+def test_configured_headless_import_capacity_exceeds_legacy_ten_thousand(tmp_path):
+    import io
+    from zipfile import ZipFile
+
+    from dataforge.agent.contracts import AccessPolicy
+    stream = io.BytesIO()
+    with ZipFile(stream, 'w') as archive:
+        for i in range(10001):
+            archive.writestr(f'{i:05}.txt', 'ignored')
+        archive.writestr('accepted.sql', 'select id from raw.a;')
+    path = tmp_path / 'capacity.zip'
+    path.write_bytes(stream.getvalue())
+    store = Store(tmp_path / 'home')
+    w = store.create_workspace('capacity')
+    store.set_setting(w, 'max_files', 100000)
+    service = AgentService(store, AccessPolicy(allow_write=True, import_roots=(str(tmp_path),)))
+    try:
+        result = service.run_operation(w, 'ingest', {'path': str(path), 'extensions': ['sql']})
+        assert result['discovered'] == 10002 and result['skipped'] == 10001
+        assert result['accepted'] == 1 and len(store.files(w)) == 1
+    finally:
+        service.close()
+        store.close()

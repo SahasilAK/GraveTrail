@@ -158,6 +158,7 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 manager = RuntimeConnections()
                 manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True))
                 service.runtime_connections[(workspace_id, profile_id)] = manager
+                service.runtime_profiles[(workspace_id, profile_id)] = profile.model_dump_json()
             if background:
                 service._workspace(workspace_id, write=True)
                 QueryOptions.model_validate(config["options"])

@@ -56,6 +56,8 @@ def test_stdio_real_client_without_streamlit(tmp_path):
                 await session.initialize()
                 result = await session.call_tool("list_workspaces", {})
                 assert not result.isError and result.structuredContent["count"] == 0
+                capabilities = await session.call_tool('get_capabilities', {})
+                assert not capabilities.isError and capabilities.structuredContent['total'] == 46
     asyncio.run(check())
 
 
@@ -82,11 +84,19 @@ def test_http_requires_token_scope_and_secure_remote_configuration(tmp_path, mon
                     assert response.status_code == 401
                     assert "x" * 40 not in response.text
                 client.headers["Authorization"] = "Bearer " + os.environ["DATAFORGE_MCP_TOKEN"]
+                oversized = await client.post('/mcp', content=b' ' * 70000,
+                    headers={'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'})
+                assert oversized.status_code == 413
                 async with streamable_http_client("http://127.0.0.1:8765/mcp", http_client=client) as (read, write, _):
                     async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=10)) as session:
                         await session.initialize()
                         result = await session.call_tool("get_workspace_summary", {"workspace_id": w})
                         assert result.structuredContent["workspace_id"] == w and not result.isError
+                        settings = await session.call_tool('get_workspace_settings', {'workspace_id': w, 'section': 'resources'})
+                        assert not settings.isError and settings.structuredContent['values']['max_files'] == 10000
+                        denied = await session.call_tool('update_workspace_settings', {'workspace_id': w, 'section': 'resources',
+                            'values': {'max_files': 20}, 'expected_revision': settings.structuredContent['settings_revision']})
+                        assert denied.isError and denied.structuredContent['error']['code'] == 'forbidden'
     try:
         asyncio.run(check())
     finally:

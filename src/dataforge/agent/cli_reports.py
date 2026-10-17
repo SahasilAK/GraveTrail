@@ -98,6 +98,12 @@ def register(app, workspace_app, assets_app, lineage_app, source_app, exports_ap
 
 
 def register_maintenance(app, maintenance_app, invoke, fail):
+    def load_preview(ctx, path):
+        from dataforge.agent.contracts import AgentError
+        try:
+            return read_json_file(path)
+        except (OSError, ValueError, AgentError):
+            return fail(ctx, AgentError('validation_failed', 'Expected a saved bounded JSON maintenance preview'))
     history = typer.Typer(help='Local guarded history archive/recovery; metadata previews are read-only.')
     staging = typer.Typer(help='Local guarded stale staging cleanup/recovery; never automatic on CLI/MCP reads.')
     app.add_typer(history, name='history')
@@ -113,7 +119,7 @@ def register_maintenance(app, maintenance_app, invoke, fail):
 
     @history.command('archive')
     def archive(ctx: typer.Context, preview: Path, workspace: Workspace, confirm: str = ''):
-        invoke(ctx, 'history_archive', workspace, preview=read_json_file(preview), confirmation=confirm)
+        invoke(ctx, 'history_archive', workspace, preview=load_preview(ctx, preview), confirmation=confirm)
 
     @history.command('restore')
     def history_restore(ctx: typer.Context, archive_id: str, workspace: Workspace, confirm: str = ''):
@@ -126,7 +132,7 @@ def register_maintenance(app, maintenance_app, invoke, fail):
     @staging.command('clean')
     def clean(ctx: typer.Context, preview: Path, workspace: Workspace, confirm: str = '', name: list[str] = typer.Option(None), expired: bool = False):
         # --expired still consumes a saved24h preview and explicit confirmation.
-        payload = read_json_file(preview)
+        payload = load_preview(ctx, preview)
         if expired and payload.get('age_hours') != 24:
             from dataforge.agent.contracts import AgentError
             return fail(ctx, AgentError('validation_failed', '--expired requires a24h saved preview'))
