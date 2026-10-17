@@ -30,7 +30,7 @@ keyboard focus and reduced-motion support. Documentation chrome stays familiar.
   maintenance and repository metadata recommendations. Add contribution/security/templates.
 - [x] Verify strict build, internal links/fragments/assets, publication inventory,
   fresh application pytest/Ruff, actual UI and docs browser (desktop/mobile/search/theme).
-- [ ] Review final diff, update status/knowledge, commit, push and create/attach PR.
+- [x] Review final diff, update status/knowledge, commit, push and create/attach PR.
 
 ## Rulings
 
@@ -43,3 +43,5 @@ keyboard focus and reduced-motion support. Documentation chrome stays familiar.
   captured from a real isolated running instance, never fabricated.
 - Do not enable Pages or merge the PR on the user's behalf; deliver exact activation
   instructions after review. The expected URL is not a verified deployment.
+
+Delivery: PR [#3](https://github.com/SahasilAK/dataforge-engineering-hub/pull/3), targeting main. Pages activation stays a maintainer step after review.
