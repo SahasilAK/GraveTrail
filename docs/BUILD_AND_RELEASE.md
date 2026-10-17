@@ -146,13 +146,70 @@ rendered Streamlit WebSocket session. The Docker check also verifies non-root
 execution and persistence across independent container owners. This focused smoke
 does not replace full SQL/SAS fixture and interactive settings testing.
 
-`.github/workflows/release.yml` runs on `v*` tags or manual dispatch. Tag versions
-must match `pyproject.toml`. Native jobs on Windows, Linux and macOS run the suite,
-build and smoke the executable, install and smoke the wheel, verify checksums and
-upload release artifacts. A Linux job builds and checks the container. The workflow
-does not publish packages/images, create public GitHub releases or sign binaries.
-Artifacts are available from the successful Actions run. Maintainers can review
-them and publish through their normal release process.
+`.github/workflows/release.yml` runs on `v*` tags, manual dispatch, or as a reusable
+workflow. Tag versions must match `pyproject.toml`. Native jobs on Windows, Linux
+and macOS run the suite, build and smoke the executable, install and smoke the
+wheel, verify checksums and upload Actions artifacts. A Linux job builds and checks
+the container; the standalone publishing workflow skips that container job.
+Running **release artifacts** directly retains the build-only behavior.
+
+## Publish a standalone GitHub Release
+
+Merge `.github/workflows/publish-release.yml` into the repository's default branch
+before using it. It appears in **Actions → Publish standalone release → Run workflow**.
+Select the default branch, enter the exact committed project version (for example,
+`0.1.0`), and run it. Stable `X.Y.Z` versions are supported; do not prefix the input
+with `v`. If you are preparing a new version, update it first:
+
+```console
+uv version 0.2.0
+uv lock --check
+```
+
+Commit both `pyproject.toml` and `uv.lock`, review and merge them, then dispatch with
+`0.2.0`. The workflow does not make version-bump commits. Mismatched versions,
+non-default-branch runs and existing version tags fail before native builds start.
+
+The workflow reuses all three native builds and their real executable/wheel smoke
+checks. Publication waits for every native job, downloads their artifacts without
+merging platform directories, and verifies each original manifest, size and checksum.
+It requires one version-matching executable archive per OS. It publishes the three
+standalone archives plus a consolidated `manifest.json` and `SHA256SUMS`; Python
+packages remain available in Actions artifacts. The consolidated manifest's platform
+and Python fields describe the publishing runner; each archive filename identifies
+its target OS and architecture.
+
+Only after those checks does the publishing job create `vX.Y.Z` at the exact dispatch
+commit and publish **DataForge vX.Y.Z** under the repository's Releases tab. It uses
+only the built-in `GITHUB_TOKEN` with `contents: write` in that job. No personal token,
+provider key, additional account connection or signing certificate is required.
+Repository rules still apply: restrictions on tag creation or token write permissions
+can block publication. The workflow never overwrites an existing tag or release.
+If publication fails after creating the tag, inspect any draft release and uploaded
+assets before deliberately removing the failed draft/tag or selecting a new version;
+a rerun cannot silently replace them.
+
+Notes always include GitHub-generated changes, up to 100 commits since the previous
+reachable version tag, the exact source SHA, download/startup instructions and upgrade
+guidance. **Try Copilot highlights** defaults to enabled. A separate job uses the
+same short-lived token with `copilot-requests: write`, a pinned Copilot CLI, no tools,
+no built-in MCP servers, no repository instructions and a 90-second request timeout.
+Only bounded commit records are provided to the model. Its highlights are labeled
+AI-generated and supplement the original change records.
+
+Copilot can use the built-in token in personal repositories (billed to the owner's
+seat) and organization repositories (subject to organization policy/billing). It uses
+Copilot credits, with a soft one-credit response limit. Disable the checkbox to skip
+AI entirely. Missing entitlement, policy/auth failures, CLI installation errors,
+timeouts or unusable responses retain the normal notes and do not block publication.
+See [GitHub's Copilot Actions authentication guide](https://docs.github.com/en/copilot/concepts/agent-capabilities/agent-powered-workflows-and-operations/copilot-cli-in-github-actions)
+and [GitHub CLI release publishing](https://cli.github.com/manual/gh_release_create).
+
+The workflow does not publish to PyPI or a container registry, sign/notarize binaries,
+or build installers. GitHub-generated tags created with `GITHUB_TOKEN` do not start
+another tag-triggered Actions build. Native platform support and publication are
+established only when the hosted workflow actually passes; local configuration
+validation is not a hosted release test.
 
 The build approach follows the documented [uv Docker integration](https://docs.astral.sh/uv/guides/integration/docker/),
 [PyInstaller collection flags](https://pyinstaller.org/en/stable/usage.html), and
