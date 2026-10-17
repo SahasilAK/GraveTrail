@@ -442,8 +442,8 @@ dataforge --home /path/to/data --json workspace reset --workspace WORKSPACE_ID -
 `cleanup sources` supports repeatable `--file-id`; `cleanup history` supports `--run-id`.
 CLI workspace categories are sources, lineage, columns, ai, history, jobs, reset and
 workspace; shared cache/orphans/application reset are UI operations. Apply requires
-`--allow-write` plus workspace policy and the saved preview. Optional `--backup` creates
-a whole-home backup, so it also requires whole-home authorization.
+`--allow-write` plus workspace policy and the saved preview. A successful whole-home backup is mandatory (the default `--backup`); `--no-backup`
+is refused. This also requires whole-home authorization.
 
 The separate recoverable history/temporary cleanup controls archive eligible old records
 and stale application-created staging files before deletion. Their recovery journals are
@@ -598,3 +598,7 @@ appropriate Windows/Linux/macOS runners and test each native artifact before dis
 
 **What is the license?** The repository includes the [Apache License 2.0](../LICENSE).
 Review dependency licenses when redistributing a bundled application.
+
+## CLI and MCP UI coverage
+
+The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `dataforge capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source acceptance is recorded in [parity acceptance](../plans/PARITY_ACCEPTANCE.md).

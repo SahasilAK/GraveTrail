@@ -19,7 +19,7 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `EXTENDING_THE_APP.md` — Extending DataForge. Maintained documentation; consult implementation status for verification boundaries.
 - `IMPLEMENTATION_GUIDE.md` — Implementation guide. Maintained documentation; consult implementation status for verification boundaries.
 - `LINEAGE_ENGINE.md` — Lineage engine. Maintained documentation; consult implementation status for verification boundaries.
-- `LLM_INTEGRATION.md` — Provider protocols, privacy, grounding and auto/best-reasoning evidence: existing fenced SAS processing passes; intermittent gateway503 candidate exhaustion blocks complete live acceptance.
+- `LLM_INTEGRATION.md` — Provider protocols, privacy, grounding and auto/best-reasoning evidence: existing fenced SAS processing passes; 2026-10-17 bounded SQL/SAS merge-refresh-reopen passes, preserving earlier gateway failures as history.
 - `PERFORMANCE.md` — Performance. Maintained documentation; consult implementation status for verification boundaries.
 - `PROMPT_ENGINEERING.md` — Prompt engineering. Maintained documentation; consult implementation status for verification boundaries.
 - `REVIEW.md` — Implementation review, 2026-10-15. Maintained documentation; consult implementation status for verification boundaries.
@@ -39,3 +39,5 @@ Shared parser cache/original blobs require explicit shared cleanup. Source/AI re
 the dependent workspace graph; full runtime reset preserves backups/unrecognized files/schema.
 Backups restore only to a new home. Source/CLI and installed/frozen UI default homes differ;
 pass explicit homes and respect one DuckDB owner. Platform/build evidence lives in status.
+
+- `CLI_MCP_CAPABILITIES.md` — Actual routes/tools for all46 IDs,36 implemented/10 policy-restricted, independent authority, source/artifact/retry/cleanup boundaries and acceptance links.

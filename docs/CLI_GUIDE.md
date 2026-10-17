@@ -72,8 +72,8 @@ import, analysis and artifact creation; workspace settings may revoke it further
 `--allowed-workspace ID` narrows access and is repeatable. A scoped launch cannot
 create workspaces. `--allowed-root PATH` is repeatable; alternatively set
 `DATAFORGE_ALLOWED_ROOTS` with the OS path separator. No import roots are implicitly
-granted by the CLI. There is no arbitrary shell/SQL execution, provider configuration,
-secret discovery, destructive workspace deletion or LLM invocation command.
+granted by the CLI. No arbitrary shell/SQL execution or secret discovery is exposed.
+Provider configuration, AI requests and local cleanup require the independent grants below.
 
 Settings → Agent & Automation Access controls workspace access, write permission,
 source retrieval, default detail, response cap and optional read auditing. Mutation
@@ -112,7 +112,7 @@ assets or 100,000 evidence edges. Journals and exports cap at 1,000 each (export
 per workspace); archive completed local files when reached. No distributed worker,
 job cancellation or automatic job retry is introduced.
 
-Parity discovery: `dataforge capabilities` / `get_capabilities` enumerate all46 IDs with explicit pending/restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
+Parity discovery: `dataforge capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
 
 Workspace preferences: `settings schema -w ID [--section parsing]`, `settings get parsing -w ID`, `settings update parsing patch.json -w ID --expected-revision REV`. Use the returned settings_revision; stale patches fail with conflict. `workspace update -w ID --name NAME --description TEXT --expected-revision REV`; `workspace config export -w ID` returns a configuration object; `workspace config import config.json` accepts that object (v1/v2). Mutations require write+config; imports require unrestricted scope. Privacy/access widening requires local --allow-admin. No analysis is triggered.
 
@@ -129,3 +129,5 @@ Format allowlist: graph HTML/JSON; paths CSV/JSON; source-bundle ZIP; original-s
 Maintenance parity: `history preview --keep-runs N --keep-imports N --batch-size N -w ID`, `history archives -w ID`, `history archive PREVIEW.json -w ID --confirm NAME`, `history restore ARCHIVE_ID -w ID --confirm NAME`. `staging preview --age-hours 24 -w ID`, `staging clean PREVIEW.json -w ID --confirm NAME [--name UUID.tmp] [--expired]`, `staging recoveries|restore`. Save previews using global --output NEW_FILE; apply consumes that exact preview. Local mutations need --allow-write and unrestricted ownership; archive/clean create a recoverable whole-home backup before removal. General cleanup defaults to backup and refuses --no-backup. Specialized recovery journals remain separate from general undo. `maintenance backups` and `maintenance download BACKUP_ID NEW_DEST` require unrestricted --allow-application-config; backup/restore/checkpoint existing local guards remain. Shared cache/orphan/application apply remains UI-only.
 
 Application/runtime: `application theme list|get|apply NAME`, `application logging get|update LEVEL`, `runtime info`, `agent inspect -w ID [--tool-name NAME]`, `agent client-config -w ID --client codex|claude --transport stdio|streamable-http`, `agent self-test -w ID`. Application mutations need --allow-write --allow-config-write --allow-application-config with unrestricted workspace scope. Theme path is startup-selected DATAFORGE_THEME_CONFIG or source-checkout .streamlit/config.toml; installed UI selects its home copy. Theme reads report configured/detected state, loaded=null, reload_required=true; never restart another owner. Logging is persisted per home. Self-test runs the actual in-process handler; external transport/client tests remain separate.
+
+See the [complete UI capability matrix](CLI_MCP_CAPABILITIES.md) for every coverage ID, exact command/tool names and policy restrictions.

@@ -1,0 +1,1478 @@
+{
+  "P01": {
+    "capability_id": "P01",
+    "description": "List/get/create/edit/remove provider profiles; name/provider/URL/model/reference/auth/timeout/retries/max_tokens/context_chars/temperature/structured/Azure API version",
+    "cli": [
+      [
+        "providers",
+        "list"
+      ],
+      [
+        "providers",
+        "get"
+      ],
+      [
+        "providers",
+        "save"
+      ],
+      [
+        "providers",
+        "remove"
+      ]
+    ],
+    "mcp": [
+      "list_provider_profiles",
+      "get_provider_profile",
+      "save_provider_profile",
+      "remove_provider_profile"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 3
+  },
+  "P02": {
+    "capability_id": "P02",
+    "description": "Session connect/status/clear; reference compatibility and restart behavior",
+    "cli": [
+      [
+        "providers",
+        "credentials",
+        "status"
+      ],
+      [
+        "providers",
+        "test"
+      ],
+      [
+        "ai",
+        "request"
+      ]
+    ],
+    "mcp": [
+      "connect_runtime_reference",
+      "get_runtime_connection_status",
+      "clear_runtime_connection"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP binds only an approved named launch reference. Raw credentials use hidden per-invocation CLI input or a UI session; never tool arguments.",
+    "slice": 3
+  },
+  "P03": {
+    "capability_id": "P03",
+    "description": "Model discovery with sanitized results",
+    "cli": [
+      [
+        "providers",
+        "models"
+      ]
+    ],
+    "mcp": [
+      "discover_provider_models"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write",
+      "network"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_llm",
+      "allowed_llm_origin",
+      "allowed_credential_ref_when_required",
+      "source_permission_for_ai"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 3
+  },
+  "P04": {
+    "capability_id": "P04",
+    "description": "Actual model connection test and sanitized usage/failure",
+    "cli": [
+      [
+        "providers",
+        "test"
+      ]
+    ],
+    "mcp": [
+      "test_provider_connection"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write",
+      "network"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_llm",
+      "allowed_llm_origin",
+      "allowed_credential_ref_when_required",
+      "source_permission_for_ai"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 3
+  },
+  "P05": {
+    "capability_id": "P05",
+    "description": "Default profile, each of five task routes and ordered fallback profiles",
+    "cli": [
+      [
+        "providers",
+        "routing",
+        "get"
+      ],
+      [
+        "providers",
+        "routing",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_model_routing",
+      "update_model_routing"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 3
+  },
+  "A01": {
+    "capability_id": "A01",
+    "description": "Selected evidence analysis: SQL lineage, SAS lineage, lineage validation, column usage, code explanation",
+    "cli": [
+      [
+        "ai",
+        "request"
+      ]
+    ],
+    "mcp": [
+      "request_ai_assistance"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write",
+      "network"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_llm",
+      "allowed_llm_origin",
+      "allowed_credential_ref_when_required",
+      "source_permission_for_ai"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 4
+  },
+  "A02": {
+    "capability_id": "A02",
+    "description": "Offline statement chunk preview, selected chunk/range and budget information",
+    "cli": [
+      [
+        "ai",
+        "chunks"
+      ]
+    ],
+    "mcp": [
+      "preview_ai_chunks"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 4
+  },
+  "A03": {
+    "capability_id": "A03",
+    "description": "Unresolved warning/error review queue, recommended source context, custom bounds and explicit AI review",
+    "cli": [
+      [
+        "ai",
+        "review",
+        "list"
+      ],
+      [
+        "ai",
+        "review",
+        "preview"
+      ],
+      [
+        "ai",
+        "review",
+        "request"
+      ]
+    ],
+    "mcp": [
+      "list_review_candidates",
+      "preview_diagnostic_review",
+      "request_diagnostic_review"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write",
+      "network"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_llm",
+      "allowed_llm_origin",
+      "allowed_credential_ref_when_required",
+      "source_permission_for_ai"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 4
+  },
+  "A04": {
+    "capability_id": "A04",
+    "description": "Saved AI result list/get, outcomes/quarantine, source-job/hash warnings, advisory download and AI activity/usage/duration",
+    "cli": [
+      [
+        "ai",
+        "results",
+        "list"
+      ],
+      [
+        "ai",
+        "results",
+        "get"
+      ],
+      [
+        "ai",
+        "results",
+        "export"
+      ],
+      [
+        "ai",
+        "activity"
+      ]
+    ],
+    "mcp": [
+      "list_ai_results",
+      "get_ai_result",
+      "export_ai_result",
+      "get_ai_activity"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 4
+  },
+  "A05": {
+    "capability_id": "A05",
+    "description": "Explicit validated lineage merge as inferred and graph refresh; no advisory merge",
+    "cli": [
+      [
+        "ai",
+        "merge"
+      ]
+    ],
+    "mcp": [
+      "merge_ai_claims"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 4
+  },
+  "S01": {
+    "capability_id": "S01",
+    "description": "Default SQL dialect, per-folder/per-extension overrides",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "S02": {
+    "capability_id": "S02",
+    "description": "Case-sensitive identities, wildcard expansion, CSV sample rows",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "S03": {
+    "capability_id": "S03",
+    "description": "SAS library mappings, static macros, default job/session and folder job assignments",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "S04": {
+    "capability_id": "S04",
+    "description": "Saved minimum confidence, include_inferred, diagnostic visibility, reanalysis mode",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "S05": {
+    "capability_id": "S05",
+    "description": "max_file_mb1\u2013100, max_files1\u2013100000, parse_workers1\u20138",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "S06": {
+    "capability_id": "S06",
+    "description": "AI workspace concurrency1\u20134, process cap8, chunk_chars500\u2013100000",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "S07": {
+    "capability_id": "S07",
+    "description": "external_llm, allow_full_source, max_context_chars500\u2013100000, redact_secrets, llm_history, retention_days1\u20133650",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP may tighten privacy. Enabling transmission/full source/history, increasing disclosure/retention budgets or disabling redaction requires local CLI --allow-admin or UI.",
+    "slice": 2
+  },
+  "S08": {
+    "capability_id": "S08",
+    "description": "Application logging DEBUG/INFO/WARNING/ERROR, persisted per home",
+    "cli": [
+      [
+        "application",
+        "logging",
+        "get"
+      ],
+      [
+        "application",
+        "logging",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_application_logging",
+      "update_application_logging"
+    ],
+    "scope": "application",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write",
+      "unrestricted_application_scope_for_writes_or_global_metadata"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 8
+  },
+  "S09": {
+    "capability_id": "S09",
+    "description": "Agent enabled/write/source permissions, default detail, max_chars512\u2013100000, audit_reads",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP cannot enable disabled access/source/write, increase detail/response budgets or disable read auditing. Use local administrator CLI/UI.",
+    "slice": 2
+  },
+  "S10": {
+    "capability_id": "S10",
+    "description": "Actual local MCP-handler check, available schemas and generated Codex/Claude stdio/HTTP examples",
+    "cli": [
+      [
+        "agent",
+        "inspect"
+      ],
+      [
+        "agent",
+        "self-test"
+      ],
+      [
+        "agent",
+        "client-config"
+      ]
+    ],
+    "mcp": [
+      "get_agent_setup",
+      "test_local_agent_access"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 8
+  },
+  "W01": {
+    "capability_id": "W01",
+    "description": "Rename existing workspace and edit description",
+    "cli": [
+      [
+        "workspace",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "update_workspace"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "W02": {
+    "capability_id": "W02",
+    "description": "Export allowed configuration and create new workspace from v1/v2 configuration; exclude profiles/secrets/privacy/source/history",
+    "cli": [
+      [
+        "workspace",
+        "config",
+        "export"
+      ],
+      [
+        "workspace",
+        "config",
+        "import"
+      ]
+    ],
+    "mcp": [
+      "export_workspace_configuration",
+      "import_workspace_configuration"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "W03": {
+    "capability_id": "W03",
+    "description": "Storage locations/home status and current browser home selection equivalent",
+    "cli": [
+      [
+        "runtime",
+        "info"
+      ]
+    ],
+    "mcp": [
+      "get_runtime_info"
+    ],
+    "scope": "application",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "policy_restricted",
+    "restriction": "No live server home switch. Relaunch CLI/MCP with an authorized --home; UI changes its current browser session only.",
+    "slice": 8
+  },
+  "W04": {
+    "capability_id": "W04",
+    "description": "Analysis and ingestion run lists/details, inventory file_size/encoding/metadata and import diagnostics",
+    "cli": [
+      [
+        "runs",
+        "list"
+      ],
+      [
+        "runs",
+        "get"
+      ],
+      [
+        "ingestions",
+        "list"
+      ],
+      [
+        "ingestions",
+        "get"
+      ],
+      [
+        "source",
+        "list"
+      ],
+      [
+        "source",
+        "metadata"
+      ]
+    ],
+    "mcp": [
+      "list_analysis_runs",
+      "get_analysis_run",
+      "list_ingestion_runs",
+      "get_ingestion_run",
+      "search_source_code",
+      "get_source_metadata"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "W05": {
+    "capability_id": "W05",
+    "description": "Baseline/comparison run diff and JSON download",
+    "cli": [
+      [
+        "runs",
+        "compare"
+      ],
+      [
+        "export",
+        "report"
+      ]
+    ],
+    "mcp": [
+      "compare_analysis_runs",
+      "export_report"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "V01": {
+    "capability_id": "V01",
+    "description": "Fourteen theme presets, detected/configured/loaded theme and explicit apply",
+    "cli": [
+      [
+        "application",
+        "theme",
+        "list"
+      ],
+      [
+        "application",
+        "theme",
+        "get"
+      ],
+      [
+        "application",
+        "theme",
+        "apply"
+      ]
+    ],
+    "mcp": [
+      "list_theme_presets",
+      "get_application_theme",
+      "apply_application_theme"
+    ],
+    "scope": "application",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write",
+      "unrestricted_application_scope_for_writes_or_global_metadata"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 8
+  },
+  "V02": {
+    "capability_id": "V02",
+    "description": "Saved graph node limit10\u20131000, traversal depth1\u201330, tree expansion0\u201330, upstream/downstream/combined, collapse temporary",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "V03": {
+    "capability_id": "V03",
+    "description": "Graph labels compact/full/hidden, semantic/neutral palette, width1\u20135, source complete/relevant and line numbers",
+    "cli": [
+      [
+        "settings",
+        "schema"
+      ],
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ]
+    ],
+    "mcp": [
+      "get_settings_schema",
+      "get_workspace_settings",
+      "update_workspace_settings"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 2
+  },
+  "V04": {
+    "capability_id": "V04",
+    "description": "Interactive graph/tree/edge/node focus, expand/collapse and column grouping/filter equivalents",
+    "cli": [
+      [
+        "lineage",
+        "graph"
+      ],
+      [
+        "columns",
+        "usage"
+      ]
+    ],
+    "mcp": [
+      "get_graph_data",
+      "get_column_usage"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 6
+  },
+  "R01": {
+    "capability_id": "R01",
+    "description": "Data dictionary: declared SQL types, sampled CSV types, fallback direct references, provenance and unknowns",
+    "cli": [
+      [
+        "dictionary",
+        "list"
+      ]
+    ],
+    "mcp": [
+      "get_data_dictionary"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "R02": {
+    "capability_id": "R02",
+    "description": "Declared schema columns plus original DDL evidence",
+    "cli": [
+      [
+        "assets",
+        "schema"
+      ]
+    ],
+    "mcp": [
+      "get_asset_schema"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "R03": {
+    "capability_id": "R03",
+    "description": "Dashboard hotspots, isolated/temporary assets, cyclic groups and parsing-status counts",
+    "cli": [
+      [
+        "workspace",
+        "health"
+      ]
+    ],
+    "mcp": [
+      "get_workspace_health"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "R04": {
+    "capability_id": "R04",
+    "description": "Standalone stored-lineage evidence check (does not analyze or repair)",
+    "cli": [
+      [
+        "lineage",
+        "validate"
+      ]
+    ],
+    "mcp": [
+      "validate_stored_lineage"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "R05": {
+    "capability_id": "R05",
+    "description": "Dependency paths in both directions, max_paths1\u2013500, depth, temporary view, boundaries and exports",
+    "cli": [
+      [
+        "lineage",
+        "paths"
+      ],
+      [
+        "export",
+        "paths"
+      ]
+    ],
+    "mcp": [
+      "get_dependency_paths",
+      "export_dependency_paths"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 6
+  },
+  "R06": {
+    "capability_id": "R06",
+    "description": "Step-wise lineage rows/logical dependency order with evidence; no inferred runtime order",
+    "cli": [
+      [
+        "lineage",
+        "steps"
+      ]
+    ],
+    "mcp": [
+      "get_lineage_steps"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 6
+  },
+  "R07": {
+    "capability_id": "R07",
+    "description": "Code search matching line numbers/snippets and report export, beyond current metadata-only file search",
+    "cli": [
+      [
+        "source",
+        "search"
+      ],
+      [
+        "export",
+        "report"
+      ]
+    ],
+    "mcp": [
+      "search_source_code",
+      "export_report"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  },
+  "E01": {
+    "capability_id": "E01",
+    "description": "Interactive offline graph HTML and graph visualization JSON with appearance",
+    "cli": [
+      [
+        "export",
+        "graph"
+      ]
+    ],
+    "mcp": [
+      "export_graph"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 6
+  },
+  "E02": {
+    "capability_id": "E02",
+    "description": "Relevant original source ZIP, selected original file download and historical evidence versions",
+    "cli": [
+      [
+        "export",
+        "sources"
+      ],
+      [
+        "source",
+        "download"
+      ]
+    ],
+    "mcp": [
+      "export_source_bundle",
+      "export_original_source"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 6
+  },
+  "E03": {
+    "capability_id": "E03",
+    "description": "Inventory/dictionary/column/impact/code-search/run-comparison CSV/JSON/HTML reports matching available UI formats",
+    "cli": [
+      [
+        "export",
+        "report"
+      ]
+    ],
+    "mcp": [
+      "export_report"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 6
+  },
+  "C01": {
+    "capability_id": "C01",
+    "description": "Cleanup counts/estimates and all existing workspace-category previews/applies/reset/deletion",
+    "cli": [
+      [
+        "cleanup",
+        "inspect"
+      ],
+      [
+        "cleanup",
+        "sources"
+      ],
+      [
+        "cleanup",
+        "lineage"
+      ],
+      [
+        "cleanup",
+        "columns"
+      ],
+      [
+        "cleanup",
+        "ai"
+      ],
+      [
+        "cleanup",
+        "history"
+      ],
+      [
+        "cleanup",
+        "jobs"
+      ],
+      [
+        "cleanup",
+        "reset"
+      ],
+      [
+        "cleanup",
+        "workspace"
+      ],
+      [
+        "workspace",
+        "reset"
+      ]
+    ],
+    "mcp": [
+      "inspect_cleanup",
+      "preview_cleanup"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP cleanup is read-only. Guarded local CLI apply needs a fresh preview, typed name and full-home backup.",
+    "slice": 7
+  },
+  "C02": {
+    "capability_id": "C02",
+    "description": "Shared parser/Streamlit caches, orphan blobs and full recognized application-data reset",
+    "cli": [
+      [
+        "cleanup",
+        "inspect"
+      ],
+      [
+        "capabilities"
+      ]
+    ],
+    "mcp": [
+      "inspect_cleanup",
+      "preview_cleanup"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [],
+    "availability": "policy_restricted",
+    "restriction": "Shared cache/orphan/application apply is UI-only. Authorized unrestricted previews expose estimates, never apply tokens or paths.",
+    "slice": 7
+  },
+  "C03": {
+    "capability_id": "C03",
+    "description": "History retention preview, archive eligibility, archive list, local archive and recovery restore",
+    "cli": [
+      [
+        "history",
+        "preview"
+      ],
+      [
+        "history",
+        "archive"
+      ],
+      [
+        "history",
+        "archives"
+      ],
+      [
+        "history",
+        "restore"
+      ]
+    ],
+    "mcp": [
+      "preview_history_archive",
+      "list_history_archives"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP may preview/list history archives only. Archive/restore is an explicit guarded local CLI/UI action.",
+    "slice": 7
+  },
+  "C04": {
+    "capability_id": "C04",
+    "description": "Stale staging preview, selected cleanup, age24\u20138760h, recovery list/restore",
+    "cli": [
+      [
+        "staging",
+        "preview"
+      ],
+      [
+        "staging",
+        "clean"
+      ],
+      [
+        "staging",
+        "recoveries"
+      ],
+      [
+        "staging",
+        "restore"
+      ]
+    ],
+    "mcp": [
+      "preview_staging_cleanup",
+      "list_staging_recoveries"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP may preview/list staging recoveries only. Clean/restore is an explicit guarded local CLI/UI action.",
+    "slice": 7
+  },
+  "C05": {
+    "capability_id": "C05",
+    "description": "Automatic expired staging preference; only app-created files,24h,100 files/25MB per visit",
+    "cli": [
+      [
+        "settings",
+        "get"
+      ],
+      [
+        "settings",
+        "update"
+      ],
+      [
+        "staging",
+        "clean"
+      ]
+    ],
+    "mcp": [
+      "get_workspace_settings",
+      "update_workspace_settings",
+      "preview_staging_cleanup"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "allow_config_write"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP may read/disable the automatic preference, never enable or execute it. Automatic cleanup runs only on the existing opt-in UI event.",
+    "slice": 7
+  },
+  "M01": {
+    "capability_id": "M01",
+    "description": "Database integrity/storage, checkpoint, full-home backup, backup list/download, new-home restore",
+    "cli": [
+      [
+        "maintenance",
+        "inspect"
+      ],
+      [
+        "maintenance",
+        "backup"
+      ],
+      [
+        "maintenance",
+        "checkpoint"
+      ],
+      [
+        "maintenance",
+        "restore"
+      ],
+      [
+        "maintenance",
+        "backups"
+      ],
+      [
+        "maintenance",
+        "download"
+      ]
+    ],
+    "mcp": [
+      "inspect_database_maintenance",
+      "list_runtime_backups"
+    ],
+    "scope": "application",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write",
+      "unrestricted_application_scope_for_writes_or_global_metadata"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "MCP exposes authorized unrestricted metadata only. Checkpoint/backup/restore and backup download are local CLI/UI; restore requires a new home.",
+    "slice": 7
+  },
+  "I01": {
+    "capability_id": "I01",
+    "description": "Browser ZIP/folder uploads and file inspection",
+    "cli": [
+      [
+        "ingest"
+      ],
+      [
+        "source",
+        "list"
+      ],
+      [
+        "source",
+        "metadata"
+      ],
+      [
+        "source",
+        "download"
+      ]
+    ],
+    "mcp": [
+      "ingest_sources",
+      "search_source_code",
+      "get_source_metadata",
+      "export_original_source"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 5
+  }
+}

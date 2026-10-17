@@ -74,7 +74,10 @@ untrusted users or a defense against a local account that can mutate configured 
 
 CLI/MCP launches are read-only unless explicitly authorized with --allow-write; per-workspace
 settings may revoke writes, all access or source retrieval. Imports require startup-allowed
-roots. Tools cannot execute arbitrary commands/SQL, inspect credentials or invoke an LLM.
+roots. Tools cannot execute arbitrary commands/SQL or inspect credential values. Explicit
+AI requests additionally require independent outbound-network, exact recipient-origin,
+approved credential-reference, source and workspace privacy authorization. Configuration
+and application mutations have separate startup grants; MCP cannot grant itself authority.
 Queries are workspace scoped, paged and character limited; ambiguity is explicit. Mutations
 are audited without source/arguments/credentials. HTTP additionally requires a named environment
 bearer credential and explicit workspace IDs. Externally bound deployments require a TLS

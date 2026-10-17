@@ -16,10 +16,13 @@ Use `DATAFORGE_OPENAI_API_KEY`, `DATAFORGE_ANTHROPIC_API_KEY`,
 environment references (including `OMNIROUTE_API_KEY`) remain compatible and read-only.
 No operating-system or shared process environment variables are written by credential entry.
 
-Adapters use the active session manager through a context-local scope. CLI/MCP use their
-launch environment; current agent tools perform deterministic local analysis without an LLM.
-New worker integrations must explicitly pass a session manager or construct a scoped child
-environment. Never serialize a manager or credentials into job journals. Session secrets
+Adapters use the active session manager through a context-local scope. CLI/MCP deterministic
+queries are offline; explicit provider/AI operations require approved launch references,
+exact recipient origins and independent network/privacy grants. CLI supports hidden input
+for the current invocation; MCP accepts reference names only. Its runtime bindings are scoped
+to workspace/profile and invalidated after profile edits. UI sessions remain separate.
+Pass session managers explicitly in process; never put session credentials in a process or
+child environment. Never serialize a manager or credentials into job journals. Session secrets
 must not be put in globally cached objects. Disconnect drops session references; launch
 environment secrets remain available until removed from the launching environment.
 

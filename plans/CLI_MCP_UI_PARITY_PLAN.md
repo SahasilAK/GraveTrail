@@ -10,7 +10,7 @@
 
 **Specification and context:** [MASTER_PROMPT](../docs/prompts/MASTER_PROMPT.md), [maintenance specification](../docs/prompts/FEATURE_MAINTENANCE_AND_DEPLOYMENT.md), [AGENTS](../AGENTS.md), [current status](IMPLEMENTATION_STATUS.md), [existing agent plan](AGENT_INTEGRATION_PLAN.md), [CLI guide](../docs/CLI_GUIDE.md), [MCP guide](../docs/MCP_INTEGRATION.md). This plan implements the user's request following the complete UI-only inventory discussed on 2026-10-16.
 
-**Status:** Implementation authorized 2026-10-16; slice1 foundation tested. Catalog tracks pending capabilities honestly. Slices2–9 in progress.
+**Status (2026-10-17):** All nine source slices implemented. Actual catalog/checked fixture account for46 IDs:36 implemented equivalents and10 policy-restricted capabilities. Full regression320 passed/1 existing privilege skip; actual CLI/MCP/running UI, both ZIPs and bounded live checks recorded in [PARITY_ACCEPTANCE.md](PARITY_ACCEPTANCE.md). Standalone downloaded offline-HTML browser interaction and new release-artifact gates remain open below. The section4 command/tool names were design targets; [the user matrix](../docs/CLI_MCP_CAPABILITIES.md) and checked fixture contain the exact shipped names.
 
 ## 1. Completion boundary and existing coverage
 
@@ -177,10 +177,10 @@ Every slice follows this cycle: write the specified failing regression, run it t
 **Interfaces:** `capability_catalog(service, workspace_id=None) -> dict`; strict typed settings/operation requests; additive launch policy fields described in section3. All new handlers still pass through shared authorization.
 
 - [x] Add `test_capabilities_cover_inventory`: every section4 ID has CLI/MCP status, effects and restriction metadata; no unknown or duplicate IDs.
-- [ ] Add tests denying source/network/config writes without their independent permission, scoped global administration and attempts to alter launch policy through request JSON.
-- [ ] Implement capability discovery, schema versions, stable errors and conflict revisions. Do not change existing default policy semantics or tool outputs.
-- [ ] Add tests showing both stdio and HTTP enforce the same service checks and MCP64KB admission limit remains effective.
-- [ ] Run `uv run pytest tests/test_parity_contracts.py tests/test_agent_service.py tests/test_agent_cli.py tests/test_agent_mcp.py`; update guides and commit `feat: add capability and permission discovery`.
+- [x] Add tests denying source/network/config writes without their independent permission, scoped global administration and attempts to alter launch policy through request JSON.
+- [x] Implement capability discovery, schema versions, stable errors and conflict revisions. Do not change existing default policy semantics or tool outputs.
+- [x] Add tests showing both stdio and HTTP enforce the same service checks and MCP64KB admission limit remains effective.
+- [x] Run `uv run pytest tests/test_parity_contracts.py tests/test_agent_service.py tests/test_agent_cli.py tests/test_agent_mcp.py`; update guides and commit `feat: add capability and permission discovery`.
 
 ### Slice 2 — Settings, workspace details and configuration portability
 
@@ -190,12 +190,12 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** `read_settings(store, workspace_id, section) -> dict`; `update_settings(store, policy, workspace_id, section, values, expected_revision) -> dict`; reuse `export_workspace_configuration` and `import_workspace_configuration`.
 
-- [ ] Pin every UI field/range in section4 in a settings schema test, including defaults and all profile-independent privacy/resource fields. Reject unknown keys, invalid dialects/folder mappings, out-of-range values and mixed invalid/valid patches with no partial write.
-- [ ] Test stale revision conflicts and UI cache invalidation. Changing parsing settings marks analysis required without deleting old committed facts or triggering analysis.
-- [ ] Test `enabled=false` cannot be undone by MCP, tightening revokes subsequent requests, widening source/network/audit/budget permissions is refused, and the credential-free polling snapshot stays consistent.
-- [ ] Implement workspace identity editing and bounded configuration v1/v2 import into a new workspace. Test that profiles/secrets/privacy/agent permissions/history never transfer, including malicious extra fields and oversize files.
-- [ ] Wire CLI and MCP section schemas and adapters; UI uses the same update validators. Saved settings and per-request overrides remain distinct.
-- [ ] Run `uv run pytest tests/test_parity_settings.py tests/test_workspace_configuration.py tests/test_agent_settings.py tests/test_llm_resources.py`; verify existing UI save/import flows; commit `feat: expose typed workspace configuration`.
+- [x] Pin every UI field/range in section4 in a settings schema test, including defaults and all profile-independent privacy/resource fields. Reject unknown keys, invalid dialects/folder mappings, out-of-range values and mixed invalid/valid patches with no partial write.
+- [x] Test stale revision conflicts and UI cache invalidation. Changing parsing settings marks analysis required without deleting old committed facts or triggering analysis.
+- [x] Test `enabled=false` cannot be undone by MCP, tightening revokes subsequent requests, widening source/network/audit/budget permissions is refused, and the credential-free polling snapshot stays consistent.
+- [x] Implement workspace identity editing and bounded configuration v1/v2 import into a new workspace. Test that profiles/secrets/privacy/agent permissions/history never transfer, including malicious extra fields and oversize files.
+- [x] Wire CLI and MCP section schemas and adapters; UI uses the same update validators. Saved settings and per-request overrides remain distinct.
+- [x] Run `uv run pytest tests/test_parity_settings.py tests/test_workspace_configuration.py tests/test_agent_settings.py tests/test_llm_resources.py`; verify existing UI save/import flows; commit `feat: expose typed workspace configuration`.
 
 ### Slice 3 — Secure profiles, runtime connections and routing
 
@@ -205,12 +205,12 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** `save_profile(store, policy, workspace_id, profile, expected_revision) -> dict`; `provider_operation(store, policy, connections, workspace_id, profile_id, operation) -> dict`, where operation is only `models` or `test`; typed routing with exactly the current five tasks and ordered profile IDs.
 
-- [ ] Test all Profile fields and validation rules, secret-bearing URL/userinfo rejection, authorized recipient origins, missing/duplicate profile IDs, routing references, removal of a referenced profile and stable fallback order.
-- [ ] Test the named-reference allowlist, DATAFORGE_ session names, explicit legacy launch reference, hidden CLI prompt and runtime clear/shutdown. Assert canary secrets absent from database bytes, files, CLI output, MCP envelopes, logs, audits, exceptions and job metadata; assert `os.environ` unchanged.
-- [ ] Test zero outbound requests for profile/routing reads/updates, offline capability checks and denied operations. Test blocked redirect/origin changes and same-host fallback rules before any credential is forwarded.
-- [ ] Implement CLI hidden per-operation credentials and MCP reference binding/status/clear with workspace isolation. UI session values cannot be retrieved or implicitly shared through these APIs.
-- [ ] Reuse existing model discovery/completion adapters. Return sanitized timing/usage and errors; no raw HTTP headers, raw provider body or automatic fallback model substitution.
-- [ ] Run `uv run pytest tests/test_parity_providers.py tests/test_connections.py tests/test_llm.py`; mock network first, then at most one authorized OmniRoute discovery/test pair; verify UI connect/clear/routing; commit `feat: expose secure provider operations`.
+- [x] Test all Profile fields and validation rules, secret-bearing URL/userinfo rejection, authorized recipient origins, missing/duplicate profile IDs, routing references, removal of a referenced profile and stable fallback order.
+- [x] Test the named-reference allowlist, DATAFORGE_ session names, explicit legacy launch reference, hidden CLI prompt and runtime clear/shutdown. Assert canary secrets absent from database bytes, files, CLI output, MCP envelopes, logs, audits, exceptions and job metadata; assert `os.environ` unchanged.
+- [x] Test zero outbound requests for profile/routing reads/updates, offline capability checks and denied operations. Test blocked redirect/origin changes and same-host fallback rules before any credential is forwarded.
+- [x] Implement CLI hidden per-operation credentials and MCP reference binding/status/clear with workspace isolation. UI session values cannot be retrieved or implicitly shared through these APIs.
+- [x] Reuse existing model discovery/completion adapters. Return sanitized timing/usage and errors; no raw HTTP headers, raw provider body or automatic fallback model substitution.
+- [x] Run `uv run pytest tests/test_parity_providers.py tests/test_connections.py tests/test_llm.py`; mock network first, then at most one authorized OmniRoute discovery/test pair; verify UI connect/clear/routing; commit `feat: expose secure provider operations`.
 
 ### Slice 4 — AI requests, unresolved review and durable results
 
@@ -220,12 +220,12 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** `preview_ai_evidence(store, policy, workspace_id, file_id, first, last, task) -> dict`; `request_ai_assistance(store, policy, connections, workspace_id, file_id, first, last, task, expected_hash, cancelled=None) -> dict`; `get_ai_result(store, policy, workspace_id, record_id, options) -> dict`; `merge_ai_result(store, policy, workspace_id, record_id, refresh=True) -> dict`. Use `assist_task`/`merge_claims`, not duplicate grounding logic.
 
-- [ ] Test all five tasks, diagnostic selection, adjustable line bounds, chunk selection and exact hash pinning. Preview/chunk/review listing is entirely offline. A later source/job assignment change must produce a bounded conflict/warning, never silently analyze different evidence.
-- [ ] Test schema and exact-quote rejection, fenced valid JSON, ambiguous symbols, provider failure, redaction, quarantine persistence and source permission revocation. No guessed preprocessing or relaxed evidence checks.
-- [ ] Expose saved result/activity lists and versioned detail/advisory artifacts with usage, duration, task/provider/requested model, outcome and freshness; respect full-history privacy and retention. Do not reveal source-bearing quotes in summary responses without source permission.
-- [ ] Implement explicit inferred merge only for validated lineage tasks; repeat merge is safe, advisory/quarantined results cannot merge, and refresh failure reports that merge committed while graph refresh needs retry.
-- [ ] Keep requests synchronous and bounded initially: no background secret-bearing job queue, no automatic calls for remaining chunks. Enforce existing workspace/process concurrency and provider timeout/retry budgets. Document safe retry after ambiguous disconnect without promising provider exactly-once billing.
-- [ ] Run `uv run pytest tests/test_parity_ai.py tests/test_llm.py tests/test_llm_resources.py`; exercise UI request/result/review/merge in isolated fixtures; commit `feat: expose grounded AI workflows`.
+- [x] Test all five tasks, diagnostic selection, adjustable line bounds, chunk selection and exact hash pinning. Preview/chunk/review listing is entirely offline. A later source/job assignment change must produce a bounded conflict/warning, never silently analyze different evidence.
+- [x] Test schema and exact-quote rejection, fenced valid JSON, ambiguous symbols, provider failure, redaction, quarantine persistence and source permission revocation. No guessed preprocessing or relaxed evidence checks.
+- [x] Expose saved result/activity lists and versioned detail/advisory artifacts with usage, duration, task/provider/requested model, outcome and freshness; respect full-history privacy and retention. Do not reveal source-bearing quotes in summary responses without source permission.
+- [x] Implement explicit inferred merge only for validated lineage tasks; repeat merge is safe, advisory/quarantined results cannot merge, and refresh failure reports that merge committed while graph refresh needs retry.
+- [x] Keep requests synchronous and bounded initially: no background secret-bearing job queue, no automatic calls for remaining chunks. Enforce existing workspace/process concurrency and provider timeout/retry budgets. Document safe retry after ambiguous disconnect without promising provider exactly-once billing.
+- [x] Run `uv run pytest tests/test_parity_ai.py tests/test_llm.py tests/test_llm_resources.py`; exercise UI request/result/review/merge in isolated fixtures; commit `feat: expose grounded AI workflows`.
 
 ### Slice 5 — Inventory, history and engineering reports
 
@@ -235,12 +235,12 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** shared `workspace_health`, `data_dictionary`, `asset_schema`, `validate_lineage_evidence`, analysis/import run list/detail and `compare_analysis_runs` report builders, each accepting explicit workspace and bounded options.
 
-- [ ] Test inventory encoding/file size/metadata/import diagnostics, completed/failed/pending statuses, stable run pagination, cross-workspace run rejection and before/after comparison semantics using existing `compare_runs`.
-- [ ] Test dictionary declared SQL/CSV sampled types/provenance, unknown types, missing schemas and disagreement. Declared-schema reports include exact original DDL evidence only with source permission. Do not promote sampled/inferred fields to verified schema.
-- [ ] Test hotspot ordering, temporary/isolated counts and bounded cycle reporting; omit no freshness/truncation warnings. Reuse NetworkX and current graph filtering semantics.
-- [ ] Expose the standalone existing evidence validation checks as a read-only operation and distinguish them from reparsing, schema validation and runtime correctness.
-- [ ] Extend source search additively: default remains metadata-only; `include_matches` requires source permission and returns bounded exact line/snippet matches. Preserve literal matching and clearly document CSV exclusion for the UI-style code-search report.
-- [ ] Run `uv run pytest tests/test_parity_reports.py tests/test_agent_service.py tests/test_agent_cli.py tests/test_agent_mcp.py`; compare UI/report outputs on both supplied fixtures; commit `feat: expose engineering and history reports`.
+- [x] Test inventory encoding/file size/metadata/import diagnostics, completed/failed/pending statuses, stable run pagination, cross-workspace run rejection and before/after comparison semantics using existing `compare_runs`.
+- [x] Test dictionary declared SQL/CSV sampled types/provenance, unknown types, missing schemas and disagreement. Declared-schema reports include exact original DDL evidence only with source permission. Do not promote sampled/inferred fields to verified schema.
+- [x] Test hotspot ordering, temporary/isolated counts and bounded cycle reporting; omit no freshness/truncation warnings. Reuse NetworkX and current graph filtering semantics.
+- [x] Expose the standalone existing evidence validation checks as a read-only operation and distinguish them from reparsing, schema validation and runtime correctness.
+- [x] Extend source search additively: default remains metadata-only; `include_matches` requires source permission and returns bounded exact line/snippet matches. Preserve literal matching and clearly document CSV exclusion for the UI-style code-search report.
+- [x] Run `uv run pytest tests/test_parity_reports.py tests/test_agent_service.py tests/test_agent_cli.py tests/test_agent_mcp.py`; compare UI/report outputs on both supplied fixtures; commit `feat: expose engineering and history reports`.
 
 ### Slice 6 — Graph, paths, source downloads and artifact parity
 
@@ -250,13 +250,13 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** `create_artifact(store, policy, workspace_id, kind, selection, format, options) -> dict`; `read_artifact(..., artifact_id, offset, length) -> dict`. `kind` is an explicit enum: graph, paths, source-bundle, original-source, inventory, dictionary, columns, impact, code-search, run-comparison, ai-result, backup. Format compatibility is declared, not guessed.
 
-- [ ] Test upstream/downstream/combined graph data, filtered nodes/edges and scoped node/edge selection, direct-column filters/grouping, temporary collapse and bounded tree representation with cycle boundaries. Return selection/evidence data rather than browser expansion state.
-- [ ] Expose dependency path and step-wise reports with exact original evidence, `max_paths`1–500, depth and boundary/completeness flags. Never describe dependency order as runtime execution order.
-- [ ] Reuse `graph_data`, `graph_html`, `path_rows`, `source_bundle` and existing report exporters. Keep existing ordinary lineage export formats/results compatible; add specialized artifact kinds without repurposing their meaning.
-- [ ] Publish the format allowlist: graph HTML/JSON; paths CSV/JSON; source bundle ZIP; original source raw bytes; inventory/code search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run comparison and advisory AI result JSON. Reject unsupported combinations rather than silently changing formats. Backup ZIP retrieval is local-only.
-- [ ] Test raw original file byte equality (including BOM/non-UTF8/newlines), original source versions in ZIPs, safe ZIP entry names, missing blobs, HTML escaping and offline graph assets. Source permission must apply even to saved artifacts after revocation.
-- [ ] Test artifact cross-workspace IDs, traversal/symlinks/redirected paths, new-file-only CLI writes, invalid ranges, max response budgets, base64 chunk reassembly checksum and truncation of bounded reports. No arbitrary artifact file read/write tool.
-- [ ] Run `uv run pytest tests/test_parity_artifacts.py tests/test_exports.py tests/test_agent_service.py tests/test_agent_mcp.py`; open exported HTML outside the checkout and verify UI downloads still work; commit `feat: expose graph and source artifacts`.
+- [x] Test upstream/downstream/combined graph data, filtered nodes/edges and scoped node/edge selection, direct-column filters/grouping, temporary collapse and bounded tree representation with cycle boundaries. Return selection/evidence data rather than browser expansion state.
+- [x] Expose dependency path and step-wise reports with exact original evidence, `max_paths`1–500, depth and boundary/completeness flags. Never describe dependency order as runtime execution order.
+- [x] Reuse `graph_data`, `graph_html`, `path_rows`, `source_bundle` and existing report exporters. Keep existing ordinary lineage export formats/results compatible; add specialized artifact kinds without repurposing their meaning.
+- [x] Publish the format allowlist: graph HTML/JSON; paths CSV/JSON; source bundle ZIP; original source raw bytes; inventory/code search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run comparison and advisory AI result JSON. Reject unsupported combinations rather than silently changing formats. Backup ZIP retrieval is local-only.
+- [x] Test raw original file byte equality (including BOM/non-UTF8/newlines), original source versions in ZIPs, safe ZIP entry names, missing blobs, HTML escaping and offline graph assets. Source permission must apply even to saved artifacts after revocation.
+- [x] Test artifact cross-workspace IDs, traversal/symlinks/redirected paths, new-file-only CLI writes, invalid ranges, max response budgets, base64 chunk reassembly checksum and truncation of bounded reports. No arbitrary artifact file read/write tool.
+- [ ] Run `uv run pytest tests/test_parity_artifacts.py tests/test_exports.py tests/test_agent_service.py tests/test_agent_mcp.py`; open exported HTML outside the checkout and verify UI downloads still work; commit `feat: expose graph and source artifacts`. **Partial:** tests, UI downloads and feature commit pass; standalone file-URL browser opening is blocked. See acceptance.
 
 ### Slice 7 — Maintenance visibility and permitted local actions
 
@@ -266,12 +266,12 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** reuse `cleanup_plan`/`apply_cleanup`, `history_plan`/`archive_history`/`list_archives`/`restore_history`, `temporary_plan`/`cleanup_temporary`/`temporary_recoveries`/`restore_temporary`, `inspect_database`/`backup`/`checkpoint`/`restore_backup`. New discovery/preview wrappers are read-only.
 
-- [ ] Preserve all existing guarded workspace CLI cleanup operations. Extend capability discovery to every category; safe shared previews expose estimates/notes without offering CLI/MCP apply.
-- [ ] Add CLI history/staging preview, local archive/clean, list and restore with explicit selection, confirmation and stale-file/revision guards. MCP supports preview/list only, including safe archive/recovery metadata.
-- [ ] Test that inspecting settings, listing recoveries, invoking MCP tools or constructing a service never triggers automatic staging cleanup. Only the existing opt-in UI event or an explicit local CLI cleanup may do so.
-- [ ] Add local backup listing/download and safe MCP maintenance metadata. Scope global inspection/backup metadata to unrestricted administrator launches; do not leak full-home paths or other workspaces through a scoped server.
-- [ ] Exercise stale preview, active LLM/jobs, referenced originals, symlinks, unexpected runtime files, missing/failed backup, interrupted recovery and restore-to-existing-destination refusal. Preserve reset-vs-delete semantics and theme/source-controlled files.
-- [ ] Run `uv run pytest tests/test_parity_maintenance.py tests/test_cleanup.py tests/test_maintenance.py tests/test_temporary_cleanup.py`; destructive tests only in disposable homes; verify maintenance UI; commit `feat: expose safe maintenance discovery`.
+- [x] Preserve all existing guarded workspace CLI cleanup operations. Extend capability discovery to every category; safe shared previews expose estimates/notes without offering CLI/MCP apply.
+- [x] Add CLI history/staging preview, local archive/clean, list and restore with explicit selection, confirmation and stale-file/revision guards. MCP supports preview/list only, including safe archive/recovery metadata.
+- [x] Test that inspecting settings, listing recoveries, invoking MCP tools or constructing a service never triggers automatic staging cleanup. Only the existing opt-in UI event or an explicit local CLI cleanup may do so.
+- [x] Add local backup listing/download and safe MCP maintenance metadata. Scope global inspection/backup metadata to unrestricted administrator launches; do not leak full-home paths or other workspaces through a scoped server.
+- [x] Exercise stale preview, active LLM/jobs, referenced originals, symlinks, unexpected runtime files, missing/failed backup, interrupted recovery and restore-to-existing-destination refusal. Preserve reset-vs-delete semantics and theme/source-controlled files.
+- [x] Run `uv run pytest tests/test_parity_maintenance.py tests/test_cleanup.py tests/test_maintenance.py tests/test_temporary_cleanup.py`; destructive tests only in disposable homes; verify maintenance UI; commit `feat: expose safe maintenance discovery`.
 
 ### Slice 8 — Application settings, runtime context and client setup
 
@@ -281,29 +281,29 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 **Interfaces:** preserve `current_preset`/`apply_preset` semantics in the shared theme module; `runtime_info(policy) -> dict`; `agent_setup(store, policy, workspace_id, client, transport) -> dict`.
 
-- [ ] Extract existing fourteen theme presets/detection/atomic TOML updates; no Streamlit import in CLI/MCP service code. Applying requires unrestricted `--allow-application-config` plus write/config permission; MCP may apply only when that authority was explicitly granted at launch, never through workspace write permission alone. Use the startup-selected theme config path, never a request-supplied path.
-- [ ] Test theme apply preserves unrelated TOML content and reports configured-vs-loaded/reload-required states. A CLI/MCP process cannot inspect another Streamlit process's loaded theme: return loaded state as unavailable and reload required, rather than falsely confirming a live UI update. No browser refresh or server restart is automatic.
-- [ ] Expose application log level read/update with the same app-wide guards, sanitized outputs and persistence; never return log contents through a configuration tool.
-- [ ] Expose runtime home/location context and allowed storage options only to appropriately scoped callers; no server home mutation. CLI `--home` remains the switching mechanism.
-- [ ] Generate credential-free Codex/Claude stdio/HTTP examples with actual authorized workspace/home paths and existing executable selection. Reuse schema generation, never edit client config files automatically.
-- [ ] Run the actual in-process MCP handler self-test and label it accurately; external connectivity remains a separate client test. Test disabled access, missing token and lock contention without bypasses.
-- [ ] Run `uv run pytest tests/test_parity_runtime.py tests/test_themes.py tests/test_logging.py tests/test_agent_settings.py`; verify UI themes/settings/setup without changing the user's current theme; commit `feat: expose application and agent setup controls`.
+- [x] Extract existing fourteen theme presets/detection/atomic TOML updates; no Streamlit import in CLI/MCP service code. Applying requires unrestricted `--allow-application-config` plus write/config permission; MCP may apply only when that authority was explicitly granted at launch, never through workspace write permission alone. Use the startup-selected theme config path, never a request-supplied path.
+- [x] Test theme apply preserves unrelated TOML content and reports configured-vs-loaded/reload-required states. A CLI/MCP process cannot inspect another Streamlit process's loaded theme: return loaded state as unavailable and reload required, rather than falsely confirming a live UI update. No browser refresh or server restart is automatic.
+- [x] Expose application log level read/update with the same app-wide guards, sanitized outputs and persistence; never return log contents through a configuration tool.
+- [x] Expose runtime home/location context and allowed storage options only to appropriately scoped callers; no server home mutation. CLI `--home` remains the switching mechanism.
+- [x] Generate credential-free Codex/Claude stdio/HTTP examples with actual authorized workspace/home paths and existing executable selection. Reuse schema generation, never edit client config files automatically.
+- [x] Run the actual in-process MCP handler self-test and label it accurately; external connectivity remains a separate client test. Test disabled access, missing token and lock contention without bypasses.
+- [x] Run `uv run pytest tests/test_parity_runtime.py tests/test_themes.py tests/test_logging.py tests/test_agent_settings.py`; verify UI themes/settings/setup without changing the user's current theme; commit `feat: expose application and agent setup controls`.
 
 ### Slice 9 — Complete parity proof, documentation and release gates
 
 **Files:** `tests/test_parity_coverage.py`, existing CLI/MCP integration tests, `docs/CLI_GUIDE.md`, `docs/MCP_INTEGRATION.md`, `docs/SETUP_AND_DEPLOYMENT.md`, README, AGENTS policy documentation if clarifications are needed, plans/status/acceptance and affected KNOWLEDGE maps.
 
-- [ ] Add a checked-in capability fixture keyed by every section4 ID, with implemented command/tool names and restriction reasons. Tests compare it with actual Typer help, MCP tool schemas and service authorization; a prose-only matrix does not pass.
-- [ ] Test read-only launch denial for every new mutation/network tool, cross-workspace access, unsafe path/HTML inputs, secret canaries, non-escalation, source revocation and every policy-restricted action.
-- [ ] Run both fixture ZIPs in isolated homes with only the matching extension:85 persistent tables,128 collapsed logical edges, seven layers/all16 sources from `pub.all_kpis`; SAS additionally16 WORK assets/144 physical edges. Verify cache reuse, original evidence and persistence after closing/reopening the owner.
-- [ ] Test direct service vs CLI vs MCP vs UI outputs for configuration, reports, AI mocked results and artifacts. Confirm each new report declares freshness/completeness and deterministic queries make zero LLM calls.
-- [ ] Execute real stdio and authenticated streamable-HTTP integration, not just server factory calls; test missing/bad token and correct structured results. Keep one Store owner per home during all comparisons.
-- [ ] Run `uv run pytest`, `uv run ruff check .`, `git diff --check`, `uv run dataforge --help` and new subgroup help/schema checks. Report skipped gates separately from passing ones.
-- [ ] Perform one bounded live SQL and one SAS AI request/validate/merge/refresh/reopen check if the named OmniRoute credential and service are available; stop repeated failures, retain sanitized diagnostics and never claim mocked results as live success.
-- [ ] Run the UI against the completed slices, including profiles/runtime credentials, privacy/settings, builder/review, schema/reports, exports and isolated cleanup/recovery. Confirm no existing functionality regressed.
-- [ ] Document every new command/tool with examples, flags, scoping, secrets, external effects, versioned schemas, binary artifacts, error/retry behavior, DuckDB ownership and explicit restricted capabilities. Include the original UI-only-to-parity matrix in user documentation.
-- [ ] If executable/wheel/Docker artifacts are distributed for these changes, rebuild and smoke-test their new commands/tools outside the checkout; record native/hosted gates that remain unavailable.
-- [ ] Update `IMPLEMENTATION_STATUS.md` for each completed slice, acceptance evidence and remaining restricted/unverified items; update affected KNOWLEDGE files. Commit `docs: document CLI and MCP feature parity` after passing the recorded checks.
+- [x] Add a checked-in capability fixture keyed by every section4 ID, with implemented command/tool names and restriction reasons. Tests compare it with actual Typer help, MCP tool schemas and service authorization; a prose-only matrix does not pass.
+- [x] Test read-only launch denial for every new mutation/network tool, cross-workspace access, unsafe path/HTML inputs, secret canaries, non-escalation, source revocation and every policy-restricted action.
+- [x] Run both fixture ZIPs in isolated homes with only the matching extension:85 persistent tables,128 collapsed logical edges, seven layers/all16 sources from `pub.all_kpis`; SAS additionally16 WORK assets/144 physical edges. Verify cache reuse, original evidence and persistence after closing/reopening the owner.
+- [x] Test direct service vs CLI vs MCP vs UI outputs for configuration, reports, AI mocked results and artifacts. Confirm each new report declares freshness/completeness and deterministic queries make zero LLM calls.
+- [x] Execute real stdio and authenticated streamable-HTTP integration, not just server factory calls; test missing/bad token and correct structured results. Keep one Store owner per home during all comparisons.
+- [x] Run `uv run pytest`, `uv run ruff check .`, `git diff --check`, `uv run dataforge --help` and new subgroup help/schema checks. Report skipped gates separately from passing ones.
+- [x] Perform one bounded live SQL and one SAS AI request/validate/merge/refresh/reopen check if the named OmniRoute credential and service are available; stop repeated failures, retain sanitized diagnostics and never claim mocked results as live success.
+- [x] Run the UI against the completed slices, including profiles/runtime credentials, privacy/settings, builder/review, schema/reports, exports and isolated cleanup/recovery. Confirm no existing functionality regressed.
+- [x] Document every new command/tool with examples, flags, scoping, secrets, external effects, versioned schemas, binary artifacts, error/retry behavior, DuckDB ownership and explicit restricted capabilities. Include the original UI-only-to-parity matrix in user documentation.
+- [ ] If executable/wheel/Docker artifacts are distributed for these changes, rebuild and smoke-test their new commands/tools outside the checkout; record native/hosted gates that remain unavailable. **Not executed:** no artifacts distributed for parity; rebuild/outside-checkout and target-platform acceptance remain release gates.
+- [x] Update `IMPLEMENTATION_STATUS.md` for each completed slice, acceptance evidence and remaining restricted/unverified items; update affected KNOWLEDGE files. Commit `docs: document CLI and MCP feature parity` after passing the recorded checks.
 
 ## 7. Review focus and explicit acceptance tests
 
@@ -317,10 +317,21 @@ Every slice follows this cycle: write the specified failing regression, run it t
 
 ## 8. Remaining work ledger and stop condition
 
-- [ ] Slices1–9 implemented and tested in order; capability matrix IDs all accounted for.
-- [ ] Current policy exceptions remain explicit in discovery, command help, MCP schemas and docs.
-- [ ] No raw secret transport/persistence, self-escalation, second DuckDB owner or source execution introduced.
-- [ ] Existing user data, settings, source versions and deterministic fixture results preserved.
-- [ ] Full test/UI/CLI/MCP/artifact evidence recorded; external/platform limits named honestly.
+- [x] Slices1–9 implemented and tested in order; capability matrix IDs all accounted for.
+- [x] Current policy exceptions remain explicit in discovery, command help, MCP schemas and docs.
+- [x] No raw secret transport/persistence, self-escalation, second DuckDB owner or source execution introduced.
+- [x] Existing user data, settings, source versions and deterministic fixture results preserved.
+- [x] Full test/UI/CLI/MCP/artifact evidence recorded; external/platform limits named honestly.
 
 Stop after this scope is verified. OAuth/multi-user authentication, a remote control plane for a running UI, arbitrary environment/filesystem access, MCP destructive cleanup and unrelated new app features are outside this plan. Do not describe a policy-restricted capability as fully implemented headless parity.
+
+
+## 9. Execution record — 2026-10-17
+
+Actual implementation/verification is documented in [PARITY_ACCEPTANCE.md](PARITY_ACCEPTANCE.md)
+and sanitized [PARITY_ACCEPTANCE.json](PARITY_ACCEPTANCE.json). Commits follow the dependency
+order:409e4de,a0c48f6,9956546,21ebcc9,ce3297d,ec5752f,12b010f,0569f2f;
+review fixes cea21cb; slice9 coverage/docs follow. No pending catalog capabilities remain.
+Checked implementation items do not close the two unexecuted acceptance actions above.
+P02,S07,S09,W03,C01,C02,C03,C04,C05,M01 are restricted, not full operational parity.
+Source evidence, master prompt, source ZIPs and primary user data/settings are preserved.
