@@ -1,8 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
   <title id="title">DataForge engineering hub</title>
   <desc id="desc">Trace the path. Keep the proof. An evidence-backed SQL and SAS lineage workspace.</desc>
+  <style>
+    .data-flow { stroke-dasharray: 7 13; animation: flow 3s linear infinite; }
+    @keyframes flow { to { stroke-dashoffset: -60; } }
+    @media (prefers-reduced-motion: reduce) { .data-flow { animation: none; } }
+  </style>
   <rect width="1200" height="330" rx="18" fill="#edf4f8"/>
   <path d="M810 90h80v75h100m-180 75h80v-75" fill="none" stroke="#90afc5" stroke-width="3"/>
+  <path class="data-flow" d="M860 90h30v75h90M860 240h30v-75h90" fill="none" stroke="#b6532c" stroke-width="4"/>
   <rect x="765" y="65" width="95" height="50" rx="8" fill="#244766"/>
   <rect x="765" y="215" width="95" height="50" rx="8" fill="#244766"/>
   <rect x="980" y="133" width="140" height="64" rx="8" fill="#b6532c"/>

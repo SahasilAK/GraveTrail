@@ -1,4 +1,8 @@
 <p align="center">
+  <a href="https://sahasilak.github.io/dataforge-engineering-hub/"><strong>🚀 Explore the live DataForge documentation →</strong></a>
+</p>
+
+<p align="center">
   <img src="docs/assets/images/banner.svg" alt="DataForge engineering hub — Trace the path. Keep the proof." width="960">
 </p>
 
@@ -10,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/index.md"><strong>Documentation hub</strong></a> ·
+  <a href="https://sahasilak.github.io/dataforge-engineering-hub/"><strong>Documentation hub</strong></a> ·
   <a href="docs/getting-started/quick-start.md">Quick start</a> ·
   <a href="docs/CLI_GUIDE.md">CLI</a> ·
   <a href="docs/MCP_INTEGRATION.md">MCP</a> ·
@@ -121,9 +125,9 @@ and [fixture verification limits](docs/TESTING.md).
 | [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Build verification](docs/BUILD_AND_RELEASE.md) |
 | [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
 
-The hub also builds as a searchable documentation website with light/dark mode.
-Follow the [Pages activation guide](docs/deployment/github-pages.md) after merging the
-workflow; it explains how to find the published URL. GitHub Pages hosts the documentation;
+Explore the [live documentation website](https://sahasilak.github.io/dataforge-engineering-hub/)
+with search and light/dark mode. See the [Pages deployment guide](docs/deployment/github-pages.md)
+for publishing details. GitHub Pages hosts the documentation;
 run the Streamlit application locally or on your own host.
 
 ## Know the boundaries

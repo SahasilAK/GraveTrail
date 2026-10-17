@@ -25,7 +25,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `AGENTS.md` — Repository conventions, authority, module navigation, verification commands, current OmniRoute auto/best-reasoning route and per-feature commit policy.
 - `Dockerfile`, `compose.yaml` — Locked multi-stage non-root image, persistent /data, UI/MCP owner profiles and health check; actual Linux container smoke verified on Docker Desktop.
 - `LICENSE` — Project license; preserve original terms.
-- `README.md` — Installation, startup, first workflow, features, configuration, structure and honest limits.
+- `README.md` — Live documentation link, animated hero, installation, first workflow, features and honest limits.
 - `app.py` — Entry point: configure logs, cache Store, select/create workspaces, register six st.Page scripts.
 - `pyproject.toml` — Package/dependency constraints, dataforge CLI entry point, official MCP SDK/Typer dependencies, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
