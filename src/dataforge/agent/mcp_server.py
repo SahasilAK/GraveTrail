@@ -105,9 +105,9 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call("batch", workspace_id, options, assets=assets, direction=direction)
 
     @server.tool(annotations=read)
-    async def get_column_usage(workspace_id: str, asset: str, options: QueryOptions | None = None) -> CallToolResult:
+    async def get_column_usage(workspace_id: str, asset: str, column_query: str = "", usage_type: str = "", file_id: str = "", group_by: str = "none", options: QueryOptions | None = None) -> CallToolResult:
         """Get persisted direct column usage with optional evidence."""
-        return await call("columns", workspace_id, options, asset=asset)
+        return await call("columns", workspace_id, options, asset=asset, column_query=column_query, usage_type=usage_type, file_id=file_id, group_by=group_by)
 
     @server.tool(annotations=read)
     async def get_source_evidence(workspace_id: str, file_id: str | None = None, statement_id: str | None = None,
@@ -142,9 +142,14 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call("export", workspace_id, options, asset=asset, format=format, direction=direction)
 
     @server.tool(annotations=read)
-    async def get_export(workspace_id: str, result_id: str, format: Literal["json", "csv", "html"] = "json",
-                   options: QueryOptions | None = None) -> CallToolResult:
-        """Read an explicitly selected, workspace-scoped bounded export."""
+    async def get_export(workspace_id: str, result_id: str = "", format: Literal["json", "csv", "html"] = "json",
+                   options: QueryOptions | None = None, artifact_id: str = '', offset: int = 0, length: int = 16384) -> CallToolResult:
+        """Read legacy text export, or an artifact_id as bounded base64 bytes. Source revocation applies at every read."""
+        if artifact_id and result_id:
+            result = AgentError('validation_failed', 'Choose exactly one artifact_id or result_id').response()
+            return CallToolResult(content=[TextContent(type='text', text=compact(result))], structuredContent=result, isError=True)
+        if artifact_id:
+            return await call('artifact_read', workspace_id, options, artifact_id=artifact_id, offset=offset, length=length)
         return await call("result", workspace_id, options, result_id=result_id, format=format)
 
     @server.tool(annotations=read)
@@ -333,6 +338,51 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
     async def get_source_metadata(workspace_id: str, file_id: str, options: QueryOptions | None = None) -> CallToolResult:
         """get source metadata; stored facts only, with scope/freshness/budget guards."""
         return await call('source_metadata', workspace_id, options, file_id=file_id)
+
+    @server.tool(annotations=read)
+    async def get_dependency_paths(workspace_id: str, asset: str, direction: str = "upstream", max_paths: int = 50, options: QueryOptions | None = None) -> CallToolResult:
+        """get dependency paths; bounded logical dependencies, not runtime execution order."""
+        return await call('paths', workspace_id, options, asset=asset, direction=direction, max_paths=max_paths)
+
+    @server.tool(annotations=read)
+    async def get_lineage_steps(workspace_id: str, asset: str, direction: str = "upstream", options: QueryOptions | None = None) -> CallToolResult:
+        """get lineage steps; bounded logical dependencies, not runtime execution order."""
+        return await call('steps', workspace_id, options, asset=asset, direction=direction)
+
+    @server.tool(annotations=read)
+    async def get_graph_data(workspace_id: str, asset: str, direction: str = "upstream", view: str = "nodes", node_id: str = "", edge_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
+        """get graph data; bounded logical dependencies, not runtime execution order."""
+        return await call('graph_view', workspace_id, options, asset=asset, direction=direction, view=view, node_id=node_id, edge_id=edge_id)
+
+    @server.tool(annotations=write)
+    async def export_graph(workspace_id: str, asset: str, format: Literal['json', 'html'] = 'html', direction: str = 'upstream', options: QueryOptions | None = None) -> CallToolResult:
+        """Create offline graph artifact; get_export retrieves bounded binary chunks. Source permission required."""
+        return await call('artifact_create', workspace_id, options, kind='graph', format=format, selection={'asset': asset, 'direction': direction})
+
+    @server.tool(annotations=write)
+    async def export_dependency_paths(workspace_id: str, asset: str, format: Literal['json', 'csv'] = 'json', direction: str = 'upstream', max_paths: int = 50, options: QueryOptions | None = None) -> CallToolResult:
+        """Create exact-evidence dependency path artifact with boundary/completeness flags."""
+        return await call('artifact_create', workspace_id, options, kind='paths', format=format, selection={'asset': asset, 'direction': direction, 'max_paths': max_paths})
+
+    @server.tool(annotations=write)
+    async def export_source_bundle(workspace_id: str, selection: dict, options: QueryOptions | None = None) -> CallToolResult:
+        """Create ZIP from typed explicit file_ids/versions or an asset/direction. No caller output path."""
+        return await call('artifact_create', workspace_id, options, kind='source-bundle', format='zip', selection=selection)
+
+    @server.tool(annotations=write)
+    async def export_original_source(workspace_id: str, file_id: str, content_hash: str = '', options: QueryOptions | None = None) -> CallToolResult:
+        """Create an original-byte source artifact pinned to a current or referenced historical hash."""
+        return await call('artifact_create', workspace_id, options, kind='original-source', format='raw', selection={'file_id': file_id, 'content_hash': content_hash})
+
+    @server.tool(annotations=write)
+    async def export_report(workspace_id: str, kind: Literal['inventory', 'dictionary', 'columns', 'impact', 'code-search', 'run-comparison'], format: Literal['json', 'csv', 'html'], selection: dict, options: QueryOptions | None = None) -> CallToolResult:
+        """Create a typed report artifact using the documented kind/format allowlist. No ZIP/HTML inline."""
+        return await call('artifact_create', workspace_id, options, kind=kind, format=format, selection=selection)
+
+    @server.tool(annotations=write)
+    async def export_ai_result(workspace_id: str, record_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """Create source-gated advisory/result JSON artifact; no secret export."""
+        return await call('artifact_create', workspace_id, options, kind='ai-result', format='json', selection={'record_id': record_id})
 
     @server.resource("dataforge://workspaces")
     async def workspaces_resource() -> str:

@@ -57,6 +57,10 @@ def register(app, invoke, fail):
     def result_get(ctx: typer.Context, record_id: str, workspace: Workspace):
         invoke(ctx, 'ai_result', workspace, record_id=record_id)
 
+    @results.command('export')
+    def export_result(ctx: typer.Context, record_id: str, workspace: Workspace):
+        invoke(ctx, 'artifact_create', workspace, kind='ai-result', format='json', selection={'record_id': record_id})
+
     @ai.command('activity')
     def activity(ctx: typer.Context, workspace: Workspace):
         invoke(ctx, 'ai_activity', workspace)

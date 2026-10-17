@@ -123,6 +123,7 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
     store = service = None
     try:
         config = ctx.obj
+        download_to = arguments.pop('download_to', None)
         if action == "job":
             if not config["policy"].permits(workspace_id):
                 raise AgentError("forbidden", "Workspace is not authorized")
@@ -179,6 +180,25 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 result = {"job_id": record["job_id"], "status": "queued"}
             else:
                 result = service.call(action, workspace_id, options=config["options"], **arguments)
+                if download_to is not None:
+                    import base64
+                    import hashlib
+                    artifact_id = result['artifact_id']
+                    digest = hashlib.sha256()
+                    offset = 0
+                    with download_to.open('xb') as stream:
+                        while True:
+                            chunk = service.call('artifact_read', workspace_id, options=config['options'], artifact_id=artifact_id, offset=offset)
+                            data = base64.b64decode(chunk['data'])
+                            stream.write(data)
+                            digest.update(data)
+                            offset = chunk['next_offset']
+                            if chunk['complete']:
+                                break
+                    if offset != chunk['bytes'] or digest.hexdigest() != chunk['sha256']:
+                        raise AgentError('conflict', 'Downloaded artifact checksum failed')
+                    result = {'artifact_id': artifact_id, 'destination': str(download_to), 'bytes': offset,
+                              'sha256': digest.hexdigest(), 'complete': chunk['artifact_complete']}
                 if action in {"ingest", "analyze"}:
                     service.jobs.wait(result["job_id"], workspace_id)
                     result = service.job_status(workspace_id, result["job_id"], config["options"])
@@ -261,8 +281,10 @@ def search_assets(ctx: typer.Context, workspace: Workspace, query: str = ""):
 
 
 @columns_app.command("usage")
-def columns(ctx: typer.Context, asset: str, workspace: Workspace):
-    invoke(ctx, "columns", workspace, asset=asset)
+def columns(ctx: typer.Context, asset: str, workspace: Workspace, column_query: str = '',
+            usage_type: str = '', file_id: str = '', group_by: str = 'none'):
+    invoke(ctx, "columns", workspace, asset=asset, column_query=column_query,
+           usage_type=usage_type, file_id=file_id, group_by=group_by)
 
 
 @source_app.command("list")
@@ -303,8 +325,12 @@ def export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = "
 
 
 @exports_app.command("read")
-def result(ctx: typer.Context, result_id: str, workspace: Workspace, format: str = "json"):
-    invoke(ctx, "result", workspace, result_id=result_id, format=format)
+def result(ctx: typer.Context, result_id: str, workspace: Workspace, format: str = "json",
+           binary: bool = False, offset: int = 0, length: int = 16384):
+    if binary:
+        invoke(ctx, 'artifact_read', workspace, artifact_id=result_id, offset=offset, length=length)
+    else:
+        invoke(ctx, "result", workspace, result_id=result_id, format=format)
 
 
 @batch_app.command("lineage")
@@ -411,7 +437,7 @@ def ui(ctx: typer.Context):
 
 register_settings(app, workspace_app, invoke, fail)
 register_ai(app, invoke, fail)
-register_reports(app, workspace_app, assets_app, lineage_app, source_app, invoke)
+register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
 
 if __name__ == "__main__":
     app()

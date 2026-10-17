@@ -23,6 +23,9 @@ from dataforge.agent.paging import page
 from dataforge.ai_service import READS as AI_READS
 from dataforge.ai_service import WRITES as AI_WRITES
 from dataforge.ai_service import AIOperations
+from dataforge.artifacts import READS as ARTIFACT_READS
+from dataforge.artifacts import WRITES as ARTIFACT_WRITES
+from dataforge.artifacts import ArtifactOperations
 from dataforge.asset_identity import asset_label
 from dataforge.configuration import ParsingSettings
 from dataforge.graph import LineageGraph
@@ -35,10 +38,10 @@ from dataforge.reporting import READS as REPORT_READS
 from dataforge.reporting import ReportOperations
 
 WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
-          'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES | AI_WRITES
+          'settings_update', 'workspace_update', 'config_import'} | PROVIDER_WRITES | AI_WRITES | ARTIFACT_WRITES
 
 
-class AgentService(ProviderOperations, AIOperations, ReportOperations):
+class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations):
     def __init__(self, store, policy: AccessPolicy | None = None):
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
@@ -81,7 +84,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations):
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES | AI_READS | AI_WRITES | REPORT_READS:
+                          'config_export', 'config_import'} | PROVIDER_READS | PROVIDER_WRITES | AI_READS | AI_WRITES | REPORT_READS | ARTIFACT_READS | ARTIFACT_WRITES:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -339,17 +342,28 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations):
         return {"workspace_id": w, "results": results, "processed": len(results), "requested": len(assets),
                 "complete": complete, "remaining_assets": assets[len(results):]}
 
-    def _columns(self, w, opts, asset):
+    def _columns(self, w, opts, asset, column_query='', usage_type='', file_id='', group_by='none'):
         from dataforge.services import column_report
+        if group_by not in {'none', 'file', 'usage_type'} or any(len(value) > 1024 for value in (column_query, usage_type, file_id)):
+            raise AgentError('validation_failed', 'Invalid direct-column filter/grouping')
         selected = self._asset(w, asset)
         rows = column_report(self.store, w, selected["asset_id"])
+        rows = [r for r in rows if column_query.casefold() in r['column_name'].casefold()
+                and (not usage_type or usage_type.casefold() in r['context'].casefold())
+                and (not file_id or r['file_id'] == file_id)]
         fields = ("column_name", "context", "status", "statement_id", "file_id")
         if opts.detail_level != "summary":
             fields += ("relative_path", "start_line", "end_line", "operation_id", "source_hash")
         if opts.detail_level == "detailed":
             fields += ("code", "expression")
-        return self._page(w, opts, ["columns", selected["asset_id"]], [{k: r[k] for k in fields} for r in rows],
-                          asset_id=selected["asset_id"], analysis_current=self._current(w))
+        items = [{k: r[k] for k in fields} for r in rows]
+        if group_by != 'none':
+            for item, row in zip(items, rows):
+                item['group'] = row['relative_path'] if group_by == 'file' else row['context']
+            items.sort(key=lambda item: (item['group'], item['column_name']))
+        return self._page(w, opts, ["columns", selected["asset_id"], column_query, usage_type, file_id, group_by], items,
+                          asset_id=selected["asset_id"], unique_columns=len({r['column_name'] for r in rows}),
+                          group_by=group_by, analysis_current=self._current(w))
 
     def _statement(self, w, statement_id):
         rows = self.store.rows("""SELECT s.statement_id,s.file_id,s.start_line,s.end_line,s.code,

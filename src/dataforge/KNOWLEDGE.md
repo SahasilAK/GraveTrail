@@ -49,3 +49,5 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 - `ai_service.py` — offline chunks/diagnostic review, hash/job-pinned synchronous assistance with per-fallback authorization, durable metadata/detail/activity and idempotent inferred merge with refresh-failure reporting.
 
 - `reporting.py` — shared dictionary/provenance, health, original-evidence integrity, literal SQL/SAS matches and scoped history/inventory reports; all queries are offline.
+
+- `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifact creation, guarded managed paths and scoped/checksummed budgeted base64 reads.

@@ -150,5 +150,11 @@ def source_bundle(store, file_ids: list[str], versions: dict | None = None) -> b
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for fid in dict.fromkeys(file_ids):
             source = store.file(fid)
-            archive.writestr(safe_relative(source["relative_path"]), store.original(fid, (versions or {}).get(fid)))
+            selected = (versions or {}).get(fid)
+            hashes = selected if isinstance(selected, list) else [selected]
+            for digest in hashes:
+                path = source['relative_path']
+                if len(hashes) > 1:
+                    path = digest + '/' + path
+                archive.writestr(safe_relative(path), store.original(fid, digest))
     return out.getvalue()
