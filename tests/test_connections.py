@@ -113,3 +113,62 @@ def test_explicit_environment_reference_redacts_arbitrary_variable_names(monkeyp
     with Adapter(profile, transport=transport) as adapter:
         content, _ = adapter.complete('test', 'test')
     assert 'dummy-environment-sensitive-123' not in content
+
+
+def test_sanitize_redacts_keys_values_and_shared_containers_without_mutation():
+    manager = RuntimeConnections()
+    secret = 'dummy"quoted\\secret'
+    manager.register('DATAFORGE_TEST_API_KEY', secret)
+    shared = {secret: [secret, None, True, 42, 1.5]}
+    original = {'first': shared, 'second': shared}
+
+    result = manager.sanitize(original)
+
+    expected = {'[REDACTED]': ['[REDACTED]', None, True, 42, 1.5]}
+    assert result == {'first': expected, 'second': expected}
+    assert original['first'] is shared and original['second'] is shared
+    assert shared[secret][0] == secret
+    assert manager.sanitize(secret) == '[REDACTED]'
+    assert manager.sanitize(None) is None
+
+
+@pytest.mark.parametrize('kind', ['dict', 'list', 'mixed'])
+@pytest.mark.parametrize('depth', [65, 1100])
+def test_sanitize_rejects_excessive_nesting(kind, depth):
+    value = 'dummy-sensitive-123'
+    for level in range(depth):
+        value = {'child': value} if kind == 'dict' or (kind == 'mixed' and level % 2) else [value]
+
+    with pytest.raises(ValueError, match='nesting'):
+        RuntimeConnections().sanitize(value)
+
+
+def test_sanitize_redacts_at_nesting_limit():
+    manager = RuntimeConnections()
+    manager.register('DATAFORGE_TEST_API_KEY', 'dummy-sensitive-123')
+    value = 'dummy-sensitive-123'
+    for _ in range(64):
+        value = [value]
+
+    result = manager.sanitize(value)
+    for _ in range(64):
+        result = result[0]
+    assert result == '[REDACTED]'
+
+
+@pytest.mark.parametrize('kind', ['dict', 'list', 'mixed'])
+def test_sanitize_rejects_cycles(kind):
+    if kind == 'dict':
+        value = {}
+        value['self'] = value
+    elif kind == 'list':
+        value = []
+        value.append(value)
+    else:
+        value = {'child': []}
+        value['child'].append(value)
+
+    manager = RuntimeConnections()
+    with pytest.raises(ValueError, match='cyclic'):
+        manager.sanitize(value)
+    assert manager.sanitize({'safe': ['value']}) == {'safe': ['value']}

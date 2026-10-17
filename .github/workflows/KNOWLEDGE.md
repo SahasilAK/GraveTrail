@@ -1,6 +1,8 @@
 # .github/workflows/
 
 CI test matrix for Windows/Linux and Python 3.11/3.12; remote execution is not claimed until it runs.
+All Linux jobs pin ubuntu-24.04. Action releases are commit-pinned and use Node24,
+including the nested upload action in the Pages composite; test commands also install Node24.
 
 ## Files
 - `tests.yml` — uv lock install, Ruff and pytest on Windows/Linux Python 3.11/3.12; Node enables JS syntax regression.
