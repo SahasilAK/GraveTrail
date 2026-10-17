@@ -178,11 +178,11 @@ class Adapter:
                         chunks.append(chunk)
                     try:
                         data = json.loads(b"".join(chunks))
+                        if not isinstance(data, dict):
+                            raise ProviderError("Provider response must be a JSON object")
+                        return self.connections.sanitize(data)
                     except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
-                    if not isinstance(data, dict):
-                        raise ProviderError("Provider response must be a JSON object")
-                    return self.connections.sanitize(data)
             except httpx.TransportError:
                 if attempt >= self.profile.retries:
                     raise ProviderError("Provider connection failed or timed out", True) from None

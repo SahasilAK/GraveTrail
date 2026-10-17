@@ -158,7 +158,10 @@ def test_fenced_grounded_response_validates_without_accepting_invented_assets(tm
         store.close()
 
 
-@pytest.mark.parametrize("body", [b"not json", b"[]", b"null", b'{"data":' + b'[' * 1100 + b'0' + b']' * 1100 + b'}'])
+@pytest.mark.parametrize("body", [b"not json", b"[]", b"null",
+    b'{"data":' + b'[' * 80 + b'0' + b']' * 80 + b'}',
+    b'{"data":' + b'[' * 1100 + b'0' + b']' * 1100 + b'}'],
+    ids=['invalid-json', 'array', 'null', 'deep', 'extreme-depth'])
 def test_provider_invalid_envelope_raises_controlled_error(body):
     from dataforge.llm import ProviderError
 

@@ -868,3 +868,29 @@ unverified; clean installation/packaging must be rerun after these new slices.
   standalone-file-browser application gates above remain unchanged.
 
 - Changes pushed and PR [#3](https://github.com/SahasilAK/dataforge-engineering-hub/pull/3) opened for user review; PR documentation validation started successfully. No merge or Pages activation performed.
+
+## Runtime sanitization recursion fix — 2026-10-17
+
+- Created session branch codex/fix-runtime-sanitization from the clean current checkout.
+  Reproduced test_provider_invalid_envelope_raises_controlled_error on Python3.12:
+  decoding accepts the 1100-level JSON list, then RuntimeConnections.sanitize exhausts
+  Python recursion outside the adapter's controlled JSON error boundary. Python3.11
+  rejects this payload during decoding, masking the sanitizer defect in the original test.
+- Sanitization now rejects more than64 nested dict/list containers and active-ancestor
+  cycles with value-free ValueError messages. Shared references, copied input structures,
+  ordinary scalars and key/value secret redaction retain their behavior. Adapter includes
+  sanitization in its existing JSON validation boundary and returns ProviderError for
+  rejected envelopes; no partial or unsanitized fallback is returned.
+- Added direct dict/list/mixed nesting65/1100, valid64-depth redaction, direct/indirect
+  cycle, shared-reference and input-preservation regressions. Added80-level HTTP envelope
+  coverage so Python3.11 also exercises the sanitizer boundary. Observed10 new failures
+  before implementation; the original Python3.12 case independently reproduced RecursionError.
+- Original envelope test now5 passed on both Python3.11.16 and Python3.12.10. Focused
+  credential/LLM/provider suite39 passed. Full pytest:336 passed/1 existing Windows privilege
+  skip on Python3.11 (61.62s) and Python3.12 (87.15s). Ruff passes; independent review found
+  no actionable issues. Other provider-shape validation and new width limits remain outside
+  this focused recursion fix; existing HTTP2MB response admission is unchanged.
+- Running isolated8521 UI with a local mock8522 provider: Discover models receives the
+  1100-level envelope, displays the controlled ProviderError notice and keeps settings
+  usable. No external provider, real credentials, primary home, master prompt or release
+  artifacts were changed. These are local Windows results; remote Actions rerun is pending.

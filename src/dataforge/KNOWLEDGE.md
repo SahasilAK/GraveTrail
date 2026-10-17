@@ -36,7 +36,9 @@ Every edge has exact statement/file/version evidence. UI never executes imported
 # Runtime credentials
 
 `connections.py` owns session-local credentials, context scopes, read-only environment
-resolution and recursive/JSON-escaped secret redaction. Adapters and log formatting share it; never cache a session manager
+resolution and JSON-escaped secret redaction. sanitize copies dict/list trees, allows shared
+references, and raises ValueError for ancestor cycles or more than 64 nested containers;
+Adapter converts these validation failures to ProviderError. Never cache a session manager
 globally or persist it. `docs/SECURE_CONFIGURATION.md` describes limits and environment names.
 
 AI admission now covers source reads through result commit; maintenance reserves the home

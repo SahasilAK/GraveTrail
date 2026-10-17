@@ -76,13 +76,28 @@ class RuntimeConnections:
                       r"\1'[REDACTED]'", text)
 
     def sanitize(self, value):
-        if isinstance(value, str):
-            return self.redact(value)
-        if isinstance(value, dict):
-            return {self.redact(k): self.sanitize(v) for k, v in value.items()}
-        if isinstance(value, list):
-            return [self.sanitize(item) for item in value]
-        return value
+        """Redact copies of dict/list trees; reject cycles or more than 64 containers deep."""
+        ancestors: set[int] = set()
+
+        def visit(item, depth):
+            if isinstance(item, str):
+                return self.redact(item)
+            if not isinstance(item, (dict, list)):
+                return item
+            if depth >= 64:
+                raise ValueError('Sanitization exceeds nesting limit')
+            identity = id(item)
+            if identity in ancestors:
+                raise ValueError('Sanitization requires acyclic containers')
+            ancestors.add(identity)
+            try:
+                if isinstance(item, dict):
+                    return {self.redact(k): visit(v, depth + 1) for k, v in item.items()}
+                return [visit(child, depth + 1) for child in item]
+            finally:
+                ancestors.remove(identity)
+
+        return visit(value, 0)
 
 
 _active: ContextVar[RuntimeConnections | None] = ContextVar('dataforge_connections', default=None)
