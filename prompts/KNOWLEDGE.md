@@ -1,0 +1,14 @@
+# prompts/
+
+Version 1 grounded AI tasks. Source goes in JSON user context, never system instructions. Schemas and exact-evidence tests govern changes.
+
+## Subfolders
+- `code_explanation/` — [code_explanation/KNOWLEDGE.md](code_explanation/KNOWLEDGE.md).
+- `column_usage/` — [column_usage/KNOWLEDGE.md](column_usage/KNOWLEDGE.md).
+- `lineage_validation/` — [lineage_validation/KNOWLEDGE.md](lineage_validation/KNOWLEDGE.md).
+- `sas_lineage/` — [sas_lineage/KNOWLEDGE.md](sas_lineage/KNOWLEDGE.md).
+- `schemas/` — [schemas/KNOWLEDGE.md](schemas/KNOWLEDGE.md).
+- `sql_lineage/` — [sql_lineage/KNOWLEDGE.md](sql_lineage/KNOWLEDGE.md).
+
+## Files
+- `README.md` — Prompt repository. Maintained documentation; consult implementation status for verification boundaries.

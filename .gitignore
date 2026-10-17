@@ -189,8 +189,23 @@ AGENTS.md
 .venv-clean/
 .knowledge-base/
 
-# Local Codex instructions, context maps and implementation records
+# Local Codex instructions and implementation records
 .codex/
 .kbignore
-KNOWLEDGE.md
-/plans/
+/plans/**
+
+# Keep project knowledge maps versioned, including maps in local-context folders.
+!/plans/**/
+!/plans/**/KNOWLEDGE.md
+!/docs/prompts/
+/docs/prompts/**
+!/docs/prompts/**/
+!/docs/prompts/**/KNOWLEDGE.md
+!/docs/plans/
+/docs/plans/**
+!/docs/plans/**/
+!/docs/plans/**/KNOWLEDGE.md
+!/scripts/build/
+/scripts/build/**
+!/scripts/build/**/
+!/scripts/build/**/KNOWLEDGE.md
