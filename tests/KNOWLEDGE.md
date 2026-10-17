@@ -53,3 +53,5 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_parity_runtime.py` — Fourteen shared themes/TOML preservation, actual logging/setup/self-test MCP, application scope and CLI settings.
 - `test_parity_coverage.py` — Every keyed catalog field/CLI route/help/MCP schema and all mutation/network tool denials under a read-only launch.
 - `test_parity_ui.py` — Equal asset labels across workspaces retain selectable widget identity, reproducing the real-browser regression.
+
+- `test_documentation.py` — Public source safety, Windows route collisions, rendered anchors/project prefixes and artifact inventory rejection; standard-library implementation imports work without docs dependencies.

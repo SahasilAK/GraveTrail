@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible application or documentation problem.
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check existing issues first. Do not attach credentials, private source, live databases or backups.
+        For vulnerabilities, follow [SECURITY.md](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version or revision
+      description: Package version or Git commit, and installation method (source, wheel, Docker or executable).
+      placeholder: "Git commit abc1234, uv source checkout"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version if applicable, browser, and whether UI, CLI or MCP was used.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal sanitized SQL/SAS/CSV example or documentation URL and relevant settings. Use a disposable home for destructive reproductions.
+      placeholder: |
+        1. Create a workspace...
+        2. Import this sanitized example...
+        3. Analyze and select...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and diagnostics
+      description: Include relevant sanitized error text. Remove keys, sensitive paths and private source from logs/screenshots.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues and removed credentials and confidential data from this report.
+          required: true

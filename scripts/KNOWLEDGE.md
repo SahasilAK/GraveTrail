@@ -11,3 +11,5 @@ Operational reproducibility utilities. benchmark.py creates isolated synthetic f
 - `verify_llm.py` — Opt-in real endpoint check, default OmniRoute auto/best-reasoning; synthetic SQL/SAS discovery, connection, grounding/merge/refresh/restart and safe JSON report. Credentials come from a named environment variable.
 
 - `verify_parity.py` — Requires a new isolated home; actual CLI extension-specific ZIP import/build/warm reuse, owner close/reopen, exact original byte/hash checks, manifest traversal, actual MCP handlers/shared UI dictionary and SDK stdio catalog verification. No network provider calls.
+
+- `docs/` — [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md): explicit public allowlist, strict static-site build, links/anchors/search/output inspection.

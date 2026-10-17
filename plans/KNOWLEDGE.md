@@ -42,3 +42,5 @@ failures remain historical evidence; no app/preprocessing/gateway code was chang
 Current parity live acceptance passes discovery, connection, SQL/SAS validation, inferred merge,
 refresh and reopen using auto/best-reasoning. Earlier dated gateway failures remain historical;
 this bounded success does not establish future availability. Master prompt and user homes untouched.
+
+- `DOCUMENTATION_PLAN.md` — Executed README/docs hub/Pages plan, publication boundaries, design choices and verification/integration checks.

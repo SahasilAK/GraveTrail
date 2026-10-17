@@ -1,0 +1,123 @@
+site_name: DataForge
+site_description: Evidence-backed SQL and SAS lineage. Trace dependencies, inspect source, and keep the proof.
+site_url: https://sahasilak.github.io/dataforge-engineering-hub/
+repo_url: https://github.com/SahasilAK/dataforge-engineering-hub
+repo_name: SahasilAK/dataforge-engineering-hub
+edit_uri: edit/main/docs/
+copyright: DataForge · Apache License 2.0
+strict: true
+theme:
+  name: material
+  language: en
+  font: false
+  logo: assets/images/mark.svg
+  favicon: assets/images/mark.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+plugins:
+  - search
+hooks:
+  - scripts/docs/hooks.py
+extra_css:
+  - assets/stylesheets/extra.css
+extra:
+  generator: false
+  public_assets:
+    - assets/images/mark.svg
+    - assets/images/banner.svg
+    - assets/diagrams/lineage.svg
+    - assets/stylesheets/extra.css
+    - assets/images/workspace-dashboard.png
+    - assets/images/lineage-explorer.png
+    - assets/images/source-evidence.png
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+nav:
+  - Home: index.md
+  - Get started:
+      - getting-started/index.md
+      - First lineage: getting-started/quick-start.md
+      - Install & operate: SETUP_AND_DEPLOYMENT.md
+      - Configuration: getting-started/configuration.md
+  - User guide:
+      - user-guide/index.md
+      - UI reference: USER_GUIDE.md
+      - Data management & recovery: DATA_MANAGEMENT.md
+  - Integrations:
+      - integrations/index.md
+      - CLI: CLI_GUIDE.md
+      - MCP: MCP_INTEGRATION.md
+      - Capability matrix: CLI_MCP_CAPABILITIES.md
+      - Agent workflows: AGENT_WORKFLOWS.md
+      - Response budgets: TOKEN_OPTIMIZATION.md
+      - LLM providers: LLM_INTEGRATION.md
+      - Secure configuration: SECURE_CONFIGURATION.md
+  - Architecture:
+      - architecture/overview.md
+      - System overview: ARCHITECTURE.md
+      - Data model: DATA_MODEL.md
+      - Lineage engine: LINEAGE_ENGINE.md
+      - SQL coverage: SQL_PARSING.md
+      - SAS coverage: SAS_PARSING.md
+      - Prompt engineering: PROMPT_ENGINEERING.md
+      - Security: SECURITY.md
+      - Performance: PERFORMANCE.md
+  - Deploy:
+      - deployment/index.md
+      - Build & release: BUILD_AND_RELEASE.md
+      - GitHub Pages: deployment/github-pages.md
+  - Develop:
+      - development/index.md
+      - Contributing: development/contributing.md
+      - Implementation guide: IMPLEMENTATION_GUIDE.md
+      - Extending DataForge: EXTENDING_THE_APP.md
+      - Testing: TESTING.md
+      - Documentation: development/documentation.md
+  - Troubleshooting:
+      - troubleshooting/help.md
+      - Troubleshooting reference: TROUBLESHOOTING.md

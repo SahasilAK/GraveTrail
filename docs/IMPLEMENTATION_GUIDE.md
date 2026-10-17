@@ -9,7 +9,8 @@ root (direct `uv run streamlit run app.py` remains available). Use `uv run pytes
 operations commands live in [SETUP_AND_DEPLOYMENT.md](SETUP_AND_DEPLOYMENT.md).
 No manual database edits are needed for normal use. Runtime source and keys must never be committed.
 Use `dataforge --home PATH ...` for independent CLI/MCP access only after stopping another
-owner of that home; installed UI and CLI defaults differ, so configure home explicitly.
+owner of that home. Source launchers default to `.dataforge/`; installed UI/CLI/MCP
+launchers share the platform user-data default. Configure the home explicitly when switching owners.
 
 Implement feature changes at their owning layer: parsers emit `ParseResult`, services persist
 and resolve, graph transforms view topology, UI presents it. Add a failing fixture reproducing

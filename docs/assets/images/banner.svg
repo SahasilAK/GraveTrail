@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
+  <title id="title">DataForge engineering hub</title>
+  <desc id="desc">Trace the path. Keep the proof. An evidence-backed SQL and SAS lineage workspace.</desc>
+  <rect width="1200" height="330" rx="18" fill="#edf4f8"/>
+  <path d="M810 90h80v75h100m-180 75h80v-75" fill="none" stroke="#90afc5" stroke-width="3"/>
+  <rect x="765" y="65" width="95" height="50" rx="8" fill="#244766"/>
+  <rect x="765" y="215" width="95" height="50" rx="8" fill="#244766"/>
+  <rect x="980" y="133" width="140" height="64" rx="8" fill="#b6532c"/>
+  <g fill="#fff" font-family="monospace" font-size="16" text-anchor="middle">
+    <text x="813" y="96">source</text><text x="813" y="246">source</text><text x="1050" y="171">evidence</text>
+  </g>
+  <g fill="#172b3a" font-family="Segoe UI,Arial,sans-serif">
+    <text x="64" y="98" font-size="49" font-weight="700">DataForge</text>
+    <text x="65" y="131" font-size="21" fill="#46647a">engineering hub</text>
+    <text x="64" y="205" font-size="36" font-weight="650">Trace the path. Keep the proof.</text>
+    <text x="65" y="251" font-size="21" fill="#46647a">Evidence-backed SQL and SAS lineage, on your terms.</text>
+  </g>
+</svg>

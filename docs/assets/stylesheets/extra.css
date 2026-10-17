@@ -1,0 +1,44 @@
+:root {
+  --md-primary-fg-color: #244766;
+  --md-accent-fg-color: #b6532c;
+  --md-text-font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --md-code-font: "Cascadia Code", Consolas, monospace;
+}
+[data-md-color-scheme="default"] {
+  --md-default-fg-color: #172b3a;
+  --md-typeset-a-color: #275e88;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #203e57;
+  --md-accent-fg-color: #efad84;
+  --md-typeset-a-color: #93c9ee;
+  --md-default-bg-color: #172633;
+}
+.md-grid { max-width: 66rem; }
+.md-typeset { font-size: .82rem; line-height: 1.7; }
+.md-typeset h1, .md-typeset h2, .md-typeset h3 { font-weight: 650; letter-spacing: -.025em; }
+.md-typeset h1 { color: var(--md-default-fg-color); }
+.md-typeset .md-button { border-radius: .3rem; padding: .6em 1.2em; font-size: .78rem; }
+.md-typeset .md-button--primary { background: var(--md-primary-fg-color); border-color: var(--md-primary-fg-color); }
+[data-md-color-scheme="slate"] .md-typeset .md-button { color: #b7d9ef; border-color: #6e9cbd; }
+[data-md-color-scheme="slate"] .md-typeset .md-button--primary { color: #fff; background: #365f7f; border-color: #365f7f; }
+.md-typeset a:focus-visible, .md-button:focus-visible { outline: 3px solid var(--md-accent-fg-color); outline-offset: 4px; }
+.md-typeset table:not([class]) { font-size: .74rem; }
+.md-typeset table:not([class]) th { background: color-mix(in srgb, var(--md-primary-fg-color) 8%, transparent); }
+.df-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 2.5rem; align-items: center; padding: 2.1rem 0 2.8rem; }
+.md-typeset .df-hero h1 { font-size: clamp(2.4rem, 4.5vw, 3.5rem); line-height: 1.08; margin: 0 0 1.2rem; letter-spacing: -.045em; }
+.df-hero-copy > p { max-width: 35rem; }
+.md-typeset .df-caption { font-size: .67rem; color: var(--md-default-fg-color--light); margin-top: 1.1rem; }
+.df-hero-visual img { display: block; width: 100%; border-radius: .8rem; }
+.df-hero-visual { animation: df-arrive .65s ease-out both; }
+.df-questions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.6rem; border-top: 2px solid var(--md-primary-fg-color); padding: .5rem 0 1.3rem; }
+.df-questions h3 { margin-top: 1rem; }
+@keyframes df-arrive { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .df-hero-visual { animation: none; } html { scroll-behavior: auto; } }
+@media (max-width: 76.25em) { .df-hero { gap: 1.5rem; } }
+@media (max-width: 48em) {
+  .df-hero { grid-template-columns: 1fr; padding: .7rem 0 1.2rem; gap: 1rem; }
+  .df-hero-visual { max-width: 32rem; }
+  .df-questions { grid-template-columns: 1fr; gap: 0; }
+  .md-typeset .df-hero h1 { font-size: 2.4rem; }
+}

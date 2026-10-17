@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">DataForge branching lineage mark</title>
+  <rect width="64" height="64" rx="14" fill="#244766"/>
+  <path d="M17 18h13v14h17M17 46h13V32" fill="none" stroke="#dcebf5" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="17" cy="18" r="6" fill="#fff"/><circle cx="17" cy="46" r="6" fill="#fff"/>
+  <circle cx="47" cy="32" r="7" fill="#efad84"/>
+</svg>
