@@ -20,8 +20,8 @@ and explicit policy restrictions, including read-only MCP maintenance and UI-onl
 ## Query before reading source
 
 ```sh
-uv run dataforge --help
-uv run dataforge --home ./automation-data --json workspace list
+uv run gravetrail --help
+uv run gravetrail --home ./automation-data --json workspace list
 ```
 
 With an analyzed home, resolve the workspace and asset IDs first. Check freshness,

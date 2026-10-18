@@ -39,7 +39,7 @@ def render(store, workspace):
     if category == 'history':
         runs = [r['run_id'] for r in store.runs(workspace)]
         run_id = st.selectbox('Specific analysis run (optional)', [None, *runs], format_func=lambda r: r or 'All unreferenced history')
-    phrase = 'RESET DATAFORGE' if category == 'application' else 'CLEAN SHARED DATA' if shared else names[workspace]
+    phrase = 'RESET GRAVETRAIL' if category == 'application' else 'CLEAN SHARED DATA' if shared else names[workspace]
     if st.button('Preview cleanup', type='primary'):
         try:
             st.session_state['cleanup_preview'] = cleanup_plan(store, '' if shared else workspace, category, file_ids, run_id)
@@ -96,10 +96,10 @@ def render(store, workspace):
     archives = sorted((store.home / 'backups').glob('*.zip'))
     if archives:
         archive = st.selectbox('Backup to restore', archives, format_func=lambda p: p.name)
-        restore_confirmation = st.text_input('Type RESTORE DATAFORGE to create a restored home')
-        if st.button('Restore into a new sibling home', disabled=restore_confirmation != 'RESTORE DATAFORGE'):
+        restore_confirmation = st.text_input('Type RESTORE GRAVETRAIL to create a restored home')
+        if st.button('Restore into a new sibling home', disabled=restore_confirmation != 'RESTORE GRAVETRAIL'):
             try:
-                destination = store.home.parent / ('dataforge-restored-' + uuid.uuid4().hex)
+                destination = store.home.parent / ('gravetrail-restored-' + uuid.uuid4().hex)
                 st.success('Restored to ' + str(restore_backup(archive, destination)))
             except (ValueError, OSError):
                 st.error('Restore refused; the backup is invalid or its destination is unavailable.')

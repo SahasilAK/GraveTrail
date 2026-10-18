@@ -195,8 +195,8 @@ def apply_cleanup(store, preview, confirmation, backup_first=True):
     workspace, category = preview['workspace_id'], preview['category']
     with maintenance_guard(store, '' if category in {'application', 'cache', 'orphans'} else workspace):
         expected = store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [workspace]) if workspace else []
-        phrase = expected[0]['name'] if expected else 'RESET DATAFORGE' if category == 'application' else 'CLEAN SHARED DATA'
-        if confirmation != phrase:
+        phrase = expected[0]['name'] if expected else 'RESET GRAVETRAIL' if category == 'application' else 'CLEAN SHARED DATA'
+        if confirmation != phrase and not (not expected and category == 'application' and confirmation == 'RESET DATAFORGE'):
             raise ValueError('Explicit confirmation does not match')
         current = cleanup_plan(store, workspace, category, preview.get('file_ids'), preview.get('run_id'))
         if current['token'] != preview.get('token'):

@@ -10,8 +10,8 @@ installation, containers and packaged launchers.
 
 | Symptom | Next action |
 | --- | --- |
-| Dependency or launcher missing | From the repository root, run `uv sync --locked --extra dev`; use `uv run dataforge-ui`. Confirm Python 3.11+. |
-| Port 8501 already used | Stop the intended previous owner or use `dataforge-ui --port 8502`. |
+| Dependency or launcher missing | From the repository root, run `uv sync --locked --extra dev`; use `uv run gravetrail-ui`. Confirm Python 3.11+. |
+| Port 8501 already used | Stop the intended previous owner or use `gravetrail-ui --port 8502`. |
 | Browser does not open | Open the loopback URL printed by the launcher and inspect terminal output. |
 | `storage_busy` or DuckDB lock | Stop the process owning that exact home before starting a separate UI/CLI/MCP process. Do not delete database/WAL/lock files. |
 | Previously analyzed workspace missing | Check the explicit home. Source and installed launchers can have different defaults; reopen the original home with `--home`. |

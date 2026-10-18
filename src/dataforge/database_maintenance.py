@@ -151,7 +151,7 @@ def _restore_backup(archive_path, destination):
     if destination.exists() or destination.is_symlink() or destination.resolve() != destination:
         raise ValueError('Restore requires a new, nonredirected destination directory')
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='dataforge-restore-', dir=destination.parent) as temporary:
+    with tempfile.TemporaryDirectory(prefix='gravetrail-restore-', dir=destination.parent) as temporary:
         staging = Path(temporary)
         with zipfile.ZipFile(archive_path) as archive:
             entries = archive.infolist()

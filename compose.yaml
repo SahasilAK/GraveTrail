@@ -1,6 +1,6 @@
 name: dataforge
 x-runtime: &runtime
-  image: dataforge:local
+  image: gravetrail:local
   build: .
   container_name: ${COMPOSE_PROJECT_NAME:-dataforge}-owner
   init: true
@@ -22,7 +22,7 @@ services:
   mcp:
     <<: *runtime
     profiles: [mcp]
-    command: [dataforge, mcp]
+    command: [gravetrail, mcp]
     stdin_open: true
     healthcheck:
       disable: true

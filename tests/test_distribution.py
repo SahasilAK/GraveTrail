@@ -1,12 +1,52 @@
 """Distribution boundaries: writable homes, immutable assets and artifact integrity."""
 import json
+import runpy
 import shutil
 import subprocess
+import sys
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
+
+
+def test_gravetrail_distribution_keeps_legacy_entry_points():
+    root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert project["name"] == "gravetrail"
+    for suffix in ("", "-ui", "-build"):
+        assert project["scripts"]["gravetrail" + suffix] == project["scripts"]["dataforge" + suffix]
+
+
+def test_frozen_cli_uses_gravetrail_program_name(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["gravetrail.exe", "--cli", "--help"])
+    monkeypatch.setattr(sys, "path", sys.path[:])
+    monkeypatch.setattr("dataforge.cli.app", lambda: calls.append(sys.argv[:]))
+    root = Path(__file__).resolve().parents[1]
+    runpy.run_path(str(root / "scripts/build/frozen_entry.py"), run_name="__main__")
+    assert calls == [["gravetrail", "--help"]]
+
+
+def test_python_build_ignores_previous_brand_and_version_artifacts(tmp_path, monkeypatch):
+    from dataforge.build import build_python
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
+    output = tmp_path / "dist"
+    folder = output / "python"
+    folder.mkdir(parents=True)
+    for name in ("dataforge_engineering_hub-1.2.3-py3-none-any.whl", "gravetrail-1.2.2-py3-none-any.whl",
+                 "gravetrail-1.2.2.tar.gz", "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"):
+        (folder / name).write_bytes(b"artifact")
+    monkeypatch.setattr("dataforge.build._run", lambda *args, **kwargs: None)
+    assert {p.name for p in build_python(tmp_path, output)} == {
+        "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"}
+    (folder / "gravetrail-1.2.3-py3-none-any.whl").unlink()
+    with pytest.raises(ValueError, match="current GraveTrail"):
+        build_python(tmp_path, output)
 
 
 def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path):

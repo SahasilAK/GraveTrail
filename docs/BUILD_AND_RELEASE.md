@@ -1,4 +1,4 @@
-# Build and release DataForge
+# Build and release GraveTrail
 
 All distributions run the existing application and shared Python services. Build from
 the repository root with Python 3.11+ and `uv`; Docker additionally needs a running
@@ -7,12 +7,12 @@ PyInstaller. They produce a console application with a browser UI.
 
 ```console
 uv sync --locked --extra dev
-uv run dataforge-build --target python
-uv run dataforge-build --target docker --output dist/container
-uv run dataforge-build --target executable
-uv run dataforge-build --target all
-uv run dataforge-build --verify
-uv run dataforge-build --verify --output dist/container
+uv run gravetrail-build --target python
+uv run gravetrail-build --target docker --output dist/container
+uv run gravetrail-build --target executable
+uv run gravetrail-build --target all
+uv run gravetrail-build --verify
+uv run gravetrail-build --verify --output dist/container
 ```
 
 `--root PATH` selects the source checkout; `--output PATH` selects the artifact
@@ -29,8 +29,8 @@ application's runtime configuration.
 |---|---|
 | `dist/python/*.whl` | Installable application, UI pages, prompts and default theme |
 | `dist/python/*.tar.gz` | Source distribution, including release/build tooling |
-| `dist/dataforge-VERSION-OS-ARCH.zip` | Windows executable and complete companion directory |
-| `dist/dataforge-VERSION-OS-ARCH.tar.gz` | Linux/macOS executable and companion directory |
+| `dist/gravetrail-VERSION-OS-ARCH.zip` | Windows executable and complete companion directory |
+| `dist/gravetrail-VERSION-OS-ARCH.tar.gz` | Linux/macOS executable and companion directory |
 | `dist/docker-image.json` | Local Docker image tag, content ID, OS and architecture |
 | `dist/manifest.json`, `dist/SHA256SUMS` | Version/platform/build metadata, artifact sizes and SHA-256 hashes |
 
@@ -38,7 +38,7 @@ The Docker target builds a local image, rather than exporting an image tarball o
 publishing to a registry. Its manifest hashes the image metadata document. Use the
 recorded content ID to identify the local image. Executables are built for the host
 OS and architecture; this is not cross-compilation. Keep the complete extracted
-`dataforge/` directory together. Never distribute just `dataforge.exe`.
+`gravetrail/` directory together. Never distribute just `gravetrail.exe`.
 
 `--verify` checks every manifest entry, size, checksum and the checksum-list contents;
 it rejects paths escaping the artifact directory. Checksums detect modification,
@@ -52,21 +52,21 @@ Install a wheel in a clean virtual environment:
 
 ```console
 python -m venv .venv
-python -m pip install dist/python/dataforge_engineering_hub-0.1.0-py3-none-any.whl
-dataforge-ui --no-browser
-dataforge --json workspace list
-dataforge mcp
+python -m pip install dist/python/gravetrail-0.1.0-py3-none-any.whl
+gravetrail-ui --no-browser
+gravetrail --json workspace list
+gravetrail mcp
 ```
 
 Activate the environment first (`.venv\Scripts\Activate.ps1` in PowerShell or
-`source .venv/bin/activate` on Linux/macOS). The command `dataforge ui` uses the same
-launcher. `dataforge-ui` accepts `--home PATH`, `--port PORT`, `--address HOST`, and
+`source .venv/bin/activate` on Linux/macOS). The command `gravetrail ui` uses the same
+launcher. `gravetrail-ui` accepts `--home PATH`, `--port PORT`, `--address HOST`, and
 `--no-browser`. It forwards additional Streamlit options. Loopback is the default.
 Initialization runs the existing DuckDB migrations before serving.
 
 The frozen application accepts those same UI flags. Use
-`dataforge.exe --cli --json workspace list` on Windows, or
-`./dataforge --cli --json workspace list` on Linux/macOS. For MCP, append `mcp`
+`gravetrail.exe --cli --json workspace list` on Windows, or
+`./gravetrail --cli --json workspace list` on Linux/macOS. For MCP, append `mcp`
 after `--cli` and any global CLI options. The frozen dispatcher also supports the
 existing detached job worker; no second application implementation is maintained.
 
@@ -115,7 +115,7 @@ with Compose:
 
 ```console
 docker compose --profile ui down
-docker run --rm -v dataforge_dataforge-data:/data dataforge:local dataforge --json workspace list
+docker run --rm -v dataforge_dataforge-data:/data gravetrail:local gravetrail --json workspace list
 docker compose --profile mcp run --rm --no-deps mcp
 ```
 
@@ -134,11 +134,11 @@ environment; point `--python` to the clean installation's interpreter:
 
 ```console
 uv run python scripts/build/smoke.py --python dist/wheel-smoke/Scripts/python.exe
-uv run python scripts/build/smoke.py --executable dist/.build/bundle/dataforge/dataforge.exe
-uv run python scripts/build/smoke_docker.py --image dataforge:0.1.0
+uv run python scripts/build/smoke.py --executable dist/.build/bundle/gravetrail/gravetrail.exe
+uv run python scripts/build/smoke_docker.py --image gravetrail:0.1.0
 ```
 
-On Linux/macOS substitute `bin/python` and `dataforge` for Windows paths. These
+On Linux/macOS substitute `bin/python` and `gravetrail` for Windows paths. These
 checks create isolated temporary homes; Docker additionally uses a uniquely named
 temporary volume/container and removes only those resources. They exercise real
 SQL import, lineage traversal, stdio MCP initialization/query, HTTP health and a
@@ -180,7 +180,7 @@ and Python fields describe the publishing runner; each archive filename identifi
 its target OS and architecture.
 
 Only after those checks does the publishing job create `vX.Y.Z` at the exact dispatch
-commit and publish **DataForge vX.Y.Z** under the repository's Releases tab. It uses
+commit and publish **GraveTrail vX.Y.Z** under the repository's Releases tab. It uses
 only the built-in `GITHUB_TOKEN` with `contents: write` in that job. No personal token,
 provider key, additional account connection or signing certificate is required.
 Repository rules still apply: restrictions on tag creation or token write permissions
@@ -232,3 +232,41 @@ The build approach follows the documented [uv Docker integration](https://docs.a
 - Native Linux/macOS executable builds and hosted Actions runs have not been
   executed from this Windows session. The workflow supplies their verification
   gates; their presence alone is not evidence of platform support.
+
+## GraveTrail rebrand compatibility
+
+GraveTrail is the new application and distribution name. Use `gravetrail`,
+`gravetrail-ui`, and `gravetrail-build`; the `dataforge`, `dataforge-ui`, and
+`dataforge-build` commands remain compatibility aliases. Python imports and
+`python -m dataforge.cli` / `python -m dataforge.launcher` stay unchanged.
+
+When upgrading a pip installation of `dataforge-engineering-hub`, install the
+GraveTrail wheel in a fresh virtual environment and launch it with the same explicit
+`--home`. Stop the previous owner first. Keep the two distributions in separate
+environments because both provide the `dataforge` Python package and legacy commands.
+
+Existing `DATAFORGE_*` launch variables, `.dataforge/`, platform data directories,
+`dataforge.duckdb`, and backup/configuration formats are retained so upgrades
+reuse existing data and settings. Compose keeps its `dataforge` project name
+and `dataforge-data` volume to reconnect to existing storage. Do not create
+a second owner of the same home. No data migration is required.
+
+Repository and documentation links still use `dataforge-engineering-hub`
+until the repository is renamed after merge.
+
+### Names intentionally retained
+
+| Existing identifier | Reason it stays |
+| --- | --- |
+| `src/dataforge/`, `dataforge.*` imports and module launchers | Existing scripts, plugins and packaged asset lookups use this Python namespace. The distribution and primary commands are GraveTrail. |
+| `DATAFORGE_*` launch variables and credential references | Existing launch configuration and credential authorization keep working. |
+| `.dataforge/`, platform `DataForge` data homes, `dataforge.duckdb` | Existing workspaces, originals and settings reopen without moving data. |
+| Backup, history and portable configuration format IDs | Previously exported files remain readable. |
+| Compose project `dataforge` and `dataforge-data` volume | Upgrades reconnect to the existing physical volume. |
+| `dataforge://` resources and old console commands | Compatibility aliases; new configurations use GraveTrail. |
+| Supplied `dataforge_*_lineage_test_project.zip` files and their internal paths | Original test fixtures and evidence retain their exact names and bytes. |
+| `dataforge-engineering-hub` repository and Pages links | The repository rename is planned after merge. |
+
+README and guide screenshots use explicit `gravetrail-*` asset filenames and show the
+GraveTrail sidebar. Any old name in their source-file selectors comes from the supplied
+fixture's original path, not the application branding.

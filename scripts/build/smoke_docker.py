@@ -19,9 +19,9 @@ from dataforge.build import build_environment
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--image", default="dataforge:0.1.0")
+    parser.add_argument("--image", default="gravetrail:0.1.0")
     args = parser.parse_args()
-    name = "dataforge-smoke-" + uuid.uuid4().hex[:12]
+    name = "gravetrail-smoke-" + uuid.uuid4().hex[:12]
     env = build_environment()
 
     def docker(*arguments, capture=True):
@@ -31,14 +31,14 @@ def main() -> None:
 
     docker("volume", "create", name)
     try:
-        with tempfile.TemporaryDirectory(prefix="dataforge-container-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="gravetrail-container-") as temporary:
             inputs = Path(temporary)
             (inputs / "flow.sql").write_text("create table pub.kpi as select id from raw.orders;", encoding="utf-8")
             runtime = ["run", "--rm", "-v", f"{name}:/data", "-v", f"{inputs}:/imports:ro", args.image]
             assert docker(*runtime, "id", "-u") == "10001"
 
             def cli(*arguments):
-                return json.loads(docker(*runtime, "dataforge", "--json", "--allow-write",
+                return json.loads(docker(*runtime, "gravetrail", "--json", "--allow-write",
                                          "--allowed-root", "/imports", *arguments))
 
             workspace = cli("workspace", "create", "Container persistence")["workspace_id"]
@@ -66,7 +66,7 @@ def main() -> None:
                 docker("rm", name)
             assert cli("workspace", "list")["items"][0]["name"] == "Container persistence"
             asyncio.run(check_mcp(["docker", "run", "--rm", "-i", "-v", f"{name}:/data",
-                                   args.image, "dataforge"], inputs, env))
+                                   args.image, "gravetrail"], inputs, env))
         print("PASS: non-root container, import/lineage, rendered UI, volume persistence and stdio MCP query")
     finally:
         subprocess.run(["docker", "rm", "-f", name], env=env, capture_output=True, timeout=30)

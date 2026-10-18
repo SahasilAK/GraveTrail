@@ -25,12 +25,15 @@ async def render_session(port: int) -> None:
     request.rerun_script.query_string = ""
     await connection.send(request.SerializeToString())
     seen_delta = False
+    seen_brand = False
     try:
         while True:
             raw = await asyncio.wait_for(connection.recv(), timeout=60)
             if raw is None:
                 raise RuntimeError("UI session closed before rendering")
             message = ForwardMsg.FromString(raw)
+            if message.HasField("page_config_changed"):
+                seen_brand = message.page_config_changed.title == "GraveTrail | Engineering workspace"
             if message.HasField("delta"):
                 seen_delta = True
                 if message.delta.HasField("new_element") and message.delta.new_element.HasField("exception"):
@@ -42,6 +45,8 @@ async def render_session(port: int) -> None:
                     continue
                 if not seen_delta:
                     raise RuntimeError("UI produced no rendered elements")
+                if not seen_brand:
+                    raise RuntimeError("UI did not apply the GraveTrail page title")
                 return
     finally:
         await connection.close()
@@ -55,7 +60,9 @@ async def check_mcp(command: list[str], cwd: Path, env: dict[str, str]) -> None:
                                        cwd=str(cwd), env=env)
     async with stdio_client(parameters) as (reader, writer):
         async with ClientSession(reader, writer) as session:
-            await session.initialize()
+            initialized = await session.initialize()
+            if initialized.serverInfo.name != "GraveTrail":
+                raise RuntimeError("MCP did not identify itself as GraveTrail")
             tools = await session.list_tools()
             if not any(tool.name == "list_workspaces" for tool in tools.tools):
                 raise RuntimeError("MCP did not register workspace tools")
@@ -77,7 +84,7 @@ def main() -> None:
         python = str(args.python.resolve())
         ui = [python, "-m", "dataforge.launcher"]
         cli = [python, "-m", "dataforge.cli"]
-    with tempfile.TemporaryDirectory(prefix="dataforge-distribution-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="gravetrail-distribution-") as temporary:
         cwd = Path(temporary)
         env = {**build_environment(), "DATAFORGE_HOME": str(cwd / "home")}
         inputs = cwd / "inputs"

@@ -1,6 +1,6 @@
 # Token-efficient local analysis
 
-DataForge resolves names and computes lineage with the local stored graph, rather
+GraveTrail resolves names and computes lineage with the local stored graph, rather
 than asking an agent to load scripts and rebuild dependencies. Hash-based parsing
 cache and persisted evidence are reused. Queries never reparse or call an LLM.
 

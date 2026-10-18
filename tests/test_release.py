@@ -20,9 +20,9 @@ def native_builds(root, version="1.2.3"):
     for runner, platform, extension in (("Windows-X64", "windows-amd64", ".zip"),
                                          ("Linux-X64", "linux-x86_64", ".tar.gz"),
                                          ("macOS-ARM64", "darwin-arm64", ".tar.gz")):
-        directory = root / f"dataforge-{runner}"
+        directory = root / f"gravetrail-{runner}"
         directory.mkdir(parents=True)
-        archive = directory / f"dataforge-{version}-{platform}{extension}"
+        archive = directory / f"gravetrail-{version}-{platform}{extension}"
         archive.write_bytes(runner.encode())
         python = directory / "python/package.whl"
         python.parent.mkdir()
@@ -41,7 +41,7 @@ def test_stage_verifies_each_build_and_publishes_only_standalone_archives(tmp_pa
     assert len(manifest["artifacts"]) == 3
     assert len(list(output.iterdir())) == 5
     assert not list(output.rglob("*.whl"))
-    assert all(item["path"].startswith("dataforge-1.2.3-") for item in manifest["artifacts"])
+    assert all(item["path"].startswith("gravetrail-1.2.3-") for item in manifest["artifacts"])
 
 
 @pytest.mark.parametrize("problem", ["missing", "tampered", "version", "duplicate", "unlisted"])
@@ -50,7 +50,7 @@ def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path, problem):
 
     downloads, output = tmp_path / "downloads", tmp_path / "release"
     native_builds(downloads)
-    windows = downloads / "dataforge-Windows-X64"
+    windows = downloads / "gravetrail-Windows-X64"
     archive = next(windows.glob("*.zip"))
     if problem == "missing":
         (windows / "manifest.json").unlink()
@@ -60,7 +60,7 @@ def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path, problem):
         write_manifest(windows, "2.0.0", [archive], "executable")
     elif problem == "duplicate":
         import shutil
-        shutil.copytree(windows, downloads / "dataforge-Windows-ARM64")
+        shutil.copytree(windows, downloads / "gravetrail-Windows-ARM64")
     else:
         (windows / "manifest.json").unlink()
         write_manifest(windows, "1.2.3", [windows / "python/package.whl"], "executable")
@@ -114,5 +114,5 @@ def test_release_notes_always_retain_changes_and_installation_guidance():
     for summary in (None, "## Highlights\n\n- Export fix."):
         notes = release_notes("## What's Changed\nPR #7", "abc123 fix: export", summary)
         assert "PR #7" in notes and "abc123 fix: export" in notes
-        assert "SHA256SUMS" in notes and "dataforge.exe" in notes
+        assert "SHA256SUMS" in notes and "gravetrail.exe" in notes
         assert ("AI-generated" in notes) == bool(summary)

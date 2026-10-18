@@ -1,10 +1,10 @@
-site_name: DataForge
+site_name: GraveTrail
 site_description: Evidence-backed SQL and SAS lineage. Trace dependencies, inspect source, and keep the proof.
 site_url: https://sahasilak.github.io/dataforge-engineering-hub/
 repo_url: https://github.com/SahasilAK/dataforge-engineering-hub
 repo_name: SahasilAK/dataforge-engineering-hub
 edit_uri: edit/main/docs/
-copyright: DataForge · Apache License 2.0
+copyright: GraveTrail · Apache License 2.0
 strict: true
 theme:
   name: material
@@ -50,9 +50,9 @@ extra:
     - assets/images/banner.svg
     - assets/diagrams/lineage.svg
     - assets/stylesheets/extra.css
-    - assets/images/workspace-dashboard.png
-    - assets/images/lineage-explorer.png
-    - assets/images/source-evidence.png
+    - assets/images/gravetrail-workspace-dashboard.png
+    - assets/images/gravetrail-lineage-explorer.png
+    - assets/images/gravetrail-source-evidence.png
 markdown_extensions:
   - admonition
   - attr_list
@@ -115,7 +115,7 @@ nav:
       - development/index.md
       - Contributing: development/contributing.md
       - Implementation guide: IMPLEMENTATION_GUIDE.md
-      - Extending DataForge: EXTENDING_THE_APP.md
+      - Extending GraveTrail: EXTENDING_THE_APP.md
       - Testing: TESTING.md
       - Documentation: development/documentation.md
   - Troubleshooting:

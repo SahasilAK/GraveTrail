@@ -1,6 +1,6 @@
-# How DataForge works
+# How GraveTrail works
 
-DataForge keeps presentation separate from parsing, storage and investigation. The UI,
+GraveTrail keeps presentation separate from parsing, storage and investigation. The UI,
 CLI and MCP adapters call shared services. No imported SQL, SAS or CSV content is executed.
 
 ```mermaid

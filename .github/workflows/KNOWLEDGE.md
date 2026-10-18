@@ -12,3 +12,5 @@ including the nested upload action in the Pages composite; test commands also in
 - `docs.yml` — Read-only PR strict build/publication inspection in a locked docs-only environment. Relevant main pushes/manual main runs upload only site/; deploy alone has Pages/OIDC write using the github-pages environment. Pages must be enabled separately.
 
 - `publish-release.yml` — Manual default-branch stable X.Y.Z publication; project/lock/tag preflight, reused native build gates, consolidated verified archives/checksums, exact SHA tag and public Release. Optional Copilot highlights use only GITHUB_TOKEN in a separate read-only job; failure/skipping falls back to GitHub notes/commits. `release.yml` is callable with skip_container while direct tag/manual runs remain build-only.
+
+Release build/upload/download patterns and executable smoke paths use gravetrail consistently; repository and Pages URLs remain unchanged until the post-merge rename.

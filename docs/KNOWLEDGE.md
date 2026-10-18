@@ -25,7 +25,7 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `TOKEN_OPTIMIZATION.md` — Progressive disclosure, cursor/budget rules and reproducible representative character/token estimates.
 - `ARCHITECTURE.md` — Architecture. Maintained documentation; consult implementation status for verification boundaries.
 - `DATA_MODEL.md` — Data model. Maintained documentation; consult implementation status for verification boundaries.
-- `EXTENDING_THE_APP.md` — Extending DataForge. Maintained documentation; consult implementation status for verification boundaries.
+- `EXTENDING_THE_APP.md` — Extending GraveTrail. Maintained documentation; consult implementation status for verification boundaries.
 - `IMPLEMENTATION_GUIDE.md` — Implementation guide. Maintained documentation; consult implementation status for verification boundaries.
 - `LINEAGE_ENGINE.md` — Lineage engine. Maintained documentation; consult implementation status for verification boundaries.
 - `LLM_INTEGRATION.md` — Provider protocols, privacy, grounding and auto/best-reasoning evidence: existing fenced SAS processing passes; 2026-10-17 bounded SQL/SAS merge-refresh-reopen passes, preserving earlier gateway failures as history.
@@ -54,3 +54,9 @@ pass explicit homes and respect one DuckDB owner. Platform/build evidence lives 
 Public docs link to tracked contribution/testing/build guides. All KNOWLEDGE.md context maps are tracked for repository navigation; agent instructions and implementation records remain optional local context.
 
 BUILD_AND_RELEASE.md now includes the manual Publish standalone release runbook: committed project+lock version, default branch, exact tag/source, platform assets, no-extra-secret Copilot/fallback, failed-publication handling and hosted acceptance limits.
+
+Product prose and command examples use GraveTrail; BUILD_AND_RELEASE documents preserved legacy storage, imports, variables, commands, Compose identities and unchanged repository links. Native/archive/image examples use gravetrail.
+
+Rebrand rescan aligns reset/restore phrases and sample installation paths, explicitly documents retained compatibility identifiers, and uses gravetrail-prefixed screenshot filenames.
+
+CLI/MCP references enumerate all98 executable routes/29groups, root and command flags/positional arguments,78 tools with required/optional inputs,2 concrete resources/4templates including legacy aliases and1prompt. Documentation tests compare exact registrations/inputs, independently of the46-ID UI capability catalog. Launcher/build sibling flags and the UI exception to non-Streamlit CLI behavior are explicit.

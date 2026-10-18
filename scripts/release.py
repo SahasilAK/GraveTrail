@@ -26,14 +26,14 @@ def stage_assets(downloads: Path, output: Path, version: str) -> None:
     for runner, system, extension in (("Windows", "windows", ".zip"),
                                        ("Linux", "linux", ".tar.gz"),
                                        ("macOS", "darwin", ".tar.gz")):
-        builds = list(downloads.glob(f"dataforge-{runner}-*"))
+        builds = list(downloads.glob(f"gravetrail-{runner}-*"))
         if len(builds) != 1 or builds[0].is_symlink():
             raise ValueError(f"Expected exactly one {runner} build")
         directory = builds[0]
         manifest = verify_artifacts(directory)
         if manifest["version"] != version or manifest["target"] != "executable":
             raise ValueError(f"Wrong version or target in {directory.name}")
-        pattern = rf"dataforge-{re.escape(version)}-{system}-[a-z0-9_]+{re.escape(extension)}"
+        pattern = rf"gravetrail-{re.escape(version)}-{system}-[a-z0-9_]+{re.escape(extension)}"
         archives = [directory / item["path"] for item in manifest["artifacts"]
                     if re.fullmatch(pattern, item["path"])]
         if len(archives) != 1:
@@ -57,7 +57,7 @@ def copilot_summary(github_notes: str, commits: str) -> str | None:
     )
     try:
         # Empty cwd prevents project hooks/instructions; no tools or built-in MCP access.
-        with tempfile.TemporaryDirectory(prefix="dataforge-release-notes-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="gravetrail-release-notes-") as temporary:
             result = subprocess.run(
                 ["copilot", "--silent", "--no-color", "--no-auto-update", "--available-tools=",
                  "--disable-builtin-mcps", "--no-custom-instructions", "--max-ai-credits=1", "-p", prompt],
@@ -80,10 +80,10 @@ def release_notes(github_notes: str, commits: str, summary: str | None = None) -
         f"## Commit history\n\n{commits.strip()}\n\n"
         "## Downloads and startup\n\n"
         "Choose the archive matching your operating system and architecture. Verify it against "
-        "`SHA256SUMS`, extract the complete archive, and keep the `dataforge/` directory together. "
-        "On Windows run `dataforge.exe`; on Linux/macOS run `./dataforge`. The app opens in your browser. "
+        "`SHA256SUMS`, extract the complete archive, and keep the `gravetrail/` directory together. "
+        "On Windows run `gravetrail.exe`; on Linux/macOS run `./gravetrail`. The app opens in your browser. "
         "Python does not need to be installed. These executables are unsigned.\n\n"
-        "Back up your existing DataForge data home with all app/CLI/MCP owners stopped before upgrading. "
+        "Back up your existing GraveTrail data home with all app/CLI/MCP owners stopped before upgrading. "
         "Replace application files and retain your separate runtime data home.\n"
     )
 

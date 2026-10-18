@@ -1,6 +1,6 @@
 # Architecture
 
-DataForge is a single local Streamlit application with Python feature services. Presentation
+GraveTrail is a single local Streamlit application with Python feature services. Presentation
 never parses source or executes imported statements. DuckDB persists facts; NetworkX derives
 bounded graphs; a local SVG/JavaScript component links graph interactions to source evidence.
 

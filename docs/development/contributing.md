@@ -49,7 +49,7 @@ Use a disposable home for application checks. Set `DATAFORGE_HOME` in the launch
 shell before direct Streamlit startup, or use the explicit-home launcher instead:
 
 ```sh
-uv run dataforge-ui --home /absolute/path/to/disposable-home
+uv run gravetrail-ui --home /absolute/path/to/disposable-home
 ```
 
 AppTest covers Python interactions; it does not execute the graph's browser JavaScript.

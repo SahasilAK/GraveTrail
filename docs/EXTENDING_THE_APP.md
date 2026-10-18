@@ -1,4 +1,4 @@
-# Extending DataForge
+# Extending GraveTrail
 
 **Parsers:** add a module under `src/dataforge/parsers/` returning `ParseResult`, with
 `Operation` inputs/outputs, exact code/line ranges, `Usage` direct references and `Diagnostic`

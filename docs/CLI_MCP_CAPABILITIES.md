@@ -3,9 +3,15 @@
 Verified source implementation: 2026-10-17. All 46 UI coverage IDs are accounted for:
 36 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
 rows have working permitted reads/local routes; they do **not** claim full MCP parity.
-`dataforge capabilities` and MCP `get_capabilities` return this versioned inventory,
+`gravetrail capabilities` and MCP `get_capabilities` return this versioned inventory,
 including scope, aggregate effects, required grants and current launch authorization.
 Follow `next_cursor`; availability does not mean the current caller has permission.
+
+These 46 IDs group UI capabilities; they are not command/tool counts. The registered
+interface has **98 CLI command routes, 29 CLI groups, 78 MCP tools, 2 concrete resources,
+4 resource templates and 1 prompt** (verified 2026-10-18). The CLI and MCP guides list
+every route/tool, including basic discovery commands outside this UI capability matrix.
+Documentation tests compare those references with actual registrations and inputs.
 
 Use [CLI guide](CLI_GUIDE.md) for command options/examples and [MCP integration](MCP_INTEGRATION.md)
 for typed schemas and transport setup. Every workspace operation selects an explicit ID.

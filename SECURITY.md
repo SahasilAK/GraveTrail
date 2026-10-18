@@ -1,6 +1,6 @@
 # Security
 
-DataForge is a local, single-user static-analysis tool. Keep the UI bound to loopback
+GraveTrail is a local, single-user static-analysis tool. Keep the UI bound to loopback
 and protect data homes, exports and backups: they can contain complete source code.
 Read the [security and privacy guide](docs/SECURITY.md) for the implemented threat
 boundaries, credential lifecycle, import protections and deployment requirements.

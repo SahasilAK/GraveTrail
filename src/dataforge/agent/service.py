@@ -203,8 +203,8 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         args += ['--home', str(self.store.home), '--allowed-workspace', w, 'mcp']
         stdio = {'command': sys.executable, 'args': args}
         result = {'stdio': stdio, 'client': client, 'transport': transport,
-                  'codex_toml': '[mcp_servers.dataforge]\ncommand = ' + json.dumps(sys.executable) + '\nargs = ' + json.dumps(args),
-                  'claude': {'mcpServers': {'dataforge': stdio}},
+                  'codex_toml': '[mcp_servers.gravetrail]\ncommand = ' + json.dumps(sys.executable) + '\nargs = ' + json.dumps(args),
+                  'claude': {'mcpServers': {'gravetrail': stdio}},
                   'http': {'url': 'http://127.0.0.1:8765/mcp', 'bearer_reference': 'DATAFORGE_MCP_TOKEN',
                            'authentication': 'pre-provisioned bearer; external TLS reverse proxy required'},
                   'tools': [t.name for t in tools], 'ownership': 'Stop any other owner before launching an external client'}

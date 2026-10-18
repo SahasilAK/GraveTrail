@@ -9,7 +9,7 @@ hide:
 
 # Trace the path.<br>Keep the proof.
 
-Understand the SQL and SAS pipelines in front of you. DataForge connects table
+Understand the SQL and SAS pipelines in front of you. GraveTrail connects table
 dependencies to the original statements, so every investigation has somewhere to start
 and evidence to come back to.
 
@@ -68,7 +68,7 @@ metadata, pagination, and bounded responses. Retrieve original source only when 
 git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
 cd dataforge-engineering-hub
 uv sync --locked --extra dev
-uv run dataforge-ui
+uv run gravetrail-ui
 ```
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
@@ -92,7 +92,7 @@ explains each option and its verification limits. There is no assumed public bin
 | Recover from an error | [Troubleshooting](troubleshooting/help.md) |
 
 !!! info "Evidence includes uncertainty"
-    DataForge performs static analysis. Unsupported syntax, dynamic macros, and ambiguous
+    GraveTrail performs static analysis. Unsupported syntax, dynamic macros, and ambiguous
     identities remain diagnostic boundaries. AI-assisted claims remain inferred after
     explicit validation and merge. Start with [SQL](SQL_PARSING.md) and [SAS](SAS_PARSING.md)
     coverage before drawing conclusions from missing edges.

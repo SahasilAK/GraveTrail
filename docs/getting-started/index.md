@@ -1,12 +1,12 @@
 # Getting started
 
-DataForge turns imported SQL and SAS into a local, evidence-backed dependency graph.
+GraveTrail turns imported SQL and SAS into a local, evidence-backed dependency graph.
 Use it to investigate an unfamiliar project, trace the inputs of a report, or assess
 which downstream assets a change could affect. CSV imports add source metadata;
 their values are never interpreted as code.
 
 The deterministic workflow needs no API key, model, cloud account or database
-connection. DataForge analyzes source text without executing the imported scripts.
+connection. GraveTrail analyzes source text without executing the imported scripts.
 
 ## Choose your installation
 
