@@ -17,7 +17,7 @@ if __name__ == "__main__":
         sys.path.insert(0, str(application_root()))
         from dataforge.cli import app
 
-        sys.argv = ["dataforge", *sys.argv[2:]]
+        sys.argv = ["gravetrail", *sys.argv[2:]]
         app()
     else:
         main()

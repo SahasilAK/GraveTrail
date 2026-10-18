@@ -9,7 +9,7 @@ invalid source blobs. No embedding index or runtime knowledge base is implemente
 Choose a category, optionally select source files or an unreferenced history run, then
 **Preview cleanup**. Review every affected table and runtime file. Type the workspace name
 to apply; shared cache/orphan cleanup requires `CLEAN SHARED DATA`, and full reset requires
-`RESET DATAFORGE`. A changed database or file invalidates the preview. A successful full-home backup is mandatory before general cleanup and cannot be disabled. No operation runs simply by selecting a category.
+`RESET GRAVETRAIL`. A changed database or file invalidates the preview. A successful full-home backup is mandatory before general cleanup and cannot be disabled. No operation runs simply by selecting a category.
 
 | Operation | Effect |
 | --- | --- |
@@ -73,7 +73,7 @@ gravetrail --home /path/to/home --json --output preview.json cleanup lineage --w
 gravetrail --home /path/to/home --json --allow-write cleanup lineage --workspace WORKSPACE_ID --no-dry-run --preview preview.json --confirm "Workspace name" --backup
 gravetrail --home /path/to/home maintenance inspect
 gravetrail --home /path/to/home --allow-write maintenance backup
-gravetrail --allow-write maintenance restore backup.zip /new/home --confirm "RESTORE DATAFORGE"
+gravetrail --allow-write maintenance restore backup.zip /new/home --confirm "RESTORE GRAVETRAIL"
 ```
 
 Output files must be new. Source/columns/AI/history/jobs/reset/workspace categories use the

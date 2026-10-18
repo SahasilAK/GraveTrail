@@ -1,6 +1,6 @@
 # User guide
 
-![GraveTrail lineage explorer showing the supplied SQL project at depth 30](../assets/images/lineage-explorer.png)
+![GraveTrail lineage explorer showing the supplied SQL project at depth 30](../assets/images/gravetrail-lineage-explorer.png)
 
 *Actual local application, captured with the included SQL project in an isolated home.*
 
@@ -12,7 +12,7 @@ documents individual controls and settings.
 ## Build a trustworthy workspace
 
 ??? example "View the sample workspace dashboard"
-    ![Actual dashboard: 86 SQL files, 92 registered assets, 128 dependencies and no diagnostics](../assets/images/workspace-dashboard.png)
+    ![Actual dashboard: 86 SQL files, 92 registered assets, 128 dependencies and no diagnostics](../assets/images/gravetrail-workspace-dashboard.png)
 
 Create or select a workspace in the sidebar. Workspaces retain their own inventory,
 analysis, settings and provider profiles. In **Lineage builder**, import a ZIP,
@@ -47,7 +47,7 @@ Collapsed temporary steps retain their intermediate evidence. Logical path steps
 establish runtime execution order.
 
 ??? example "Inspect the complete original SQL"
-    ![Original SQL source viewer showing the imported statement and exact line numbers](../assets/images/source-evidence.png)
+    ![Original SQL source viewer showing the imported statement and exact line numbers](../assets/images/gravetrail-source-evidence.png)
 
 ## Inspect direct column usage
 

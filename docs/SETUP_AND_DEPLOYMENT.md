@@ -65,7 +65,7 @@ Clone as above, then create a dedicated environment. Windows PowerShell:
 ```powershell
 py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
-.venv\Scripts\gravetrail-ui.exe --home D:\DataForge\data
+.venv\Scripts\gravetrail-ui.exe --home D:\GraveTrail\data
 ```
 
 Linux/macOS:
@@ -180,8 +180,8 @@ Extract the **entire** archive, keeping its `gravetrail` directory and internal 
 together. On Windows:
 
 ```powershell
-.\gravetrail\gravetrail.exe --home D:\DataForge\data --port 8501
-.\gravetrail\gravetrail.exe --cli --home D:\DataForge\data --json workspace list
+.\gravetrail\gravetrail.exe --home D:\GraveTrail\data --port 8501
+.\gravetrail\gravetrail.exe --cli --home D:\GraveTrail\data --json workspace list
 ```
 
 Stop the UI before running a CLI or MCP process against the same home. `--cli` routes to
@@ -259,9 +259,9 @@ and [agent workflows](AGENT_WORKFLOWS.md).
 Host access is configured before startup. PowerShell example:
 
 ```powershell
-$env:DATAFORGE_HOME = 'D:\DataForge\data'
+$env:DATAFORGE_HOME = 'D:\GraveTrail\data'
 $env:DATAFORGE_ALLOWED_ROOTS = 'D:\Engineering\jobs;D:\Engineering\exports'
-$env:DATAFORGE_STORAGE_LOCATIONS = 'D:\DataForge\archive;D:\DataForge\sandbox'
+$env:DATAFORGE_STORAGE_LOCATIONS = 'D:\GraveTrail\archive;D:\GraveTrail\sandbox'
 uv run gravetrail-ui
 ```
 
@@ -343,8 +343,8 @@ For Codex, configure a local process using actual absolute paths:
 
 ```toml
 [mcp_servers.gravetrail]
-command = "D:/DataForge/.venv/Scripts/python.exe"
-args = ["-m", "dataforge.cli", "--home", "D:/DataForge/data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
+command = "D:/GraveTrail/.venv/Scripts/python.exe"
+args = ["-m", "dataforge.cli", "--home", "D:/GraveTrail/data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
 ```
 
 Settings → **Agent & Automation Access** provides configurations for the selected home

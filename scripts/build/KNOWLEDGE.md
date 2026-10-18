@@ -10,3 +10,5 @@ requires explicitly adding new files in this directory; do not change user ignor
 - `smoke_docker.py` — Actual non-root image smoke, CLI analysis, rendered UI, owner restart persistence and MCP; removes only uniquely named test containers/volume.
 
 Distribution smoke also requires the GraveTrail page title and MCP server identity. Docker smoke uses gravetrail image/CLI names and uniquely named disposable runtime resources.
+
+Frozen --cli sets the program name to gravetrail so help/errors reflect the product; worker module paths remain compatible.

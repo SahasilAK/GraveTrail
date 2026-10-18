@@ -32,7 +32,7 @@ def main():
         if response_object(raw).get("status") != "connected":
             raise ValueError("Connection response failed its contract")
         report["checks"].append({"name": "connection", "status": "passed", "usage": usage})
-        with tempfile.TemporaryDirectory(prefix="dataforge-live-check-") as directory:
+        with tempfile.TemporaryDirectory(prefix="gravetrail-live-check-") as directory:
             store = Store(directory)
             try:
                 workspace = store.create_workspace("Synthetic live LLM verification")

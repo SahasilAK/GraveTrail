@@ -20,8 +20,8 @@ Codex `config.toml` example (replace paths and ID):
 
 ```toml
 [mcp_servers.gravetrail]
-command = "D:/DataForge/.venv/Scripts/python.exe"
-args = ["-m", "dataforge.cli", "--home", "D:/DataForge/automation-data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
+command = "D:/GraveTrail/.venv/Scripts/python.exe"
+args = ["-m", "dataforge.cli", "--home", "D:/GraveTrail/automation-data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
 ```
 
 Claude Code project `.mcp.json`:
@@ -30,8 +30,8 @@ Claude Code project `.mcp.json`:
 {
   "mcpServers": {
     "gravetrail": {
-      "command": "D:/DataForge/.venv/Scripts/python.exe",
-      "args": ["-m", "dataforge.cli", "--home", "D:/DataForge/automation-data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
+      "command": "D:/GraveTrail/.venv/Scripts/python.exe",
+      "args": ["-m", "dataforge.cli", "--home", "D:/GraveTrail/automation-data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
     }
   }
 }

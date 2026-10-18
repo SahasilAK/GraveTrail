@@ -38,3 +38,5 @@ MCP cannot accept local-admin launches or register maintenance mutations. Capabi
 against actual help/schemas by the keyed parity fixture.
 
 MCP identifies as GraveTrail; gravetrail:// and legacy dataforge:// workspace/summary/job resources share handlers and permissions. Setup emits mcp_servers.gravetrail/client names while retaining dataforge.cli module paths.
+
+Managed job thread names use gravetrail-agent; journals, IDs and worker module paths are unchanged.

@@ -51,7 +51,7 @@ account, or paid service**. Imported code is never executed.
 <details>
 <summary><strong>See the application with the included SQL project</strong></summary>
 
-![Actual GraveTrail lineage explorer tracing pub.all_kpis upstream at depth 30](docs/assets/images/lineage-explorer.png)
+![Actual GraveTrail lineage explorer tracing pub.all_kpis upstream at depth 30](docs/assets/images/gravetrail-lineage-explorer.png)
 
 Captured from an isolated local workspace using the supplied SQL fixture. See the
 [user guide](docs/user-guide/index.md) for the dashboard and source-evidence viewer.

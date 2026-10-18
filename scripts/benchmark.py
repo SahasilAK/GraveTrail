@@ -23,7 +23,7 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.files <= 5000:
         parser.error("Use 1–5,000 files")
-    with tempfile.TemporaryDirectory(prefix="dataforge-benchmark-") as directory:
+    with tempfile.TemporaryDirectory(prefix="gravetrail-benchmark-") as directory:
         store = Store(directory)
         workspace = store.create_workspace("Synthetic benchmark")
         expected = {(f"mart.t{i - 1}" if i else "raw.seed", f"mart.t{i}") for i in range(args.files)}

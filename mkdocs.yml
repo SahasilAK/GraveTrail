@@ -50,9 +50,9 @@ extra:
     - assets/images/banner.svg
     - assets/diagrams/lineage.svg
     - assets/stylesheets/extra.css
-    - assets/images/workspace-dashboard.png
-    - assets/images/lineage-explorer.png
-    - assets/images/source-evidence.png
+    - assets/images/gravetrail-workspace-dashboard.png
+    - assets/images/gravetrail-lineage-explorer.png
+    - assets/images/gravetrail-source-evidence.png
 markdown_extensions:
   - admonition
   - attr_list

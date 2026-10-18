@@ -56,3 +56,5 @@ Public docs link to tracked contribution/testing/build guides. All KNOWLEDGE.md 
 BUILD_AND_RELEASE.md now includes the manual Publish standalone release runbook: committed project+lock version, default branch, exact tag/source, platform assets, no-extra-secret Copilot/fallback, failed-publication handling and hosted acceptance limits.
 
 Product prose and command examples use GraveTrail; BUILD_AND_RELEASE documents preserved legacy storage, imports, variables, commands, Compose identities and unchanged repository links. Native/archive/image examples use gravetrail.
+
+Rebrand rescan aligns reset/restore phrases and sample installation paths, explicitly documents retained compatibility identifiers, and uses gravetrail-prefixed screenshot filenames.

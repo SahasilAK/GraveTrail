@@ -1,7 +1,9 @@
 """Distribution boundaries: writable homes, immutable assets and artifact integrity."""
 import json
+import runpy
 import shutil
 import subprocess
+import sys
 import tarfile
 import tomllib
 import zipfile
@@ -16,6 +18,17 @@ def test_gravetrail_distribution_keeps_legacy_entry_points():
     assert project["name"] == "gravetrail"
     for suffix in ("", "-ui", "-build"):
         assert project["scripts"]["gravetrail" + suffix] == project["scripts"]["dataforge" + suffix]
+
+
+def test_frozen_cli_uses_gravetrail_program_name(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    monkeypatch.setattr(sys, "argv", ["gravetrail.exe", "--cli", "--help"])
+    monkeypatch.setattr(sys, "path", sys.path[:])
+    monkeypatch.setattr("dataforge.cli.app", lambda: calls.append(sys.argv[:]))
+    root = Path(__file__).resolve().parents[1]
+    runpy.run_path(str(root / "scripts/build/frozen_entry.py"), run_name="__main__")
+    assert calls == [["gravetrail", "--help"]]
 
 
 def test_python_build_ignores_previous_brand_and_version_artifacts(tmp_path, monkeypatch):

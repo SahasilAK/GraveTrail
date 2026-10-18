@@ -27,7 +27,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — Live documentation link, animated hero, installation, first workflow, features and honest limits.
 - `app.py` — Entry point: configure logs, cache Store, select/create workspaces, register six st.Page scripts.
-- `pyproject.toml` — Package/dependency constraints, dataforge CLI entry point, official MCP SDK/Typer dependencies, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
+- `pyproject.toml` — Package/dependency constraints, gravetrail CLI entry points with legacy aliases, official MCP SDK/Typer dependencies, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
 
 Storage selection is per-session and startup-allowlisted (DATAFORGE_STORAGE_LOCATIONS); app.py
@@ -38,3 +38,5 @@ Documentation: `mkdocs.yml` and separate locked docs group build36 public pages 
 Context policy: All project KNOWLEDGE.md maps are tracked so humans and agents can navigate a clean checkout, including maps inside otherwise ignored context folders. AGENTS.md, .kbignore, .codex/ and implementation records remain local-only. New branches use feature/, bugfix/ or another appropriate prefix; never codex/.
 
 GraveTrail branding: distribution/commands use gravetrail (legacy dataforge commands remain aliases). Internal Python package, DATAFORGE_* variables, .dataforge/platform homes, database/portable formats and Compose project/volume stay compatible. Repository URLs remain unchanged pending the user's post-merge rename. Build outputs and MCP display/resource aliases use GraveTrail.
+
+Rebrand audit: frozen CLI program name, sample install paths and cleanup guide use GraveTrail; README/guide screenshot references use gravetrail-prefixed real captures. BUILD_AND_RELEASE lists intentionally retained compatibility names.

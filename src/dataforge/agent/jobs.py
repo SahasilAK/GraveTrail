@@ -18,7 +18,7 @@ class Jobs:
     def __init__(self, home):
         self.directory = home / "agent" / "jobs"
         self.directory.mkdir(parents=True, exist_ok=True)
-        self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dataforge-agent")
+        self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gravetrail-agent")
         self.lock = threading.RLock()
 
     def path(self, job_id):

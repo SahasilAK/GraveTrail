@@ -253,3 +253,20 @@ a second owner of the same home. No data migration is required.
 
 Repository and documentation links still use `dataforge-engineering-hub`
 until the repository is renamed after merge.
+
+### Names intentionally retained
+
+| Existing identifier | Reason it stays |
+| --- | --- |
+| `src/dataforge/`, `dataforge.*` imports and module launchers | Existing scripts, plugins and packaged asset lookups use this Python namespace. The distribution and primary commands are GraveTrail. |
+| `DATAFORGE_*` launch variables and credential references | Existing launch configuration and credential authorization keep working. |
+| `.dataforge/`, platform `DataForge` data homes, `dataforge.duckdb` | Existing workspaces, originals and settings reopen without moving data. |
+| Backup, history and portable configuration format IDs | Previously exported files remain readable. |
+| Compose project `dataforge` and `dataforge-data` volume | Upgrades reconnect to the existing physical volume. |
+| `dataforge://` resources and old console commands | Compatibility aliases; new configurations use GraveTrail. |
+| Supplied `dataforge_*_lineage_test_project.zip` files and their internal paths | Original test fixtures and evidence retain their exact names and bytes. |
+| `dataforge-engineering-hub` repository and Pages links | The repository rename is planned after merge. |
+
+README and guide screenshots use explicit `gravetrail-*` asset filenames and show the
+GraveTrail sidebar. Any old name in their source-file selectors comes from the supplied
+fixture's original path, not the application branding.

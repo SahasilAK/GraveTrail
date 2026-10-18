@@ -84,7 +84,7 @@ def main() -> None:
         python = str(args.python.resolve())
         ui = [python, "-m", "dataforge.launcher"]
         cli = [python, "-m", "dataforge.cli"]
-    with tempfile.TemporaryDirectory(prefix="dataforge-distribution-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="gravetrail-distribution-") as temporary:
         cwd = Path(temporary)
         env = {**build_environment(), "DATAFORGE_HOME": str(cwd / "home")}
         inputs = cwd / "inputs"
