@@ -17,3 +17,6 @@ Teradata volatile parenthesized CTAS inputs; parser cache version9.
 
 SAS rule blocks slice original source by line-anchored offsets, preserving exact whitespace
 and same-line boundaries; inline data cannot redirect matching evidence offsets.
+
+SQL routine headers use a forward-only whitespace/comment scan with dialect-specific nested
+block comments and a bounded keyword regex; no ambiguous repeated prefix or source normalization.

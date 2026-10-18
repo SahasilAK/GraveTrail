@@ -15,8 +15,36 @@ log = logging.getLogger(__name__)
 # SQLGlot fallback warnings include raw imported statements; keep sensitive source out of logs.
 logging.getLogger("sqlglot").setLevel(logging.ERROR)
 ROUTINE_HEADER = re.compile(
-    r"\A(?:\s+|/\*.*?\*/|--[^\n]*(?:\n|$))*(?:CREATE(?:\s+OR\s+(?:REPLACE|ALTER))?|ALTER)"
-    r"\s+(?:PROCEDURE|PROC|FUNCTION)\b", re.I | re.S)
+    r"(?:CREATE(?:\s+OR\s+(?:REPLACE|ALTER))?|ALTER)\s+(?:PROCEDURE|PROC|FUNCTION)\b", re.I)
+COMMENT_DELIMITER = re.compile(r"/\*|\*/")
+
+
+def _routine_header(code, nested_comments):
+    # Advance once through the prefix; repeated whitespace/comment regexes can backtrack exponentially.
+    position = 0
+    while position < len(code):
+        if code[position].isspace():
+            position += 1
+        elif code.startswith("/*", position):
+            position += 2
+            depth = 1
+            while depth:
+                delimiter = COMMENT_DELIMITER.search(code, position)
+                if delimiter is None:
+                    return None
+                position = delimiter.end()
+                if delimiter.group() == "*/":
+                    depth -= 1
+                elif nested_comments:
+                    depth += 1
+        elif code.startswith("--", position):
+            end = code.find("\n", position + 2)
+            if end < 0:
+                return None
+            position = end + 1
+        else:
+            return ROUTINE_HEADER.match(code, position)
+    return None
 
 
 def table_name(table: exp.Table) -> str:
@@ -148,9 +176,10 @@ def parse_sql(content: str, dialect: str | sqlglot.Dialect = "") -> ParseResult:
 def _parse_sql(content, dialect, depth=0, restricted=False):
     result = ParseResult()
     for code, start, end in statements(content):
-        routine_header = ROUTINE_HEADER.match(code)
+        routine_header = None
         try:
             dialect = sqlglot.Dialect.get_or_raise(dialect or None)
+            routine_header = _routine_header(code, dialect.tokenizer_class.NESTED_COMMENTS)
             tree = sqlglot.parse_one(code, read=dialect or None, error_level=ErrorLevel.RAISE)
             if tree is None:
                 continue

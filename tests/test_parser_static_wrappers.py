@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -265,3 +267,38 @@ def test_procedure_parameters_remain_unresolved():
     result = parse_sql("CREATE PROCEDURE mart.p(source_name text) LANGUAGE SQL AS $$INSERT INTO mart.x SELECT id FROM raw.a;$$;", "postgres")
     assert not result.operations
     assert result.diagnostics
+
+
+def test_commented_sql_with_long_whitespace_finishes_without_backtracking():
+    # A subprocess deadline also protects the test runner if exponential scanning returns.
+    script = """
+from dataforge.parsers.sql import parse_sql
+code = '/* CREATE PROCEDURE is only comment text */\\n' + ' ' * 100_000 + 'CREATE TABLE mart.x AS SELECT id FROM raw.a;'
+result = parse_sql(code)
+assert not result.diagnostics
+assert len(result.operations) == 1
+operation = result.operations[0]
+assert operation.code == code
+assert [source.name for source in operation.sources] == ['raw.a']
+assert [target.name for target in operation.targets] == ['mart.x']
+"""
+    subprocess.run([sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[1],
+                   capture_output=True, check=True, timeout=10)
+
+
+@pytest.mark.parametrize("header", ["CREATE PROCEDURE", "CREATE PROC", "CREATE OR ALTER PROC",
+                                   "CREATE OR REPLACE FUNCTION", "ALTER PROCEDURE", "ALTER FUNCTION"])
+def test_commented_routine_headers_preserve_unsupported_body_guard(header):
+    prefix = "-- misleading CREATE TABLE text\r\n\t/* first */  /* second */\n  "
+    result = parse_sql(prefix + header + " mart.p AS BEGIN SELECT 1; INSERT INTO mart.x SELECT id FROM raw.fake; END;", "tsql")
+    assert not result.operations
+    assert any("remainder" in diagnostic.message.lower() for diagnostic in result.diagnostics)
+
+
+@pytest.mark.parametrize("dialect,prefix", [("tsql", "/* outer /* inner */ rest */ "),
+                                            ("snowflake", "/* outer /* inner */ ")])
+def test_dialect_comment_nesting_preserves_procedure_body_guard(dialect, prefix):
+    code = prefix + "CREATE PROCEDURE mart.p AS BEGIN SELECT 1; INSERT INTO mart.x SELECT id FROM raw.fake; END;"
+    result = parse_sql(code, dialect)
+    assert not result.operations
+    assert any("remainder" in diagnostic.message.lower() for diagnostic in result.diagnostics)

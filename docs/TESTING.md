@@ -21,13 +21,21 @@ published; this tracked summary is the public acceptance reference.
 Whole-home backup/restore and guarded blob cleanup are delivered features. Scheduled retention,
 SVG/PNG export, transitive column transformations and multi-user collaboration remain optional.
 
-Final parser-9 source verification on 2026-10-18: **402 passed, 1 existing Windows symlink
+Initial parser-9 source verification on 2026-10-18: **402 passed, 1 existing Windows symlink
 privilege skip** in 68.31 seconds. Ruff and the lock check pass. Fresh isolated SQL/SAS ZIP
 acceptance through CLI/service/actual MCP preserves exact originals, expected logical/physical
 edges, all seven layers/16 roots and 86 warm cache hits per project. The running isolated UI
 rebuilt all three new fixtures, validated zero invalid evidence records, and displayed the
 procedure upstream chain and original source on graph selection. No imported code or external
 provider was executed. Release artifacts were not rebuilt for this source change.
+
+The subsequent CodeQL ReDoS follow-up passes **411 tests, 1 existing skip** in 63.74 seconds.
+Routine-header whitespace/comments now scan forward without an ambiguous repeated regex,
+honoring each dialect's nested-comment rules. A subprocess regression with 100,000 spaces
+after a comment exceeded its 10-second bound before the fix and passes afterward; ordinary
+SQL evidence and CREATE/ALTER procedure guards are preserved. Fresh SQL/SAS ZIP parity and
+the running isolated UI pass, including zero invalid evidence records for the padded SQL.
+Parser cache version 9 is unchanged because the fix preserves intended parsing behavior.
 
 ## Test commands and historical evidence
 
