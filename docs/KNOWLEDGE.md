@@ -14,7 +14,7 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `prompts/` — [prompts/KNOWLEDGE.md](prompts/KNOWLEDGE.md).
 
 ## Files
-- `index.md` — Branded MkDocs landing page; section indexes organize canonical references without duplication. Only mkdocs.yml nav and named assets are published; REVIEW/prompts/plans/knowledge stay excluded.
+- `index.md` — Branded MkDocs landing page with “Nothing stays buried.” / “Every dependency leaves a trail.” hero; section indexes organize canonical references without duplication. Only mkdocs.yml nav and named assets are published; REVIEW/prompts/plans/knowledge stay excluded.
 - `BUILD_AND_RELEASE.md` — Actual launcher/build options, native artifact contracts, Docker ownership/persistence, CI gates and dated tested/untested platform evidence.
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
 - `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.

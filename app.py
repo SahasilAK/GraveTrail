@@ -54,7 +54,7 @@ page = st.navigation(pages, position="hidden")
 with st.sidebar:
     with st.container(key="brand"):
         st.header(":material/account_tree: GraveTrail")
-        st.caption("Evidence behind every dependency")
+        st.caption("**Nothing stays buried.**  \nEvery dependency leaves a trail.")
     options = {w["workspace_id"]: w["name"] for w in workspaces}
     if st.session_state.get("workspace") not in options:
         st.session_state["workspace"] = next(iter(options))
