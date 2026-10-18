@@ -278,17 +278,30 @@ The build approach follows the documented [uv Docker integration](https://docs.a
 [PyInstaller collection flags](https://pyinstaller.org/en/stable/usage.html), and
 [Hatch build-hook API](https://hatch.pypa.io/latest/plugins/build-hook/reference/).
 
-## Current build acceptance — 2026-10-18
+## Windows installer acceptance — 2026-10-19
+
+[Hosted validation run 39155104885](https://github.com/SahasilAK/GraveTrail/actions/runs/39155104885)
+passed from source `8e76fd9`, resolving the first patch release to `0.0.1` while
+the committed project version remained `0.1.0`. Hosted Windows passed the full suite,
+native/wheel smoke, unsigned installer packaging, running-owner refusal, reinstall
+lineage preservation and uninstall data/settings preservation. The separate publisher
+job downloaded and verified those final bytes, repeated installed CLI/MCP/rendered UI
+and lifecycle checks, and generated release notes and consolidated checksums.
+The `verified-windows-release` Actions artifact contains the reviewed downloads.
+This was a development validation run: no public tag/release was created. Production
+signing, truly standard-user desktop testing and cross-version upgrade remain unverified.
+
+## Previous build acceptance — 2026-10-18
 
 The 2026-10-18 GraveTrail Windows wheel and executable passed outside-checkout SQL import,
 lineage, actual stdio MCP, HTTP health and rendered UI smoke with parser 8. The branded Linux
 Docker image passed non-root runtime and persistence checks on 2026-10-17. A fresh Docker
 attempt on 2026-10-18 was blocked by daemon availability; it does not erase the earlier pass.
 
-The current source adds parser 9. Rebuild and smoke wheel/native/container artifacts before
+At this earlier checkpoint the source added parser 9. Rebuild and smoke wheel/native/container artifacts before
 distributing those rules; older artifact results do not validate changed source. Native
-Linux/macOS executables and the current hosted release/download workflow remain unrecorded
-acceptance gates here. See [the current acceptance matrix](TESTING.md#current-acceptance-summary-2026-10-18).
+Linux/macOS executable acceptance remains unrecorded here; the Windows hosted result above
+supersedes this checkpoint's hosted-release gap. See [the current acceptance matrix](TESTING.md#current-acceptance-summary-2026-10-18).
 
 ## Historical verification ledger (2026-10-16)
 
