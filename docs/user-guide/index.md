@@ -72,6 +72,14 @@ without known direct references. Both lists ignore the text filter. Missing/conf
 or unresolved wildcards prevent an unused list; a displayed list describes analyzed sources,
 not non-use in the live system.
 
+## Follow column transformations
+
+Open **Transformation lineage**, below Columns, to select an output column and inspect
+its upstream expressions or downstream effects. Value inputs, CASE selection, join/filter
+context and rowsets have distinct roles. Coverage boundaries and source versions travel
+with each bounded CSV/JSON export. See [column transformations](../TRANSFORMATION_LINEAGE.md)
+for tested SQL/SAS coverage and unresolved constructs.
+
 ## Use diagnostics and optional assistance
 
 Review warnings/errors in Analysis → Diagnostics before accepting a graph as complete. The unresolved

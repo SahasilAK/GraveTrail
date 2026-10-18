@@ -110,6 +110,21 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call("columns", workspace_id, options, asset=asset, column_query=column_query, usage_type=usage_type, file_id=file_id, group_by=group_by)
 
     @server.tool(annotations=read)
+    async def get_transformation_columns(workspace_id: str, asset: str,
+                                         options: QueryOptions | None = None) -> CallToolResult:
+        """Page exact column IDs and scope/version for transformation tracing."""
+        return await call("column_catalog", workspace_id, options, asset=asset)
+
+    @server.tool(annotations=read)
+    async def get_column_lineage(workspace_id: str, asset: str, column: str,
+                                 direction: Literal["upstream", "downstream"] = "upstream",
+                                 status: Literal["all", "verified", "inferred", "unresolved"] = "all",
+                                 options: QueryOptions | None = None) -> CallToolResult:
+        """Page bounded stored column transformations, roles, paths and coverage. Summary excludes source."""
+        return await call("column_lineage", workspace_id, options, asset=asset, column=column,
+                          direction=direction, status=status)
+
+    @server.tool(annotations=read)
     async def get_source_evidence(workspace_id: str, file_id: str | None = None, statement_id: str | None = None,
                             operation_id: str | None = None, start_line: int | None = None,
                             end_line: int | None = None, full: bool = False,

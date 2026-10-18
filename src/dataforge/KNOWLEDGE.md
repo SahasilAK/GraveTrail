@@ -2,6 +2,12 @@
 
 Static facts, persistence, analysis and export APIs. Keep UI imports out of this package. Related tables and data flow are in docs/DATA_MODEL.md.
 
+`transformations.py` — materialize_columns, column_catalog and trace_columns: indexed,
+workspace/job/scoped column identities, revision-bound expressions/roles, bounded traversal,
+unknown-writer alternatives and cycle/limit/coverage markers. Operation.derivations cache
+round-trips additively; parser10/migration5 preserve direct usage/table contracts. Cleanup,
+integrity and full-home backup/restore include all four column tables and legacy v4 restores.
+
 ## Subfolders
 - `agent/` — Shared automation requests, permissions, jobs, paging and MCP. See [agent/KNOWLEDGE.md](agent/KNOWLEDGE.md).
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).

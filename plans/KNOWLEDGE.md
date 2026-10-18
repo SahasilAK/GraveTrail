@@ -54,3 +54,6 @@ and direct offline-file browser interaction retain explicit unexecuted gates.
 - `DOCUMENTATION_PLAN.md` — Executed README/docs hub/Pages plan, publication boundaries, design choices and verification/integration checks.
 
 - `STANDALONE_RELEASE_PLAN.md` — Manual standalone release scope, version/artifact/notes invariants, checks and hosted acceptance boundaries.
+
+- `COLUMN_TRANSFORMATION_LINEAGE.md` — User-brief implementation checklist: additive parser/storage,
+  scoped query service, SQL/SAS tests, separate UI/CLI/MCP, recovery/docs and PR verification.

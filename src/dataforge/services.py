@@ -16,7 +16,7 @@ from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 
-PARSER_VERSION = "9"
+PARSER_VERSION = "10"
 log = logging.getLogger(__name__)
 
 
@@ -185,6 +185,9 @@ def _collect_jobs(store, jobs, results, progress, cancelled):
             raise InterruptedError("Analysis cancelled; previous lineage retained")
         if future is not None:
             parsed = future.result()
+            if (any(d.severity == 'error' for d in parsed.diagnostics)
+                    and store.rows('SELECT 1 FROM statements WHERE file_id=? LIMIT 1', [metadata['file_id']])):
+                raise ValueError('Parsing failed; previous committed analysis retained')
             store.execute("INSERT INTO parse_cache VALUES (?,?) ON CONFLICT(cache_key) DO UPDATE SET result=excluded.result",
                           [key, json.dumps(parsed.to_dict())])
         results.append((metadata, parsed))
@@ -193,6 +196,7 @@ def _collect_jobs(store, jobs, results, progress, cancelled):
 
 
 def _materialize(store, workspace, run_id, results, config):
+    from dataforge.transformations import materialize_columns
     resolver = AssetResolver(workspace, results, config)
     resolve = resolver.resolve
     registry, aliases = resolver.registry, resolver.aliases
@@ -200,6 +204,7 @@ def _materialize(store, workspace, run_id, results, config):
     schemas = collect_schemas(results, workspace, resolver)
     rows = {"assets": [], "statements": [], "operations": [], "operation_assets": [], "edges": [],
             "column_usages": [], "diagnostics": [], "asset_aliases": []}
+    column_rows = materialize_columns(workspace, run_id, results, resolver, schemas, config)
     statuses = []
     for metadata, parsed in results:
         fid = metadata["file_id"]
@@ -246,6 +251,8 @@ def _materialize(store, workspace, run_id, results, config):
             registry[aid][6] = json.dumps({**schema, **json.loads(registry[aid][6])})
     rows["assets"] = list(registry.values())
     rows["asset_aliases"] = list(aliases)
+    rows.update(column_rows)
+    rows['column_analysis'] = [[workspace, run_id, PARSER_VERSION]]
     for table, values in rows.items():
         store.execute(f"DELETE FROM {table} WHERE workspace_id=?", [workspace])
         if values:

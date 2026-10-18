@@ -56,6 +56,7 @@ class Operation:
     confidence: float = 1.0
     usages: list[Usage] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    derivations: list[dict] = field(default_factory=list)
 
 
 @dataclass

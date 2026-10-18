@@ -932,7 +932,7 @@
   },
   "V04": {
     "capability_id": "V04",
-    "description": "Interactive graph/tree/edge/node focus, expand/collapse and column grouping/filter equivalents",
+    "description": "Interactive graph/tree/edge/node focus, expand/collapse, direct column usage and bounded column transformation lineage with roles, source evidence and coverage",
     "cli": [
       [
         "lineage",
@@ -941,11 +941,21 @@
       [
         "columns",
         "usage"
+      ],
+      [
+        "columns",
+        "catalog"
+      ],
+      [
+        "columns",
+        "lineage"
       ]
     ],
     "mcp": [
       "get_graph_data",
-      "get_column_usage"
+      "get_column_usage",
+      "get_transformation_columns",
+      "get_column_lineage"
     ],
     "scope": "workspace",
     "effects": [

@@ -44,6 +44,7 @@ pages = {
                   st.Page("ui/pages/analysis.py", title="Analysis", icon=":material/play_circle:")],
     "Explore": [st.Page("ui/pages/explorer.py", title="Lineage", icon=":material/account_tree:"),
                 st.Page("ui/pages/columns.py", title="Columns", icon=":material/view_column:"),
+                st.Page("ui/pages/transformations.py", title="Transformation lineage", icon=":material/route:"),
                 st.Page("ui/pages/tools.py", title="Engineering tools", icon=":material/manage_search:")],
     "Administration": [st.Page("ui/pages/settings.py", title="Workspace settings", icon=":material/tune:"),
                        st.Page("ui/pages/connections.py", title="Connections & AI", icon=":material/hub:"),

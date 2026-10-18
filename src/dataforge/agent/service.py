@@ -94,7 +94,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
     def call(self, action: str, workspace_id: str = "", options=None, **arguments):
         """Transport-neutral request boundary. No queries parse files or contact an LLM."""
         if action not in {"workspaces", "create_workspace", "summary", "assets", "files", "issues",
-                          "lineage", "impact", "batch", "columns", "source", "search_code",
+                          "lineage", "impact", "batch", "columns", "column_catalog", "column_lineage", "source", "search_code",
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
@@ -564,6 +564,51 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return self._page(w, opts, ["columns", selected["asset_id"], column_query, usage_type, file_id, group_by], items,
                           asset_id=selected["asset_id"], unique_columns=len({r['column_name'] for r in rows}),
                           group_by=group_by, analysis_current=self._current(w))
+
+    def _column_catalog(self, w, opts, asset):
+        from dataforge.transformations import column_catalog
+        selected = self._asset(w, asset)
+        rows = column_catalog(self.store, w, selected["asset_id"], limit=min(opts.max_items + 1, 20000))
+        boundaries = ["items"] if len(rows) > opts.max_items or len(rows) == 20000 else []
+        return self._page(w, opts, ["column_catalog", selected["asset_id"]], rows[:opts.max_items],
+                          asset_id=selected["asset_id"], boundaries=boundaries,
+                          analysis_current=self._current(w))
+
+    def _column_lineage(self, w, opts, asset, column, direction="upstream", status="all"):
+        from dataforge.transformations import trace_columns
+        if (direction not in {"upstream", "downstream"} or
+                status not in {"all", "verified", "inferred", "unresolved"} or
+                not isinstance(column, str) or not column or len(column) > 1024):
+            raise AgentError("invalid_argument", "Specify a column, upstream/downstream direction and all/verified/inferred/unresolved status")
+        selected = self._asset(w, asset)
+        source_allowed = AgentSettings.from_store(self.store, w).allow_source
+        trace = trace_columns(self.store, w, selected["asset_id"], column,
+                              direction=direction, depth=opts.max_depth, limit=opts.max_items,
+                              status=status, include_source=opts.detail_level == "detailed" and source_allowed)
+        paths_by_derivation = {}
+        for path in trace["paths"]:
+            paths_by_derivation.setdefault(path["derivation_id"], []).append(path)
+        items = []
+        for derivation in trace["derivations"]:
+            row = dict(derivation)
+            row["evidence"] = dict(row.get("evidence") or {})
+            if opts.detail_level == "summary" or not source_allowed:
+                row.pop("expression", None)
+            if opts.detail_level != "detailed" or not source_allowed:
+                row["evidence"].pop("code", None)
+            row["paths"] = paths_by_derivation.get(row["derivation_id"], [])
+            items.append(row)
+        boundaries = []
+        if trace.get("truncated"):
+            boundaries.append("traversal_limit")
+        if not trace.get("complete", False):
+            boundaries.append("coverage")
+        return self._page(w, opts, ["column_lineage", selected["asset_id"], column, direction, status], items,
+                          asset_id=selected["asset_id"], column=trace["column"], direction=direction,
+                          depth=opts.max_depth, status=status, state=trace["state"],
+                          coverage=trace["coverage"], truncated=trace["truncated"],
+                          trace_complete=trace["complete"], run_id=trace.get("run_id"),
+                          boundaries=boundaries, analysis_current=self._current(w))
 
     def _statement(self, w, statement_id):
         rows = self.store.rows("""SELECT s.statement_id,s.file_id,s.start_line,s.end_line,s.code,

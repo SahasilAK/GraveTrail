@@ -9,8 +9,9 @@ import time
 from contextlib import contextmanager
 
 from dataforge.maintenance import _idle
+from dataforge.store import COLUMN_TABLES
 
-GRAPH = ('edges', 'column_usages', 'operation_assets', 'operations', 'statements',
+GRAPH = (*COLUMN_TABLES, 'edges', 'column_usages', 'operation_assets', 'operations', 'statements',
          'asset_aliases', 'assets', 'diagnostics')
 WORKSPACE_TABLES = (*GRAPH, 'analysis_runs', 'llm_records', 'ingestion_runs', 'source_files',
                     'history_archives', 'temporary_recovery', 'llm_profiles', 'settings', 'workspaces')
@@ -141,7 +142,7 @@ def _selection(store, workspace, category, file_ids, run_id):
         raise ValueError('Run selection is supported only for unreferenced analysis history')
     tables = {
         'sources': (*GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'source_files'),
-        'lineage': (*GRAPH, 'analysis_runs'), 'columns': ('column_usages',),
+        'lineage': (*GRAPH, 'analysis_runs'), 'columns': (*COLUMN_TABLES, 'column_usages'),
         'ai': (*GRAPH, 'analysis_runs', 'llm_records'),  # remove dependent inferred graph, rebuild deterministically
         'history': ('analysis_runs', 'ingestion_runs'), 'jobs': (), 'cache': ('parse_cache',),
         'reset': (*GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'ingestion_runs'),
@@ -159,6 +160,8 @@ def _selection(store, workspace, category, file_ids, run_id):
         if category == 'history':
             if table == 'analysis_runs':
                 where += " AND status IN ('completed','failed','cancelled') AND run_id NOT IN (SELECT run_id FROM edges WHERE workspace_id=?)"
+                params.append(workspace)
+                where += ' AND run_id NOT IN (SELECT run_id FROM column_analysis WHERE workspace_id=?)'
                 params.append(workspace)
                 if run_id:
                     where += ' AND run_id=?'

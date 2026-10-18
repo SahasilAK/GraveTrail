@@ -85,7 +85,7 @@ exception internals. HTTP access logging is disabled to keep source/credentials 
 
 ## Discovery and tools
 
-The complete registered interface has **78 tools**, verified on 2026-10-18.
+The complete registered interface has **80 tools**, verified on 2026-10-18.
 The table lists every tool and every top-level input. `options` is the shared bounded
 query object described below. Required inputs are separate from optional inputs;
 optional defaults and enum values are available through MCP tool discovery or
@@ -122,6 +122,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `get_application_theme` | — | `options` | Read |
 | `get_asset_schema` | `asset`, `workspace_id` | `options` | Read |
 | `get_capabilities` | — | `options`, `workspace_id` | Read |
+| `get_column_lineage` | `asset`, `column`, `workspace_id` | `direction`, `options`, `status` | Read |
 | `get_column_usage` | `asset`, `workspace_id` | `column_query`, `file_id`, `group_by`, `options`, `usage_type` | Read |
 | `get_data_dictionary` | `workspace_id` | `options`, `query` | Read |
 | `get_dependency_paths` | `asset`, `workspace_id` | `direction`, `max_paths`, `options` | Read |
@@ -141,6 +142,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `get_source_metadata` | `file_id`, `workspace_id` | `options` | Read |
 | `get_workspace_health` | `workspace_id` | `options` | Read |
 | `get_workspace_settings` | `section`, `workspace_id` | — | Read |
+| `get_transformation_columns` | `asset`, `workspace_id` | `options` | Read |
 | `get_workspace_summary` | `workspace_id` | — | Read |
 | `import_workspace_configuration` | `configuration` | — | Mutation |
 | `ingest_sources` | `extensions`, `path`, `workspace_id` | — | Mutation |
@@ -234,6 +236,19 @@ AI tools: preview_ai_chunks, list_review_candidates, preview_diagnostic_review, 
 Report tools: list_analysis_runs, get_analysis_run, list_ingestion_runs, get_ingestion_run, compare_analysis_runs, get_source_metadata, get_data_dictionary, get_asset_schema, get_workspace_health, validate_stored_lineage. All require an authorized explicit workspace; history IDs from another workspace are refused. search_source_code adds include_matches=false; true requires source permission. Follow cursors, completeness and analysis_current.
 
 Artifacts/query tools: get_dependency_paths, get_lineage_steps, get_graph_data (nodes/edges/tree and node/edge filters), export_graph, export_dependency_paths, export_source_bundle, export_original_source, export_report, export_ai_result. get_column_usage supports column_query/usage_type/file_id/group_by. `get_export` retains result_id text reads and adds mutually exclusive artifact_id, offset, length base64 reads. Large HTML/ZIP/XLSX content is never embedded in ordinary responses. IDs bind home/workspace/content; source authorization is rechecked after revocation. Backup IDs/downloads are refused. Exact historical source hashes must still be referenced. CLI guide lists the format allowlist and caps.
+
+Column transformations: call `get_transformation_columns(workspace_id, asset)` to resolve
+an exact column ID, then `get_column_lineage(workspace_id, asset, column)`. Column names
+are also accepted within the exact asset. `direction` is `upstream` or `downstream`;
+`status` is `all`, `verified`, `inferred` or `unresolved`. Query options bound depth,
+items, page size and response characters. Derivations are paged as `items`, each with
+its matching uncollapsed `paths`, dependency roles and source evidence references.
+Summary omits expressions and code. Standard includes expressions only when source
+access is enabled; detailed includes bounded original source and requires source access.
+Follow `next_cursor` and retain `state`, `coverage`, `truncated`, `trace_complete`,
+`analysis_current` and `boundaries`. A known constant has zero value inputs; unknown
+coverage and no known dependency are separate states. Direct usage stays available
+through `get_column_usage`.
 
 `export_dependency_paths(format="xlsx")` creates an ordered workbook with `Lineage Paths`
 and `Lineage Steps`. `include_evidence=true` adds offline citations; raw code is excluded

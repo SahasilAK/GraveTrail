@@ -26,7 +26,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `Dockerfile`, `compose.yaml` — Locked multi-stage non-root image, persistent /data, UI/MCP owner profiles and health check; actual Linux container smoke verified on Docker Desktop.
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — “Nothing stays buried.” headline and “Every dependency leaves a trail.” supporting line, live documentation link, animated hero, installation, first workflow, features and honest limits. Branding is shared with the app sidebar, Pages homepage/banner and site description.
-- `app.py` — Entry point: shared frame, workspace dialog and context guards; ten native routes grouped into Workspace, Explore and Administration. Existing builder/explorer/settings URLs remain valid.
+- `app.py` — Entry point: shared frame, workspace dialog and context guards; eleven native routes grouped into Workspace, Explore and Administration. Transformation lineage follows Columns; existing builder/explorer/settings URLs remain valid.
 - `pyproject.toml` — Package/dependency constraints (including pure-Python XlsxWriter), CLI aliases, MCP SDK/Typer, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
 
@@ -47,3 +47,8 @@ never executes; original wrapper/block evidence survives. docs/TESTING.md is the
 current acceptance matrix; optional local status/matrix ledgers retain dated historical records.
 
 UI redesign: Apple Design guides system typography, native theme tokens and scoped presentation CSS. Sources and Analysis are separate; administration has four focused routes. App/Pages share the visual language, with no entrance animations or remote font dependency. Navigation/state and delivery checklist: docs/USER_GUIDE.md; local plan: plans/UI_REDESIGN.md when available.
+
+Column transformations: parser10/migration5 add scoped SQL/PROC SQL and bounded DATA-step
+derivations alongside direct usage. `transformations.py` shares identity, materialization,
+catalog and bounded traversal across the new page, CLI and MCP. Coverage/upgrade limits:
+docs/TRANSFORMATION_LINEAGE.md; benchmark: scripts/benchmark_transformations.py.

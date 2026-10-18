@@ -1,6 +1,6 @@
 # ui/pages/
 
-Ten focused direct scripts registered by app.py using native st.Page/st.navigation.
+Eleven focused direct scripts registered by app.py using native st.Page/st.navigation.
 Existing /builder, /explorer, /columns, /tools and /settings routes remain supported.
 
 ## Files
@@ -9,6 +9,7 @@ Existing /builder, /explorer, /columns, /tools and /settings routes remain suppo
 - `analysis.py` — Run / Diagnostics / History; explicit analyze selected/all, force rebuild and evidence validation, scoped completion notice and next actions. Delegates lazy sections to analysis_sections.py.
 - `explorer.py` — Lineage: exact asset/All, graph focus and Back/Forward history; direction-aware graph/tree evidence. Asset-specific paths export JSON/CSV and shared XLSX with reviewable scope, temporary/evidence/excerpt controls, explicit preparation and download without rerun.
 - `columns.py` — Direct column usage/comma-term filtering/grouping, inferred wildcard provenance, declared schema evidence and exports. Unfiltered distinct used and conservatively known unused names have individual/list copy controls; unused panel stays lazy. Shares valid asset context with Lineage/Impact.
+- `transformations.py` — Focused exact-column upstream/downstream traces with bounded depth/status, coverage states, roles and uncollapsed paths; lazy original-version evidence (200 lines/12k chars), guarded selector identities and bounded CSV/JSON exports with completeness markers.
 - `tools.py` — Code search / Data dictionary / Impact analysis. Run comparison now belongs to Analysis → History.
 - `settings.py` — Workspace settings: Parsing / Resources / Appearance. Shared extracted forms preserve eighteen native theme presets, parsing/job identities, resource limits and graph/source defaults.
 - `connections.py` — Connections & AI: Providers & routing / Privacy, external-request status, session credentials, logging/host roots and shared privacy validators.

@@ -15,9 +15,20 @@ SAS `DATETIME()` is recognized as an expression. Malformed modifiers remain pars
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 9 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 10 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
-evidence remain intact. Existing packaged executables/images need rebuilding for version 9.
+evidence remain intact. Existing packaged executables/images need rebuilding for version 10.
+
+## Column transformation subset
+
+[Transformation lineage](TRANSFORMATION_LINEAGE.md) reuses SQL derivations for PROC SQL
+and adds a bounded DATA-step subset: explicit assignments with ordered variable versions,
+single SET propagation and explicit KEEP/DROP/RENAME when statically established. Original
+assignment and PROC SQL expression text remains cited. Unknown passthrough schemas remain
+visible; a partial list is not promoted to a complete schema. MERGE BY, multiple SETs,
+arrays, loops, conditional retention, automatic variables and runtime/macro-expanded
+expressions are unresolved. Existing table-level MERGE recognition does not imply SQL join
+semantics or a compiled SAS variable analysis. No SAS code executes.
 
 ## Static macro-variable expressions
 

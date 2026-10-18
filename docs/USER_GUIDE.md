@@ -15,6 +15,7 @@ workspace** to open a creation dialog. Changing pages never starts an analysis o
 | Workspace | Analysis | Run selected/all files, rebuild, validation; Diagnostics and optional AI review; History and run comparison |
 | Explore | Lineage | Graph or full-width Tree; source evidence, paths and graph/source exports |
 | Explore | Columns | Direct usage, grouping, declared schema evidence and reports |
+| Explore | Transformation lineage | Output/value transformations, distinct dependency roles, coverage and original source evidence |
 | Explore | Engineering tools | Code search, data dictionary and downstream impact |
 | Administration | Workspace settings | Parsing, Resources and Appearance, including all eighteen themes |
 | Administration | Connections & AI | Provider profiles, session credentials, routing and Privacy |

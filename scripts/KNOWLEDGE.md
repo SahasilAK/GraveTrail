@@ -2,6 +2,10 @@
 
 Operational reproducibility utilities. benchmark.py creates isolated synthetic files, measures real services and persists labeled workload metrics.
 
+`benchmark_transformations.py` — disposable 120-stage/20-column expression chain plus
+order-totals example, real analysis and bounded query time/Python allocation peak. Optional
+explicit home supports browser review; no private source/provider data used.
+
 ## Subfolders
 - `build/` — Allowlisted package assets, frozen dispatcher and actual distribution smoke drivers. See [build/KNOWLEDGE.md](build/KNOWLEDGE.md).
 

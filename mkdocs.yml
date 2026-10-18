@@ -102,6 +102,7 @@ nav:
   - User guide:
       - user-guide/index.md
       - UI reference: USER_GUIDE.md
+      - Column transformations: TRANSFORMATION_LINEAGE.md
       - Data management & recovery: DATA_MANAGEMENT.md
   - Integrations:
       - integrations/index.md

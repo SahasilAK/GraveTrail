@@ -46,6 +46,8 @@ relationship to inspect the original statement and line range.
 ### What depends on this change?
 
 Trace downstream impact, inspect direct column usage, and search related source.
+Follow output expressions in the separate [Transformation lineage view](TRANSFORMATION_LINEAGE.md),
+with original evidence and explicit SQL/SAS coverage boundaries.
 Export an offline graph or a report to share your findings.
 
 [Investigate your project](USER_GUIDE.md)
