@@ -74,7 +74,8 @@ jobs:
             exit 1
           fi
           uv lock --check
-          gh api --paginate "repos/$GH_REPO/releases?per_page=100" --slurp --jq 'add' > releases.json
+          gh api --paginate "repos/$GH_REPO/releases?per_page=100" --slurp > release-pages.json
+          jq 'add' release-pages.json > releases.json
           VERSION=$(uv run --locked python scripts/release.py resolve --releases releases.json --exact "$RELEASE_VERSION" --bump "$RELEASE_TYPE")
           TAG="v$VERSION"
           if git show-ref --verify --quiet "refs/tags/$TAG"; then
