@@ -232,3 +232,125 @@ def test_path_output_cap_is_explicit_on_convergent_impact(tmp_path):
     assert result['truncated'] and not result['complete']
     assert any(c['reason'] == 'path_limit' for c in result['coverage'])
     store.close()
+
+
+@pytest.mark.parametrize('case_sensitive', [False, True])
+@pytest.mark.parametrize('sql', [
+    'CREATE TABLE mid AS SELECT amount AS a FROM raw; CREATE TABLE dst AS SELECT "a" AS result FROM mid;',
+    'CREATE TABLE dst AS WITH mid AS (SELECT amount AS a FROM raw) SELECT "a" AS result FROM mid;',
+    'CREATE TABLE dst AS SELECT "a" AS result FROM (SELECT amount AS a FROM raw) mid;',
+])
+def test_equivalent_quoted_names_keep_complete_transitive_paths(tmp_path, case_sensitive, sql):
+    from dataforge.transformations import trace_columns
+
+    store = Store(tmp_path)
+    w = store.create_workspace('Quoted columns')
+    store.set_setting(w, 'dialect', 'postgres')
+    store.set_setting(w, 'case_sensitive', case_sensitive)
+    Importer(store, w).files([('a.sql', sql.encode())], {'.sql'})
+    analyze(store, w)
+    trace = trace_columns(store, w, asset_id(store, w, 'dst'), 'result')
+    assert {d['target']['table'] for d in trace['derivations']} == {'dst', 'mid'}
+    assert trace['complete']
+    reverse = trace_columns(store, w, asset_id(store, w, 'raw'), 'amount', direction='downstream')
+    assert {d['target']['table'] for d in reverse['derivations']} == {'mid', 'dst'}
+    store.close()
+
+
+def test_quoted_case_is_preserved_through_declared_wildcards(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, '''CREATE TABLE src ("X" INT, "a" INT);
+        CREATE TABLE mid AS SELECT * FROM src;
+        CREATE TABLE dst AS SELECT "X" AS upper_value, a AS lower_value FROM mid;''')
+    target = asset_id(store, w, 'dst')
+    for column in ('upper_value', 'lower_value'):
+        trace = trace_columns(store, w, target, column)
+        assert {d['target']['table'] for d in trace['derivations']} == {'mid', 'dst'}
+        assert next(d for d in trace['derivations'] if d['target']['table'] == 'mid')['status'] == 'inferred'
+    assert trace_columns(store, w, asset_id(store, w, 'mid'), 'x')['state'] == 'no_known_dependency'
+    store.close()
+
+
+@pytest.mark.parametrize('condition', ['WHERE s.flag=1', 'JOIN other o ON s.flag=o.flag'])
+def test_input_limits_do_not_change_downstream_effects(tmp_path, condition):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, f'CREATE TABLE dst AS SELECT s.x+s.y AS v FROM src s {condition};')
+    source = asset_id(store, w, 'src')
+    trace = trace_columns(store, w, source, 'flag', direction='downstream', limit=1)
+    assert trace['paths'] and all(p['effect'] == 'row_selection' for p in trace['paths'])
+    assert len(trace['derivations'][0]['inputs']) == 1 and trace['truncated']
+    assert any(c['reason'] == 'input_limit' for c in trace['coverage'])
+    value = trace_columns(store, w, source, 'x', direction='downstream', limit=1)
+    assert value['paths'] and all(p['effect'] == 'value' for p in value['paths'])
+    store.close()
+
+
+def test_insert_wildcard_maps_expanded_positions_to_declared_targets(tmp_path):
+    from dataforge.transformations import column_catalog, trace_columns
+
+    store, w = populate(tmp_path, '''CREATE TABLE src (a INT, b INT);
+        CREATE TABLE dst (x INT, y INT); INSERT INTO dst SELECT * FROM src;''')
+    target = asset_id(store, w, 'dst')
+    assert {c['column_name'] for c in column_catalog(store, w, target)} == {'x', 'y'}
+    for output, input_ in [('x', 'a'), ('y', 'b')]:
+        trace = trace_columns(store, w, target, output)
+        assert trace['state'] == 'known'
+        step = trace['derivations'][0]
+        assert step['status'] == 'inferred' and step['target']['column_name'] == output
+        assert {(i['table'], i['column_name']) for i in step['inputs'] if i['role'] == 'value'} == {('src', input_)}
+    store.close()
+
+
+@pytest.mark.parametrize('target_ddl,projection', [
+    ('', '*'),
+    ('CREATE TABLE dst (x INT);', '*'),
+    ('CREATE TABLE dst (x INT, y INT);', 's.*, 99 AS extra'),
+])
+def test_unmapped_insert_wildcards_do_not_invent_targets(tmp_path, target_ddl, projection):
+    from dataforge.transformations import column_catalog, trace_columns
+
+    store, w = populate(tmp_path, f'''CREATE TABLE src (a INT, b INT); {target_ddl}
+        INSERT INTO dst SELECT {projection} FROM src s;''')
+    target = asset_id(store, w, 'dst')
+    assert {c['column_name'] for c in column_catalog(store, w, target)} == {'*'}
+    trace = trace_columns(store, w, target, 'x')
+    assert trace['state'] == 'unresolved' and not trace['complete']
+    assert any(c['reason'] == 'unresolved_scope' for c in trace['coverage'])
+    store.close()
+
+
+@pytest.mark.parametrize('spelling,expected', [
+    ('a', 'a'), ('"a"', 'a'), ('`a`', 'a'), ('[a]', 'a'),
+    ('A', 'a'), ('"A"', 'A'), ('"a""b"', 'a"b'), ('[a]]b]', 'a]b'),
+])
+def test_column_identity_unquotes_without_merging_distinct_case(spelling, expected):
+    from dataforge.models import column_key
+
+    assert column_key(spelling) == 'column:' + expected
+    assert column_key('A', case_sensitive=True) == 'column:A'
+
+
+def test_previous_parser_cache_requires_refresh_and_is_replaced(tmp_path, monkeypatch):
+    from dataforge import services
+    from dataforge.transformations import trace_columns
+
+    with monkeypatch.context() as previous:
+        previous.setattr(services, 'PARSER_VERSION', '10')
+        store, w = populate(tmp_path, 'CREATE TABLE dst AS SELECT a FROM src;')
+    target = asset_id(store, w, 'dst')
+    old = trace_columns(store, w, target, 'a')
+    assert not old['complete'] and any(c['reason'] == 'reanalysis_required' for c in old['coverage'])
+    refresh = analyze(store, w)
+    assert refresh['analyzed'] == 1 and refresh['cached'] == 0
+    assert trace_columns(store, w, target, 'a')['complete']
+    store.close()
+
+
+def test_quoted_special_names_do_not_share_wildcard_or_rowset_identity():
+    from dataforge.models import column_key
+
+    assert column_key('"*"') != column_key('*')
+    assert column_key('""') != column_key('')
+    assert column_key('"column:a"') != column_key('a')

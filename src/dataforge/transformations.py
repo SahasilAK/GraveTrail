@@ -8,15 +8,12 @@ from collections import deque
 from networkx import DiGraph, strongly_connected_components
 
 from dataforge.configuration import ParsingSettings
-from dataforge.models import AssetRef, canonical, stable_id
+from dataforge.models import AssetRef, column_key, stable_id
 
 ROW_ROLES = {'row_filter', 'join'}
 STATUSES = {'all', 'verified', 'inferred', 'unresolved'}
-
-
-def column_key(name, case_sensitive=False):
-    # Quoted identifiers retain their case; unquoted names follow workspace rules.
-    return name.strip() if case_sensitive or name.startswith(('"', '`', '[')) else canonical(name)
+INSERT_MAPPING_GAPS = {'INSERT target column mapping requires an explicit list or trusted schema',
+                       'Output and projection cardinality mismatch', 'Output column name cannot be established'}
 
 
 def materialize_columns(workspace, run_id, results, resolver, schemas, config):
@@ -53,8 +50,17 @@ def materialize_columns(workspace, run_id, results, resolver, schemas, config):
                 return cid, inferred or resolver.registry[aid][4] == 'unresolved'
 
             derivations = []
+            physical = [d for d in op.derivations if not d.get('scope')]
+            wildcard_insert = op.kind == 'INSERT' and any(d.get('category') == 'wildcard' for d in physical)
+            single_insert_wildcard = (len(physical) == 1 and physical[0].get('target_mapping_missing')
+                                      and physical[0].get('projection_count') == 1)
             for original in op.derivations:
                 d = copy.deepcopy(original)
+                if wildcard_insert and not d.get('scope') and not single_insert_wildcard:
+                    d.update(target_column='*', status='unresolved')
+                    d['coverage'].append('INSERT wildcard target layout is unresolved')
+                    derivations.append(d)
+                    continue
                 # Only a single plain wildcard with consistent imported DDL has a stable order.
                 if d.get('category') == 'wildcard' and d.get('wildcard_safe') and config['expand_wildcards']:
                     inputs = [i for i in d['inputs'] if i['role'] == 'value']
@@ -63,16 +69,25 @@ def materialize_columns(workspace, run_id, results, resolver, schemas, config):
                         aid, _ = resolver.resolve(AssetRef(inputs[0]['table']), metadata, parsed)
                         schema = schemas.get(aid)
                     if schema and schema.get('schema_status') == 'declared':
-                        for position, col in enumerate(schema['columns']):
+                        target_names = schema['column_identifiers']
+                        if d.get('target_mapping_missing'):
+                            target_schema = schemas.get(outputs.get(resolver.norm(d['target_table'])), {})
+                            if (target_schema.get('schema_status') != 'declared'
+                                    or len(target_schema['columns']) != len(schema['columns'])):
+                                derivations.append(d)
+                                continue
+                            target_names = target_schema['column_identifiers']
+                        for position, source_name in enumerate(schema['column_identifiers']):
                             expanded = copy.deepcopy(d)
                             gaps = [c for c in d.get('coverage', [])
-                                    if c != 'Wildcard requires trusted schema expansion']
-                            expanded.update(target_column=col['name'], status='unresolved' if gaps else 'inferred',
+                                    if c != 'Wildcard requires trusted schema expansion'
+                                    and not (d.get('target_mapping_missing') and c in INSERT_MAPPING_GAPS)]
+                            expanded.update(target_column=target_names[position], status='unresolved' if gaps else 'inferred',
                                             ordinal=d.get('ordinal', 0) + position,
                                             coverage=[*gaps, 'Expanded from imported DDL; runtime schema is unverified'])
                             for item in expanded['inputs']:
                                 if item['role'] == 'value':
-                                    item['column'] = col['name']
+                                    item['column'] = source_name
                             derivations.append(expanded)
                         continue
                 # Explicit INSERT target DDL is an inferred positional mapping.
@@ -81,11 +96,8 @@ def materialize_columns(workspace, run_id, results, resolver, schemas, config):
                     schema = schemas.get(aid, {})
                     columns = schema.get('columns', [])
                     if schema.get('schema_status') == 'declared' and len(columns) == d.get('projection_count'):
-                        mapping_gaps = {'INSERT target column mapping requires an explicit list or trusted schema',
-                                        'Output and projection cardinality mismatch',
-                                        'Output column name cannot be established'}
-                        gaps = [c for c in d.get('coverage', []) if c not in mapping_gaps]
-                        d.update(target_column=columns[d['ordinal']]['name'], status='unresolved' if gaps else 'inferred',
+                        gaps = [c for c in d.get('coverage', []) if c not in INSERT_MAPPING_GAPS]
+                        d.update(target_column=schema['column_identifiers'][d['ordinal']], status='unresolved' if gaps else 'inferred',
                                  coverage=[*gaps, 'INSERT target mapped from imported DDL; runtime schema is unverified'])
                 derivations.append(d)
             for index, d in enumerate(derivations):
@@ -144,7 +156,9 @@ def trace_columns(store, workspace, asset_id, column, direction='upstream', dept
 
 
 def _trace(store, w, aid, column, direction, depth, limit, status, include_source):
-    analysis = store.rows('''SELECT c.run_id,r.configuration FROM column_analysis c JOIN analysis_runs r
+    from dataforge.services import PARSER_VERSION
+
+    analysis = store.rows('''SELECT c.run_id,c.parser_version,r.configuration FROM column_analysis c JOIN analysis_runs r
         ON c.run_id=r.run_id AND c.workspace_id=r.workspace_id WHERE c.workspace_id=?''', [w])
     result = {'workspace_id': w, 'asset_id': aid, 'column': column, 'direction': direction,
               'depth': depth, 'derivations': [], 'paths': [], 'coverage': [], 'truncated': False,
@@ -160,6 +174,8 @@ def _trace(store, w, aid, column, direction, depth, limit, status, include_sourc
         boundary('reanalysis_required', message='Analyze sources to establish transformation coverage')
         return result
     run_id = analysis[0]['run_id']
+    if analysis[0]['parser_version'] != PARSER_VERSION:
+        boundary('reanalysis_required', message='Analyze again to refresh column identity and schema mappings')
     configuration = json.loads(analysis[0]['configuration'])
     current_settings = ParsingSettings.model_validate({k: store.setting(w, k, default)
         for k, default in ParsingSettings().model_dump().items()}).model_dump()
@@ -287,9 +303,11 @@ def _trace(store, w, aid, column, direction, depth, limit, status, include_sourc
                 boundary('coverage_diagnostic', derivation_id=did, message=warning)
             if step['status'] == 'unresolved':
                 boundary('unresolved_derivation', derivation_id=did)
-            matched = [i for i in inputs if i['column_id'] == cid]
-            next_effect = ('row_selection' if effect == 'row_selection' or any(i['role'] in ROW_ROLES for i in matched)
-                           else 'value')
+            row_effect = effect == 'row_selection'
+            if direction == 'downstream' and not row_effect:
+                row_effect = bool(store.rows('''SELECT 1 FROM column_dependencies WHERE workspace_id=?
+                    AND derivation_id=? AND source_column_id=? AND role IN ('row_filter','join') LIMIT 1''', [w, did, cid]))
+            next_effect = 'row_selection' if row_effect else 'value'
             if did not in emitted:
                 if len(emitted) >= limit:
                     boundary('item_limit')

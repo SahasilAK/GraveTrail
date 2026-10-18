@@ -26,6 +26,16 @@ def file_asset(path: str) -> str:
     return "file:" + path.replace("\\", "/").removeprefix("./")
 
 
+def column_key(name: str, case_sensitive: bool = False) -> str:
+    value = name.strip()
+    if value in {'', '*'}:
+        return value
+    for opening, closing in [('"', '"'), ('`', '`'), ('[', ']')]:
+        if len(value) >= 2 and value.startswith(opening) and value.endswith(closing):
+            return 'column:' + value[1:-1].replace(closing * 2, closing)
+    return 'column:' + (value if case_sensitive else value.casefold())
+
+
 @dataclass
 class AssetRef:
     name: str

@@ -33,7 +33,7 @@ Operations use `sql-procedure-body` or `sql-literal` methods and retain the comp
 enclosing statement and its line range, including original quotes and LF/CRLF endings. Body
 DDL does not supply unconditional workspace schema declarations or wildcard expansion.
 `tests/test_parser_static_wrappers.py` and the three additional vendor fixtures verify these
-boundaries, persistence, direct columns, exact evidence and cache reuse. Parser cache version 10
+boundaries, persistence, direct columns, exact evidence and cache reuse. Parser cache version 11
 refreshes older analysis on the next run; previously built packages must be rebuilt for these rules.
 
 ## Column transformation coverage
@@ -43,7 +43,11 @@ mapping for projections, aliases, expressions, constants, CASE, aggregates/windo
 CTEs/derived tables, explicit INSERT positions and positional UNION branches. Join/filter
 context stays separate from value dependencies. `COUNT(*)` retains a rowset dependency.
 Consistent imported DDL can infer plain wildcard and INSERT target mappings; it is not
-runtime schema verification. UPDATE/MERGE/DELETE transformations, recursive SQL,
+runtime schema verification. A single plain INSERT wildcard maps expanded source positions
+to declared destination names only when both schemas have matching cardinality; mixed or
+unknown layouts remain unresolved. DDL retains original identifier quoting alongside the
+existing name/type schema fields, so expansion preserves quoted case. UPDATE/MERGE/DELETE
+transformations, recursive SQL,
 scalar/correlated value subqueries, unknown functions and unsupported wildcard layouts
 have explicit coverage boundaries. Named windows, EXCEPT/INTERSECT, lateral projection aliases,
 base-table positional column aliases and duplicate outputs also remain conservative boundaries.

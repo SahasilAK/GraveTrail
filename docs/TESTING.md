@@ -9,11 +9,11 @@ published; this tracked summary is the public acceptance reference.
 
 | Area | Latest evidence | Remaining gate |
 | --- | --- | --- |
-| Source application | Parser cache 10 adds SQL/SAS column derivations, migration 5, bounded shared queries and a dedicated UI; full source verification is recorded below | No claim of universal SQL/SAS coverage |
+| Source application | Parser cache 11 adds SQL/SAS column derivations, migration 5, bounded shared queries and a dedicated UI; full source verification is recorded below | No claim of universal SQL/SAS coverage |
 | SQL/SAS sample ZIPs | Each has 85 persistent tables, 128 logical edges, seven layers/all 16 roots; SAS adds 16 WORK assets/144 physical edges | Real client projects and large dense graphs need separate accuracy/performance acceptance |
 | CLI/MCP | Complete documented interfaces and actual SDK transport/permission regressions; fixture parity includes original bytes, evidence and warm caches | One DuckDB process owns each home |
 | OmniRoute | Bounded 2026-10-17 live discovery, connection, SQL/SAS validation, inferred merge, refresh and reopen passed with `auto/best-reasoning` | Historical gateway failures are superseded; future availability and other live providers are not established |
-| Windows wheel/executable | 2026-10-18 parser-8 artifacts passed outside-checkout CLI/import/lineage, actual stdio MCP, health and rendered UI smoke | Rebuild and smoke artifacts containing parser 10 before release |
+| Windows wheel/executable | 2026-10-18 parser-8 artifacts passed outside-checkout CLI/import/lineage, actual stdio MCP, health and rendered UI smoke | Rebuild and smoke artifacts containing parser 11 before release |
 | Linux Docker | 2026-10-17 GraveTrail image passed non-root CLI/import/lineage/UI/MCP and volume persistence | 2026-10-18 fresh Docker checks were blocked by daemon availability; no parser-9 container result claimed |
 | Native Linux/macOS and hosted release | Build/publish workflow implemented | Target-native downloaded-artifact and current hosted release acceptance remain unrecorded here |
 | Standalone HTML | Self-contained assets, escaping, JavaScript checks and real UI download passed; 2026-10-18 source-generated `file://` graph with 501 nodes/500 edges passed fullscreen, keyboard copy and evidence checks without external requests | Current packaged artifacts were not rebuilt for the QOL changes |
@@ -22,7 +22,16 @@ Whole-home backup/restore and guarded blob cleanup are delivered features. Sched
 SVG/PNG export and multi-user collaboration remain optional. Bounded column transformations
 are now implemented for the [documented SQL/SAS subset](TRANSFORMATION_LINEAGE.md).
 
-Column transformation verification on 2026-10-18: **545 passed, 2 existing Windows
+Review follow-up verification on 2026-10-18: **568 passed, 2 existing Windows symlink
+permission skips** in 97.58 seconds. Parser cache 11 fixes equivalent quoted column
+identities, including escaped/special names; classifies downstream row-selection effects
+before trimming displayed inputs; and maps plain INSERT wildcards to declared destination
+positions. Unknown/mismatched/mixed wildcard layouts remain unresolved. Regressions verify
+that older caches request reanalysis and are replaced on the next analysis. The full suite
+includes existing UI, CLI, actual MCP transport, direct-usage and storage compatibility checks.
+Ruff, the lock check and strict documentation validation pass (37 public pages, 8 assets).
+
+Initial column transformation verification on 2026-10-18: **545 passed, 2 existing Windows
 symlink permission skips** in 111.01 seconds; Ruff and the lock check pass. Strict Pages
 validation passes all **37 public pages**, 8 assets, rendered local links/anchors and search.
 New fixtures cover projection/role separation, constants, CTE/INSERT/UNION and unsupported

@@ -39,7 +39,8 @@ plus the order-totals example. This Windows/Python 3.11 run stored 2,404 derivat
 analysis took **42.8948 s**. An upstream query at depth 30, limit 200 returned exactly
 200 derivations/200 path-step records in **16.9428 s**, with **1,081,760 bytes** peak
 Python allocations under tracemalloc and an explicit `item_limit` marker.
-This final run overlapped the full test suite and documentation build on the same host.
+This parser-10 run predates the parser-11 identity/mapping corrections and overlapped
+the full test suite and documentation build on the same host.
 The allocator tracing excludes DuckDB/native/process memory and adds measurement overhead.
 These are measured synthetic results, not a responsiveness guarantee for real projects.
 

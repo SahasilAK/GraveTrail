@@ -57,7 +57,11 @@ SHA256 and created/restored timestamps). Bytes commit before stale staging-file 
 Recovery journals are not metadata-transfer payloads and are deleted only with explicit
 workspace deletion. This table never authorizes cleanup outside its application namespace.
 
-Column IDs include exact resolved asset/job identity and column key. Intermediate scopes
+Column IDs include exact resolved asset/job identity and a shared quote-aware column key.
+Equivalent quoted and unquoted spellings share identity, while quoted case is preserved;
+quoted literal names such as `"*"` remain distinct from wildcard/rowset markers. Declared
+schemas retain original `column_identifiers` alongside unchanged name/type `columns` fields.
+Intermediate scopes
 and variable versions include immutable statement identity; they attach to an existing
 asset without adding CTE tables to the table graph. Physical columns can have multiple
 writer alternatives, which traversal does not combine into an assumed execution history.

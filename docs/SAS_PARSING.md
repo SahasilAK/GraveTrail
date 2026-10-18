@@ -15,9 +15,9 @@ SAS `DATETIME()` is recognized as an expression. Malformed modifiers remain pars
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 10 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 11 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
-evidence remain intact. Existing packaged executables/images need rebuilding for version 10.
+evidence remain intact. Existing packaged executables/images need rebuilding for version 11.
 
 ## Column transformation subset
 

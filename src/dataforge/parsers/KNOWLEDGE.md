@@ -6,7 +6,8 @@ Pure static parsers returning ParseResult. Add positive/negative fixtures and bu
   dependency roles and explicit unsupported boundaries; schema hooks defer to materialization.
 - `sas_transformations.py` — ordered DATA assignment versions, bounded single SET and
   explicit column options, known scalar functions and conservative runtime/unknown coverage.
-Parser10 adds these contracts; PROC SQL remaps shared derivations through SAS namespaces.
+Parser11 preserves DDL identifier quoting for schema expansion and refreshes column
+identities; PROC SQL remaps shared derivations through SAS namespaces.
 
 ## Files
 - `__init__.py` — Package marker; no business behavior.
@@ -19,7 +20,7 @@ SAS parse_sas accepts sql_dialect for PROC SQL only; default/extension/folder pr
 resolved in services.source_dialect. SAS DATA/PROC static rules are unchanged.
 
 SQL preserves SQL Server #/## identifier flags, top-level SELECT INTO set-query targets and
-Teradata volatile parenthesized CTAS inputs; current parser cache version10.
+Teradata volatile parenthesized CTAS inputs; current parser cache version11.
 
 SAS rule blocks slice original source by line-anchored offsets, preserving exact whitespace
 and same-line boundaries; inline data cannot redirect matching evidence offsets.

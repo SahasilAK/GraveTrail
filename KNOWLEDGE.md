@@ -48,7 +48,7 @@ current acceptance matrix; optional local status/matrix ledgers retain dated his
 
 UI redesign: Apple Design guides system typography, native theme tokens and scoped presentation CSS. Sources and Analysis are separate; administration has four focused routes. App/Pages share the visual language, with no entrance animations or remote font dependency. Navigation/state and delivery checklist: docs/USER_GUIDE.md; local plan: plans/UI_REDESIGN.md when available.
 
-Column transformations: parser10/migration5 add scoped SQL/PROC SQL and bounded DATA-step
+Column transformations: parser11/migration5 add scoped SQL/PROC SQL and bounded DATA-step
 derivations alongside direct usage. `transformations.py` shares identity, materialization,
 catalog and bounded traversal across the new page, CLI and MCP. Coverage/upgrade limits:
 docs/TRANSFORMATION_LINEAGE.md; benchmark: scripts/benchmark_transformations.py.

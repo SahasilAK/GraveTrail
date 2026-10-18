@@ -3,7 +3,7 @@
 Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries; parser/security/testing guides state verified coverage and limitations.
 
 `TRANSFORMATION_LINEAGE.md` — dedicated page workflow, tested SQL/SAS subset, dependency
-roles, bounded exports/queries and parser10/migration5 upgrade/recovery boundaries. Published
+roles, bounded exports/queries and parser11/migration5 upgrade/recovery boundaries. Published
 through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CLI/MCP
 references now enumerate100 executable routes and80 tools; UI has eleven destinations.
 

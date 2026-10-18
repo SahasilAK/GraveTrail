@@ -8,7 +8,7 @@ the value of every output column.
 ## Trace a column
 
 1. Import sources and run **Analysis**. Existing workspaces keep their table/direct-usage
-   facts after upgrade; transformation coverage appears after analysis with parser 10.
+   facts after upgrade; transformation coverage appears after analysis with parser 11.
 2. Choose an exact asset, including its job identity for temporary tables. Select a
    physical output column, or paste a column name or exact column ID.
 3. Choose **How it is produced** (upstream) or **What it affects** (downstream), depth
@@ -25,6 +25,8 @@ the `join` role. CASE/IF tests use `value_selection`; windows preserve `partitio
 `order`. Aggregates/windows retain relation `rowset` context. `COUNT(*)` does not depend
 on every column. A literal-only output is a constant with zero value inputs; row context
 can still apply. Downstream paths label value effects separately from row-selection effects.
+Display input limits do not change those labels. Equivalent quoted and unquoted column names share an
+identity under workspace case rules; quoted case and escaped identifier characters are retained.
 
 ## Tested static coverage
 
@@ -33,7 +35,7 @@ can still apply. Downstream paths label value effects separately from row-select
 | SQL projection, alias, expression, literal, CAST, CASE/IF | Named output derivations and distinct dependency roles |
 | Aggregation/window | Argument columns, rowsets and partition/order roles |
 | CTE/derived table | Statement-local intermediate columns; each expression remains inspectable |
-| INSERT SELECT | Explicit target lists map by position; consistent imported target DDL can infer a mapping |
+| INSERT SELECT | Explicit target lists map by position; consistent imported target DDL can infer a mapping after a single plain wildcard expands. Unknown or mismatched target schemas and mixed wildcard layouts stay unresolved |
 | UNION | Branch-specific derivations map by position; incompatible cardinality stays unresolved |
 | Plain wildcard | Single-source consistent imported DDL may expand as inferred; modifiers, scoped/branch schemas and ambiguous layouts stay unresolved |
 | SAS PROC SQL | Shared SQL contract, with SAS library/WORK identity and original source evidence |
@@ -56,7 +58,8 @@ unresolved scope and analysis that has not established transformation coverage. 
 these states proves live database behavior. Imported declarations remain inferred schema
 evidence. Parser diagnostics remain visible alongside known results.
 
-Every query uses one committed analysis revision and its identity settings. Changed parsing
+Every query uses one committed analysis revision and its identity settings. Older parser
+caches require explicit reanalysis to refresh identity and schema mappings. Changed parsing
 settings produce a settings-changed boundary until reanalysis. Reimported but unanalyzed code produces
 an analysis-stale marker while the old steps retain their original source hashes. Multiple
 writes to one physical column are alternatives with an unknown-order boundary; their
@@ -79,7 +82,7 @@ See [CLI](CLI_GUIDE.md), [MCP](MCP_INTEGRATION.md), [data model](DATA_MODEL.md),
 ## Storage and recovery
 
 Migration 5 adds column references, derivations, inputs and an analysis marker without
-rewriting old facts. Parser cache 10 refreshes extraction on the next explicit analysis.
+rewriting old facts. Parser cache 11 refreshes extraction on the next explicit analysis.
 Reanalysis replaces the committed derivations transactionally; a parse error for an already
 analyzed source retains the previous committed result. Cleanup previews include dependent
 column records. Columns cleanup clears transformation coverage as well as direct usages;

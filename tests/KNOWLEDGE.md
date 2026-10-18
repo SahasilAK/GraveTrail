@@ -4,7 +4,9 @@ Column transformation regressions: `test_sql_transformations.py` covers projecti
 spans/roles, scoped CTEs, UNION/INSERT and unsupported grammar; `test_sas_transformations.py`
 covers ordered variables, SET options and unresolved runtime functions; `test_transformations.py`
 pins storage, old-home migration/restore, immutable revisions, wildcard mappings, unknown writers,
-bounded cycles and cleanup. `test_transformation_sas_integration.py` verifies SAS traces/jobs;
+bounded cycles and cleanup. It also pins equivalent/escaped quoted names, literal marker
+identities, positional INSERT wildcard targets, limit-independent row effects and old-cache
+reanalysis boundaries. `test_transformation_sas_integration.py` verifies SAS traces/jobs;
 `test_transformation_access.py` checks native AppTest, CLI/MCP parity, real SDK stdio, source
 permissions, continuation budgets and stale widget identities.
 

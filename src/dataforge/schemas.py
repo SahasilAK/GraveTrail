@@ -1,7 +1,7 @@
 """Reconcile explicit DDL without assuming runtime order or discovering a database schema."""
 import json
 
-from dataforge.models import AssetRef, Diagnostic, stable_id
+from dataforge.models import AssetRef, Diagnostic, column_key, stable_id
 
 
 def collect_schemas(results, workspace, resolver):
@@ -36,16 +36,19 @@ def collect_schemas(results, workspace, resolver):
             columns = record["columns"]
             valid = valid and bool(columns)
             if columns:
-                names = [normalize(c["name"]) for c in columns]
+                identifiers = record.get('column_identifiers') or [c['name'] for c in columns]
+                names = [column_key(name, resolver.config['case_sensitive']) for name in identifiers]
                 valid = valid and len(set(names)) == len(names)
-                signatures.add(json.dumps([(normalize(c["name"]), c["type"]) for c in columns]))
+                signatures.add(json.dumps([(name, c['type']) for name, c in zip(names, columns)]))
             evidence.append({"file_id": source["file_id"], "relative_path": source["relative_path"],
                 "source_hash": source["content_hash"], "start_line": record["start_line"],
                 "end_line": record["end_line"], "statement_id": stable_id(workspace, source["file_id"],
                     str(record["operation_index"]), source["content_hash"])})
         valid = valid and len(signatures) == 1
         schemas[aid] = {"schema_status": "declared" if valid else "unresolved",
-            "columns": records[0][2]["columns"] if valid else [], "schema_evidence": evidence}
+            "columns": records[0][2]["columns"] if valid else [], "schema_evidence": evidence,
+            "column_identifiers": (records[0][2].get('column_identifiers') or
+                                   [c['name'] for c in records[0][2]['columns']]) if valid else []}
         if not valid and any(record["columns"] for _, _, record in records):
             for _, parsed, record in records:
                 message = f"Schema for {name} is conflicting, incomplete or changed; wildcard expansion disabled"
