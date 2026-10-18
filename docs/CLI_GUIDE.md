@@ -1,7 +1,7 @@
-# DataForge CLI
+# GraveTrail CLI
 
-Install from this checkout with `uv sync --locked --extra dev`. Run `uv run dataforge
---help` or install the wheel and use `dataforge`. Streamlit is neither imported nor
+Install from this checkout with `uv sync --locked --extra dev`. Run `uv run gravetrail
+--help` or install the wheel and use `gravetrail`. Streamlit is neither imported nor
 launched by the CLI. Python 3.11+ is required.
 
 ## First workflow
@@ -10,10 +10,10 @@ Global options come **before** the subcommand. Substitute the exact workspace ID
 returned by creation; names are not workspace identifiers.
 
 ```bash
-dataforge --home ./automation-data --allow-write --json workspace create ecommerce
-dataforge --home ./automation-data --allow-write --allowed-root ./tests/sample_data ingest ./tests/sample_data/dataforge_sql_lineage_test_project.zip --extensions sql --workspace WORKSPACE_ID
-dataforge --home ./automation-data --allow-write lineage build --workspace WORKSPACE_ID
-dataforge --home ./automation-data --json --max-depth 30 lineage upstream pub.all_kpis --workspace WORKSPACE_ID
+gravetrail --home ./automation-data --allow-write --json workspace create ecommerce
+gravetrail --home ./automation-data --allow-write --allowed-root ./tests/sample_data ingest ./tests/sample_data/dataforge_sql_lineage_test_project.zip --extensions sql --workspace WORKSPACE_ID
+gravetrail --home ./automation-data --allow-write lineage build --workspace WORKSPACE_ID
+gravetrail --home ./automation-data --json --max-depth 30 lineage upstream pub.all_kpis --workspace WORKSPACE_ID
 ```
 
 Runtime files stay under `--home`, otherwise `DATAFORGE_HOME`. Without either override,
@@ -113,7 +113,7 @@ assets or 100,000 evidence edges. Journals and exports cap at 1,000 each (export
 per workspace); archive completed local files when reached. No distributed worker,
 job cancellation or automatic job retry is introduced.
 
-Parity discovery: `dataforge capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
+Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
 
 Workspace preferences: `settings schema -w ID [--section parsing]`, `settings get parsing -w ID`, `settings update parsing patch.json -w ID --expected-revision REV`. Use the returned settings_revision; stale patches fail with conflict. `workspace update -w ID --name NAME --description TEXT --expected-revision REV`; `workspace config export -w ID` returns a configuration object; `workspace config import config.json` accepts that object (v1/v2). Mutations require write+config; imports require unrestricted scope. Privacy/access widening requires local --allow-admin. No analysis is triggered.
 

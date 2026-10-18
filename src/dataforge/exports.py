@@ -123,8 +123,8 @@ def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
 def graph_html(graph, appearance: VisualizationSettings | None = None) -> str:
     data = json.dumps(graph_data(graph, appearance), default=str).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<title>DataForge lineage</title><style>body{margin:20px}' + GRAPH_CSS + '</style></head><body>'
-            '<h1>DataForge lineage</h1><p>Static dependencies with source evidence. Logical ordering is not execution order.</p>'
+            '<title>GraveTrail lineage</title><style>body{margin:20px}' + GRAPH_CSS + '</style></head><body>'
+            '<h1>GraveTrail lineage</h1><p>Static dependencies with source evidence. Logical ordering is not execution order.</p>'
             + GRAPH_BODY + '<script>' + GRAPH_JS + '\nmountGraph(document.body,' + data + ',null);</script></body></html>')
 
 
@@ -142,7 +142,7 @@ def report_csv(rows: list[dict]) -> str:
 def report_html(rows: list[dict]) -> str:
     header = "".join(f"<th>{html.escape(k)}</th>" for k in (rows[0] if rows else []))
     body = "".join("<tr>" + "".join(f"<td>{html.escape(str(v))}</td>" for v in r.values()) + "</tr>" for r in rows)
-    return '<!doctype html><html lang="en"><meta charset="utf-8"><title>DataForge report</title><style>body{font:14px system-ui;margin:24px}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd;text-align:left;white-space:pre-wrap}</style><h1>DataForge report</h1><table><thead><tr>' + header + '</tr></thead><tbody>' + body + '</tbody></table></html>'
+    return '<!doctype html><html lang="en"><meta charset="utf-8"><title>GraveTrail report</title><style>body{font:14px system-ui;margin:24px}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd;text-align:left;white-space:pre-wrap}</style><h1>GraveTrail report</h1><table><thead><tr>' + header + '</tr></thead><tbody>' + body + '</tbody></table></html>'
 
 
 def source_bundle(store, file_ids: list[str], versions: dict | None = None) -> bytes:

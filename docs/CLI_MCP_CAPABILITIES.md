@@ -3,7 +3,7 @@
 Verified source implementation: 2026-10-17. All 46 UI coverage IDs are accounted for:
 36 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
 rows have working permitted reads/local routes; they do **not** claim full MCP parity.
-`dataforge capabilities` and MCP `get_capabilities` return this versioned inventory,
+`gravetrail capabilities` and MCP `get_capabilities` return this versioned inventory,
 including scope, aggregate effects, required grants and current launch authorization.
 Follow `next_cursor`; availability does not mean the current caller has permission.
 

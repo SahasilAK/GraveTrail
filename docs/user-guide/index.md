@@ -1,11 +1,11 @@
 # User guide
 
-![DataForge lineage explorer showing the supplied SQL project at depth 30](../assets/images/lineage-explorer.png)
+![GraveTrail lineage explorer showing the supplied SQL project at depth 30](../assets/images/lineage-explorer.png)
 
 *Actual local application, captured with the included SQL project in an isolated home.*
 
 Start with a focused question: which sources feed this table, which reports depend on
-it, or where is this column used? DataForge connects the answer to original source
+it, or where is this column used? GraveTrail connects the answer to original source
 evidence and keeps unresolved cases visible. The [detailed user reference](../USER_GUIDE.md)
 documents individual controls and settings.
 

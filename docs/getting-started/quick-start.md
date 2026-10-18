@@ -11,7 +11,7 @@ Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/), then run:
 git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
 cd dataforge-engineering-hub
 uv sync --locked --extra dev
-uv run dataforge-ui --home ./.dataforge
+uv run gravetrail-ui --home ./.dataforge
 ```
 
 Open [the local application](http://127.0.0.1:8501). The launcher uses loopback and
@@ -71,9 +71,9 @@ an independent CLI or MCP process must not open the same home while the UI owns 
 From the same repository root, use the same explicit home:
 
 ```sh
-uv run dataforge --home ./.dataforge --json workspace list
-uv run dataforge --home ./.dataforge --json assets search --query pub.all_kpis --workspace WORKSPACE_ID
-uv run dataforge --home ./.dataforge --json --max-depth 30 lineage upstream ASSET_ID --workspace WORKSPACE_ID
+uv run gravetrail --home ./.dataforge --json workspace list
+uv run gravetrail --home ./.dataforge --json assets search --query pub.all_kpis --workspace WORKSPACE_ID
+uv run gravetrail --home ./.dataforge --json --max-depth 30 lineage upstream ASSET_ID --workspace WORKSPACE_ID
 ```
 
 Replace `WORKSPACE_ID` and `ASSET_ID` with the exact IDs returned by the preceding
@@ -81,6 +81,6 @@ commands. Global options precede subcommands. Follow `next_cursor` when present;
 inspect `complete`, freshness and traversal boundaries before treating a response
 as comprehensive. A larger depth limit does not remove response pagination.
 
-Restart the UI with `uv run dataforge-ui --home ./.dataforge` to reopen the same
+Restart the UI with `uv run gravetrail-ui --home ./.dataforge` to reopen the same
 workspace. See the [CLI guide](../CLI_GUIDE.md) for import, write permissions and
 bounded evidence retrieval, or [configuration](configuration.md) for storage defaults.

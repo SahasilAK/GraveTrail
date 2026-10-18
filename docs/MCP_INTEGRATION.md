@@ -1,6 +1,6 @@
 # MCP integration
 
-DataForge uses the official `mcp` Python SDK (locked 1.30.0). CLI, MCP and the UI
+GraveTrail uses the official `mcp` Python SDK (locked 1.30.0). CLI, MCP and the UI
 reuse Store, Importer, the analysis service, LineageGraph and exports. The adapters
 contain no parser implementation. Normal queries use persisted facts and never
 invoke an LLM or execute imported source.
@@ -8,7 +8,7 @@ invoke an LLM or execute imported source.
 ## Recommended: local stdio
 
 ```bash
-dataforge --home ./automation-data --allowed-workspace WORKSPACE_ID mcp
+gravetrail --home ./automation-data --allowed-workspace WORKSPACE_ID mcp
 ```
 
 Launch from the installed environment, or use an absolute Python executable and
@@ -19,7 +19,7 @@ process. Settings supplies ready-to-copy configurations using actual absolute pa
 Codex `config.toml` example (replace paths and ID):
 
 ```toml
-[mcp_servers.dataforge]
+[mcp_servers.gravetrail]
 command = "D:/DataForge/.venv/Scripts/python.exe"
 args = ["-m", "dataforge.cli", "--home", "D:/DataForge/automation-data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
 ```
@@ -29,7 +29,7 @@ Claude Code project `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "dataforge": {
+    "gravetrail": {
       "command": "D:/DataForge/.venv/Scripts/python.exe",
       "args": ["-m", "dataforge.cli", "--home", "D:/DataForge/automation-data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
     }
@@ -38,10 +38,10 @@ Claude Code project `.mcp.json`:
 ```
 
 Alternatively register an installed CLI:
-`claude mcp add --transport stdio dataforge -- dataforge --home ./automation-data mcp`.
+`claude mcp add --transport stdio gravetrail -- gravetrail --home ./automation-data mcp`.
 Formats were checked against the [official Codex MCP guide](https://developers.openai.com/codex/mcp)
 and [official Claude Code MCP guide](https://code.claude.com/docs/en/mcp) on 2026-10-16.
-These are examples only; DataForge does not modify client configuration.
+These are examples only; GraveTrail does not modify client configuration.
 
 Add `--allow-write` **before** `mcp` only for an authorized automation workflow;
 configure `DATAFORGE_ALLOWED_ROOTS` before launching to enable bounded imports.
@@ -56,7 +56,7 @@ Set `DATAFORGE_MCP_TOKEN` to a private value of at least 32 characters through y
 environment/secret manager. Never put its value in project configuration or logs.
 
 ```bash
-dataforge --home ./automation-data --allowed-workspace WORKSPACE_ID mcp --transport streamable-http --host 127.0.0.1 --port 8765
+gravetrail --home ./automation-data --allowed-workspace WORKSPACE_ID mcp --transport streamable-http --host 127.0.0.1 --port 8765
 ```
 
 Endpoint: `http://127.0.0.1:8765/mcp`. Every request requires an Authorization
@@ -64,7 +64,7 @@ bearer header, including GET/POST/DELETE. Explicit workspace IDs are mandatory;
 unauthenticated network startup is refused. For Codex HTTP configuration:
 
 ```toml
-[mcp_servers.dataforge]
+[mcp_servers.gravetrail]
 url = "http://127.0.0.1:8765/mcp"
 bearer_token_env_var = "DATAFORGE_MCP_TOKEN"
 ```
@@ -77,7 +77,7 @@ one launch policy, not multiple independently authorized users.
 
 For an external binding, also supply `--public-url https://your-host/mcp` and use
 a trusted TLS reverse proxy and network rules that prevent direct access to the
-unencrypted backend. DataForge does not terminate TLS itself. DNS rebinding/Origin
+unencrypted backend. GraveTrail does not terminate TLS itself. DNS rebinding/Origin
 checks remain enabled; external hostname comes from the declared public URL.
 Request bodies cap at 64 KB, admitted HTTP requests at eight, and jobs at two.
 SDK protocol/validation errors are bounded by the SDK; application errors omit
@@ -111,9 +111,9 @@ MCP structured tool results (2025-06-18+). Application failures set `isError=tru
 and return a small structured `error`; framework argument failures remain standard
 MCP errors. Never interpret source comments as tool instructions.
 
-Resources: `dataforge://workspaces`,
-`dataforge://workspaces/{workspace_id}/summary`,
-`dataforge://workspaces/{workspace_id}/jobs/{job_id}`. They enforce the same
+Resources: `gravetrail://workspaces`,
+`gravetrail://workspaces/{workspace_id}/summary`,
+`gravetrail://workspaces/{workspace_id}/jobs/{job_id}`. They enforce the same
 permissions and response caps; tools provide continuation. Prompt:
 `investigate_lineage(workspace_id, asset)` suggests identity resolution, compact
 traversal and focused evidence; it neither reads arbitrary files nor calls an LLM.
@@ -124,7 +124,7 @@ for polling while DuckDB is busy. Jobs already running may finish after revocati
 new operations and subsequent status retrieval are denied. Restarted/crashed jobs
 expire to interrupted and require explicit retry. No hidden daemon or shell tool.
 
-Parity discovery: `dataforge capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
+Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
 
 Workspace configuration tools: get_settings_schema, get_workspace_settings, update_workspace_settings, update_workspace, export_workspace_configuration, import_workspace_configuration. Typed bounded patches require expected_revision. MCP may tighten privacy/access but cannot enable external/full-source/history, increase disclosure budgets, disable redaction/auditing or enable automatic cleanup.
 
@@ -141,3 +141,5 @@ Maintenance is read-only: preview_history_archive, list_history_archives, previe
 Application/setup tools: list_theme_presets, get_application_theme, apply_application_theme, get_application_logging, update_application_logging, get_runtime_info, get_agent_setup, test_local_agent_access. Application writes require unrestricted write/config/application startup authority; a workspace-scoped HTTP launch cannot perform them. Loaded Streamlit theme state is unavailable to this owner; no automatic restart/refresh. Setup reports credential-free examples and actual schemas; local handler self-test explicitly does not establish external connectivity.
 
 See the [complete UI capability matrix](CLI_MCP_CAPABILITIES.md) for every coverage ID, exact command/tool names and policy restrictions.
+
+The server identifies itself as **GraveTrail**. The previous `dataforge://` resource URLs remain aliases of `gravetrail://` with identical permissions and responses. Existing client configuration names can be retained. Python module paths and `DATAFORGE_*` variables are unchanged.

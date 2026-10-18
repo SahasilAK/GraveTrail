@@ -1,4 +1,4 @@
-# Contributing to DataForge
+# Contributing to GraveTrail
 
 Read the [contribution guide](docs/development/contributing.md) for development setup,
 test commands, evidence contracts and pull request expectations. Start with a focused

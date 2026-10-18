@@ -9,7 +9,7 @@ def test_agent_settings_permissions_examples_and_connection(tmp_path, monkeypatc
     app.switch_page("ui/pages/settings.py").run()
     app.segmented_control[0].set_value("Agent & Automation Access").run()
     assert not app.exception
-    assert any("[mcp_servers.dataforge]" in code.value for code in app.code)
+    assert any("[mcp_servers.gravetrail]" in code.value for code in app.code)
     next(b for b in app.button if b.label == "Test local agent access").click().run()
     assert any("Local agent access works" in s.value for s in app.success)
     next(c for c in app.checkbox if c.label == "Allow source retrieval").uncheck()

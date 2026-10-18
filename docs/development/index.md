@@ -1,6 +1,6 @@
 # Development
 
-DataForge is a Python 3.11+ application with a Streamlit presentation layer and shared
+GraveTrail is a Python 3.11+ application with a Streamlit presentation layer and shared
 services for the UI, CLI and MCP server. Start with the
 [contribution guide](contributing.md) for the edit/test workflow, or the
 [architecture](../ARCHITECTURE.md) for ownership boundaries.

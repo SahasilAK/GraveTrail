@@ -42,7 +42,7 @@ def prepare_runtime(home: Path, assets: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Launch the DataForge engineering workspace")
+    parser = argparse.ArgumentParser(description="Launch the GraveTrail engineering workspace")
     parser.add_argument("--home", type=Path, help="Persistent runtime data directory")
     parser.add_argument("--port", type=int, default=8501)
     parser.add_argument("--address", default="127.0.0.1")

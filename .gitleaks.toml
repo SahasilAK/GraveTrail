@@ -1,4 +1,4 @@
-title = "DataForge secret scanning"
+title = "GraveTrail secret scanning"
 
 [extend]
 useDefault = true

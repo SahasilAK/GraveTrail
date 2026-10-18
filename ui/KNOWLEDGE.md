@@ -28,3 +28,5 @@ show their job and warn when the source assignment changed.
 
 common.current_home validates startup-allowed session storage; open_storage_home callback
 opens before resetting current-session controls. Other sessions retain their stores.
+
+GraveTrail presentation: app page/sidebar title and agent examples use the new name. Reset/restore forms show RESET GRAVETRAIL / RESTORE GRAVETRAIL; services retain legacy exact phrases for scripted compatibility. Storage identifiers are unchanged.

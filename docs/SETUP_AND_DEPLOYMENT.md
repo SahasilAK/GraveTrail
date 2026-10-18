@@ -1,11 +1,11 @@
-# DataForge Setup and Deployment
+# GraveTrail Setup and Deployment
 
 This is the main installation and operations reference. For recorded verification and
 remaining release gates, see [build verification](BUILD_AND_RELEASE.md).
 
 ## 1. Introduction
 
-DataForge engineering hub helps data engineers, analysts and architects investigate SQL,
+GraveTrail engineering hub helps data engineers, analysts and architects investigate SQL,
 SAS and CSV projects. Import files, generate evidence-backed table lineage, trace upstream
 and downstream dependencies, inspect original statements and direct column usage, and
 export results. SQL/SAS scripts are analyzed statically; imported code is never executed.
@@ -49,10 +49,10 @@ For engineers starting from this repository, use the locked source environment:
 git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
 cd dataforge-engineering-hub
 uv sync --locked --extra dev
-uv run dataforge-ui
+uv run gravetrail-ui
 ```
 
-Open [DataForge](http://127.0.0.1:8501). The launcher defaults to loopback and port 8501.
+Open [GraveTrail](http://127.0.0.1:8501). The launcher defaults to loopback and port 8501.
 Stop it with Ctrl+C. In a checkout, runtime data defaults to `.dataforge/` under the
 working directory. Keep this directory out of source control.
 
@@ -65,7 +65,7 @@ Clone as above, then create a dedicated environment. Windows PowerShell:
 ```powershell
 py -3.11 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
-.venv\Scripts\dataforge-ui.exe --home D:\DataForge\data
+.venv\Scripts\gravetrail-ui.exe --home D:\DataForge\data
 ```
 
 Linux/macOS:
@@ -73,7 +73,7 @@ Linux/macOS:
 ```sh
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
-.venv/bin/dataforge-ui --home "$HOME/.local/share/dataforge"
+.venv/bin/gravetrail-ui --home "$HOME/.local/share/dataforge"
 ```
 
 Using the environment's executables directly avoids activation and PowerShell execution
@@ -84,9 +84,9 @@ policy issues. pip resolves the declared version ranges; `uv sync --locked` uses
 Obtain or build the wheel described in section 7 and install its actual filename:
 
 ```sh
-python -m pip install /path/to/dataforge_engineering_hub-0.1.0-py3-none-any.whl
-dataforge-ui --home /path/to/dataforge-data
-dataforge --help
+python -m pip install /path/to/gravetrail-0.1.0-py3-none-any.whl
+gravetrail-ui --home /path/to/dataforge-data
+gravetrail --help
 ```
 
 `0.1.0` is the current source version, not a claim of a published release. Replace it
@@ -94,7 +94,7 @@ with the version actually built. An installed wheel includes UI pages, graph ass
 Streamlit configuration and prompt resources; it runs outside the source checkout.
 
 Launcher equivalents are `python -m dataforge.launcher` and
-`dataforge --home /path/to/dataforge-data ui`. From the checkout, direct development
+`gravetrail --home /path/to/dataforge-data ui`. From the checkout, direct development
 startup also remains available:
 
 ```sh
@@ -104,7 +104,7 @@ uv run streamlit run app.py --server.address 127.0.0.1
 To choose another port or suppress automatic browser opening:
 
 ```sh
-dataforge-ui --home /path/to/dataforge-data --port 8502 --no-browser
+gravetrail-ui --home /path/to/dataforge-data --port 8502 --no-browser
 ```
 
 Install from the repository root if pip cannot locate `pyproject.toml`. If an executable
@@ -116,9 +116,9 @@ Stop the owner and back up the home before upgrading; see section 13.
 From the repository root:
 
 ```sh
-docker build -t dataforge:local .
-docker run --name dataforge-ui --init -d -p 127.0.0.1:8501:8501 -v dataforge-data:/data dataforge:local
-docker logs -f dataforge-ui
+docker build -t gravetrail:local .
+docker run --name gravetrail-ui --init -d -p 127.0.0.1:8501:8501 -v dataforge-data:/data gravetrail:local
+docker logs -f gravetrail-ui
 ```
 
 The image starts the UI on container port 8501, runs as UID/GID 10001 and stores data
@@ -142,7 +142,7 @@ docker compose --profile mcp run --rm --no-deps mcp
 ```
 
 Do not add `-v` to `docker compose down` when retaining data. A containerized stdio
-agent integration should use an attached `docker run --rm -i ... dataforge mcp`, with
+agent integration should use an attached `docker run --rm -i ... gravetrail mcp`, with
 the same volume and no other owner. See [MCP integration](MCP_INTEGRATION.md).
 
 Inject provider credentials at runtime from the launching environment; never put values
@@ -150,7 +150,7 @@ in Dockerfiles, image build arguments or committed Compose files. For example, w
 `DATAFORGE_OPENAI_API_KEY` already supplied by your secret manager:
 
 ```sh
-docker run --name dataforge-ui --init -d -p 127.0.0.1:8501:8501 -v dataforge-data:/data -e DATAFORGE_OPENAI_API_KEY dataforge:local
+docker run --name gravetrail-ui --init -d -p 127.0.0.1:8501:8501 -v dataforge-data:/data -e DATAFORGE_OPENAI_API_KEY gravetrail:local
 ```
 
 Only supply credentials required by that container. Environment values are visible to
@@ -160,33 +160,33 @@ refers to the container itself; configure a reachable endpoint and the privacy g
 For host imports, mount a directory read-only and allow its **container** path:
 
 ```sh
-docker run --name dataforge-ui --init -d -p 127.0.0.1:8501:8501 -v dataforge-data:/data -v /absolute/jobs:/imports:ro -e DATAFORGE_ALLOWED_ROOTS=/imports dataforge:local
+docker run --name gravetrail-ui --init -d -p 127.0.0.1:8501:8501 -v dataforge-data:/data -v /absolute/jobs:/imports:ro -e DATAFORGE_ALLOWED_ROOTS=/imports gravetrail:local
 ```
 
 Bind-mounted data directories must be writable by UID 10001; fix permissions on the
 dedicated data directory or use a named volume. Do not grant broad host permissions.
-To stop/remove a plain container, use `docker stop dataforge-ui` then
-`docker rm dataforge-ui`. Rebuild and start a replacement using the same volume to update.
+To stop/remove a plain container, use `docker stop gravetrail-ui` then
+`docker rm gravetrail-ui`. Rebuild and start a replacement using the same volume to update.
 
 ## 6. Standalone executable installation
 
 Obtain a bundle built from a trusted revision for your OS and architecture, or create it
 with section 7. A locally built Windows artifact is named like
-`dataforge-0.1.0-windows-amd64.zip`; other hosts produce their own platform archive.
+`gravetrail-0.1.0-windows-amd64.zip`; other hosts produce their own platform archive.
 Compare the archive SHA-256 with `SHA256SUMS` from the same trusted build. Checksums
 detect modification but do not authenticate an untrusted publisher.
 
-Extract the **entire** archive, keeping its `dataforge` directory and internal dependencies
+Extract the **entire** archive, keeping its `gravetrail` directory and internal dependencies
 together. On Windows:
 
 ```powershell
-.\dataforge\dataforge.exe --home D:\DataForge\data --port 8501
-.\dataforge\dataforge.exe --cli --home D:\DataForge\data --json workspace list
+.\gravetrail\gravetrail.exe --home D:\DataForge\data --port 8501
+.\gravetrail\gravetrail.exe --cli --home D:\DataForge\data --json workspace list
 ```
 
 Stop the UI before running a CLI or MCP process against the same home. `--cli` routes to
 the regular CLI, including `mcp`; without it the binary launches the UI. On Linux/macOS,
-the equivalent executable is `./dataforge/dataforge`. Build on the target platform;
+the equivalent executable is `./gravetrail/gravetrail`. Build on the target platform;
 Windows executables do not run natively on Linux/macOS. Native Linux/macOS bundle startup
 requires its own runner verification and is not established by the Windows build.
 
@@ -205,10 +205,10 @@ isolated build environment. From the repository root:
 
 ```sh
 uv sync --locked --extra dev --extra build
-uv run dataforge-build --target python
-uv run dataforge-build --target docker
-uv run dataforge-build --target executable
-uv run dataforge-build --verify
+uv run gravetrail-build --target python
+uv run gravetrail-build --target docker
+uv run gravetrail-build --target executable
+uv run gravetrail-build --verify
 ```
 
 `--target all` runs every target; `--root PATH` chooses the source root and `--output PATH`
@@ -217,7 +217,7 @@ chooses the artifact directory (default `dist`). Targets produce:
 | Target | Output |
 | --- | --- |
 | `python` | Wheel and source archive under `dist/python/` |
-| `docker` | Local `dataforge:VERSION` image plus `dist/docker-image.json` identifying it |
+| `docker` | Local `gravetrail:VERSION` image plus `dist/docker-image.json` identifying it |
 | `executable` | Host OS/architecture archive containing a PyInstaller directory bundle, plus wheel |
 | All builds | `dist/manifest.json` and `dist/SHA256SUMS` with version, platform and artifact hashes |
 
@@ -262,7 +262,7 @@ Host access is configured before startup. PowerShell example:
 $env:DATAFORGE_HOME = 'D:\DataForge\data'
 $env:DATAFORGE_ALLOWED_ROOTS = 'D:\Engineering\jobs;D:\Engineering\exports'
 $env:DATAFORGE_STORAGE_LOCATIONS = 'D:\DataForge\archive;D:\DataForge\sandbox'
-uv run dataforge-ui
+uv run gravetrail-ui
 ```
 
 These non-secret settings apply to the launching process. Linux/macOS use `:` between
@@ -318,31 +318,31 @@ Gateway availability remains an external verification condition. See
 
 ## 10. CLI and MCP setup
 
-Python installation provides `dataforge`. Global options precede subcommands:
+Python installation provides `gravetrail`. Global options precede subcommands:
 
 ```sh
-dataforge --home /path/to/data --json workspace list
-dataforge --home /path/to/data --allow-write --json workspace create ecommerce
-dataforge --home /path/to/data --json assets search --query pub.all_kpis --workspace WORKSPACE_ID
-dataforge --home /path/to/data --json --max-depth 30 lineage upstream ASSET_ID --workspace WORKSPACE_ID
+gravetrail --home /path/to/data --json workspace list
+gravetrail --home /path/to/data --allow-write --json workspace create ecommerce
+gravetrail --home /path/to/data --json assets search --query pub.all_kpis --workspace WORKSPACE_ID
+gravetrail --home /path/to/data --json --max-depth 30 lineage upstream ASSET_ID --workspace WORKSPACE_ID
 ```
 
 Replace uppercase placeholders with returned IDs; workspace names are not IDs. Command
 groups cover workspace, ingest, lineage, assets, columns, source, impact, batch, jobs,
-export, cleanup and maintenance. `dataforge --help` and each group's `--help` are authoritative.
+export, cleanup and maintenance. `gravetrail --help` and each group's `--help` are authoritative.
 Writes require startup `--allow-write` and workspace permission; host imports also require
 allowed roots. Normal analysis queries never invoke an LLM.
 
 Start local read-only stdio MCP in the installed environment:
 
 ```sh
-dataforge --home /path/to/data --allowed-workspace WORKSPACE_ID mcp
+gravetrail --home /path/to/data --allowed-workspace WORKSPACE_ID mcp
 ```
 
 For Codex, configure a local process using actual absolute paths:
 
 ```toml
-[mcp_servers.dataforge]
+[mcp_servers.gravetrail]
 command = "D:/DataForge/.venv/Scripts/python.exe"
 args = ["-m", "dataforge.cli", "--home", "D:/DataForge/data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
 ```
@@ -371,7 +371,7 @@ or use a separate home. A single MCP process shares its Store and jobs internall
 | Docker | `/data`, backed by the configured volume |
 
 The UI, CLI and MCP share the same default-home resolver. Pass `--home` explicitly
-when selecting another installation's data. `dataforge --home PATH ui` uses that explicit
+when selecting another installation's data. `gravetrail --home PATH ui` uses that explicit
 home. The packaged UI copies default theme configuration once into the home and
 preserves subsequent edits.
 
@@ -384,9 +384,9 @@ holds maintenance archives. Parser cache is shared within the database.
 Use the UI database maintenance controls, or stop other owners and run:
 
 ```sh
-dataforge --home /path/to/data --json maintenance inspect
-dataforge --home /path/to/data --allow-write --json maintenance backup
-dataforge --allow-write maintenance restore /path/to/backup.zip /path/to/NEW-data --confirm "RESTORE DATAFORGE"
+gravetrail --home /path/to/data --json maintenance inspect
+gravetrail --home /path/to/data --allow-write --json maintenance backup
+gravetrail --allow-write maintenance restore /path/to/backup.zip /path/to/NEW-data --confirm "RESTORE GRAVETRAIL"
 ```
 
 Backup creates a checkpointed database snapshot and managed runtime files with a manifest
@@ -401,14 +401,14 @@ restart with the new storage allowlist if selecting it through UI storage contro
 
 For a complete filesystem backup, stop all owners and copy the entire home using your
 normal backup tool. Never copy a database while another process owns it. Backups include
-source and retained AI content; they are sensitive and are not encrypted by DataForge.
+source and retained AI content; they are sensitive and are not encrypted by GraveTrail.
 
 ## 12. Cleanup and maintenance
 
 Open **Settings → Data Management & Cleanup**. Choose scope/category, inspect real record
 counts and file sizes, create a dry-run preview and type the displayed confirmation.
 Workspace operations require its exact name; shared cleanup uses `CLEAN SHARED DATA`;
-full application reset uses `RESET DATAFORGE`. A changed preview is rejected and must be
+full application reset uses `RESET GRAVETRAIL`. A changed preview is rejected and must be
 refreshed. Active analysis, managed jobs and AI requests block unsafe operations.
 
 | Category | Effect |
@@ -433,10 +433,10 @@ There is no separate embedding index or generated knowledge directory to clear.
 CLI cleanup defaults to dry-run. Save its preview to a **new** file, review it, then apply:
 
 ```sh
-dataforge --home /path/to/data --json cleanup inspect --workspace WORKSPACE_ID
-dataforge --home /path/to/data --json --output lineage-preview.json cleanup lineage --workspace WORKSPACE_ID --dry-run
-dataforge --home /path/to/data --allow-write --json cleanup lineage --workspace WORKSPACE_ID --no-dry-run --preview lineage-preview.json --confirm "Workspace name" --backup
-dataforge --home /path/to/data --json workspace reset --workspace WORKSPACE_ID --dry-run
+gravetrail --home /path/to/data --json cleanup inspect --workspace WORKSPACE_ID
+gravetrail --home /path/to/data --json --output lineage-preview.json cleanup lineage --workspace WORKSPACE_ID --dry-run
+gravetrail --home /path/to/data --allow-write --json cleanup lineage --workspace WORKSPACE_ID --no-dry-run --preview lineage-preview.json --confirm "Workspace name" --backup
+gravetrail --home /path/to/data --json workspace reset --workspace WORKSPACE_ID --dry-run
 ```
 
 `cleanup sources` supports repeatable `--file-id`; `cleanup history` supports `--run-id`.
@@ -456,7 +456,7 @@ before enabling.
 Database maintenance supports integrity/schema/reference inspection and a checkpoint:
 
 ```sh
-dataforge --home /path/to/data --allow-write maintenance checkpoint
+gravetrail --home /path/to/data --allow-write maintenance checkpoint
 ```
 
 Checkpoint flushes DuckDB's WAL; neither it nor logical row deletion guarantees a smaller
@@ -489,13 +489,13 @@ home and use its matching code if rollback is needed. Do not manually edit migra
 | --- | --- |
 | Dependency/install failure | Confirm Python 3.11+, correct environment and repository root; retry the locked uv installation. Check download/proxy access without exposing credentials. |
 | UI command missing | Use the environment's executable path or `python -m dataforge.launcher`. Reinstall the current package. |
-| Port already in use | Stop the intended previous process or use `dataforge-ui --port 8502`. Do not terminate unrelated processes. |
+| Port already in use | Stop the intended previous process or use `gravetrail-ui --port 8502`. Do not terminate unrelated processes. |
 | UI starts but browser does not open | Open the loopback URL manually; inspect terminal output and health endpoint `/_stcore/health`. |
 | `storage_busy` / DuckDB lock | Stop the UI, MCP or worker owning that exact home, or choose a separate home. Do not delete lock/WAL files to bypass ownership. |
 | Docker daemon unavailable | Start a supported Linux engine and check `docker info`. A CLI installation alone is insufficient. |
 | Docker permission denied | Ensure dedicated `/data` mount permits UID 10001; prefer a named volume. Input mounts should be read-only and allowed inside the container. |
 | Executable fails | Extract all bundled files, run from a terminal, check matching OS/architecture and review quarantine/antivirus findings. |
-| Encoding/binary diagnostic | Inspect the original file; convert an intentional copy to a supported text encoding and reimport. DataForge reports undecodable/binary content rather than silently changing evidence. |
+| Encoding/binary diagnostic | Inspect the original file; convert an intentional copy to a supported text encoding and reimport. GraveTrail reports undecodable/binary content rather than silently changing evidence. |
 | Missing runtime credential | Re-enter the masked session credential or provision the exact variable referenced by the profile before restarting. Clearing session credentials leaves launch variables available. |
 | LLM test fails | Check endpoint/model/auth method, provider availability, network and privacy settings. A local gateway may require a credential and may forward data remotely. |
 | Cleanup preview expired | Refresh after data/settings/jobs change; inspect the new scope before confirming. |
@@ -573,7 +573,7 @@ Keep release publication a deliberate maintainer operation.
 lineage exploration and offline HTML exports need no provider. Installation/downloads and
 optional remote assistance need network access.
 
-**Does DataForge execute my scripts?** No. It performs static analysis. Dynamic SQL,
+**Does GraveTrail execute my scripts?** No. It performs static analysis. Dynamic SQL,
 runtime SAS macros and execution-order-dependent behavior may remain unresolved.
 
 **Can the UI and MCP open one home simultaneously?** Use one owning process per home.
@@ -602,4 +602,6 @@ Review dependency licenses when redistributing a bundled application.
 
 ## CLI and MCP UI coverage
 
-The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `dataforge capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source verification commands are in the [testing guide](TESTING.md).
+The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `gravetrail capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source verification commands are in the [testing guide](TESTING.md).
+
+See [GraveTrail rebrand compatibility](BUILD_AND_RELEASE.md#gravetrail-rebrand-compatibility) before upgrading an existing installation.

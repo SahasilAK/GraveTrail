@@ -3,10 +3,37 @@ import json
 import shutil
 import subprocess
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
+
+
+def test_gravetrail_distribution_keeps_legacy_entry_points():
+    root = Path(__file__).resolve().parents[1]
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert project["name"] == "gravetrail"
+    for suffix in ("", "-ui", "-build"):
+        assert project["scripts"]["gravetrail" + suffix] == project["scripts"]["dataforge" + suffix]
+
+
+def test_python_build_ignores_previous_brand_and_version_artifacts(tmp_path, monkeypatch):
+    from dataforge.build import build_python
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
+    output = tmp_path / "dist"
+    folder = output / "python"
+    folder.mkdir(parents=True)
+    for name in ("dataforge_engineering_hub-1.2.3-py3-none-any.whl", "gravetrail-1.2.2-py3-none-any.whl",
+                 "gravetrail-1.2.2.tar.gz", "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"):
+        (folder / name).write_bytes(b"artifact")
+    monkeypatch.setattr("dataforge.build._run", lambda *args, **kwargs: None)
+    assert {p.name for p in build_python(tmp_path, output)} == {
+        "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"}
+    (folder / "gravetrail-1.2.3-py3-none-any.whl").unlink()
+    with pytest.raises(ValueError, match="current GraveTrail"):
+        build_python(tmp_path, output)
 
 
 def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path):

@@ -73,11 +73,16 @@ def _run(args: list[str], root: Path, *, capture=False) -> str:
 def build_python(root: Path, output: Path) -> list[Path]:
     folder = output / "python"
     _run(["uv", "build", "--out-dir", str(folder)], root)
-    return sorted(folder.glob("*.whl")) + sorted(folder.glob("*.tar.gz"))
+    version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    wheels = list(folder.glob(f"gravetrail-{version}-*.whl"))
+    source = folder / f"gravetrail-{version}.tar.gz"
+    if len(wheels) != 1 or not source.is_file():
+        raise ValueError("Expected exactly one current GraveTrail wheel and source archive")
+    return [*wheels, source]
 
 
 def build_docker(root: Path, output: Path, version: str) -> list[Path]:
-    tag = f"dataforge:{version}"
+    tag = f"gravetrail:{version}"
     _run(["docker", "build", "--tag", tag, "."], root)
     details = json.loads(_run(["docker", "image", "inspect", tag], root, capture=True))[0]
     path = output / "docker-image.json"
@@ -102,20 +107,20 @@ def build_executable(root: Path, output: Path, version: str) -> list[Path]:
     _run(["uv", "pip", "install", "--python", str(python), "--no-deps", str(wheels[0])], root)
     assets = _run([str(python), "-c", "from dataforge.launcher import application_root; print(application_root())"],
                   root, capture=True)
-    _run([str(python), "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--name", "dataforge",
+    _run([str(python), "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--name", "gravetrail",
           "--distpath", str(work / "bundle"), "--workpath", str(work / "pyinstaller"),
           "--specpath", str(work), "--paths", assets, "--collect-all", "dataforge",
           "--collect-all", "streamlit", "--collect-submodules", "ui", "--collect-submodules", "sqlglot",
-          "--recursive-copy-metadata", "dataforge-engineering-hub",
+          "--recursive-copy-metadata", "gravetrail",
           str(root / "scripts/build/frozen_entry.py")], root)
-    bundle = work / "bundle/dataforge"
-    name = f"dataforge-{version}-{platform.system().lower()}-{platform.machine().lower()}"
+    bundle = work / "bundle/gravetrail"
+    name = f"gravetrail-{version}-{platform.system().lower()}-{platform.machine().lower()}"
     if sys.platform == "win32":
         archive = Path(shutil.make_archive(str(output / name), "zip", bundle.parent, bundle.name))
     else:
         archive = output / f"{name}.tar.gz"
         with tarfile.open(archive, "w:gz") as stream:
-            stream.add(bundle, arcname="dataforge")
+            stream.add(bundle, arcname="gravetrail")
     return [*python_artifacts, archive]
 
 

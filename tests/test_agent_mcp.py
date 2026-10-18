@@ -25,6 +25,7 @@ def test_mcp_service_parity_resources_prompts_and_errors(tmp_path):
     analyze(store, w)
     service = AgentService(store)
     server = create_server(service)
+    assert server.name == "GraveTrail"
 
     async def check():
         names = {t.name for t in await server.list_tools()}
@@ -38,6 +39,11 @@ def test_mcp_service_parity_resources_prompts_and_errors(tmp_path):
         assert any("summary" in str(t.uriTemplate) for t in templates)
         resource = await server.read_resource(f"dataforge://workspaces/{w}/summary")
         assert json.loads(list(resource)[0].content)["workspace_id"] == w
+        renamed = await server.read_resource(f"gravetrail://workspaces/{w}/summary")
+        assert list(renamed)[0].content == list(resource)[0].content
+        for scheme in ("gravetrail", "dataforge"):
+            listing = await server.read_resource(f"{scheme}://workspaces")
+            assert json.loads(list(listing)[0].content)["items"][0]["workspace_id"] == w
         prompts = await server.list_prompts()
         assert any(p.name == "investigate_lineage" for p in prompts)
     try:

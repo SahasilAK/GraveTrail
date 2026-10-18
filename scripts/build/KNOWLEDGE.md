@@ -8,3 +8,5 @@ requires explicitly adding new files in this directory; do not change user ignor
 - `build_executable.py` — Convenience wrapper around `dataforge.build.main --target executable`.
 - `smoke.py` — External wheel/frozen SQL import/lineage, real stdio MCP query and HTTP/WebSocket rendered UI checks in a temporary home.
 - `smoke_docker.py` — Actual non-root image smoke, CLI analysis, rendered UI, owner restart persistence and MCP; removes only uniquely named test containers/volume.
+
+Distribution smoke also requires the GraveTrail page title and MCP server identity. Docker smoke uses gravetrail image/CLI names and uniquely named disposable runtime resources.

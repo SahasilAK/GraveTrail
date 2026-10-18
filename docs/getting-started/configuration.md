@@ -1,6 +1,6 @@
 # Configuration
 
-DataForge separates startup configuration, workspace preferences and runtime secrets.
+GraveTrail separates startup configuration, workspace preferences and runtime secrets.
 Choose storage and filesystem access before launching; tune analysis and display in
 **Settings** after selecting a workspace.
 
@@ -9,8 +9,8 @@ Choose storage and filesystem access before launching; tune analysis and display
 Use an explicit home when moving between source, installed and packaged launchers:
 
 ```sh
-uv run dataforge-ui --home /absolute/path/to/dataforge-data
-uv run dataforge --home /absolute/path/to/dataforge-data --json workspace list
+uv run gravetrail-ui --home /absolute/path/to/dataforge-data
+uv run gravetrail --home /absolute/path/to/dataforge-data --json workspace list
 ```
 
 Run these commands sequentially, stopping the UI before opening the home through an
@@ -33,7 +33,7 @@ an actively owned database. Restore whole-home backups into a new directory.
 | `DATAFORGE_HOME` | Default persistent data home when `--home` is absent |
 | `DATAFORGE_ALLOWED_ROOTS` | Explicit host directories permitted for server-side imports |
 | `DATAFORGE_STORAGE_LOCATIONS` | Additional absolute homes offered by the UI storage selector |
-| `--address`, `--port` on `dataforge-ui` | Bind address and port; default `127.0.0.1:8501` |
+| `--address`, `--port` on `gravetrail-ui` | Bind address and port; default `127.0.0.1:8501` |
 
 Root/location lists use `;` on Windows and `:` on Linux/macOS. Additional storage
 locations are capped at eight total including the default home. Opening another
@@ -90,3 +90,5 @@ affected by a cleanup. General cleanup requires a whole-home backup and typed co
 changed previews must be refreshed. Source or AI cleanup invalidates the complete dependent
 workspace graph. Shared cache/orphan/application cleanup is UI-only, and MCP cleanup is
 read-only. Read the [data management guide](../DATA_MANAGEMENT.md) before applying changes.
+
+See [GraveTrail rebrand compatibility](../BUILD_AND_RELEASE.md#gravetrail-rebrand-compatibility) for retained commands, environment variables and storage names.

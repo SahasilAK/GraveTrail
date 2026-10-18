@@ -1,4 +1,4 @@
-"""DataForge automation CLI; does not import or start Streamlit."""
+"""GraveTrail automation CLI; does not import or start Streamlit."""
 from __future__ import annotations
 
 import os
@@ -421,8 +421,9 @@ def _maintenance(ctx, operation):
 @maintenance_app.command('restore')
 def maintenance_restore(ctx: typer.Context, archive: Path, destination: Path, confirm: str = ''):
     from dataforge.database_maintenance import restore_backup
-    if not ctx.obj['policy'].allow_write or ctx.obj['policy'].workspaces is not None or confirm != 'RESTORE DATAFORGE':
-        fail(ctx, AgentError('forbidden', 'Restore requires unrestricted --allow-write and --confirm "RESTORE DATAFORGE"'))
+    if (not ctx.obj['policy'].allow_write or ctx.obj['policy'].workspaces is not None
+            or confirm not in {'RESTORE GRAVETRAIL', 'RESTORE DATAFORGE'}):
+        fail(ctx, AgentError('forbidden', 'Restore requires unrestricted --allow-write and --confirm "RESTORE GRAVETRAIL"'))
         return
     try:
         emit(ctx, {'restored_home': str(restore_backup(archive, destination))})

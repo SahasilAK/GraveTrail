@@ -1,4 +1,4 @@
-# DataForge/
+# GraveTrail/
 
 Local evidence-backed SQL/SAS/CSV engineering workspace. Entry: app.py; Python, Streamlit, DuckDB, SQLGlot and NetworkX.
 
@@ -36,3 +36,5 @@ opens the validated home before workspace navigation. Default remains DATAFORGE_
 Documentation: `mkdocs.yml` and separate locked docs group build36 public pages with scripts/docs/build.py. CONTRIBUTING.md and SECURITY.md are root entry points. README is a product introduction with real fixture imagery. Site output is ignored/excluded; canonical uppercase guide sources remain.
 
 Context policy: All project KNOWLEDGE.md maps are tracked so humans and agents can navigate a clean checkout, including maps inside otherwise ignored context folders. AGENTS.md, .kbignore, .codex/ and implementation records remain local-only. New branches use feature/, bugfix/ or another appropriate prefix; never codex/.
+
+GraveTrail branding: distribution/commands use gravetrail (legacy dataforge commands remain aliases). Internal Python package, DATAFORGE_* variables, .dataforge/platform homes, database/portable formats and Compose project/volume stay compatible. Repository URLs remain unchanged pending the user's post-merge rename. Build outputs and MCP display/resource aliases use GraveTrail.

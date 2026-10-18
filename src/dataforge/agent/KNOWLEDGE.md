@@ -36,3 +36,5 @@ Long provider/request/merge operations avoid holding Store.lock across network o
 per-request admission is immediate. Storage APIs retain their own locks; merge locks only checking/commit.
 MCP cannot accept local-admin launches or register maintenance mutations. Capability routes are checked
 against actual help/schemas by the keyed parity fixture.
+
+MCP identifies as GraveTrail; gravetrail:// and legacy dataforge:// workspace/summary/job resources share handlers and permissions. Setup emits mcp_servers.gravetrail/client names while retaining dataforge.cli module paths.

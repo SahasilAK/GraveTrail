@@ -15,3 +15,5 @@ Operational reproducibility utilities. benchmark.py creates isolated synthetic f
 - `docs/` — [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md): explicit public allowlist, strict static-site build, links/anchors/search/output inspection.
 
 - `release.py` — validate_version, stage_assets, copilot_summary and release_notes; CLI validate/stage/summarize/notes. Validates all three original manifests before creating output, selects versioned native archives, emits consolidated integrity metadata. Copilot uses empty cwd/no tools/MCP/custom instructions, bounded records and timeout; helper never publishes.
+
+Release staging requires gravetrail platform artifact directories and exact versioned archive names; generated notes describe gravetrail executables.

@@ -1,9 +1,9 @@
 <p align="center">
-  <a href="https://sahasilak.github.io/dataforge-engineering-hub/"><strong>🚀 Explore the live DataForge documentation →</strong></a>
+  <a href="https://sahasilak.github.io/dataforge-engineering-hub/"><strong>🚀 Explore the live GraveTrail documentation →</strong></a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/images/banner.svg" alt="DataForge engineering hub — Trace the path. Keep the proof." width="960">
+  <img src="docs/assets/images/banner.svg" alt="GraveTrail engineering hub — Trace the path. Keep the proof." width="960">
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@
 
 # Your scripts have a story. Follow it.
 
-**DataForge engineering hub** is a local-first workspace for understanding SQL and SAS
+**GraveTrail engineering hub** is a local-first workspace for understanding SQL and SAS
 projects. Import a folder or ZIP, build table lineage, and follow every relationship back
 to the exact source statement. Find direct column references, investigate downstream
 impact, and share an interactive graph that works offline.
@@ -51,7 +51,7 @@ account, or paid service**. Imported code is never executed.
 <details>
 <summary><strong>See the application with the included SQL project</strong></summary>
 
-![Actual DataForge lineage explorer tracing pub.all_kpis upstream at depth 30](docs/assets/images/lineage-explorer.png)
+![Actual GraveTrail lineage explorer tracing pub.all_kpis upstream at depth 30](docs/assets/images/lineage-explorer.png)
 
 Captured from an isolated local workspace using the supplied SQL fixture. See the
 [user guide](docs/user-guide/index.md) for the dashboard and source-evidence viewer.
@@ -67,16 +67,16 @@ Install [Git](https://git-scm.com/downloads), Python 3.11+, and
 git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
 cd dataforge-engineering-hub
 uv sync --locked --extra dev
-uv run dataforge-ui
+uv run gravetrail-ui
 ```
 
 Open [http://127.0.0.1:8501](http://127.0.0.1:8501). From the checkout, data is stored
-in ignored `.dataforge/`. Choose a location with `uv run dataforge-ui --home PATH`.
+in ignored `.dataforge/`. Choose a location with `uv run gravetrail-ui --home PATH`.
 Use the same explicit `--home` when switching between UI, CLI, and MCP; **one process
 owns each DuckDB home**. Installed launchers use the platform user-data directory.
 
 Prefer pip? In a Python virtual environment, run `python -m pip install -e ".[dev]"`,
-then `dataforge-ui`. See the [installation guide](docs/SETUP_AND_DEPLOYMENT.md) for
+then `gravetrail-ui`. See the [installation guide](docs/SETUP_AND_DEPLOYMENT.md) for
 Windows, Linux, macOS, credentials, and troubleshooting.
 
 <details>
@@ -85,20 +85,24 @@ Windows, Linux, macOS, credentials, and troubleshooting.
 Build the container from this repository and retain data in a named volume:
 
 ```sh
-docker build -t dataforge:local .
-docker run --rm -p 127.0.0.1:8501:8501 -v dataforge-data:/data dataforge:local
+docker build -t gravetrail:local .
+docker run --rm -p 127.0.0.1:8501:8501 -v dataforge-data:/data gravetrail:local
 ```
 
 Standalone directory bundles can be built for the host OS:
 
 ```sh
-uv run dataforge-build --target executable
+uv run gravetrail-build --target executable
 ```
 
 No public binary or registry image is assumed. Native builds require target-platform
 verification; see [builds and release limits](docs/BUILD_AND_RELEASE.md).
 
 </details>
+
+GraveTrail replaces the DataForge product name. Existing commands, environment
+variables, and data homes remain supported; see
+[rebrand compatibility](docs/BUILD_AND_RELEASE.md#gravetrail-rebrand-compatibility).
 
 ## Try a real project
 
@@ -152,7 +156,7 @@ uv run pytest -q
 uv run ruff check .
 ```
 
-DataForge uses [Streamlit](https://streamlit.io/), [SQLGlot](https://github.com/tobymao/sqlglot),
+GraveTrail uses [Streamlit](https://streamlit.io/), [SQLGlot](https://github.com/tobymao/sqlglot),
 [NetworkX](https://networkx.org/), and [DuckDB](https://duckdb.org/). Documentation is built
 with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
 

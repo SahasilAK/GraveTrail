@@ -9,6 +9,7 @@ def test_empty_dashboard_and_builder(tmp_path, monkeypatch):
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     assert not app.exception
     assert app.title[0].value == "Workspace overview"
+    assert any("GraveTrail" in header.value for header in app.sidebar.header)
     app.switch_page("ui/pages/builder.py").run()
     assert not app.exception
     assert any("Import" in b.label for b in app.button)

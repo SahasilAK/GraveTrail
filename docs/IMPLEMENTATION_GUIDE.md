@@ -6,12 +6,12 @@ and `plans/IMPLEMENTATION_STATUS.md`. Agent instructions and implementation reco
 ignored local working files. Tracked `KNOWLEDGE.md` maps describe the project for humans
 and agents, starting at the repository root and continuing through each folder.
 
-Install with `uv sync --locked --extra dev`. Start `uv run dataforge-ui` from the repo
+Install with `uv sync --locked --extra dev`. Start `uv run gravetrail-ui` from the repo
 root (direct `uv run streamlit run app.py` remains available). Use `uv run pytest -q` and
 `uv run ruff check .` before each coherent feature commit. Installation, packaging and
 operations commands live in [SETUP_AND_DEPLOYMENT.md](SETUP_AND_DEPLOYMENT.md).
 No manual database edits are needed for normal use. Runtime source and keys must never be committed.
-Use `dataforge --home PATH ...` for independent CLI/MCP access only after stopping another
+Use `gravetrail --home PATH ...` for independent CLI/MCP access only after stopping another
 owner of that home. Source launchers default to `.dataforge/`; installed UI/CLI/MCP
 launchers share the platform user-data default. Configure the home explicitly when switching owners.
 
@@ -96,14 +96,14 @@ Migration versions remain 1–4 for this feature; never delete schema as ordinar
 
 ## Packaging and release checks
 
-`launcher.py` resolves checkout/packaged UI assets; `build.py` exposes `dataforge-build`.
+`launcher.py` resolves checkout/packaged UI assets; `build.py` exposes `gravetrail-build`.
 Include new UI/static/prompt resources in the wheel and frozen build, and verify imports plus
 real startup outside the checkout. Source data belongs under the runtime home, not `_app`.
 Frozen `--cli` forwards to existing CLI/MCP code. Keep default data homes and installed theme
 copies compatible across upgrades.
 
-Run `uv run dataforge-build --target python`, `--target docker` or `--target executable`.
-Use `--target all` when all prerequisites exist. Run `uv run dataforge-build --verify`, then
+Run `uv run gravetrail-build --target python`, `--target docker` or `--target executable`.
+Use `--target all` when all prerequisites exist. Run `uv run gravetrail-build --verify`, then
 smoke-test each artifact; checksum verification alone does not prove startup. Builds run on
 their target OS for native bundles and receive no provider credentials from the parent
 environment. Preserve the lock and version metadata, review output exclusions, record native

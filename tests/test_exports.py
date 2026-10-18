@@ -14,6 +14,8 @@ def test_offline_graph_and_reports_escape_source():
     name = '</script><img src=x onerror=alert(1)>'
     g = LineageGraph([{"asset_id": "a", "name": name, "kind": "table", "temporary": False}], [])
     output = graph_html(g)
+    assert "<title>GraveTrail lineage</title>" in output
+    assert "<title>GraveTrail report</title>" in report_html([])
     assert name not in output
     assert "https://" not in output and "<svg" in output
     assert json.loads(json.dumps(graph_data(g)))["nodes"][0]["name"] == name

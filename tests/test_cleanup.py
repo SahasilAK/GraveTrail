@@ -79,6 +79,30 @@ def test_backup_restore_checksums_and_paths(tmp_path):
     store.close()
 
 
+@pytest.mark.parametrize('confirmation', ['RESTORE GRAVETRAIL', 'RESTORE DATAFORGE'])
+def test_rebrand_restore_preserves_originals_and_requires_exact_confirmation(tmp_path, confirmation):
+    from typer.testing import CliRunner
+
+    from dataforge.cli import app
+    from dataforge.database_maintenance import backup
+
+    store = Store(tmp_path / 'home')
+    workspace = populated(store, 'Retained workspace')
+    original = store.original(store.files(workspace)[0]['file_id'])
+    archive = backup(store)
+    store.close()
+    destination = tmp_path / 'restored'
+    command = ['--home', str(tmp_path / 'home'), '--allow-write', 'maintenance', 'restore',
+               str(archive), str(destination), '--confirm']
+    assert CliRunner().invoke(app, [*command, 'RESTORE']).exit_code != 0
+    assert not destination.exists()
+    result = CliRunner().invoke(app, [*command, confirmation])
+    assert result.exit_code == 0, result.output
+    restored = Store(destination)
+    assert restored.original(restored.files(workspace)[0]['file_id']) == original
+    restored.close()
+
+
 def test_cli_requires_write_permission_saved_preview_and_name(tmp_path):
     from typer.testing import CliRunner
 
@@ -276,7 +300,8 @@ def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path)
     store.close()
 
 
-def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp_path):
+@pytest.mark.parametrize('confirmation', ['RESET DATAFORGE', 'RESET GRAVETRAIL'])
+def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp_path, confirmation):
     from dataforge.cleanup import apply_cleanup, cleanup_plan
 
     store = Store(tmp_path)
@@ -287,6 +312,6 @@ def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp
     personal = tmp_path / 'agent' / 'jobs' / 'personal.json'
     personal.parent.mkdir(parents=True)
     personal.write_text(json.dumps({'workspace_id': w, 'status': 'completed', 'updated_at': time.time()}))
-    apply_cleanup(store, cleanup_plan(store, '', 'application'), 'RESET DATAFORGE')
+    apply_cleanup(store, cleanup_plan(store, '', 'application'), confirmation)
     assert theme.is_file() and personal.is_file()
     store.close()

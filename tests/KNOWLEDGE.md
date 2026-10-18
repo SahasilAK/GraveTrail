@@ -59,3 +59,5 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 Distribution regression verifies source archives exclude agent context (plans, AGENTS.md, KNOWLEDGE.md, .kbignore and .codex) while retaining release tooling. KNOWLEDGE.md maps are tracked in the repository for navigation; package contents are tested separately.
 
 - `test_release.py` — Stable/matching version checks; three-platform archive staging/integrity, missing/tampered/wrong-version/duplicate/unlisted build rejection, no overwrite, Copilot timeouts/auth failures and preserved baseline/change/startup notes.
+
+Rebrand regressions: distribution script aliases and stale-wheel exclusion; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.

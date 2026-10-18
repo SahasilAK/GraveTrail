@@ -7,7 +7,7 @@ from dataforge.logging_config import configure_logging
 from ui.common import current_home, get_store
 
 configure_logging()
-st.set_page_config(page_title="DataForge | Engineering workspace", page_icon=":material/account_tree:", layout="wide")
+st.set_page_config(page_title="GraveTrail | Engineering workspace", page_icon=":material/account_tree:", layout="wide")
 try:
     store = get_store(current_home())
 except (ValueError, OSError, duckdb.Error):
@@ -21,7 +21,7 @@ if not workspaces:
     store.create_workspace("My workspace", "Local engineering workspace")
     workspaces = store.workspaces()
 with st.sidebar:
-    st.header(":material/account_tree: DataForge")
+    st.header(":material/account_tree: GraveTrail")
     st.caption("Evidence behind every dependency")
     options = {w["workspace_id"]: w["name"] for w in workspaces}
     st.selectbox("Active workspace", list(options), format_func=options.get, key="workspace")
