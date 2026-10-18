@@ -182,6 +182,18 @@ def column_report(store, workspace: str, asset_id: str) -> list[dict]:
     return rows
 
 
+def column_names(rows: list[dict], metadata: dict) -> tuple[list[str], list[str] | None]:
+    """Distinct direct names and schema columns without known usage; None means unknown coverage."""
+    names = {r["column_name"] for r in rows}
+    used = sorted(names - {"*"}, key=str.casefold)
+    if metadata.get("schema_status") != "declared" or "*" in names:
+        return used, None
+    declared = {c["name"] for c in metadata["columns"]}
+    if not names <= declared:
+        return used, None
+    return used, sorted(declared - names, key=str.casefold)
+
+
 def compare_runs(first: dict, second: dict) -> dict:
     a, b = json.loads(first["snapshot"]), json.loads(second["snapshot"])
     aset, bset = {asset_label(x) for x in a["assets"]}, {asset_label(x) for x in b["assets"]}

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/images/banner.svg" alt="GraveTrail engineering hub — Trace the path. Keep the proof." width="960">
+  <img src="docs/assets/images/banner.svg" alt="GraveTrail engineering hub — Nothing stays buried. Every dependency leaves a trail." width="960">
 </p>
 
 <p align="center">
@@ -21,7 +21,9 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-# Your scripts have a story. Follow it.
+# Nothing stays buried.
+
+## Every dependency leaves a trail.
 
 **GraveTrail engineering hub** is a local-first workspace for understanding SQL and SAS
 projects. Import a folder or ZIP, build table lineage, and follow every relationship back

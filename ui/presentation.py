@@ -37,6 +37,8 @@ def sync_context(store, workspace):
     signature = (str(store.home), workspace, tuple((r["file_id"], r["content_hash"]) for r in revisions))
     previous = st.session_state.get("view_context")
     if previous and previous != signature:
+        if previous[:2] == signature[:2]:
+            st.session_state.pop("lineage_history_" + workspace, None)
         prefixes = ("inventory_source", "lineage_source", "column_source", "schema_source", "search_source",
                     "review_diagnostic_", "diagnostic_source", "lineage_graph_", "tree_", "cleanup_",
                     "import_report_", "analysis_notice_", "settings_notice_", "parsing_notice_", "review_result_")

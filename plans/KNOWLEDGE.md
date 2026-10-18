@@ -3,6 +3,7 @@
 Tracked map of optional local execution and handoff records. Only KNOWLEDGE.md maps are versioned in this folder; the implementation records below are ignored and may be absent in a clean checkout. When available, IMPLEMENTATION_STATUS is the current truth; MASTER_PLAN and acceptance/test/risk docs preserve intent.
 
 ## Files
+- `LINEAGE_COLUMNS_QOL.md` — Approved session implementation/verification plan for All/fullscreen/copy/focus/history, direction evidence and copyable column summaries; local-only smoke scripts and screenshots accompany it when present.
 - `AGENT_ACCEPTANCE.md` — Feature requirement matrix, actual test/build/UI/review evidence, sample measurements and storage/auth/parser boundaries.
 - `AGENT_INTEGRATION_PLAN.md` — CLI/shared-service, MCP/security and human settings/delivery vertical slices, constraints, tests and acceptance.
 - `CLI_MCP_UI_PARITY_PLAN.md` — Executed nine-slice plan and 46-ID inventory with tested shared CLI/MCP/UI implementations, explicit restrictions and remaining offline-browser/release gates.

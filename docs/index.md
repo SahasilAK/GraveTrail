@@ -6,7 +6,9 @@ hide:
 
 <div class="gt-hero" markdown>
 
-# Trace the path.<br>Keep the proof.
+# Nothing stays buried.
+
+## Every dependency leaves a trail.
 
 Understand the SQL and SAS pipelines in front of you. Follow a table’s dependencies
 all the way back to the original statements, in a workspace that keeps your source local.

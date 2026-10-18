@@ -81,7 +81,7 @@ const elements={
   'svg':{setAttribute:(k,v)=>attributes[k]=v},
   '.stage':{replaceChildren:()=>{}}, '.detail':{},
   '.df-graph':{style:{setProperty:(k,v)=>properties[k]=v}},
-  '.fit':{}, '.plus':{}, '.minus':{}, '.find':{}
+  '.fit':{}, '.plus':{}, '.minus':{}, '.find':{}, '.fullscreen':{}, '.status':{}
 };
 mountGraph({querySelector:s=>elements[s]},
   {nodes:[],edges:[],appearance:{graph_edge_width:4}},null);
@@ -90,3 +90,49 @@ console.log(JSON.stringify({attributes,properties}));
         result = subprocess.run([node], input=script, text=True, encoding="utf-8", capture_output=True)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)["properties"]["--df-selected-edge-width"] == 6
+
+
+def test_graph_double_click_cancels_selection_and_copy_keeps_full_name():
+    from dataforge.exports import GRAPH_JS
+
+    if not (node := shutil.which("node")):
+        import pytest
+        pytest.skip("Node.js is required for graph event regression")
+    script = GRAPH_JS + r'''
+(async()=>{
+  class Element {
+    constructor(){this.children=[];this.attrs={};this.style={setProperty(){}};this.classList={add(){},remove(){}}}
+    setAttribute(k,v){this.attrs[k]=v}
+    appendChild(e){this.children.push(e)}
+    replaceChildren(){this.children=[]}
+    querySelectorAll(){return []}
+    getComputedTextLength(){return 999}
+  }
+  const copied=[],selected=[],navigated=[];
+  global.document={createElementNS:()=>new Element()};
+  Object.defineProperty(global,'navigator',{value:{clipboard:{writeText:async text=>copied.push(text)}}});
+  const elements=Object.fromEntries(['svg','.stage','.detail','.df-graph','.fit','.plus','.minus','.find','.fullscreen','.status'].map(k=>[k,new Element()]));
+  const root={querySelector:s=>elements[s]};
+  const container=elements['.df-graph'];let active=false;
+  container.matches=()=>active;
+  container.ownerDocument={fullscreenElement:{},addEventListener(){},removeEventListener(){},exitFullscreen:async()=>{active=false}};
+  container.requestFullscreen=async()=>{active=true};
+  mountGraph(root,{nodes:[{asset_id:'a',name:'catalog.schema.a_very_long_table_name',x:20,y:20,width:215,kind:'table'}],edges:[]},
+    v=>selected.push(v),v=>navigated.push(v));
+  const node=elements['.stage'].children.find(e=>e.attrs.class==='node');
+  node.onclick({detail:1});
+  node.ondblclick({preventDefault(){}});
+  const copy=elements['.stage'].children.find(e=>e.attrs.class==='copy-node');
+  await copy.onclick({stopPropagation(){}});
+  await elements['.fullscreen'].onclick();
+  if(elements['.fullscreen'].textContent!=='Exit fullscreen')throw Error('Fullscreen label did not update in a shadow root');
+  await elements['.fullscreen'].onclick();
+  if(active)throw Error('Fullscreen did not exit');
+  await new Promise(resolve=>setTimeout(resolve,400));
+  console.log(JSON.stringify({copied,selected,navigated}));
+})().catch(e=>{console.error(e);process.exit(1)});
+'''
+    result = subprocess.run([node], input=script, text=True, encoding="utf-8", capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "copied": ["catalog.schema.a_very_long_table_name"], "selected": [], "navigated": ["a"]}

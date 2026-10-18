@@ -14,7 +14,9 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_agent_cli.py` — No-UI subprocess help, authorization/errors, real import/background build/status/export and polling revocation/budgets.
 - `test_agent_mcp.py` — Official SDK tool parity/resources/prompts, actual stdio client, authenticated HTTP client/refusals and status responsiveness while a query waits on ingestion.
 - `test_agent_settings.py` — Agent settings AppTest, generated client config, local handler test and durable source/access revocation.
-- `test_explorer_evidence.py` — Missing-asset warning/search regression; active tree tab filters source files independently of graph direction; explicit graph evidence selection overrides it.
+- `test_explorer_evidence.py` — Missing-asset warning/search regression; Graph direction and active Tree tab scope source files; explicit graph evidence selection overrides it.
+- `test_lineage_qol.py` — AppTest for full disconnected All beyond focus limits, direction/combined evidence, Back/Forward branching and exact graph focus across search/shared context, including the 501st asset; history restores Tree tab and traversal controls.
+- `test_column_qol.py` — Real imported schema/usage lists and comma filtering; deduplication, schema-minus-usage and unknown wildcard/schema coverage.
 - `test_inventory_controls.py` — CSV sample bounds/portability/cache refresh and immediate post-analysis inventory status counters.
 - `test_storage_locations.py` — Explicit/bounded path choices, two-session switching/back with retained sources and failed-open preservation.
 - `test_vendor_fixtures.py` — Exact labeled dependency/direct-column/temporary sets for six SQL dialects and SAS in LF/CRLF, original evidence and warm-cache preservation.
@@ -24,7 +26,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_llm_resources.py` — Chunk coordinates/statement/SAS context, concurrent admission/release, cancellation/no transmission, connection gate and explicit single-chunk UI request.
 - `test_ai_results.py` — Task schemas, invented/ambiguous/transitive/comment/string attribution, historical advisory merge exclusion, saved offline UI results and stale-source warnings.
 - `test_assistance_queue.py` — Current diagnostic eligibility/bounds, SQL/SAS focused context, isolation, privacy, quarantine/inferred merge and preview-hash race refusal using synthetic HTTP only.
-- `test_exports.py` — Escaped reports/original ZIPs, path evidence/order, live/offline appearance parity and Node syntax/DocumentFragment mount regression.
+- `test_exports.py` — Escaped reports/original ZIPs, path evidence/order, live/offline appearance parity and Node syntax/DocumentFragment mount regression; double-click cancels single-click selection, exact node clipboard payload, shadow-root fullscreen enter/exit.
 - `test_graph.py` — Graph traversal plus missing-endpoint regression: evidence retention, valid search/rows and incomplete path propagation. Run with pytest; temporary runtime data only.
 - `test_lineage_tree.py` — AppTest covers lazy compact branches, Expand all/Collapse all, inline files, both directions, optional evidence details, cycle stops and depth/entry limits.
 - `test_hardening.py` — Behavioral regression tests for hardening. Run with pytest; temporary runtime data only.
