@@ -5,7 +5,29 @@ import argparse
 import os
 import shutil
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+
+
+@contextmanager
+def windows_instance():
+    """Keep installer replacement blocked while any frozen UI/CLI/worker is alive."""
+    if sys.platform != "win32":
+        yield
+        return
+    import ctypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
+    kernel.CreateMutexW.restype = ctypes.c_void_p
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel.CreateMutexW(None, False, "Local\\GraveTrail.Application")
+    if not handle:
+        raise OSError(ctypes.get_last_error(), "Cannot register running GraveTrail application")
+    try:
+        yield
+    finally:
+        kernel.CloseHandle(handle)
 
 
 def application_root() -> Path:

@@ -56,6 +56,10 @@ exclude = ["docs/prompts/**", "docs/plans/**", "**/KNOWLEDGE.md", "**/__pycache_
 "scripts/build/build_executable.py" = "scripts/build/build_executable.py"
 "scripts/build/smoke.py" = "scripts/build/smoke.py"
 "scripts/build/smoke_docker.py" = "scripts/build/smoke_docker.py"
+"scripts/build/windows.iss" = "scripts/build/windows.iss"
+"scripts/build/windows_installer.ps1" = "scripts/build/windows_installer.ps1"
+"scripts/build/sign_windows.ps1" = "scripts/build/sign_windows.ps1"
+"scripts/build/smoke_installer.py" = "scripts/build/smoke_installer.py"
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]

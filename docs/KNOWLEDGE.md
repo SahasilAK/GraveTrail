@@ -20,7 +20,7 @@ references now enumerate100 executable routes and80 tools; UI has eleven destina
 
 ## Files
 - `index.md` — Branded MkDocs landing page with “Nothing stays buried.” / “Every dependency leaves a trail.” hero; section indexes organize canonical references without duplication. Only mkdocs.yml nav and named assets are published; REVIEW/prompts/plans/knowledge stay excluded.
-- `BUILD_AND_RELEASE.md` — Actual launcher/build options, native artifact contracts, Docker ownership/persistence, CI gates and dated tested/untested platform evidence.
+- `BUILD_AND_RELEASE.md` — Launcher/build options, Windows per-user installer lifecycle and signing setup/limitations, exact-or-bumped dynamic release versions, branch validation vs default-branch publication, integrity/source/trust gates, Docker behavior and dated platform evidence.
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
 - `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.
 - `SECURE_CONFIGURATION.md` — Session credential lifecycle, namespaced read-only startup variables, legacy compatibility, redaction and trusted-host limits.

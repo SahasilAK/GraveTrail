@@ -18,8 +18,8 @@ explicit home supports browser review; no private source/provider data used.
 
 - `docs/` — [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md): explicit public allowlist, strict static-site build, links/anchors/search/output inspection.
 
-- `release.py` — validate_version, stage_assets, copilot_summary and release_notes; CLI validate/stage/summarize/notes. Validates all three original manifests before creating output, selects versioned native archives, emits consolidated integrity metadata. Copilot uses empty cwd/no tools/MCP/custom instructions, bounded records and timeout; helper never publishes.
+- `release.py` — Stable version resolution from published releases or exact override, checkout-only uv materialization, Windows-only or legacy three-platform staging, source/lifecycle/trust-policy checks, consolidated metadata, Copilot summary and release notes. CLI resolve/materialize/validate/stage/summarize/notes; helper never publishes.
 
-Release staging requires gravetrail platform artifact directories and exact versioned archive names; generated notes describe gravetrail executables.
+Windows staging consumes an explicit single artifact directory and requires checksummed installer/lifecycle evidence. Other-platform staging retains named-directory/archive contracts.
 
 Benchmark/live-check temporary directories use gravetrail prefixes; supplied fixture archive names remain original.

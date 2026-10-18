@@ -73,7 +73,8 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 
 Distribution regression verifies source archives exclude agent context (plans, AGENTS.md, KNOWLEDGE.md, .kbignore and .codex) while retaining release tooling. KNOWLEDGE.md maps are tracked in the repository for navigation; package contents are tested separately.
 
-- `test_release.py` — Stable/matching version checks; three-platform archive staging/integrity, missing/tampered/wrong-version/duplicate/unlisted build rejection, no overwrite, Copilot timeouts/auth failures and preserved baseline/change/startup notes.
+- `test_release.py` — Exact/highest stable-release bump resolution, uv project/lock materialization without dependency changes, Windows explicit-directory installer/source/trust gates and legacy three-platform staging integrity; no overwrite, Copilot fallback and preserved release records.
+- `test_windows_installer.py` — Real Windows mutex lifetime plus per-user/no-force-close/no-data-delete installer and explicit production signing/timestamp policy contracts.
 
 Rebrand regressions: distribution script aliases, unrelated-brand/stale-version wheel exclusion and /GraveTrail/ documentation link validation; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.
 
