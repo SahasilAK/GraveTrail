@@ -3,9 +3,10 @@ import multiprocessing
 import runpy
 import sys
 
-from dataforge.launcher import application_root, default_home, main
+from dataforge.launcher import application_root, default_home, main, windows_instance
 
-if __name__ == "__main__":
+
+def dispatch():
     multiprocessing.freeze_support()
     if sys.argv[1:2] == ["--worker"]:
         sys.argv = ["dataforge.agent.worker", *sys.argv[2:]]
@@ -21,3 +22,8 @@ if __name__ == "__main__":
         app()
     else:
         main()
+
+
+if __name__ == "__main__":
+    with windows_instance():
+        dispatch()

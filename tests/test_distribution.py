@@ -112,7 +112,8 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
         (tmp_path / folder).mkdir(parents=True, exist_ok=True)
     (tmp_path / "scripts/build").mkdir(parents=True)
     shutil.copyfile(root / "scripts/build/hatch_assets.py", tmp_path / "scripts/build/hatch_assets.py")
-    for name in ('frozen_entry.py', 'build_executable.py', 'smoke.py', 'smoke_docker.py'):
+    for name in ('frozen_entry.py', 'build_executable.py', 'smoke.py', 'smoke_docker.py',
+                 'windows.iss', 'windows_installer.ps1', 'sign_windows.ps1', 'smoke_installer.py'):
         shutil.copyfile(root / 'scripts/build' / name, tmp_path / 'scripts/build' / name)
     (tmp_path / "src/dataforge/__init__.py").write_text("")
     (tmp_path / "ui/__init__.py").write_text("")
@@ -147,5 +148,7 @@ def test_source_distribution_includes_release_toolkit_and_compose(tmp_path):
             assert not any(part in {"plans", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
                            for part in relative), name
         for expected in ('compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
-                         'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py'):
+                         'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py',
+                         'scripts/build/windows.iss', 'scripts/build/windows_installer.ps1',
+                         'scripts/build/sign_windows.ps1', 'scripts/build/smoke_installer.py'):
             assert any(name.endswith('/' + expected) for name in names), expected

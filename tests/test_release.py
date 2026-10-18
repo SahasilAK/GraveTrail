@@ -6,14 +6,80 @@ import pytest
 from dataforge.build import verify_artifacts, write_manifest
 
 
-def test_release_version_matches_project_and_rejects_unsafe_input(tmp_path):
+def test_release_version_is_independent_of_project_and_rejects_unsafe_input(tmp_path):
     from scripts.release import validate_version
 
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
     assert validate_version(tmp_path, "1.2.3") == "1.2.3"
-    for version in ("1.2.4", "v1.2.3", "01.2.3", "1.2", "1.2.3\n", "$(whoami)", "../1.2.3"):
+    assert validate_version(tmp_path, "1.2.4") == "1.2.4"
+    for version in ("v1.2.3", "01.2.3", "1.2", "1.2.3\n", "$(whoami)", "../1.2.3"):
         with pytest.raises(ValueError):
             validate_version(tmp_path, version)
+
+
+@pytest.mark.parametrize("bump,expected", [("major", "3.0.0"), ("minor", "2.5.0"), ("patch", "2.4.10")])
+def test_resolve_version_uses_highest_published_stable_release(bump, expected):
+    from scripts.release import resolve_version
+
+    releases = [{"tag_name": tag, "draft": draft, "prerelease": pre}
+                for tag, draft, pre in [("v2.4.9", False, False), ("v1.9.0", False, False),
+                                        ("v9.0.0", True, False), ("v8.0.0-rc1", False, True)]]
+    assert resolve_version(releases, bump=bump) == expected
+    assert resolve_version([], bump="patch") == "0.0.1"
+    assert resolve_version(releases, exact="3.2.1", bump="patch") == "3.2.1"
+    for exact in ("1.0.0", "2.4.9", "v3.0.0"):
+        with pytest.raises(ValueError):
+            resolve_version(releases, exact=exact)
+    with pytest.raises(ValueError):
+        resolve_version([], bump="wat")
+
+
+def test_windows_release_accepts_explicit_download_directory_and_keeps_installer(tmp_path):
+    import json
+
+    from scripts.release import stage_assets
+
+    native_builds(tmp_path / "downloads")
+    windows = tmp_path / "downloads/gravetrail-Windows-X64"
+    installer = windows / "gravetrail-1.2.3-windows-amd64-setup-unsigned.exe"
+    installer.write_bytes(b"installer")
+    evidence = windows / "windows-verification.json"
+    evidence.write_text(json.dumps({"version": "1.2.3", "source_revision": "a" * 40,
+                                   "mode": "development", "signing_status": "unsigned",
+                                   "platform": "windows", "architecture": "amd64",
+                                   "installer": installer.name, "lifecycle_verified": True}))
+    write_manifest(windows, "1.2.3", [installer, evidence], "executable")
+    stage_assets(windows, tmp_path / "release", "1.2.3", windows_only=True, source_revision="a" * 40)
+    manifest = verify_artifacts(tmp_path / "release")
+    assert len(manifest["artifacts"]) == 3
+    assert manifest["windows"]["signing_status"] == "unsigned"
+    assert manifest["source_revision"] == "a" * 40
+    with pytest.raises(ValueError, match="production"):
+        stage_assets(windows, tmp_path / "production", "1.2.3", windows_only=True,
+                     mode="production", source_revision="a" * 40)
+    installer.write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="Checksum"):
+        stage_assets(windows, tmp_path / "tampered", "1.2.3", windows_only=True)
+
+
+def test_materialized_version_updates_project_and_lock_without_dependency_changes(tmp_path):
+    import shutil
+    import tomllib
+    from pathlib import Path
+
+    from scripts.release import materialize_version
+
+    root = Path(__file__).resolve().parents[1]
+    for name in ("pyproject.toml", "uv.lock"):
+        shutil.copyfile(root / name, tmp_path / name)
+    before = tomllib.loads((tmp_path / "uv.lock").read_text())
+    materialize_version(tmp_path, "2.3.4")
+    project = tomllib.loads((tmp_path / "pyproject.toml").read_text())
+    after = tomllib.loads((tmp_path / "uv.lock").read_text())
+    assert project["project"]["version"] == "2.3.4"
+    assert next(p for p in after["package"] if p["name"] == "gravetrail")["version"] == "2.3.4"
+    assert [p for p in before["package"] if p["name"] != "gravetrail"] == [
+        p for p in after["package"] if p["name"] != "gravetrail"]
 
 
 def native_builds(root, version="1.2.3"):
