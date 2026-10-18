@@ -252,7 +252,7 @@ GraveTrail is the new application and distribution name. Use `gravetrail`,
 `dataforge-build` commands remain compatibility aliases. Python imports and
 `python -m dataforge.cli` / `python -m dataforge.launcher` stay unchanged.
 
-When upgrading a pip installation of `dataforge-engineering-hub`, install the
+When upgrading a pip installation of the previously named distribution, install the
 GraveTrail wheel in a fresh virtual environment and launch it with the same explicit
 `--home`. Stop the previous owner first. Keep the two distributions in separate
 environments because both provide the `dataforge` Python package and legacy commands.
@@ -263,8 +263,9 @@ reuse existing data and settings. Compose keeps its `dataforge` project name
 and `dataforge-data` volume to reconnect to existing storage. Do not create
 a second owner of the same home. No data migration is required.
 
-Repository and documentation links still use `dataforge-engineering-hub`
-until the repository is renamed after merge.
+The repository is `SahasilAK/GraveTrail`; documentation is published under
+`https://sahasilak.github.io/GraveTrail/`. Clone instructions, badges and
+contribution links use the renamed repository.
 
 ### Names intentionally retained
 
@@ -277,7 +278,6 @@ until the repository is renamed after merge.
 | Compose project `dataforge` and `dataforge-data` volume | Upgrades reconnect to the existing physical volume. |
 | `dataforge://` resources and old console commands | Compatibility aliases; new configurations use GraveTrail. |
 | Supplied `dataforge_*_lineage_test_project.zip` files and their internal paths | Original test fixtures and evidence retain their exact names and bytes. |
-| `dataforge-engineering-hub` repository and Pages links | The repository rename is planned after merge. |
 
 README and guide screenshots use explicit `gravetrail-*` asset filenames and show the
 GraveTrail sidebar. Any old name in their source-file selectors comes from the supplied

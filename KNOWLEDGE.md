@@ -26,7 +26,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `Dockerfile`, `compose.yaml` — Locked multi-stage non-root image, persistent /data, UI/MCP owner profiles and health check; actual Linux container smoke verified on Docker Desktop.
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — Live documentation link, animated hero, installation, first workflow, features and honest limits.
-- `app.py` — Entry point: configure logs, cache Store, select/create workspaces, register six st.Page scripts.
+- `app.py` — Entry point: shared frame, workspace dialog and context guards; ten native routes grouped into Workspace, Explore and Administration. Existing builder/explorer/settings URLs remain valid.
 - `pyproject.toml` — Package/dependency constraints, gravetrail CLI entry points with legacy aliases, official MCP SDK/Typer dependencies, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
 
@@ -37,7 +37,7 @@ Documentation: `mkdocs.yml` and separate locked docs group build36 public pages 
 
 Context policy: All project KNOWLEDGE.md maps are tracked so humans and agents can navigate a clean checkout, including maps inside otherwise ignored context folders. AGENTS.md, .kbignore, .codex/ and implementation records remain local-only. New branches use feature/, bugfix/ or another appropriate prefix; never codex/.
 
-GraveTrail branding: distribution/commands use gravetrail (legacy dataforge commands remain aliases). Internal Python package, DATAFORGE_* variables, .dataforge/platform homes, database/portable formats and Compose project/volume stay compatible. Repository URLs remain unchanged pending the user's post-merge rename. Build outputs and MCP display/resource aliases use GraveTrail.
+GraveTrail branding: distribution/commands use gravetrail (legacy dataforge commands remain aliases). Internal Python package, DATAFORGE_* variables, .dataforge/platform homes, database/portable formats and Compose project/volume stay compatible. Repository links, origin and the case-sensitive Pages prefix use SahasilAK/GraveTrail and /GraveTrail/. Build outputs and MCP display/resource aliases use GraveTrail.
 
 Rebrand audit: frozen CLI program name, sample install paths and cleanup guide use GraveTrail; README/guide screenshot references use gravetrail-prefixed real captures. BUILD_AND_RELEASE lists intentionally retained compatibility names.
 
@@ -45,3 +45,5 @@ Parser9: bounded PostgreSQL SQL procedure dollar bodies, Snowflake literal dynam
 quote-aware known-value SAS %LET expressions with stale-binding invalidation. Imported code
 never executes; original wrapper/block evidence survives. docs/TESTING.md is the tracked
 current acceptance matrix; optional local status/matrix ledgers retain dated historical records.
+
+UI redesign: Apple Design guides system typography, native theme tokens and scoped presentation CSS. Sources and Analysis are separate; administration has four focused routes. App/Pages share the visual language, with no entrance animations or remote font dependency. Navigation/state and delivery checklist: docs/USER_GUIDE.md; local plan: plans/UI_REDESIGN.md when available.

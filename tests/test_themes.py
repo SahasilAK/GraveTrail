@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 
-def test_six_additions_preserve_all_eight_existing_themes():
+def test_curated_additions_preserve_all_fourteen_existing_themes():
     import hashlib
     import json
 
@@ -18,8 +18,12 @@ def test_six_additions_preserve_all_eight_existing_themes():
                                       separators=(",", ":")).encode()).hexdigest()
     assert digest == "6e15dbd1a2fd9528b1b2353c5188ed503d36b767bf4fb8dec5b49b7f4cfae7df"
     assert set(PRESETS) - set(existing) == {
-        "Claude orange light", "Claude orange dark", "Nord light", "Rose light", "Sand light", "Mint light"}
-    assert len(PRESETS) == 14
+        "Claude orange light", "Claude orange dark", "Nord light", "Rose light", "Sand light", "Mint light",
+        "Porcelain light", "Celadon light", "Ink dark", "Aubergine dark"}
+    assert len(PRESETS) == 18
+    original = dict(list(PRESETS.items())[:14])
+    assert hashlib.sha256(json.dumps(original, sort_keys=True, separators=(",", ":")).encode()).hexdigest() == (
+        "6f46cc33aaaaa96b56ac89926849cd8c3e53b27f2b2af63b6da29066f730a0e5")
 
 
 def test_theme_presets_apply_both_modes_and_preserve_other_configuration(tmp_path):

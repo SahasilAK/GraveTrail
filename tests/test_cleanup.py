@@ -166,7 +166,8 @@ def test_cleanup_ui_preview_confirmation_backup_and_rebuild(tmp_path, monkeypatc
     store.close()
     app = AppTest.from_file(Path('app.py').resolve(), default_timeout=30).run()
     app.switch_page('ui/pages/settings.py').run()
-    app.segmented_control[0].set_value('Data Management & Cleanup').run()
+    app.switch_page("ui/pages/management.py").run()
+    app.segmented_control[0].set_value("Cleanup & recovery").run()
     assert not app.exception
     next(s for s in app.selectbox if s.label == 'Cleanup category').set_value('lineage').run()
     next(b for b in app.button if b.label == 'Preview cleanup').click().run()

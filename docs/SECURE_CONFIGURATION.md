@@ -3,7 +3,7 @@
 Credentials are retained only for the active runtime and are not saved in application files
 or databases. They may need to be re-entered when the application restarts.
 
-Settings → LLM providers supports a masked credential input, session connection and clear
+Connections & AI → Providers & routing supports a masked credential input, session connection and clear
 action. Provider configuration is saved only on **Save provider profile**; this explicitly
 stores nonsecret preferences and the environment variable name, never its value. URLs with
 userinfo, query parameters or fragments are rejected. Keep sensitive endpoint identifiers

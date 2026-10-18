@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from hashlib import sha256
 from pathlib import Path
 
 import duckdb
@@ -59,8 +60,9 @@ def allowed_roots():
 
 
 def title(name: str, description: str):
-    st.title(name)
-    st.caption(description)
+    with st.container(key="page_heading"):
+        st.title(name)
+        st.caption(description)
 
 
 def load_graph(store, workspace):
@@ -73,7 +75,7 @@ def load_graph(store, workspace):
                           preferences.min_lineage_confidence, preferences.include_inferred)
     if graph.unresolved_edges:
         st.warning(f"{len(graph.unresolved_edges)} relationships reference missing assets and cannot be displayed. "
-                   "Lineage is incomplete. Rebuild lineage in Lineage builder to regenerate asset metadata.")
+                   "Lineage is incomplete. Rebuild lineage in Analysis to regenerate asset metadata.")
     return graph
 
 
@@ -86,29 +88,43 @@ def _cached_graph(home, workspace, revision, min_confidence=0., include_inferred
 
 
 def choose_asset(graph, key):
-    query = st.text_input("Search tables, datasets or file assets", placeholder="e.g. orders or mart.customer_summary", key=f"asset_search_{key}")
-    matches = graph.search(query)[:500]
-    if not matches:
-        st.info("No matching assets. Analyze source files in Lineage builder first.")
-        return None
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        with st.container(width=360, key="asset_query_" + key):
+            query = st.text_input("Search tables, datasets or file assets", placeholder="e.g. orders or mart.customer_summary", key=f"asset_search_{key}", persist_state="session")
+        matches = graph.search(query)[:500]
+        if not matches:
+            st.info("No matching assets. Import sources, then run Analysis to establish dependencies.")
+            return None
+        mapping = {a["asset_id"]: a for a in matches}
+        choice_key = f"asset_choice_{key}_{st.session_state.get('workspace', '')}"
+        shared_key = "exploration_asset_" + st.session_state.get("workspace", "")
+        if st.session_state.get(choice_key) not in mapping:
+            st.session_state.pop(choice_key, None)
+            if st.session_state.get(shared_key) in mapping:
+                st.session_state[choice_key] = st.session_state[shared_key]
+
+        def remember_asset():
+            st.session_state[shared_key] = st.session_state.get(choice_key)
+            for sibling in ("lineage", "columns", "impact"):
+                sibling_key = f"asset_choice_{sibling}_{st.session_state.get('workspace', '')}"
+                if sibling_key != choice_key:
+                    st.session_state.pop(sibling_key, None)
+
+        with st.container(width=360, key="asset_select_" + key):
+            chosen = st.selectbox("Choose an exact asset", list(mapping), index=None,
+                format_func=lambda k: f'{asset_label(mapping[k])}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
+                key=choice_key, persist_state="session", on_change=remember_asset)
     if len(matches) > 1:
         st.caption(f"{len(matches)} matches. Choose the exact asset to avoid ambiguous names.")
-    mapping = {a["asset_id"]: a for a in matches}
-    # Identical labels across workspaces must not reuse the browser's old option index.
-    choice_key = f"asset_choice_{key}_{st.session_state.get('workspace', '')}"
-    if st.session_state.get(choice_key) not in mapping:
-        st.session_state.pop(choice_key, None)
-    return st.selectbox("Choose an exact asset", list(mapping), index=None,
-        format_func=lambda k: f'{asset_label(mapping[k])}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
-        key=choice_key)
+    return chosen
 
 
 def downloads(rows, stem, include_html=True):
-    with st.container(horizontal=True):
-        st.download_button("Download CSV", report_csv(rows), stem + ".csv", "text/csv", key=stem + "_csv")
-        st.download_button("Download JSON", json.dumps(rows, default=str, indent=2), stem + ".json", "application/json", key=stem + "_json")
+    with st.popover("Export report", icon=":material/download:"):
+        st.download_button("Download CSV", lambda: report_csv(rows), stem + ".csv", "text/csv", key=stem + "_csv", on_click="ignore")
+        st.download_button("Download JSON", lambda: json.dumps(rows, default=str, indent=2), stem + ".json", "application/json", key=stem + "_json", on_click="ignore")
         if include_html:
-            st.download_button("Download HTML report", report_html(rows), stem + ".html", "text/html", key=stem + "_html")
+            st.download_button("Download HTML report", lambda: report_html(rows), stem + ".html", "text/html", key=stem + "_html", on_click="ignore")
 
 
 def source_viewer(store, file_ids, key="source", evidence=None):
@@ -118,15 +134,24 @@ def source_viewer(store, file_ids, key="source", evidence=None):
     ids = list(dict.fromkeys(file_ids))
     choices = {r["file_id"]: r["relative_path"] for r in store.rows(
         "SELECT file_id,relative_path FROM source_files WHERE file_id IN (" + ",".join("?" for _ in ids) + ") ORDER BY relative_path", ids)}
+    if not choices:
+        st.warning("These source files are no longer available. Refresh the analysis or choose another asset.")
+        return
     if st.session_state.get(key + "_file") not in choices:
         st.session_state.pop(key + "_file", None)
-    fid = st.selectbox("Source file", list(choices), format_func=choices.get, key=key + "_file")
+    # A new evidence scope must create a new browser control, even at the same option index.
+    scope = sha256(json.dumps([ids, [(e.get("file_id"), e.get("source_hash")) for e in evidence or []]]).encode()).hexdigest()[:12]
+    selected = st.session_state.get(key + "_file")
+    fid = st.selectbox("Source file", list(choices), format_func=choices.get,
+                       index=list(choices).index(selected) if selected in choices else 0,
+                       key=f"{key}_choice_{st.session_state['workspace']}_{scope}")
+    st.session_state[key + "_file"] = fid
     relevant = [e for e in evidence or [] if e.get("file_id") == fid]
     source_hash = relevant[0].get("source_hash") if relevant else None
     source = store.file(fid, source_hash)
     appearance = VisualizationSettings.from_store(store, source["workspace_id"])
-    st.caption(f'{source["relative_path"]} | {source["encoding"]} | {source["line_count"]} lines | {source["file_size"]:,} bytes')
-    st.download_button("Download original file", store.original(fid, source_hash), source["file_name"], key=key + "_download")
+    st.caption(f'{source["relative_path"]} · {source["encoding"]} · {source["line_count"]} lines · {source["file_size"]:,} bytes')
+    st.download_button("Download original file", lambda: store.original(fid, source_hash), source["file_name"], key=key + "_download", on_click="ignore", icon=":material/download:")
     if source_hash and source_hash != store.file(fid)["content_hash"]:
         st.warning("Showing the original analyzed version. A newer file is pending analysis in the inventory.")
     text = source["raw_content"]

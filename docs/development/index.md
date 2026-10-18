@@ -15,8 +15,8 @@ services for the UI, CLI and MCP server. Start with the
 | `tests/` | Unit, integration, protocol, security and Streamlit AppTest coverage |
 | `scripts/` and `.github/workflows/` | Verification, packaging and automation |
 
-Browse the [source tree](https://github.com/SahasilAK/dataforge-engineering-hub/tree/main/src/dataforge)
-and [test tree](https://github.com/SahasilAK/dataforge-engineering-hub/tree/main/tests)
+Browse the [source tree](https://github.com/SahasilAK/GraveTrail/tree/main/src/dataforge)
+and [test tree](https://github.com/SahasilAK/GraveTrail/tree/main/tests)
 for concrete examples. Repository-specific contribution instructions are in the
 [contribution guide](contributing.md).
 

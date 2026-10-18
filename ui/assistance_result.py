@@ -71,7 +71,7 @@ def render_result(store, workspace, state_key):
                     try:
                         analyze(store, workspace)
                     except Exception:
-                        st.warning("Inferred relationships were saved, but lineage refresh failed. Run Analyze in Lineage builder to retry.")
+                        st.warning("Inferred relationships were saved, but lineage refresh failed. Run Analysis to retry.")
                     else:
                         st.session_state.pop(state_key, None)
                         st.session_state[state_key + "_notice"] = f"Merged {count} inferred relationships and refreshed lineage"

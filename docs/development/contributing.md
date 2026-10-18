@@ -4,14 +4,14 @@ Contributions should improve a concrete user workflow while preserving evidence,
 conservative analysis and local data safety. Use an issue to describe a reproducible bug
 or a focused feature proposal. Check existing issues first, and omit credentials and
 private source from examples. Follow the repository's
-[security reporting guidance](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/SECURITY.md)
+[security reporting guidance](https://github.com/SahasilAK/GraveTrail/blob/main/SECURITY.md)
 for vulnerabilities.
 
 ## Set up a checkout
 
 ```sh
-git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
-cd dataforge-engineering-hub
+git clone https://github.com/SahasilAK/GraveTrail.git
+cd GraveTrail
 uv sync --locked --extra dev
 git switch -c feature/describe-the-change
 ```
@@ -57,7 +57,7 @@ Verify changed UI workflows in a real browser. Stop the UI before independent CL
 checks of that same home. Do not run destructive tests against an existing user home.
 
 For lineage changes, import either supplied
-[sample ZIP](https://github.com/SahasilAK/dataforge-engineering-hub/tree/main/tests/sample_data),
+[sample ZIP](https://github.com/SahasilAK/GraveTrail/tree/main/tests/sample_data),
 select only `.sql` or `.sas`, analyze and trace `pub.all_kpis` at depth 30 through seven
 layers to all 16 sources. Compare with the bundled manifests and inspect original
 statement evidence. SAS additionally exercises 16 temporary WORK datasets. These tests
@@ -84,5 +84,5 @@ settings changes are deliberate maintainer operations. Refer to
 [build and release](../BUILD_AND_RELEASE.md) for distribution contracts.
 
 The project uses the
-[Apache License 2.0](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/LICENSE).
+[Apache License 2.0](https://github.com/SahasilAK/GraveTrail/blob/main/LICENSE).
 Include only code and sample data you have the right to contribute.

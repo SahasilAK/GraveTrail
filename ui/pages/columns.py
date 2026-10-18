@@ -5,7 +5,7 @@ import streamlit as st
 from dataforge.services import column_report
 from ui.common import choose_asset, context, downloads, load_graph, source_viewer, title
 
-title("Direct column usage", "Columns read directly from an asset. References through downstream tables are excluded.")
+title("Columns", "Columns read directly from an asset. References through downstream tables are excluded.")
 store, w = context()
 graph = load_graph(store, w)
 asset = choose_asset(graph, "columns")
@@ -34,7 +34,7 @@ if asset:
         group = st.segmented_control("Group by", ["All references", "Source file", "Usage type"], default="All references")
         display = [{k: r[k] for k in ["source_table", "column_name", "context", "alias", "relative_path", "start_line", "status", "expression", "schema_source"]} for r in rows]
         if group == "All references":
-            st.dataframe(display, hide_index=True)
+            st.dataframe(display, hide_index=True, alt="Direct column references", column_config={"column_name": "Column", "source_table": "Source asset", "relative_path": "Source file", "start_line": "Line", "status": "Evidence status"})
         else:
             key = "relative_path" if group == "Source file" else "context"
             for value in sorted({r[key] for r in display}):
@@ -43,4 +43,4 @@ if asset:
         downloads(display, "column_usage")
         source_viewer(store, list(dict.fromkeys(r["file_id"] for r in rows)), "column_source", rows)
     else:
-        st.info("No direct references established for this asset. Ambiguous columns and unsupported dynamic expressions appear in Builder diagnostics.")
+        st.info("No direct references established for this asset. Ambiguous columns and unsupported dynamic expressions appear in Analysis → Diagnostics.")

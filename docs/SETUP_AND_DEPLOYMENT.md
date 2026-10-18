@@ -46,8 +46,8 @@ status; this does not establish Linux/macOS native executable startup.
 For engineers starting from this repository, use the locked source environment:
 
 ```sh
-git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
-cd dataforge-engineering-hub
+git clone https://github.com/SahasilAK/GraveTrail.git
+cd GraveTrail
 uv sync --locked --extra dev
 uv run gravetrail-ui
 ```
@@ -230,7 +230,7 @@ Build subprocesses receive an allowlisted environment; source/package/image defi
 exclude runtime databases and common secret files. Inspect artifacts before distribution.
 
 Version comes from `pyproject.toml`. Keep `uv.lock` consistent when changing dependencies.
-The [release workflow](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/.github/workflows/release.yml) supports matching `vVERSION` tags
+The [release workflow](https://github.com/SahasilAK/GraveTrail/blob/main/.github/workflows/release.yml) supports matching `vVERSION` tags
 and manual dispatch, builds native artifacts on Windows/Linux/macOS runners, smoke-tests
 them, and uploads workflow artifacts. Its container job builds/tests the image and uploads
 metadata. It does not publish a GitHub Release or push an image. Observed remote execution
@@ -241,14 +241,14 @@ See [build and release](BUILD_AND_RELEASE.md) for reusable smoke scripts and CI 
 ## 8. Initial application setup
 
 1. Create or select a workspace in the sidebar. Give it a recognizable name.
-2. Open **Lineage builder**. Upload a ZIP, choose browser folder files, or select an
+2. Open **Sources**. Upload a ZIP, choose browser folder files, or select an
    accessible **Host directory** under a startup-allowed root.
 3. Select `.sql`, `.sas` and/or `.csv`. Only selected extensions are imported for analysis.
 4. Inspect accepted/skipped files, encoding diagnostics and original content.
-5. Choose **Analyze all files** to persist the dependency model.
-6. In **Lineage explorer**, search a table, choose its exact asset identity and inspect
+5. Open **Analysis → Run** and choose **Analyze all files** to persist the dependency model.
+6. In **Lineage**, search a table, choose its exact asset identity and inspect
    upstream/downstream trees, graph paths and relationship evidence.
-7. Open **Column usage** for direct references. Unknown wildcards and dynamic names remain
+7. Open **Columns** for direct references. Unknown wildcards and dynamic names remain
    unresolved; direct references do not imply full transitive column transformation lineage.
 
 For supplied SQL/SAS projects, import either ZIP in `tests/sample_data/`, select only its
@@ -273,7 +273,7 @@ be absolute paths. Installed builds do not rely on repository test fixtures bein
 
 ## 9. LLM connection configuration
 
-Open **Settings → LLM providers**, choose a provider and save a profile with a non-secret
+Open **Connections & AI → Providers & routing**, choose a provider and save a profile with a non-secret
 endpoint, available model/deployment identifier and credential **variable name**. Profiles
 persist validated non-secret preferences, not credential values. URLs with embedded
 credentials or authentication query parameters are rejected.
@@ -306,7 +306,7 @@ Privileged local processes may inspect process memory/environment; session isola
 not an OS security boundary or a guarantee of forensic memory erasure.
 
 Use **Discover models** and **Test model connection** explicitly. Enable remote requests
-under **Security and privacy** before using a non-loopback endpoint. Full-source remote
+under **Connections & AI → Privacy** before using a non-loopback endpoint. Full-source remote
 transmission has a separate permission. Local Ollama/LM Studio endpoints may need no key.
 Network-mounted or container-host model endpoints may be classified as remote.
 
@@ -347,7 +347,7 @@ command = "D:/GraveTrail/.venv/Scripts/python.exe"
 args = ["-m", "dataforge.cli", "--home", "D:/GraveTrail/data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
 ```
 
-Settings → **Agent & Automation Access** provides configurations for the selected home
+**Automation & access** provides configurations for the selected home
 and policy. Stdio uses local process permissions. Network MCP additionally requires a
 named runtime bearer credential, explicit workspace scope and a TLS reverse proxy for
 external binding; it has no built-in OAuth/login flow. See the complete
@@ -405,7 +405,7 @@ source and retained AI content; they are sensitive and are not encrypted by Grav
 
 ## 12. Cleanup and maintenance
 
-Open **Settings → Data Management & Cleanup**. Choose scope/category, inspect real record
+Open **Data management → Cleanup & recovery**. Choose scope/category, inspect real record
 counts and file sizes, create a dry-run preview and type the displayed confirmation.
 Workspace operations require its exact name; shared cleanup uses `CLEAN SHARED DATA`;
 full application reset uses `RESET GRAVETRAIL`. A changed preview is rejected and must be
@@ -461,7 +461,7 @@ gravetrail --home /path/to/data --allow-write maintenance checkpoint
 
 Checkpoint flushes DuckDB's WAL; neither it nor logical row deletion guarantees a smaller
 database file. Displayed logical JSON row estimates are not physically reclaimable bytes.
-Rebuild lineage through Lineage builder or `lineage build --force` after a derived-data
+Rebuild lineage through Analysis or `lineage build --force` after a derived-data
 reset. Without a backup, source/workspace/application deletion may be irreversible. See
 [data management](DATA_MANAGEMENT.md) for detailed category dependencies and recovery limits.
 
@@ -597,7 +597,7 @@ credentials remain available until the launching environment/process is changed.
 **Can I build every platform on Windows?** Executables are host-platform builds. Use
 appropriate Windows/Linux/macOS runners and test each native artifact before distribution.
 
-**What is the license?** The repository includes the [Apache License 2.0](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/LICENSE).
+**What is the license?** The repository includes the [Apache License 2.0](https://github.com/SahasilAK/GraveTrail/blob/main/LICENSE).
 Review dependency licenses when redistributing a bundled application.
 
 ## CLI and MCP UI coverage

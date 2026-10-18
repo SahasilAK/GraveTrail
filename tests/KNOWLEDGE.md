@@ -28,7 +28,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_graph.py` — Graph traversal plus missing-endpoint regression: evidence retention, valid search/rows and incomplete path propagation. Run with pytest; temporary runtime data only.
 - `test_lineage_tree.py` — AppTest covers lazy compact branches, Expand all/Collapse all, inline files, both directions, optional evidence details, cycle stops and depth/entry limits.
 - `test_hardening.py` — Behavioral regression tests for hardening. Run with pytest; temporary runtime data only.
-- `test_ingestion.py` — Behavioral regression tests for ingestion. Run with pytest; temporary runtime data only.
+- `test_ingestion.py` — ZIP/browser/directory ingestion; unapproved absolute/relative/traversal/sibling-prefix paths and empty roots fail before filesystem access. Valid roots, normalized nested paths and filesystem-root allowlists preserve original bytes. Symlink escape/child exclusion runs where OS permissions allow link creation. Temporary data only.
 - `test_llm.py` — Provider protocols, grounding/privacy, fenced JSON rejection boundaries, malformed HTTP envelopes including 80/1100-level nesting across Python decoder versions, and inferred merge retention. Temporary runtime data only.
 - `test_logging.py` — Behavioral regression tests for logging. Run with pytest; temporary runtime data only.
 - `test_maintenance.py` — History archive/restore bounds, workspace/reference protection, idempotence, tamper rejection, transaction rollback, v3 migration and journal recovery after lost file/restart.
@@ -38,8 +38,8 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_sql.py` — Behavioral regression tests for sql. Run with pytest; temporary runtime data only.
 - `test_parser_static_wrappers.py` — PostgreSQL SQL procedure/Snowflake literal wrappers and SAS %LET expressions; conservative runtime/bind/mutation rejection, nesting/resource bounds, exact LF/CRLF evidence, persisted service queries, warm caches and newline-tamper detection. Subprocess deadline covers 100k-space/comment ReDoS; header variants and dialect-specific comment nesting preserve the procedure guard.
 - `test_store.py` — Behavioral regression tests for store. Run with pytest; temporary runtime data only.
-- `test_themes.py` — Frozen original-eight palette/order preservation, exactly six additions; native mode/config/TOML preservation, atomic rollback and AA contrast across all fourteen themes.
-- `test_ui.py` — Page/workspace/provider flows, complete fourteen-theme dropdown, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
+- `test_themes.py` — Frozen original-fourteen palette/order preservation, four curated additions; native mode/config/TOML preservation, atomic rollback and AA contrast across all eighteen themes.
+- `test_ui.py` — Page/workspace/provider flows, complete eighteen-theme dropdown, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
 - `test_workflow.py` — Behavioral regression tests for workflow. Run with pytest; temporary runtime data only.
 - `test_workspace_configuration.py` — Workspace edits preserve identity/data; safe v1/v2 configuration portability, resource validation, isolation and injected-failure rollback.
 
@@ -51,7 +51,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_parity_reports.py` — Scoped dictionary/schema/history/evidence, CLI exact literal matches and configured >10k ZIP discovery admission.
 - `test_parity_artifacts.py` — Exact raw bytes/hashes/chunks/ZIP, source revocation, scoped IDs, CLI exclusive output, enriched graph/path evidence, combined tree and cycle incompleteness.
 - `test_parity_maintenance.py` — Read-side effect absence, mandatory backup guards, fresh local archive/recovery in disposable homes; general cleanup backup opt-out refused.
-- `test_parity_runtime.py` — Fourteen shared themes/TOML preservation, actual logging/setup/self-test MCP, application scope and CLI settings.
+- `test_parity_runtime.py` — Eighteen shared themes/TOML preservation, actual logging/setup/self-test MCP, application scope and CLI settings.
 - `test_parity_coverage.py` — Every keyed catalog field/CLI route/help/MCP schema and all mutation/network tool denials under a read-only launch.
 - `test_parity_ui.py` — Equal asset labels across workspaces retain selectable widget identity, reproducing the real-browser regression.
 
@@ -61,8 +61,12 @@ Distribution regression verifies source archives exclude agent context (plans, A
 
 - `test_release.py` — Stable/matching version checks; three-platform archive staging/integrity, missing/tampered/wrong-version/duplicate/unlisted build rejection, no overwrite, Copilot timeouts/auth failures and preserved baseline/change/startup notes.
 
-Rebrand regressions: distribution script aliases and stale-wheel exclusion; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.
+Rebrand regressions: distribution script aliases, unrelated-brand/stale-version wheel exclusion and /GraveTrail/ documentation link validation; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.
 
 Frozen-dispatch regression executes the real frozen entry script with a captured CLI and asserts gravetrail is the program name.
 
 Documentation regressions walk real Typer routes/groups/flags/positional arguments and SDK MCP tool/input/resource/prompt registrations, requiring exact checked-in reference coverage and no duplicate/stale rows. Discovery uses isolated temporary storage and makes no provider calls.
+
+`test_navigation_redesign.py` — Sources/Analysis/admin boundaries, no writes on navigation, hidden source/diagnostic laziness, persistent cross-page and related-view asset/file selection, workspace/reimport invalidation, existing-provider protocol preservation and pending-diagnostic source safety with manual assistance retained. Evidence tests additionally pin changing browser source-widget identities and hidden Tree direction persistence. Distribution canaries require packaged CSS bytes.
+
+Theme regressions preserve all original fourteen definitions, exercise eighteen atomic preset saves and contrast, and apply Aubergine through AppTest. `test_site_themes.py` verifies four published schemes, selector publication and exact surface/action parity with the app.

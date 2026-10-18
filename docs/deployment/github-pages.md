@@ -4,6 +4,11 @@ This repository builds its Markdown documentation with Material for MkDocs. GitH
 Actions validates the site on pull requests and deploys the static output from `main`.
 GitHub Pages does not run the Streamlit application, Python services, or your workspaces.
 
+The header's **Color theme** selector offers four coordinated appearances: **Porcelain · light**,
+**Celadon · light**, **Ink · dark** and **Aubergine · dark**. Your selection persists in this
+browser across guide pages and reloads. A first visit follows the system appearance with
+Porcelain or Ink. The app offers these same palettes alongside its existing themes.
+
 ## Prerequisites
 
 - A GitHub repository with Pages available on its plan. Public repositories can use Pages
@@ -14,7 +19,7 @@ GitHub Pages does not run the Streamlit application, Python services, or your wo
   repository/organization policy. No personal access token or deployment secret is needed.
 - For local authoring: Git, Python 3.11+, and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
-The checked-in repository is `SahasilAK/dataforge-engineering-hub`, with default branch
+The checked-in repository is `SahasilAK/GraveTrail`, with default branch
 `main`. For a fork, change `repo_url`, `repo_name`, `site_url`, and `edit_uri` in
 `mkdocs.yml`; update workflow branch guards if your default branch differs.
 
@@ -28,7 +33,7 @@ uv run --group docs mkdocs serve --dev-addr 127.0.0.1:8000
 ```
 
 Open the URL printed by MkDocs. With the configured project site it normally includes
-`/dataforge-engineering-hub/`. Keep the terminal running; changes reload automatically.
+`/GraveTrail/`. Keep the terminal running; changes reload automatically.
 Stop with Ctrl+C. Documentation dependencies are a separate locked dependency group,
 not part of the application's production requirements.
 
@@ -67,10 +72,10 @@ databases, credentials and imported originals are excluded. The workflow uploads
 
 1. Review and merge the documentation pull request into **`main`**. PR builds validate
    without deploying; running the workflow on a feature branch also cannot deploy.
-2. Open [repository Settings → Pages](https://github.com/SahasilAK/dataforge-engineering-hub/settings/pages).
+2. Open [repository Settings → Pages](https://github.com/SahasilAK/GraveTrail/settings/pages).
 3. Under **Build and deployment → Source**, select **GitHub Actions**. There is no
    `gh-pages` branch to create and no `/docs` publishing folder to select.
-4. Open [Actions → documentation](https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/docs.yml).
+4. Open [Actions → documentation](https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml).
    Choose **Run workflow**, select **`main`**, and click **Run workflow**. This is useful
    if the merge-triggered run occurred before Pages was enabled.
 5. Verify both **build** and **deploy** jobs succeed. The **github-pages** environment
@@ -78,7 +83,7 @@ databases, credentials and imported originals are excluded. The workflow uploads
 6. Open the URL returned by that deployment. With this repository's current configuration,
    the expected address is:
 
-   **`https://sahasilak.github.io/dataforge-engineering-hub/`**
+   **`https://sahasilak.github.io/GraveTrail/`**
 
 That address is derived from the Git remote and configured project prefix; its appearance
 here is not evidence that a deployment has happened. The successful deployment output
@@ -115,7 +120,7 @@ Keep the default address unless you own a domain and want to configure DNS.
 2. In **Settings → Pages → Custom domain**, enter the domain and complete DNS validation.
    Enable **Enforce HTTPS** when certificate provisioning allows it.
 3. Change `site_url` in `mkdocs.yml` to the exact HTTPS domain and path. A domain-root
-   site normally uses `/`; the project-site URL uses `/dataforge-engineering-hub/`.
+   site normally uses `/`; the project-site URL uses `/GraveTrail/`.
 4. Rebuild, validate, and merge. Run **documentation** on `main`, then use **Visit site**
    to verify CSS, images, search, and nested links at the new address.
 

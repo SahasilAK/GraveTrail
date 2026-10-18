@@ -823,7 +823,7 @@
   },
   "V01": {
     "capability_id": "V01",
-    "description": "Fourteen theme presets, detected/configured/loaded theme and explicit apply",
+    "description": "Eighteen theme presets, detected/configured/loaded theme and explicit apply",
     "cli": [
       [
         "application",

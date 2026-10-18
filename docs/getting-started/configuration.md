@@ -2,7 +2,7 @@
 
 GraveTrail separates startup configuration, workspace preferences and runtime secrets.
 Choose storage and filesystem access before launching; tune analysis and display in
-**Settings** after selecting a workspace.
+**Workspace settings** and the other Administration destinations after selecting a workspace.
 
 ## Storage and ownership
 
@@ -47,15 +47,15 @@ independent write, source, network and configuration grants.
 
 ## Workspace preferences
 
-In **Settings**, configure these according to the source project:
+Use the focused administration destinations:
 
-- **Parsing and lineage:** SQL dialect and folder overrides, SAS library/static macro
-  mappings, job/session identities, case handling, import limits and parsing workers.
-- **Visualization:** graph depth/node limits, temporary-step collapsing, tree expansion,
-  labels and source display preferences. Theme application affects the local application.
-- **Storage and workspaces:** workspace name/description, configuration transfers,
-  history maintenance and permitted storage locations.
-- **Agent & Automation Access:** workspace access, source disclosure and response budgets.
+- **Workspace settings → Parsing:** dialect/folder/extension overrides, SAS mappings,
+  job/session identities and case handling. **Resources** sets import/worker budgets;
+  **Appearance** sets graph/source defaults and all eighteen theme presets.
+- **Connections & AI:** provider profiles, session credentials, routing and Privacy.
+- **Data management:** workspace details, configuration transfers, backup/restore,
+  cleanup previews, history recovery and permitted storage locations.
+- **Automation & access:** workspace access, source disclosure and response budgets.
 
 Reanalyze after changing extraction-related settings. Normal analysis reuses compatible
 unchanged parses; **Rebuild** forces parsing. Imported pending files are not automatically
@@ -68,7 +68,7 @@ profiles and privacy permissions. Use a runtime backup when you need recovery of
 ## Optional LLM assistance
 
 Deterministic analysis works with no provider profile. To enable assistance, choose a
-provider, endpoint, model and authentication method in **Settings → LLM providers**.
+provider, endpoint, model and authentication method in **Connections & AI → Providers & routing**.
 Enter a credential in the masked session control or reference a named launch variable.
 Saving a profile stores non-secret preferences and the reference name, never the key value.
 New credential reference names use the `DATAFORGE_` prefix; explicitly configured legacy
@@ -85,7 +85,7 @@ smallest useful source range. See [secure runtime configuration](../SECURE_CONFI
 
 ## Maintenance settings
 
-Use **Settings → Data Management & Cleanup** to preview the exact records and files
+Use **Data management → Cleanup & recovery** to preview the exact records and files
 affected by a cleanup. General cleanup requires a whole-home backup and typed confirmation;
 changed previews must be refreshed. Source or AI cleanup invalidates the complete dependent
 workspace graph. Shared cache/orphan/application cleanup is UI-only, and MCP cleanup is

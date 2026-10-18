@@ -4,8 +4,8 @@ Read the [contribution guide](docs/development/contributing.md) for development 
 test commands, evidence contracts and pull request expectations. Start with a focused
 issue or a small reproducible change, and preserve unrelated work and runtime data.
 
-- [Report a bug](https://github.com/SahasilAK/dataforge-engineering-hub/issues/new?template=bug_report.yml)
-- [Suggest a feature](https://github.com/SahasilAK/dataforge-engineering-hub/issues/new?template=feature_request.yml)
+- [Report a bug](https://github.com/SahasilAK/GraveTrail/issues/new?template=bug_report.yml)
+- [Suggest a feature](https://github.com/SahasilAK/GraveTrail/issues/new?template=feature_request.yml)
 - [Development overview](docs/development/index.md)
 - [Security reporting](SECURITY.md)
 

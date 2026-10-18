@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from dataforge.theme_configuration import PALETTES as PALETTES
+from dataforge.theme_configuration import PRESET_DESCRIPTIONS
 from dataforge.theme_configuration import PRESETS as PRESETS
 from dataforge.theme_configuration import apply_preset as apply_preset
 from dataforge.theme_configuration import current_preset as current_preset
@@ -43,7 +44,9 @@ def render_theme_picker():
             st.success(notice)
         choices = list(PRESETS)
         selected = st.selectbox("Theme preset", choices, index=choices.index(active) if active else 0)
-        st.caption("Original Ocean, Forest, Amethyst and Graphite themes remain available. Added Claude-inspired orange light/dark, Nord light, Rose light, Sand light and Mint light. Changes apply only when you choose Apply theme, across this local app.")
+        if description := PRESET_DESCRIPTIONS.get(selected):
+            st.caption(description)
+        st.caption("18 themes, including Porcelain, Celadon, Ink and Aubergine. Choose Apply theme to change this local app's appearance across workspaces.")
         if active is None:
             st.caption("Current palette is customized. Applying a preset replaces its colors and appearance; custom layout/sidebar overrides remain.")
         if st.button("Apply theme", disabled=selected is None or selected == active):

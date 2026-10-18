@@ -69,6 +69,29 @@ PRESETS.update({
         ["#226d5a", "#5679a1", "#937042", "#8b679c"])},
 })
 
+# Restrained neutrals carry the interface; accents are reserved for actions and data.
+PRESETS.update({
+    "Porcelain light": {"base": "light", **_colors(
+        "#3f5f73", "#faf9f6", "#efede7", "#242a30", "#d6d4cc", "#35596e",
+        ["#3f5f73", "#617b68", "#97704b", "#87728c"])},
+    "Celadon light": {"base": "light", **_colors(
+        "#386653", "#f4f7f2", "#e7eee5", "#273b31", "#c8d4c7", "#315f4c",
+        ["#386653", "#57768a", "#a07841", "#8d6880"])},
+    "Ink dark": {"base": "dark", **_colors(
+        "#4169ad", "#17191e", "#22252c", "#eceef2", "#404650", "#a9bfe7",
+        ["#a9bfe7", "#8abaaa", "#d4b482", "#bea4ca"])},
+    "Aubergine dark": {"base": "dark", **_colors(
+        "#885a7e", "#211b24", "#302734", "#f2eaf2", "#57465c", "#d8b5d2",
+        ["#d8b5d2", "#9bbeb3", "#d9b88b", "#a8b8dd"])},
+})
+
+PRESET_DESCRIPTIONS = {
+    "Porcelain light": "Warm porcelain, stone surfaces and a quiet mineral-blue accent.",
+    "Celadon light": "Soft botanical neutrals with deep jade controls and crisp forest text.",
+    "Ink dark": "Near-black graphite, cool silver text and a measured cobalt accent.",
+    "Aubergine dark": "Deep plum surfaces, warm pearl text and a muted orchid accent.",
+}
+
 
 def current_preset(path):
     theme = tomllib.loads(Path(path).read_text(encoding="utf-8")).get("theme", {})

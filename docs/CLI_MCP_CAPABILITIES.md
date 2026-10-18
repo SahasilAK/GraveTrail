@@ -62,13 +62,13 @@ is used for session credentials. Redirects are refused.
 | W03 | Storage locations/home status and current browser home selection equivalent | `runtime info` | `get_runtime_info` | **Restricted:** No live server home switch. Relaunch CLI/MCP with an authorized --home; UI changes its current browser session only. |
 | W04 | Analysis and ingestion run lists/details, inventory file_size/encoding/metadata and import diagnostics | `runs list`<br>`runs get`<br>`ingestions list`<br>`ingestions get`<br>`source list`<br>`source metadata` | `list_analysis_runs`<br>`get_analysis_run`<br>`list_ingestion_runs`<br>`get_ingestion_run`<br>`search_source_code`<br>`get_source_metadata` | Implemented |
 | W05 | Baseline/comparison run diff and JSON download | `runs compare`<br>`export report` | `compare_analysis_runs`<br>`export_report` | Implemented |
-| V01 | Fourteen theme presets, detected/configured/loaded theme and explicit apply | `application theme list`<br>`application theme get`<br>`application theme apply` | `list_theme_presets`<br>`get_application_theme`<br>`apply_application_theme` | Implemented |
+| V01 | Eighteen theme presets, detected/configured/loaded theme and explicit apply | `application theme list`<br>`application theme get`<br>`application theme apply` | `list_theme_presets`<br>`get_application_theme`<br>`apply_application_theme` | Implemented |
 | V02 | Saved graph node limit10–1000, traversal depth1–30, tree expansion0–30, upstream/downstream/combined, collapse temporary | `settings schema`<br>`settings get`<br>`settings update` | `get_settings_schema`<br>`get_workspace_settings`<br>`update_workspace_settings` | Implemented |
 | V03 | Graph labels compact/full/hidden, semantic/neutral palette, width1–5, source complete/relevant and line numbers | `settings schema`<br>`settings get`<br>`settings update` | `get_settings_schema`<br>`get_workspace_settings`<br>`update_workspace_settings` | Implemented |
 | V04 | Interactive graph/tree/edge/node focus, expand/collapse and column grouping/filter equivalents | `lineage graph`<br>`columns usage` | `get_graph_data`<br>`get_column_usage` | Implemented |
 | R01 | Data dictionary: declared SQL types, sampled CSV types, fallback direct references, provenance and unknowns | `dictionary list` | `get_data_dictionary` | Implemented |
 | R02 | Declared schema columns plus original DDL evidence | `assets schema` | `get_asset_schema` | Implemented |
-| R03 | Dashboard hotspots, isolated/temporary assets, cyclic groups and parsing-status counts | `workspace health` | `get_workspace_health` | Implemented |
+| R03 | Overview hotspots, isolated/temporary assets, cyclic groups and parsing-status counts | `workspace health` | `get_workspace_health` | Implemented |
 | R04 | Standalone stored-lineage evidence check (does not analyze or repair) | `lineage validate` | `validate_stored_lineage` | Implemented |
 | R05 | Dependency paths in both directions, max_paths1–500, depth, temporary view, boundaries and exports | `lineage paths`<br>`export paths` | `get_dependency_paths`<br>`export_dependency_paths` | Implemented |
 | R06 | Step-wise lineage rows/logical dependency order with evidence; no inferred runtime order | `lineage steps` | `get_lineage_steps` | Implemented |
@@ -105,6 +105,6 @@ archives only into a new destination. Shared cache/orphan/application removal st
 MCP maintenance stays read-only. Reading settings/recoveries never triggers automatic cleanup.
 Runtime reset and schema removal remain separate operations.
 
-The checked-in [capability fixture](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/tests/fixtures/parity_capabilities.json) is tested against
+The checked-in [capability fixture](https://github.com/SahasilAK/GraveTrail/blob/main/tests/fixtures/parity_capabilities.json) is tested against
 actual Typer routes/help, MCP schemas and authorization. The [testing guide](TESTING.md)
 describes parity checks for transports, the running UI, both real ZIPs and live providers.

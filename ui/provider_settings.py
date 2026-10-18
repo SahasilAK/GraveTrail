@@ -15,26 +15,27 @@ from dataforge.settings_service import revision
 def render(store, workspace):
     profiles = store.rows("SELECT * FROM llm_profiles WHERE workspace_id=? ORDER BY name", [workspace])
     names = {p["profile_id"]: p["name"] for p in profiles}
-    selection = st.selectbox("Provider profile", ["New profile", *names], format_func=lambda x: names.get(x, x))
+    selection = st.selectbox("Provider profile", ["New profile", *names], format_func=lambda x: names.get(x, x), key="provider_profile_" + workspace)
     existing = next((p for p in profiles if p["profile_id"] == selection), None)
     config = json.loads(existing["config"]) if existing else {}
-    provider = st.selectbox("Provider", list(PROVIDERS), index=list(PROVIDERS).index(config.get("provider", "Ollama")))
-    with st.form("provider_config"):
+    provider = st.selectbox("Provider", list(PROVIDERS), index=list(PROVIDERS).index(config.get("provider", "Ollama")), key=f"provider_kind_{workspace}_{selection}")
+    with st.form(f"provider_config_{workspace}_{selection}_{provider}"):
         name = st.text_input("Profile name", config.get("name", provider))
         url = st.text_input("API base URL", config.get("base_url", PROVIDERS[provider]))
         model = st.text_input("Model or deployment identifier", config.get("model", ""), help="Use model discovery below or enter an identifier available to your account.")
         key_env = st.text_input("Credential environment variable name", config.get("key_env", '' if provider in {'Ollama', 'LM Studio'} else DEFAULT_KEY_ENV[provider]), placeholder=DEFAULT_KEY_ENV[provider])
         st.caption("Store only the variable name here. Set its secret value in the process environment before launching the app.")
-        auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
-        auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")))
-        timeout = st.number_input("Request timeout (seconds)", 1, 180, int(config.get("timeout", 30)))
-        retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)))
-        max_tokens = st.number_input("Maximum output tokens", 64, 32000, int(config.get("max_tokens", 2048)))
-        context = st.number_input("Profile source context character limit", 500, 200000, int(config.get("context_chars", 16000)))
-        temperature_enabled = st.checkbox("Send temperature parameter", value=config.get("temperature") is not None)
-        temperature = st.number_input("Temperature", 0., 2., float(config.get("temperature") or 0.), step=.1)
-        structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True))
-        api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"))
+        with st.expander("Advanced request options"):
+            auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
+            auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")))
+            timeout = st.number_input("Request timeout (seconds)", 1, 180, int(config.get("timeout", 30)))
+            retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)))
+            max_tokens = st.number_input("Maximum output tokens", 64, 32000, int(config.get("max_tokens", 2048)))
+            context = st.number_input("Profile source context character limit", 500, 200000, int(config.get("context_chars", 16000)))
+            temperature_enabled = st.checkbox("Send temperature parameter", value=config.get("temperature") is not None)
+            temperature = st.number_input("Temperature", 0., 2., float(config.get("temperature") or 0.), step=.1)
+            structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True))
+            api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"))
         saved = st.form_submit_button("Save provider profile", type="primary")
     if saved:
         try:
@@ -76,7 +77,7 @@ def render(store, workspace):
         if discover or test:
             try:
                 if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
-                    raise ValueError("Enable external requests in Security and privacy first")
+                    raise ValueError("Enable external requests in Connections & AI → Privacy first")
                 resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
                     for k, v in LLMResourceSettings().model_dump().items()})
                 with request_slot(store.home, workspace, resources.llm_concurrency), Adapter(profile) as adapter:

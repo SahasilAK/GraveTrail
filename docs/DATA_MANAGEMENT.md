@@ -1,6 +1,6 @@
 # Data management and cleanup
 
-Open **Settings → Data Management & Cleanup**. Counts and logical JSON row-size estimates
+Open **Data management → Cleanup & recovery**. Counts and logical JSON row-size estimates
 come from the current database. Categories overlap because dependency removals are included;
 logical row sizes are not physically reclaimable DuckDB bytes. Managed file bytes are shown
 separately. The integrity action also reports the actual database file size and missing or
@@ -17,7 +17,7 @@ to apply; shared cache/orphan cleanup requires `CLEAN SHARED DATA`, and full res
 | Lineage | Clear graph, statements, mappings, columns, diagnostics and analysis snapshots; retain originals and settings. |
 | Columns | Clear direct-column usages; rebuild lineage to regenerate. |
 | AI | Clear AI records and the graph/history that may contain inferred relationships; rebuild deterministic lineage afterwards. |
-| History | Remove only terminal analysis/ingestion history unreferenced by active facts/inventory. Optional run ID selects one eligible analysis run. Existing recoverable history archiving remains available under Storage and workspaces. |
+| History | Remove only terminal analysis/ingestion history unreferenced by active facts/inventory. Optional run ID selects one eligible analysis run. Existing recoverable history archiving remains available under Data management → History & staging. |
 | Jobs | Remove terminal or heartbeat-expired journals/results for this workspace. Active jobs block maintenance. |
 | Reset | Remove generated graph, analysis/AI/ingestion/recovery history and generated exports; retain imported files, provider preferences and workspace configuration. |
 | Workspace | Remove all workspace-owned database records and recognized recovery/export/job/access files. |

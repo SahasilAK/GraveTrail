@@ -22,7 +22,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `configuration.py` — ParsingSettings/VisualizationSettings/PortableSettings validate bounded non-network preferences; WorkspaceIdentity validates names/descriptions; export/import supports v1 and atomic v2 round trips.
 - `exports.py` — graph_data/graph_html share validated label/palette/edge appearance and fitted full names with live SVG JS/CSS; path_rows flattens paths/evidence; report_csv/html escape values; source_bundle preserves analyzed originals.
 - `graph.py` — LineageGraph retains missing-endpoint evidence in unresolved_edges, excludes anonymous nodes and propagates incomplete-view state; provides bounded search/focus, SCC cycles, temporary contraction, logical rows, root_paths and ordered path_report with evidence and explicit depth/cycle/truncation boundaries.
-- `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Original blobs are SHA-256 named.
+- `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Directory inputs are lexically normalized and checked against separator-bounded, case-normalized startup roots before filesystem resolution; resolved containment and child symlink guards remain. Original blobs are SHA-256 named.
 - `llm.py` — Profile/Adapter implement protocols/discovery/nonstreaming chat; response_object accepts one enclosing JSON fence; assist/assist_task enforce privacy/routing and optional preview hash pinning; strict grounded claims/quarantine and inferred merge.
 - `logging_config.py` — JsonFormatter/configure_logging emit application events with an explicit safe metadata allowlist; no raw source/key fields.
 - `maintenance.py` — history_plan protects current references/latest completed runs; bounded archive_history journals recovery with removal, writes an extra checksummed file; restore_history inserts missing IDs atomically, preferring the DB journal.
@@ -54,7 +54,7 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 
 - `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifact creation, guarded managed paths and scoped/checksummed budgeted base64 reads.
 
-- `theme_configuration.py` — exact existing14 preset palettes, detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.
+- `theme_configuration.py` — 18 preset palettes (existing14 preserved plus Porcelain/Celadon/Ink/Aubergine), detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.
 
 Provider runtime bindings include a saved-profile fingerprint: profile edits invalidate old credentials,
 including edits by another adapter. Fallbacks resolve their own approved credentials. AI pins hash/job
@@ -64,3 +64,5 @@ mark cycle boundaries incomplete. General cleanup cannot opt out of its full-hom
 GraveTrail compatibility: internal dataforge imports and storage identifiers stay stable. build_python selects only current gravetrail/version artifacts, excluding stale previous-brand/version wheels. Native directory/executable/archive and Docker image names use gravetrail; launcher retains existing platform homes. Exports use GraveTrail titles. Application reset accepts new/legacy exact phrases without changing backup or preview guards.
 
 Whole-home restore staging uses a gravetrail-restore- temporary prefix; persistent backup format IDs and recognized database filenames are unchanged.
+
+Graph presentation in exports.py uses theme-aware surfaces, rounded node materials, visible focus and immediate press feedback; Enter/Space selects evidence and pointer cancellation releases panning. Live and offline graph still share the same rendering code and escaped evidence.

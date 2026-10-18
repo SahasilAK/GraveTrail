@@ -39,7 +39,7 @@ def render(store, workspace):
             st.warning("Preview is truncated and sending is disabled. Select fewer lines or increase the source context budget in Security and privacy.")
         configured = bool(store.rows("SELECT 1 FROM llm_profiles WHERE workspace_id=? LIMIT 1", [workspace]))
         if not configured:
-            st.info("Configure a default or task-specific provider in Settings to request AI review. This local preview needs no provider.")
+            st.info("Configure a default or task-specific provider in Connections & AI to request AI review. This local preview needs no provider.")
         if st.button("Request AI review of this range", disabled=over_budget or not configured, key=key + "_request"):
             try:
                 with st.spinner("Reviewing selected diagnostic evidence"):

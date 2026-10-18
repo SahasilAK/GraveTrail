@@ -51,7 +51,7 @@ def register(app, workspace_app, invoke, fail):
 
 def register_application(app, invoke):
     application = typer.Typer(help='Application scope; mutation requires unrestricted write/config/application grants.')
-    theme = typer.Typer(help='Fourteen presets; loaded UI state is unavailable to this process.')
+    theme = typer.Typer(help='Eighteen presets; loaded UI state is unavailable to this process.')
     logging = typer.Typer(help='Home-wide persisted log level; no log-content access.')
     runtime = typer.Typer(help='Runtime owner/home context; switching requires a new invocation.')
     agent = typer.Typer(help='Actual schemas, credential-free client examples and local MCP handler self-test.')

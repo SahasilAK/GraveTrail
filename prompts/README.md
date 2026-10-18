@@ -1,6 +1,6 @@
 # Prompt repository
 
-Lineage tasks use v1 GroundedResponse. Column usage and code explanation use v2
+Lineage tasks use v1 GroundedResponse. Columns and code explanation use v2
 ColumnResponse/ExplanationResponse; schemas are version-controlled under schemas/.
 System instructions never contain interpolated source. User context is JSON. The prompt
 hash includes system, template and exact response schema. AI records retain task, version,

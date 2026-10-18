@@ -127,14 +127,14 @@ def test_site_links_validate_project_prefix_fragments_and_missing_targets(tmp_pa
 
     (tmp_path / "guide").mkdir()
     (tmp_path / "index.html").write_text(
-        '<a href="/dataforge-engineering-hub/guide/#install">Install</a>', encoding="utf-8"
+        '<a href="/GraveTrail/guide/#install">Install</a>', encoding="utf-8"
     )
     (tmp_path / "guide/index.html").write_text('<h1 id="install">Install</h1>', encoding="utf-8")
-    assert inspect_site(tmp_path, "/dataforge-engineering-hub/") == []
+    assert inspect_site(tmp_path, "/GraveTrail/") == []
     (tmp_path / "index.html").write_text(
         '<a href="guide/#missing">Bad</a><img src="/assets/missing.png">', encoding="utf-8"
     )
-    errors = inspect_site(tmp_path, "/dataforge-engineering-hub/")
+    errors = inspect_site(tmp_path, "/GraveTrail/")
     assert any("#missing" in error for error in errors)
     assert any("project prefix" in error for error in errors)
 

@@ -1,0 +1,51 @@
+/* Only app-owned key classes and semantic controls; native theme owns widget colors. */
+.st-key-app_workspace { max-width: 100rem; margin-inline: auto; }
+.st-key-page_heading { margin-bottom: .8rem; }
+.st-key-page_heading h1 { letter-spacing: -.04em; line-height: 1.12; font-weight: 650; padding-block: 0; }
+.st-key-page_heading p { max-width: 52rem; line-height: 1.65; }
+.st-key-app_workspace h2, .st-key-app_workspace h3 { letter-spacing: -.025em; font-weight: 600; }
+.st-key-app_workspace p { overflow-wrap: anywhere; }
+.gt-eyebrow { font: 600 .7rem/1.4 system-ui, sans-serif; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--gt-text); opacity: .65; margin: .4rem 0 .6rem; }
+.st-key-brand h2 { font-size: 1.45rem; letter-spacing: -.045em; padding-block: .25rem; }
+.st-key-brand p { font-size: .8rem; }
+.st-key-workspace_context { margin-bottom: .6rem; }
+.st-key-sidebar_navigation a { min-height: 2.35rem; border-radius: .55rem; }
+.st-key-sidebar_navigation a[aria-current="page"] {
+  background: color-mix(in srgb, var(--gt-accent) 13%, var(--gt-bg));
+  box-shadow: inset 3px 0 var(--gt-accent); font-weight: 600; }
+.st-key-sidebar_navigation a:hover { background: color-mix(in srgb, var(--gt-text) 6%, transparent); }
+.st-key-sidebar_navigation { background: color-mix(in srgb, var(--gt-surface) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2); border-radius: .75rem; }
+.st-key-app_workspace button, .st-key-sidebar_navigation a {
+  touch-action: manipulation; transition: background-color 140ms ease, border-color 140ms ease; }
+.st-key-app_workspace button:active { transform: scale(.985); }
+.st-key-app_workspace :is(button,a,input,textarea,[role="combobox"]):focus-visible,
+.st-key-sidebar_navigation a:focus-visible { outline: 2px solid var(--gt-accent); outline-offset: 3px; }
+.st-key-empty_state { padding: 1.5rem; background: color-mix(in srgb, var(--gt-surface) 55%, var(--gt-bg)); }
+.st-key-overview_next { background: color-mix(in srgb, var(--gt-accent) 7%, var(--gt-bg)); }
+.st-key-overview_next h3 { font-size: 1.45rem; }
+.st-key-analysis_run, .st-key-source_import, .st-key-preferences_body { max-width: 64rem; }
+.st-key-analysis_run, .st-key-source_import, .st-key-overview_next { padding: .5rem; }
+.st-key-graph_surface { border: 1px solid var(--gt-border); border-radius: .85rem; overflow: hidden; }
+@media (max-width: 48rem) {
+  .st-key-page_heading h1 { font-size: 2rem; }
+  .st-key-empty_state { padding: .65rem; }
+  [class*="st-key-asset_query_"], [class*="st-key-asset_select_"] { width: 100% !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .st-key-app_workspace *, .st-key-sidebar_navigation * { transition: none !important; animation: none !important; }
+  .st-key-app_workspace button:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .st-key-sidebar_navigation { background: var(--gt-surface); backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  .gt-eyebrow { opacity: 1; }
+  .st-key-sidebar_navigation { background: var(--gt-bg); backdrop-filter: none; border: 1px solid var(--gt-text); }
+  .st-key-app_workspace button { border-width: 2px; }
+}
+
+.st-key-app_workspace [role="radio"][aria-checked="true"] { color: var(--gt-link, var(--gt-text)); }
+
+.st-key-app_workspace :is([role="radio"][aria-checked="true"], [role="tab"][aria-selected="true"]) p { color: var(--gt-link, var(--gt-text)); }

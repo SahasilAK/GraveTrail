@@ -55,8 +55,12 @@ Public docs link to tracked contribution/testing/build guides. All KNOWLEDGE.md 
 
 BUILD_AND_RELEASE.md now includes the manual Publish standalone release runbook: committed project+lock version, default branch, exact tag/source, platform assets, no-extra-secret Copilot/fallback, failed-publication handling and hosted acceptance limits.
 
-Product prose and command examples use GraveTrail; BUILD_AND_RELEASE documents preserved legacy storage, imports, variables, commands, Compose identities and unchanged repository links. Native/archive/image examples use gravetrail.
+Product prose and command examples use GraveTrail; BUILD_AND_RELEASE documents preserved legacy storage, imports, variables, commands, Compose identities. Repository, contribution and Pages links use SahasilAK/GraveTrail and /GraveTrail/. Native/archive/image examples use gravetrail.
 
 Rebrand rescan aligns reset/restore phrases and sample installation paths, explicitly documents retained compatibility identifiers, and uses gravetrail-prefixed screenshot filenames.
 
 CLI/MCP references enumerate all98 executable routes/29groups, root and command flags/positional arguments,78 tools with required/optional inputs,2 concrete resources/4templates including legacy aliases and1prompt. Documentation tests compare exact registrations/inputs, independently of the46-ID UI capability catalog. Launcher/build sibling flags and the UI exception to non-Streamlit CLI behavior are explicit.
+
+The delivered ten-destination UI and before/after action map are documented in USER_GUIDE.md. Sources imports, Analysis runs/diagnostics/history, Lineage switches Graph/Tree, and four administration routes replace the old long Settings selector. All public onboarding/provider/cleanup guides use delivered labels. Homepage/styles share system typography, adaptive surfaces and immediate/reduced feedback with the app; three real fixture screenshots are refreshed.
+
+Pages now offers exactly four named themes through a native header select: Porcelain, Celadon, Ink and Aubergine. Material retains preference persistence and first-paint behavior; the allowlisted themes.js enhances its native radios. Surface/action colors match the four new app presets (eighteen app choices total). CLI/MCP counts and the UI reference reflect eighteen presets.

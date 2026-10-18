@@ -21,9 +21,15 @@ def test_source_panel_follows_active_tree_tab_unless_graph_evidence_is_selected(
         app.switch_page("ui/pages/explorer.py").run()
         next(s for s in app.selectbox if s.label == "Choose an exact asset").set_value(middle).run()
         assert next(s for s in app.selectbox if s.label == "Source file").options == ["up.sql"]
+        source_widget_key = next(s for s in app.selectbox if s.label == "Source file").key
         app.session_state["lineage_direction_tabs"] = "Downstream dependencies"
         app.run()
         assert not app.exception
+        assert next(s for s in app.selectbox if s.label == "Source file").options == ["down.sql"]
+        assert next(s for s in app.selectbox if s.label == "Source file").key != source_widget_key
+        next(s for s in app.segmented_control if s.label == "Lineage view").set_value("Tree").run()
+        next(s for s in app.segmented_control if s.label == "Lineage view").set_value("Graph").run()
+        app.run()
         assert next(s for s in app.selectbox if s.label == "Source file").options == ["down.sql"]
         assert app.segmented_control[0].value == "upstream"  # graph controls stay independent
         from ui import common

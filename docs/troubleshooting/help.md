@@ -78,10 +78,10 @@ to understand category dependencies before trying to reclaim disk space.
 ## Report an issue safely
 
 Use the repository's
-[bug report form](https://github.com/SahasilAK/dataforge-engineering-hub/issues/new?template=bug_report.yml).
+[bug report form](https://github.com/SahasilAK/GraveTrail/issues/new?template=bug_report.yml).
 Include the application revision, Python/OS/install method, minimal sanitized input,
 reproduction steps, expected/actual behavior and relevant diagnostic text. Distinguish
 the data home from the source checkout without publishing private absolute paths.
 Do not attach a live database, backup, original private ZIP or credential-bearing log.
-Use [security reporting](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/SECURITY.md)
+Use [security reporting](https://github.com/SahasilAK/GraveTrail/blob/main/SECURITY.md)
 for vulnerabilities.

@@ -151,7 +151,7 @@ Groups organize commands; use `gravetrail GROUP --help` to list their children.
 | `ai review` | Current diagnostic review candidates and bounded source previews. |
 | `application` | Application scope; mutation requires unrestricted write/config/application grants. |
 | `application logging` | Home-wide persisted log level; no log-content access. |
-| `application theme` | Fourteen presets; loaded UI state is unavailable to this process. |
+| `application theme` | Eighteen presets; loaded UI state is unavailable to this process. |
 | `assets` | Resolve asset names to stable IDs. |
 | `batch` | Aggregate-budget lineage queries. |
 | `cleanup` | Preview and explicitly confirm workspace cleanup. |
@@ -246,7 +246,7 @@ create workspaces. `--allowed-root PATH` is repeatable; alternatively set
 granted by the CLI. No arbitrary shell/SQL execution or secret discovery is exposed.
 Provider configuration, AI requests and local cleanup require the independent grants below.
 
-Settings → Agent & Automation Access controls workspace access, write permission,
+Automation & access controls workspace access, write permission,
 source retrieval, default detail, response cap and optional read auditing. Mutation
 events are always audited in `HOME/agent/audit.jsonl`, rotated at approximately 1 MB
 with one previous file retained. Records omit arguments, source and credentials.

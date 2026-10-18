@@ -99,7 +99,17 @@ class Importer:
                                 "ZIP upload", progress, cancelled)
 
     def directory(self, directory: str | Path, extensions: set[str], progress=None, cancelled=None):
-        path = Path(directory).resolve()
+        # Normalize without touching the requested path, then check a complete root
+        # boundary before resolve/stat/walk. The trailing separator also admits the
+        # root itself without admitting siblings such as "allowed-private".
+        candidate = os.path.join(os.path.normcase(os.path.abspath(os.fspath(directory))), "")
+        for root in self.roots:
+            if candidate.startswith(os.path.join(os.path.normcase(str(root)), "")):
+                path = Path(candidate).resolve()
+                break
+        else:
+            raise ValueError("Directory is outside the configured allowed roots")
+        # A lexically contained directory can still be a link to an unapproved root.
         if not any(path.is_relative_to(root) for root in self.roots):
             raise ValueError("Directory is outside the configured allowed roots")
         if not path.is_dir():
