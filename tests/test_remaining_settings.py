@@ -110,7 +110,8 @@ def test_settings_ui_persists_and_exports_preferences_atomically(tmp_path, monke
         assert app.error and store.setting(w, "min_lineage_confidence") == .8
         copied = import_workspace_configuration(store, payload)
         assert store.setting(copied, "dialect_by_extension") == {".sas": "tsql"}
-        app.segmented_control[0].set_value("Security and privacy").run()
+        app.switch_page("ui/pages/connections.py").run()
+        app.segmented_control[0].set_value("Privacy").run()
         next(s for s in app.selectbox if s.label == "Application log level").set_value("WARNING")
         next(b for b in app.button if b.label == "Save logging level").click().run()
         assert not app.exception and app.success

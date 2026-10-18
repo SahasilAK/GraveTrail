@@ -116,6 +116,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
         shutil.copyfile(root / 'scripts/build' / name, tmp_path / 'scripts/build' / name)
     (tmp_path / "src/dataforge/__init__.py").write_text("")
     (tmp_path / "ui/__init__.py").write_text("")
+    shutil.copyfile(root / "ui/style.css", tmp_path / "ui/style.css")
     (tmp_path / "prompts/prompt.md").write_text("packaged prompt")
     shutil.copyfile(root / ".streamlit/config.toml", tmp_path / ".streamlit/config.toml")
     for name in ("ui/.env", "ui/secrets.toml", "ui/cache.duckdb", ".streamlit/secrets.toml", "src/dataforge/.env"):
@@ -126,6 +127,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
         names = wheel.namelist()
         assert "dataforge/_app/app.py" in names
         assert "dataforge/_app/.streamlit/config.toml" in names
+        assert wheel.read("dataforge/_app/ui/style.css") == (root / "ui/style.css").read_bytes()
         assert "dataforge/prompts/prompt.md" in names
         assert not any(b"DUMMY_PACKAGING_SECRET_CANARY" in wheel.read(name) for name in names)
     with tarfile.open(next((tmp_path / "dist").glob("*.tar.gz"))) as archive:

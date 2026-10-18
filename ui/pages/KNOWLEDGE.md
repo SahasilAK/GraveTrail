@@ -1,27 +1,20 @@
 # ui/pages/
 
-Feature scripts registered by app.py through st.Page/st.navigation. Test each page with AppTest and custom graph behavior in the real browser.
+Ten focused direct scripts registered by app.py using native st.Page/st.navigation.
+Existing /builder, /explorer, /columns, /tools and /settings routes remain supported.
 
 ## Files
-- `builder.py` — Input/import, inventory, analyze/rebuild/validate, diagnostics/source viewer and lazy unresolved-review/manual AI panels. No automatic provider requests.
-- `columns.py` — Direct-only column metrics/filter/grouping; labels inferred schema expansions and shows both declaration and query source evidence; report downloads include schema provenance.
-- `dashboard.py` — Inventory counts, health, hotspots and recent runs with useful empty states.
-- `explorer.py` — Exact asset search, lazy tree tab, workspace-scoped direction/collapse defaults, shared live/export appearance, evidence-linked source panel and bounded path CSV/JSON plus graph/source exports.
-- `settings.py` — Parsing/storage/performance/privacy settings; themes, workspace defaults/transfers/recovery, provider forms and Agent & Automation Access section delegated to ui.agent_settings. Host roots/storage are startup environment settings.
-- `tools.py` — Code search, dictionary distinguishing declared SQL schema/sampled CSV/incomplete references, downstream impact and run comparison.
+- `dashboard.py` — Overview: contextual next action, real inventory/evidence counts, hotspots, health and recent work; no automatic analysis.
+- `builder.py` — Sources: Import (ZIP/directory/allowed host, report and next Analysis link) / Inventory (filter, compact columns, report exports, lazy original source and metadata).
+- `analysis.py` — Run / Diagnostics / History; explicit analyze selected/all, force rebuild and evidence validation, scoped completion notice and next actions. Delegates lazy sections to analysis_sections.py.
+- `explorer.py` — Lineage: persistent exact asset/direction, Graph / full-width Tree, Traversal options, contextual step-wise/source details, bounded paths and deferred offline graph/source exports. Native tree tabs have durable evidence-direction state; explicit graph evidence overrides source scope.
+- `columns.py` — Direct column usage/filter/grouping, inferred wildcard provenance, declared schema evidence and exports. Shares valid asset context with Lineage/Impact.
+- `tools.py` — Code search / Data dictionary / Impact analysis. Run comparison now belongs to Analysis → History.
+- `settings.py` — Workspace settings: Parsing / Resources / Appearance. Shared extracted forms preserve fourteen native theme presets, parsing/job identities, resource limits and graph/source defaults.
+- `connections.py` — Connections & AI: Providers & routing / Privacy, external-request status, session credentials, logging/host roots and shared privacy validators.
+- `management.py` — Data management: Storage & transfers / Backups & integrity / Cleanup & recovery / History & staging. Existing storage allowlists, mandatory backup/typed cleanup confirmation and new-home restore remain intact.
+- `automation.py` — Automation & access: existing agent permissions, source disclosure/budgets, client setup and real in-process MCP handler test.
 
-Parsing Settings accepts validated default job/session IDs and relative-folder assignments;
-reanalyze to apply new identity boundaries. Persistent assets remain shared.
-
-Storage settings opens only startup-allowed storage locations; failed opens keep the current
-workspace and successful opens reset this session before widgets are rebuilt.
-
-Builder reruns with analysis notices for fresh status counters/extension counts; Settings
-controls CSV sample0–100. Explorer tree tabs span the full width above the step-wise table/source evidence row.
-
-Explorer source scope follows active dependency tabs until an explicit graph selection; source
-scope caption explains the override, and changing tabs resets graph selection.
-
-Settings parsing/resources/visualization/privacy/agent access use shared section validators; local
-human UI authority may widen preferences. Builder evidence validation and tools dictionary/code search
-reuse reporting.py. Provider forms reuse profile/routing validation; UI session secrets remain separate.
+Tests: AppTest route/state/guard checks plus real-browser review of graph, theme,
+responsive layouts, first import/analysis journey and actual offline HTML download.
+Hidden source/AI/tree/maintenance bodies are gated. Business rules stay in src/dataforge.

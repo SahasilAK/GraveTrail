@@ -68,7 +68,7 @@ is used for session credentials. Redirects are refused.
 | V04 | Interactive graph/tree/edge/node focus, expand/collapse and column grouping/filter equivalents | `lineage graph`<br>`columns usage` | `get_graph_data`<br>`get_column_usage` | Implemented |
 | R01 | Data dictionary: declared SQL types, sampled CSV types, fallback direct references, provenance and unknowns | `dictionary list` | `get_data_dictionary` | Implemented |
 | R02 | Declared schema columns plus original DDL evidence | `assets schema` | `get_asset_schema` | Implemented |
-| R03 | Dashboard hotspots, isolated/temporary assets, cyclic groups and parsing-status counts | `workspace health` | `get_workspace_health` | Implemented |
+| R03 | Overview hotspots, isolated/temporary assets, cyclic groups and parsing-status counts | `workspace health` | `get_workspace_health` | Implemented |
 | R04 | Standalone stored-lineage evidence check (does not analyze or repair) | `lineage validate` | `validate_stored_lineage` | Implemented |
 | R05 | Dependency paths in both directions, max_paths1–500, depth, temporary view, boundaries and exports | `lineage paths`<br>`export paths` | `get_dependency_paths`<br>`export_dependency_paths` | Implemented |
 | R06 | Step-wise lineage rows/logical dependency order with evidence; no inferred runtime order | `lineage steps` | `get_lineage_steps` | Implemented |

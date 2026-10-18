@@ -66,3 +66,5 @@ Rebrand regressions: distribution script aliases, unrelated-brand/stale-version 
 Frozen-dispatch regression executes the real frozen entry script with a captured CLI and asserts gravetrail is the program name.
 
 Documentation regressions walk real Typer routes/groups/flags/positional arguments and SDK MCP tool/input/resource/prompt registrations, requiring exact checked-in reference coverage and no duplicate/stale rows. Discovery uses isolated temporary storage and makes no provider calls.
+
+`test_navigation_redesign.py` — Sources/Analysis/admin boundaries, no writes on navigation, hidden source/diagnostic laziness, persistent cross-page and related-view asset/file selection, workspace/reimport invalidation, existing-provider protocol preservation and pending-diagnostic source safety with manual assistance retained. Evidence tests additionally pin changing browser source-widget identities and hidden Tree direction persistence. Distribution canaries require packaged CSS bytes.

@@ -65,7 +65,7 @@ def test_masked_ui_credential_is_cleared_without_persistence(tmp_path, monkeypat
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     app = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
     app.switch_page('ui/pages/settings.py').run()
-    app.segmented_control[0].set_value('LLM providers').run()
+    app.switch_page("ui/pages/connections.py").run()
     next(t for t in app.text_input if t.label == 'Credential environment variable name').set_value('DATAFORGE_OLLAMA_API_KEY')
     next(t for t in app.text_input if t.label == 'Model or deployment identifier').set_value('test')
     next(b for b in app.button if b.label == 'Save provider profile').click().run()

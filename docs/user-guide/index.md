@@ -1,6 +1,6 @@
 # User guide
 
-![GraveTrail lineage explorer showing the supplied SQL project at depth 30](../assets/images/gravetrail-lineage-explorer.png)
+![GraveTrail Lineage workspace showing the supplied SQL project at depth 30](../assets/images/gravetrail-lineage-explorer.png)
 
 *Actual local application, captured with the included SQL project in an isolated home.*
 
@@ -15,9 +15,10 @@ documents individual controls and settings.
     ![Actual dashboard: 86 SQL files, 92 registered assets, 128 dependencies and no diagnostics](../assets/images/gravetrail-workspace-dashboard.png)
 
 Create or select a workspace in the sidebar. Workspaces retain their own inventory,
-analysis, settings and provider profiles. In **Lineage builder**, import a ZIP,
+analysis, settings and provider profiles. In **Sources**, import a ZIP,
 browser folder or explicitly allowed host directory, selecting only the relevant
-extensions. Inspect accepted/skipped files and diagnostics before analyzing.
+extensions. Inspect accepted/skipped files in **Inventory**, then open **Analysis → Run**.
+Successful analysis offers **Explore lineage** and **Review diagnostics**.
 
 Imports are additive: omitting a file from a later import does not delete it. Reimporting
 the same path replaces the active inventory entry while retaining originals referenced
@@ -30,9 +31,9 @@ when a language construct produces an unresolved diagnostic.
 
 ## Explore dependencies and evidence
 
-Search in **Lineage explorer**, then select the exact asset. Identically named tables
+Search in **Lineage**, then select the exact asset. Identically named tables
 in different schemas or temporary jobs are separate candidates. Upstream traces inputs;
-downstream traces consumers. Choose graph direction, traversal depth and whether to
+downstream traces consumers. Choose Graph or Tree and a graph direction. Use **Traversal options** for depth and whether to
 collapse temporary stages for the question you are answering.
 
 Trees load branches progressively. Graph/tree limits and path boundaries can restrict
@@ -51,7 +52,7 @@ establish runtime execution order.
 
 ## Inspect direct column usage
 
-In **Column usage**, choose a source asset, filter columns and group by file
+In **Columns**, choose a source asset, filter columns and group by file
 or usage context. Results describe direct references. Unqualified ambiguous columns
 remain diagnostics. A plain wildcard can expand from consistent imported SQL CREATE
 TABLE declarations as inferred references, with declaration provenance; otherwise
@@ -59,7 +60,7 @@ coverage remains unknown. No live database lookup or CSV/table-name guess fills 
 
 ## Use diagnostics and optional assistance
 
-Review warnings/errors in Builder before accepting a graph as complete. The unresolved
+Review warnings/errors in Analysis → Diagnostics before accepting a graph as complete. The unresolved
 review queue offers bounded statement context and original line selection. Previewing
 is local. A separate explicit AI request uses configured task routing, privacy gates,
 credentials and context budgets. Changed source must be previewed again.

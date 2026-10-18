@@ -10,7 +10,7 @@ def render(store, workspace):
     _saved_results(store, workspace)
     profiles = store.rows("SELECT profile_id FROM llm_profiles WHERE workspace_id=?", [workspace])
     if not profiles:
-        st.info("Configure an LLM profile in Settings to request optional assistance. Deterministic analysis needs no provider.")
+        st.info("Configure an LLM profile in Connections & AI to request optional assistance. Deterministic analysis needs no provider.")
         return
     files = [f for f in store.files(workspace) if f["extension"] != ".csv"]
     if not files:

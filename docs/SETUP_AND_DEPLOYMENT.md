@@ -241,14 +241,14 @@ See [build and release](BUILD_AND_RELEASE.md) for reusable smoke scripts and CI 
 ## 8. Initial application setup
 
 1. Create or select a workspace in the sidebar. Give it a recognizable name.
-2. Open **Lineage builder**. Upload a ZIP, choose browser folder files, or select an
+2. Open **Sources**. Upload a ZIP, choose browser folder files, or select an
    accessible **Host directory** under a startup-allowed root.
 3. Select `.sql`, `.sas` and/or `.csv`. Only selected extensions are imported for analysis.
 4. Inspect accepted/skipped files, encoding diagnostics and original content.
-5. Choose **Analyze all files** to persist the dependency model.
-6. In **Lineage explorer**, search a table, choose its exact asset identity and inspect
+5. Open **Analysis → Run** and choose **Analyze all files** to persist the dependency model.
+6. In **Lineage**, search a table, choose its exact asset identity and inspect
    upstream/downstream trees, graph paths and relationship evidence.
-7. Open **Column usage** for direct references. Unknown wildcards and dynamic names remain
+7. Open **Columns** for direct references. Unknown wildcards and dynamic names remain
    unresolved; direct references do not imply full transitive column transformation lineage.
 
 For supplied SQL/SAS projects, import either ZIP in `tests/sample_data/`, select only its
@@ -273,7 +273,7 @@ be absolute paths. Installed builds do not rely on repository test fixtures bein
 
 ## 9. LLM connection configuration
 
-Open **Settings → LLM providers**, choose a provider and save a profile with a non-secret
+Open **Connections & AI → Providers & routing**, choose a provider and save a profile with a non-secret
 endpoint, available model/deployment identifier and credential **variable name**. Profiles
 persist validated non-secret preferences, not credential values. URLs with embedded
 credentials or authentication query parameters are rejected.
@@ -306,7 +306,7 @@ Privileged local processes may inspect process memory/environment; session isola
 not an OS security boundary or a guarantee of forensic memory erasure.
 
 Use **Discover models** and **Test model connection** explicitly. Enable remote requests
-under **Security and privacy** before using a non-loopback endpoint. Full-source remote
+under **Connections & AI → Privacy** before using a non-loopback endpoint. Full-source remote
 transmission has a separate permission. Local Ollama/LM Studio endpoints may need no key.
 Network-mounted or container-host model endpoints may be classified as remote.
 
@@ -347,7 +347,7 @@ command = "D:/GraveTrail/.venv/Scripts/python.exe"
 args = ["-m", "dataforge.cli", "--home", "D:/GraveTrail/data", "--allowed-workspace", "WORKSPACE_ID", "mcp"]
 ```
 
-Settings → **Agent & Automation Access** provides configurations for the selected home
+**Automation & access** provides configurations for the selected home
 and policy. Stdio uses local process permissions. Network MCP additionally requires a
 named runtime bearer credential, explicit workspace scope and a TLS reverse proxy for
 external binding; it has no built-in OAuth/login flow. See the complete
@@ -405,7 +405,7 @@ source and retained AI content; they are sensitive and are not encrypted by Grav
 
 ## 12. Cleanup and maintenance
 
-Open **Settings → Data Management & Cleanup**. Choose scope/category, inspect real record
+Open **Data management → Cleanup & recovery**. Choose scope/category, inspect real record
 counts and file sizes, create a dry-run preview and type the displayed confirmation.
 Workspace operations require its exact name; shared cleanup uses `CLEAN SHARED DATA`;
 full application reset uses `RESET GRAVETRAIL`. A changed preview is rejected and must be
@@ -461,7 +461,7 @@ gravetrail --home /path/to/data --allow-write maintenance checkpoint
 
 Checkpoint flushes DuckDB's WAL; neither it nor logical row deletion guarantees a smaller
 database file. Displayed logical JSON row estimates are not physically reclaimable bytes.
-Rebuild lineage through Lineage builder or `lineage build --force` after a derived-data
+Rebuild lineage through Analysis or `lineage build --force` after a derived-data
 reset. Without a backup, source/workspace/application deletion may be irreversible. See
 [data management](DATA_MANAGEMENT.md) for detailed category dependencies and recovery limits.
 

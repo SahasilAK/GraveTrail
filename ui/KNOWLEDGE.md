@@ -6,8 +6,8 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 
 ## Files
-- `data_management.py` — Settings cleanup metrics, dry-run/typed confirmation, mandatory whole-home backup, rebuild, integrity/checkpoint/new-home restore and opt-in expired staging cleanup.
-- `agent_settings.py` — Workspace agent permissions/budgets/auditing, client setup examples and actual in-process MCP handler test; publishes credential-free status-polling revocation snapshots.
+- `data_management.py` — Data management cleanup metrics, dry-run/typed confirmation, mandatory whole-home backup, rebuild, integrity/checkpoint/new-home restore and opt-in expired staging cleanup.
+- `agent_settings.py` — Workspace agent permissions/budgets/auditing, client setup examples and actual in-process MCP handler test; discovers tools only when its local test panel opens. Publishes credential-free status-polling revocation snapshots.
 - `temporary_cleanup.py` — Lazy Storage panel for bounded stale staging preview, explicit selection/cleanup and retained restore; safe failure messages, per-workspace notices.
 - `__init__.py` — Package marker; no business behavior.
 - `assistance.py` — Explicit source-range/task AI action with hash-pinned preview and durable result ID; delegates validated/quarantined response presentation and inferred merge.
@@ -30,3 +30,10 @@ common.current_home validates startup-allowed session storage; open_storage_home
 opens before resetting current-session controls. Other sessions retain their stores.
 
 GraveTrail presentation: app page/sidebar title and agent examples use the new name. Reset/restore forms show RESET GRAVETRAIL / RESTORE GRAVETRAIL; services retain legacy exact phrases for scripted compatibility. Storage identifiers are unchanged.
+
+- `presentation.py` — apply_style/eyebrow/empty_state/section and sync_context: theme-derived chrome, session-persistent local selectors, workspace/source revision invalidation of transient evidence and cleanup plans.
+- `style.css` — App-owned key classes and semantic controls; responsive type/spacing, immediate focus/press feedback, reduced motion/transparency and contrast alternatives. Packaged by hatch_assets.py.
+- `workspace_settings.py` — Extracted render_parsing/render_resources/render_appearance/render_privacy/render_storage forms; validators and service behavior unchanged. Forms include workspace identity; advanced mappings stay secondary.
+- `analysis_sections.py` — Lazy diagnostics with pending-source gates and exact version pinning, optional preview/request/merge panels, recent runs/comparison.
+
+Asset/query/direction/depth/collapse and analysis file selections persist via native session state. A shared workspace-scoped asset bridges Lineage, Columns and Impact. Source control keys include evidence scope to avoid stale browser labels; file content/AI responses never enter navigation state. Graph source ZIPs and original downloads generate on click. Tree direction has a durable non-widget copy while its tabs are hidden. Provider protocol keys include the selected profile.

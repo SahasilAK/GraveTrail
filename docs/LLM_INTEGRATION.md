@@ -1,6 +1,6 @@
 # LLM integration
 
-Builder's unresolved review queue derives at most 100 current SQL/SAS warning/error items.
+Analysis → Diagnostics → Unresolved review queue derives at most 100 current SQL/SAS warning/error items.
 It excludes pending/reimported sources, informational and CSV diagnostics. Suggested context
 uses a containing deterministic statement or at most 40 nearby lines; users can adjust the
 exact range. Request buttons are tied to the displayed content hash, which is checked again
@@ -9,7 +9,7 @@ offline. Every request is explicit, sequential and subject to existing privacy/c
 Validated claims require a separate inferred merge; diagnostics are never automatically
 declared resolved. Queue request/merge tests use synthetic HTTP payloads, not a new live pass.
 
-The application is fully usable without an LLM. Settings → LLM providers stores multiple
+The application is fully usable without an LLM. Connections & AI → Providers & routing stores multiple
 profiles, task overrides, same-host ordered fallbacks and environment variable names for keys.
 For a saved profile, enter a masked **Runtime credential** and choose **Connect for this
 session**, or provision the named variable before startup. A session's `RuntimeConnections`
@@ -32,7 +32,7 @@ and [setup and deployment](SETUP_AND_DEPLOYMENT.md#9-llm-connection-configuratio
 default provider variable names. The runtime manager supports expiration for callers that
 register a lifetime; the current UI connects for the session without an expiration control.
 
-External requests are disabled until enabled in Security and privacy. Loopback endpoints are
+External requests are disabled until enabled in Connections & AI → Privacy. Loopback endpoints are
 permitted for offline use; a local gateway may itself forward requests, so configure it carefully.
 
 Protocols: OpenAI and compatible/LM Studio/OmniRoute/OpenRouter use Chat Completions;
@@ -42,7 +42,7 @@ Discovery is supported where providers expose listing endpoints. Azure deploymen
 requires a separate management API, so enter deployment names manually. Configure optional
 temperature and JSON mode according to the model's capabilities. No automatic model guessing.
 
-Builder → Optional AI assistance sends an explicit source range only. The full-file privacy
+Analysis → Diagnostics → Optional AI assistance sends an explicit source range only. The full-file privacy
 gate applies to remote providers; source and total profile budgets are enforced. Likely secrets
 are redacted by default. A redacted quote may fail exact-evidence validation, deliberately.
 No source is sent automatically during parsing. Imported instructions remain untrusted data.
@@ -101,20 +101,20 @@ source grounding checks still apply. Provider HTTP envelopes must be JSON object
 
 ## Task-specific advisory results
 
-Column usage v2 returns cited direct-column suggestions, validated against complete original
+Columns v2 returns cited direct-column suggestions, validated against complete original
 parser operations and explicit unambiguous usage. Suggestions remain AI-inferred and do not
 modify deterministic column reports. Code explanation v2 returns individually cited advisory
 items; exact citations and listed assets are checked, not the semantic truth of model prose.
 Neither task may merge lineage, and historical advisory merges are excluded from reanalysis.
-Builder → Optional AI assistance → Saved AI result reopens retained results without an active
+Analysis → Diagnostics → Optional AI assistance → Saved AI result reopens retained results without an active
 provider profile. Changed-source results display a warning and retain their original quote/hash.
 Advisory JSON downloads include provenance. The existing retention policy applies.
 
 ## Resource controls
 
-Settings → Performance configures1–4 concurrent requests per workspace (also maximum8 across
+Workspace settings → Resources configures1–4 concurrent requests per workspace (also maximum8 across
 this app process) and statement chunk size. Assistance, model connection tests and discovery
-share admission. Busy calls refuse rather than queue. Builder's chunk preview is offline:
+share admission. Busy calls refuse rather than queue. The assistance chunk preview is offline:
 choose one complete statement/SAS block chunk and explicitly request it. No next chunk runs
 automatically. Unknown or interactive SAS procedures retain context through QUIT; oversized
 units require a larger budget or different selection. Source/profile budgets still apply.

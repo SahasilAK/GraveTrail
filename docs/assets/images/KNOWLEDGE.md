@@ -1,7 +1,12 @@
 # docs/assets/images/
 
-`mark.svg` is the original branching logo/favicon; `banner.svg` is the README hero with animated data-flow dashes and a reduced-motion fallback. `gravetrail-lineage-explorer.png`, `gravetrail-workspace-dashboard.png`, `gravetrail-source-evidence.png` are actual browser captures from an isolated SQL fixture home (not generated mockups). Review/redact before replacing.
+- `mark.svg` — Existing branching product logo/favicon.
+- `banner.svg` — README vector hero with existing data-flow motion/reduced-motion fallback.
+- `gravetrail-workspace-dashboard.png` — Actual redesigned Overview, isolated SQL fixture home: 86 scripts, 92 registered assets, 128 dependencies, no diagnostics.
+- `gravetrail-lineage-explorer.png` — Actual redesigned Lineage/Graph with pub.all_kpis and traversal depth30; focused ancestor graph, not the whole workspace inventory.
+- `gravetrail-source-evidence.png` — Actual original analyzed SQL selector, version metadata and numbered statement, with the new grouped navigation.
 
-GraveTrail rebrand: both SVG labels/hero and all three actual SQL-fixture browser screenshots refreshed. Dashboard has 86 scripts/92 assets/128 edges/0 diagnostics; explorer selects pub.all_kpis at depth30.
-
-All three screenshot filenames carry the gravetrail- prefix; README/user-guide references and the MkDocs public asset allowlist must stay synchronized. Pixels are unchanged real GraveTrail captures; original fixture paths retain their original names.
+These are browser captures, not generated mockups. Preserve fixture provenance and avoid
+private home data. README/user-guide references and mkdocs.yml public asset allowlist stay
+synchronized. Before/after and responsive captures live locally under
+.dataforge/verification/ui-redesign/screenshots/ and are excluded from distribution.

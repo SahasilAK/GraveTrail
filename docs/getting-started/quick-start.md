@@ -24,7 +24,7 @@ For pip, Docker and executable alternatives, use the
 
 ## 2. Import one sample project
 
-Create a workspace in the sidebar, then open **Lineage builder**. Choose a ZIP from
+Create a workspace in the sidebar, then open **Sources**. Choose a ZIP from
 the checkout's
 [sample data directory](https://github.com/SahasilAK/GraveTrail/tree/main/tests/sample_data):
 
@@ -40,9 +40,9 @@ tables across seven ETL layers. The SAS project also has 16 temporary WORK datas
 
 ## 3. Generate and explore lineage
 
-1. Run **Analyze all files** and review the reported diagnostics.
-2. Open **Lineage explorer**, search for `pub.all_kpis`, and select that exact asset.
-3. Choose upstream exploration and set traversal depth to **30**. If the visible
+1. Open **Analysis → Run**, then choose **Analyze all files** and review the reported diagnostics.
+2. Open **Lineage**, search for `pub.all_kpis`, and select that exact asset.
+3. Choose upstream exploration and set **Traversal options → Traversal depth** to **30**. If the visible
    graph or tree is bounded, increase its node limit or inspect the bounded exports.
 4. Trace the published result through all seven layers to all **16 source tables**.
 5. Select a relationship to inspect its statement and original line range. For SAS,
@@ -59,7 +59,7 @@ execution order, and a clean fixture result does not establish universal parser 
 ## 4. Inspect and export
 
 Use the source panel to compare a relationship with the complete original code.
-Open **Column usage** for direct column references; ambiguous references
+Open **Columns** for direct column references; ambiguous references
 and unexpanded wildcards retain their uncertainty. Export CSV/JSON reports, an
 offline interactive HTML graph or the relevant source ZIP from the available controls.
 Source exports can contain private code, so review them before sharing.

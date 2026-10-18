@@ -55,7 +55,10 @@ def render(store, workspace):
             '--transport streamable-http --host 127.0.0.1 --port 8765', language="bash")
     st.caption("Endpoint: http://127.0.0.1:8765/mcp. External binding also requires --public-url https://your-host/mcp behind a TLS reverse proxy. Pre-provisioned bearer credentials are supported; OAuth login/discovery is not implemented. HTTP access logging is disabled.")
 
-    with st.expander("Available tools and local connection test"):
+    panel = st.expander("Available tools and local connection test", on_change="rerun", key="agent_tools_panel")
+    if not panel.open:
+        return
+    with panel:
         service = AgentService(store)
         try:
             server = create_server(service)

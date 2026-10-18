@@ -5,7 +5,7 @@
 - **Import skipped a file:** inspect import diagnostics. Check chosen extensions, paths,
   encoding, binary content, file size and ZIP ratio. Rename unsafe archive members at their source.
 - **No edges:** analysis may have only source/target assets, SELECT-only reads, unsupported
-  constructs or unresolved macros. Read Builder diagnostics and inspect source. Never assume
+  constructs or unresolved macros. Read Analysis → Diagnostics and inspect source. Never assume
   a filename similar to a table creates a relationship.
 - **Partial parse:** choose the correct SQL dialect/folder mapping and review unsupported
   SAS constructs. The rest of the workspace still works. Rebuild after parser/config changes.

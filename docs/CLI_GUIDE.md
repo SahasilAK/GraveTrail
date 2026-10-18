@@ -246,7 +246,7 @@ create workspaces. `--allowed-root PATH` is repeatable; alternatively set
 granted by the CLI. No arbitrary shell/SQL execution or secret discovery is exposed.
 Provider configuration, AI requests and local cleanup require the independent grants below.
 
-Settings → Agent & Automation Access controls workspace access, write permission,
+Automation & access controls workspace access, write permission,
 source retrieval, default detail, response cap and optional read auditing. Mutation
 events are always audited in `HOME/agent/audit.jsonl`, rotated at approximately 1 MB
 with one previous file retained. Records omit arguments, source and credentials.

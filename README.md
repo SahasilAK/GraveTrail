@@ -106,12 +106,12 @@ variables, and data homes remain supported; see
 
 ## Try a real project
 
-1. Open **Lineage builder** and upload either project ZIP from [`tests/sample_data/`](tests/sample_data/).
+1. Open **Sources** and upload either project ZIP from [`tests/sample_data/`](tests/sample_data/).
 2. Select **only `.sql`** for the SQL ZIP or **only `.sas`** for the SAS ZIP, then import.
-3. Select **Analyze all files**. No provider configuration is needed.
-4. In **Lineage explorer**, search `pub.all_kpis`, select the exact asset, and explore
-   upstream with depth **30**. Trace seven ETL layers back to all **16 source tables**.
-5. Select a graph edge to inspect source evidence. Explore **Column usage** or download
+3. Open **Analysis → Run** and select **Analyze all files**. No provider configuration is needed.
+4. In **Lineage**, search `pub.all_kpis`, select the exact asset, and explore
+   upstream with **Traversal options → Traversal depth** set to **30**. Trace seven ETL layers back to all **16 source tables**.
+5. Select a graph edge to inspect source evidence. Explore **Columns** or download
    a CSV/JSON report, original source bundle, or offline interactive HTML graph.
 
 The fixture expectations are 85 persistent tables and 128 logical lineage edges; SAS

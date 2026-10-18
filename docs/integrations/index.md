@@ -36,7 +36,7 @@ are independent. An agent cannot grant itself broader access.
 
 ## Configure AI deliberately
 
-Use **Settings → LLM providers** to create profiles and assign tasks. Use masked
+Use **Connections & AI → Providers & routing** to create profiles and assign tasks. Use masked
 session credentials or named read-only launch variables. Profile persistence stores
 references, never secret values. Clear session credentials when finished.
 

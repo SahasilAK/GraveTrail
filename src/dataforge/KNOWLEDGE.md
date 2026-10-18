@@ -64,3 +64,5 @@ mark cycle boundaries incomplete. General cleanup cannot opt out of its full-hom
 GraveTrail compatibility: internal dataforge imports and storage identifiers stay stable. build_python selects only current gravetrail/version artifacts, excluding stale previous-brand/version wheels. Native directory/executable/archive and Docker image names use gravetrail; launcher retains existing platform homes. Exports use GraveTrail titles. Application reset accepts new/legacy exact phrases without changing backup or preview guards.
 
 Whole-home restore staging uses a gravetrail-restore- temporary prefix; persistent backup format IDs and recognized database filenames are unchanged.
+
+Graph presentation in exports.py uses theme-aware surfaces, rounded node materials, visible focus and immediate press feedback; Enter/Space selects evidence and pointer cancellation releases panning. Live and offline graph still share the same rendering code and escaped evidence.

@@ -36,7 +36,8 @@ def test_ui_switches_independent_storage_and_preserves_other_sessions(tmp_path, 
     try:
         Importer(store, original_workspace).files([("keep.sql", b"select id from raw.a;")], {".sql"})
         app.switch_page("ui/pages/settings.py").run()
-        app.segmented_control[0].set_value("Storage and workspaces").run()
+        app.switch_page("ui/pages/management.py").run()
+        app.segmented_control[0].set_value("Storage & transfers").run()
         next(s for s in app.selectbox if s.label == "Storage location").set_value(str(second.resolve())).run()
         next(b for b in app.button if b.label == "Open storage location").click().run()
         assert not app.exception
@@ -45,7 +46,8 @@ def test_ui_switches_independent_storage_and_preserves_other_sessions(tmp_path, 
         other_session.run()
         assert other_session.session_state["workspace"] == original_workspace
         assert len(store.files(original_workspace)) == 1
-        app.segmented_control[0].set_value("Storage and workspaces").run()
+        app.switch_page("ui/pages/management.py").run()
+        app.segmented_control[0].set_value("Storage & transfers").run()
         next(s for s in app.selectbox if s.label == "Storage location").set_value(str(first.resolve())).run()
         next(b for b in app.button if b.label == "Open storage location").click().run()
         assert not app.exception and app.session_state["workspace"] == original_workspace
@@ -64,7 +66,8 @@ def test_ui_failed_storage_open_retains_current_workspace(tmp_path, monkeypatch)
     app = AppTest.from_file(Path("app.py").resolve()).run()
     original = app.session_state["workspace"]
     app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Storage and workspaces").run()
+    app.switch_page("ui/pages/management.py").run()
+    app.segmented_control[0].set_value("Storage & transfers").run()
     next(s for s in app.selectbox if s.label == "Storage location").set_value(str(invalid.resolve())).run()
     next(b for b in app.button if b.label == "Open storage location").click().run()
     assert not app.exception and app.error

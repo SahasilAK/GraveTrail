@@ -41,7 +41,7 @@ CTEs and subqueries do not become persistent tables. Inner base-table column use
 outer CTE/derived-column uses are not counted again as transitive base references.
 Qualified aliases bind within scopes, including supported correlated parents. Ambiguous
 unqualified references are diagnosed. Plain wildcards expand only from consistent imported
-typed SQL DDL declarations when enabled in Parsing and lineage settings. Expanded references
+typed SQL DDL declarations when enabled in Workspace settings → Parsing. Expanded references
 are labeled inferred and retain their query evidence and schema declaration provenance.
 Unknown or modified wildcards remain unresolved instead of fabricating names.
 
@@ -66,7 +66,7 @@ distinguishes DDL-declared types from sampled CSV types and incomplete direct re
 Current exclusions: database-catalog/schema discovery, general stored procedures, runtime-built SQL,
 dynamic templating,
 general schema evolution, arbitrary table-valued functions and runtime temporary-session
-discovery. Supplied Settings job/session IDs isolate temporary assets; persistent tables stay
+discovery. Supplied Workspace settings → Parsing job/session IDs isolate temporary assets; persistent tables stay
 workspace-global. Unspecified inputs use the legacy workspace job. Same-job mixed temporary/
 persistent reads are unresolved, because execution order is unavailable. Repeated writes expose possible static
 dependencies; static code alone does not determine which write executed last.

@@ -31,17 +31,24 @@ def path_rows(report):
 
 
 GRAPH_CSS = """
-.df-graph{font:14px system-ui,sans-serif;color:var(--st-text-color,#17324d);background:var(--st-background-color,#fff)}
-.df-graph .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 0}
-.df-graph button,.df-graph input{font:inherit;padding:7px 12px;border:1px solid #99afc5;border-radius:5px;background:transparent;color:inherit}
-.df-graph button{cursor:pointer}.df-graph svg{width:100%;height:420px;border:1px solid #91a5b94d;border-radius:8px;touch-action:none;background:var(--st-secondary-background-color,#f5f8fc)}
-.df-graph .node{cursor:pointer}.df-graph .node:focus rect{stroke:#cc7a00;stroke-width:4}
+.df-graph{font:14px/1.5 system-ui,sans-serif;color:var(--st-text-color,#23334a);background:var(--st-background-color,#fff);padding:12px;box-sizing:border-box;
+--node-neutral:#edf0f4;--node-unresolved:#fff0d4;--node-temporary:#ece7f7;--node-source:#e0efeb;--node-table:#e3ecfb;--node-text:#23334a;--node-border:#8d9cb1}
+.df-graph .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 0 12px}
+.df-graph button,.df-graph input{font:inherit;min-height:36px;padding:6px 12px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:7px;background:transparent;color:inherit;box-sizing:border-box;max-width:100%}
+.df-graph button{cursor:pointer;touch-action:manipulation}.df-graph button:active{transform:scale(.97)}
+.df-graph :is(button,input):focus-visible{outline:2px solid var(--st-primary-color,#2869c7);outline-offset:3px}
+.df-graph svg{display:block;width:100%;height:420px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;background:var(--st-secondary-background-color,#f5f7fa)}
+.df-graph .node{cursor:pointer}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
 .df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;fill:none}
 .df-graph .chosen{stroke:#d67d0d!important;stroke-width:4!important}
 .df-graph .edge.chosen{stroke-width:var(--df-selected-edge-width,4)!important}
-.df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font-size:13px;line-height:1.6}
+.df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:13px/1.7 ui-monospace,Consolas,monospace;padding:12px;border-radius:8px;background:var(--st-secondary-background-color,#f5f7fa)}
 .df-graph .hint{font-size:12px;color:inherit;opacity:.8}
+@media(prefers-color-scheme:dark){.df-graph{--node-neutral:#303b48;--node-unresolved:#4c3823;--node-temporary:#3b3354;--node-source:#203f3d;--node-table:#273d58;--node-text:#edf2f9;--node-border:#7489a3}}
+@media(prefers-reduced-motion:reduce){.df-graph button:active{transform:none}}
+@media(prefers-contrast:more){.df-graph .hint{opacity:1}.df-graph button,.df-graph input{border-color:currentColor}}
 """
+
 
 GRAPH_JS = r"""
 function mountGraph(root, data, notify) {
@@ -72,19 +79,19 @@ function mountGraph(root, data, notify) {
    const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':nodeLabel(a)+' to '+nodeLabel(b)},stage);
    p.style.strokeWidth=edgeWidth;
    const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
-   p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter')show()};
+   p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show()}};
  });
  data.nodes.forEach(n=>{
    const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':nodeLabel(n)},stage);
-   const color=appearance.graph_palette==='neutral'?'#e8edf1':n.kind==='unresolved'?'#fff1d6':n.temporary?'#e5e1f8':n.source?'#d6eeed':'#dfebfc';
-   make('rect',{width:n.width,height:48,rx:6,fill:color,stroke:'#6c8bab','data-node':n.asset_id},g);
+   const color=appearance.graph_palette==='neutral'?'var(--node-neutral)':n.kind==='unresolved'?'var(--node-unresolved)':n.temporary?'var(--node-temporary)':n.source?'var(--node-source)':'var(--node-table)';
+   make('rect',{width:n.width,height:48,rx:9,fill:color,stroke:'var(--node-border)','data-node':n.asset_id},g);
    if(labels!=='hidden'){
-     const text=make('text',{x:12,y:29,fill:'#17324d','font-size':13},g);
+     const text=make('text',{x:12,y:29,fill:'var(--node-text)','font-size':13},g);
      const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>27?label.slice(0,26)+'…':label;
      if(labels==='full'&&text.getComputedTextLength()>n.width-24){text.setAttribute('textLength',n.width-24);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
    }
    make('title',{},g).textContent=nodeLabel(n);
-   g.onclick=()=>inspectNode(n);g.onkeydown=e=>{if(e.key==='Enter')inspectNode(n)};
+   g.onclick=()=>inspectNode(n);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inspectNode(n)}};
  });
  root.querySelector('.fit').onclick=()=>{box=[0,0,width,height];view()};
  const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
@@ -93,7 +100,7 @@ function mountGraph(root, data, notify) {
  let drag=null;
  svg.onpointerdown=e=>{if(e.target===svg){drag=[e.clientX,e.clientY,...box];svg.setPointerCapture(e.pointerId)}};
  svg.onpointermove=e=>{if(drag){box=[drag[2]-(e.clientX-drag[0])*drag[4]/svg.clientWidth,drag[3]-(e.clientY-drag[1])*drag[5]/svg.clientHeight,drag[4],drag[5]];view()}};
- svg.onpointerup=()=>drag=null;
+ svg.onpointerup=()=>drag=null;svg.onpointercancel=()=>drag=null;
  root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
 }
 """

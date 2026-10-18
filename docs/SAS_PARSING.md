@@ -16,7 +16,7 @@ These rules customize only the configured PROC SQL dialect instance; ordinary SQ
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
 Parser cache version 9 invalidates earlier results on the next analysis. Run **Analyze all files**
-in Lineage builder for previously analyzed workspaces; source bytes and original statement/line
+in Analysis for previously analyzed workspaces; source bytes and original statement/line
 evidence remain intact. Existing packaged executables/images need rebuilding for version 9.
 
 ## Static macro-variable expressions

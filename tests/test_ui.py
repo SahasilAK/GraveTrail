@@ -8,7 +8,7 @@ def test_empty_dashboard_and_builder(tmp_path, monkeypatch):
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     assert not app.exception
-    assert app.title[0].value == "Workspace overview"
+    assert app.title[0].value == "Overview"
     assert any("GraveTrail" in header.value for header in app.sidebar.header)
     app.switch_page("ui/pages/builder.py").run()
     assert not app.exception
@@ -26,7 +26,7 @@ def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, 
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     workspace = app.session_state["workspace"]
     app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Visualization").run()
+    app.segmented_control[0].set_value("Appearance").run()
     palette = next(c for c in app.selectbox if c.label == "Theme preset")
     assert palette.options == list(PRESETS)
     assert len(palette.options) == 14
@@ -75,7 +75,10 @@ def test_provider_profile_form_and_settings_sections(tmp_path, monkeypatch):
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/settings.py").run()
-    for section in ["Storage and workspaces", "Performance", "Visualization", "Security and privacy", "LLM providers"]:
+    for route, section in [("management", "Storage & transfers"), ("settings", "Resources"),
+                           ("settings", "Appearance"), ("connections", "Privacy"),
+                           ("connections", "Providers & routing")]:
+        app.switch_page(f"ui/pages/{route}.py").run()
         app.segmented_control[0].set_value(section).run()
         assert not app.exception
     for field in app.text_input:
@@ -93,7 +96,8 @@ def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     identity = app.session_state["workspace"]
     app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Storage and workspaces").run()
+    app.switch_page("ui/pages/management.py").run()
+    app.segmented_control[0].set_value("Storage & transfers").run()
     next(f for f in app.text_input if f.label == "Active workspace name").set_value("Renamed workspace")
     next(f for f in app.text_area if f.label == "Workspace description").set_value("Retained description")
     next(b for b in app.button if b.label == "Save workspace details").click().run()
@@ -134,7 +138,7 @@ def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp
     app.session_state["column_schema_panel"] = True
     app.run()
     assert not app.exception
-    assert "schema.sql" in app.selectbox(key="schema_source_file").options
+    assert "schema.sql" in next(s for s in app.selectbox if s.key and s.key.startswith("schema_source_choice_")).options
     app.switch_page("ui/pages/tools.py").run()
     app.segmented_control[0].set_value("Data dictionary").run()
     next(f for f in app.text_input if f.label == "Filter dictionary").set_value("raw.a").run()
@@ -157,7 +161,9 @@ def test_history_archive_and_restore_through_settings(tmp_path, monkeypatch):
     store.close()
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Storage and workspaces").run()
+    app.switch_page("ui/pages/management.py").run()
+    app.segmented_control[0].set_value("Storage & transfers").run()
+    app.segmented_control[0].set_value("History & staging").run()
     app.session_state["history_maintenance"] = True
     app.run()
     assert not app.exception
@@ -187,7 +193,7 @@ def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(t
     store.close()
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Visualization").run()
+    app.segmented_control[0].set_value("Appearance").run()
     next(n for n in app.selectbox if n.label == "Default graph direction").set_value("downstream")
     next(n for n in app.checkbox if n.label == "Collapse temporary steps by default").uncheck()
     next(n for n in app.selectbox if n.label == "Graph labels").set_value("hidden")
@@ -223,7 +229,7 @@ def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(t
     choice.select(choice.options[0]).run()
     assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "upstream"
     assert next(n for n in app.toggle if n.label == "Collapse temporary steps").value is True
-    assert app.selectbox(key="lineage_source_file").value in {f["file_id"] for f in saved.files(other)}
+    assert next(s for s in app.selectbox if s.label == "Source file").value in {f["file_id"] for f in saved.files(other)}
     assert len(app.code) == 2 and all(c.proto.show_line_numbers for c in app.code)
 
 
@@ -259,7 +265,8 @@ def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path, 
     monkeypatch.setattr("ui.unresolved_review.request_review", lambda *args, **kwargs:
         request_review(*args, **kwargs, transport=httpx.MockTransport(handler)))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    app.switch_page("ui/pages/builder.py").run()
+    app.switch_page("ui/pages/analysis.py").run()
+    app.segmented_control[0].set_value("Diagnostics").run()
     app.session_state["unresolved_review_panel"] = True
     app.run()
     assert not app.exception and not calls

@@ -7,13 +7,18 @@ maxUploadSize = 100
 gatherUsageStats = false
 
 [theme]
-font = "sans-serif"
-baseFontSize = 15
-headingFontSizes = ["2rem", "1.5rem", "1.2rem", "1rem", "0.9rem", "0.85rem"]
-baseRadius = "0.45rem"
+font = "system-ui"
+baseFontSize = 16
+headingFontSizes = ["2.5rem", "1.65rem", "1.2rem", "1rem", "0.9rem", "0.85rem"]
+baseRadius = "0.75rem"
+buttonRadius = "0.55rem"
+headingFontWeights = [650, 600, 600, 600, 600, 600]
+metricValueFontSize = "2rem"
+metricValueFontWeight = 600
 showSidebarBorder = true
 showWidgetBorder = true
-paddingTop = "1.5rem"
+paddingTop = "2rem"
+paddingBottom = "3rem"
 base = "dark"
 primaryColor = "#2869c7"
 backgroundColor = "#15202e"

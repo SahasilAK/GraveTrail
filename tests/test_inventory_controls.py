@@ -50,7 +50,7 @@ def test_builder_analysis_refreshes_inventory_summary_immediately(tmp_path, monk
         next(n for n in app.number_input if n.label == "CSV sample rows").set_value(1)
         next(b for b in app.button if b.label == "Save parsing settings").click().run()
         assert store.setting(w, "csv_sample_rows") == 1
-        app.switch_page("ui/pages/builder.py").run()
+        app.switch_page("ui/pages/analysis.py").run()
         next(b for b in app.button if b.label == "Analyze all files").click().run()
         assert not app.exception and any("Analysis complete" in s.value for s in app.success)
         metrics = {m.label: m.value for m in app.metric}

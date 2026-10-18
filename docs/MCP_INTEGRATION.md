@@ -14,7 +14,7 @@ gravetrail --home ./automation-data --allowed-workspace WORKSPACE_ID mcp
 Launch from the installed environment, or use an absolute Python executable and
 `-m dataforge.cli`. Stdio writes MCP JSON-RPC only to stdout; OS/process permissions
 are its security boundary. Do not open the same home in another Streamlit/CLI/MCP
-process. Settings supplies ready-to-copy configurations using actual absolute paths.
+process. Automation & access supplies ready-to-copy configurations using actual absolute paths.
 
 Codex `config.toml` example (replace paths and ID):
 
