@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from dataforge.asset_identity import AssetResolver, asset_label, source_job
 from dataforge.configuration import ParsingSettings
@@ -17,6 +18,93 @@ from dataforge.schemas import collect_schemas
 
 PARSER_VERSION = "9"
 log = logging.getLogger(__name__)
+
+
+def analysis_is_current(store, workspace):
+    files = store.files(workspace)
+    runs = store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+    config = ParsingSettings.model_validate({key: store.setting(workspace, key, default)
+        for key, default in ParsingSettings().model_dump().items()}).model_dump()
+    return bool(runs) and all(f['parsing_status'] != 'pending' for f in files) and (
+        json.loads(runs[0]['snapshot'])['files'] == {f['relative_path']: f['content_hash'] for f in files}
+        and json.loads(runs[0]['configuration']) == config)
+
+
+def export_lineage_excel(store, workspace, asset, *, direction='upstream', max_paths=50, max_depth=15,
+                         max_relationships=2000, collapse_temporary=None, include_evidence=False,
+                         include_source_text=False):
+    """Snapshot committed facts/settings, then build a bounded offline workbook; callers authorize disclosure."""
+    from dataforge.excel_exports import MAX_SECONDS, MAX_TEXT_BYTES, lineage_xlsx
+    from dataforge.graph import LineageGraph
+
+    started = time.monotonic()
+    if direction not in {'upstream', 'downstream'}:
+        raise ValueError('Use upstream/downstream for an Excel path export')
+    if any(type(value) is not int or not 1 <= value <= maximum for value, maximum in [
+        (max_paths, 500), (max_depth, 30), (max_relationships, 20000)]):
+        raise ValueError('Use 1–500 paths, 1–30 depth and 1–20000 relationships')
+    if any(type(value) is not bool for value in [include_evidence, include_source_text]) or (
+        collapse_temporary is not None and type(collapse_temporary) is not bool
+    ):
+        raise ValueError('Evidence, source text and temporary-stage options must be booleans')
+    if include_source_text and not include_evidence:
+        raise ValueError('Source text requires the Evidence sheet')
+    with store.transaction():
+        workspace_rows = store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [workspace])
+        if not workspace_rows:
+            raise ValueError('Select an existing workspace')
+        counts = store.rows('SELECT count(*) AS n, coalesce(sum(length(name)+length(metadata)),0) AS text_size FROM assets WHERE workspace_id=?', [workspace])[0]
+        edge_count = store.rows('SELECT count(*) AS n FROM edges WHERE workspace_id=?', [workspace])[0]['n']
+        if counts['n'] > 20000 or edge_count > 100000:
+            raise ValueError('Excel graph exceeds 20000 assets or 100000 evidence edges; narrow workspace')
+        text_size = store.rows("""SELECT coalesce(sum(length(f.relative_path) + ? * length(s.code)),0) AS n
+            FROM edges e JOIN statements s ON e.statement_id=s.statement_id
+            JOIN source_files f ON e.file_id=f.file_id WHERE e.workspace_id=?""",
+            [int(include_source_text), workspace])[0]['n']
+        # UTF-8 can take four bytes per character. Bound input before loading text.
+        if (text_size + counts['text_size']) * 4 > MAX_TEXT_BYTES:
+            raise ValueError('Excel graph text exceeds input budget; exclude source text or narrow workspace')
+        assets = store.rows('SELECT * FROM assets WHERE workspace_id=? ORDER BY asset_id', [workspace])
+        if not any(a['asset_id'] == asset for a in assets):
+            raise ValueError('Select an existing exact asset ID')
+        code = 's.code' if include_source_text else "'' AS code"
+        edges = store.rows(f"""SELECT e.*,s.start_line,s.end_line,{code},s.content_hash AS source_hash,f.relative_path
+            FROM edges e JOIN statements s ON e.statement_id=s.statement_id
+            JOIN source_files f ON e.file_id=f.file_id WHERE e.workspace_id=? ORDER BY e.edge_id""", [workspace])
+        confidence = store.setting(workspace, 'min_lineage_confidence', 0.)
+        inferred = store.setting(workspace, 'include_inferred', True)
+        collapse = store.setting(workspace, 'collapse_temporary', False) if collapse_temporary is None else collapse_temporary
+        revisions = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+        current = analysis_is_current(store, workspace)
+        diagnostic_count = store.rows("SELECT count(*) AS n FROM diagnostics WHERE workspace_id=? AND severity IN ('warning','error')", [workspace])[0]['n']
+        scope = {'workspace': workspace_rows[0]['name'], 'workspace_id': workspace,
+            'revision': revisions[0]['run_id'] if revisions else 'unanalysed', 'analysis_current': current,
+            'export_time': datetime.now(timezone.utc).isoformat(), 'max_relationships': max_relationships,
+            'temporary_policy': 'collapsed' if collapse else 'included',
+            'filters': f'minimum confidence {confidence:g}; inferred {"included" if inferred else "excluded"}',
+            'warnings': []}
+        if not current:
+            scope['warnings'].append('Analysis is not current; pending imports/settings changes are not represented.')
+        if diagnostic_count:
+            scope['warnings'].append(f'{diagnostic_count} stored analysis warnings/errors; unsupported coverage may remain.')
+    graph = LineageGraph(assets, edges, confidence, inferred)
+    if collapse:
+        graph = graph.simplified(keep=[asset], preserve_paths=True, evidence_limit=20000)
+    report = graph.path_report(asset, direction, max_paths, max_depth,
+        max_relationships=max_relationships, max_evidence=20000, include_code=include_source_text)
+    if time.monotonic() - started > MAX_SECONDS:
+        raise ValueError('Excel export time limit exceeded; narrow the selection and retry')
+    data, metadata = lineage_xlsx(report, graph.nodes, scope, include_evidence=include_evidence,
+                                 include_source_text=include_source_text)
+    if time.monotonic() - started > MAX_SECONDS:
+        raise ValueError('Excel export time limit exceeded; narrow the selection and retry')
+    versions = {}
+    for path in report['paths']:
+        for step in path['steps']:
+            for evidence in step['evidence']:
+                versions.setdefault(evidence['file_id'], set()).add(evidence['source_hash'])
+    metadata['source_versions'] = {fid: sorted(hashes) for fid, hashes in versions.items()}
+    return data, metadata
 
 
 def analyze(store, workspace: str, file_ids: list[str] | None = None, force: bool = False,

@@ -360,9 +360,12 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call('artifact_create', workspace_id, options, kind='graph', format=format, selection={'asset': asset, 'direction': direction})
 
     @server.tool(annotations=write)
-    async def export_dependency_paths(workspace_id: str, asset: str, format: Literal['json', 'csv'] = 'json', direction: str = 'upstream', max_paths: int = 50, options: QueryOptions | None = None) -> CallToolResult:
-        """Create exact-evidence dependency path artifact with boundary/completeness flags."""
-        return await call('artifact_create', workspace_id, options, kind='paths', format=format, selection={'asset': asset, 'direction': direction, 'max_paths': max_paths})
+    async def export_dependency_paths(workspace_id: str, asset: str, format: Literal['json', 'csv', 'xlsx'] = 'json', direction: str = 'upstream', max_paths: int = 50, options: QueryOptions | None = None,
+                                      include_evidence: bool = False, include_source_text: bool = False) -> CallToolResult:
+        """Create a bounded path artifact. XLSX has optional evidence and explicit raw source text; source permission required. Retrieve bytes with get_export."""
+        return await call('artifact_create', workspace_id, options, kind='paths', format=format, selection={'asset': asset,
+            'direction': direction, 'max_paths': max_paths, 'include_evidence': include_evidence,
+            'include_source_text': include_source_text})
 
     @server.tool(annotations=write)
     async def export_source_bundle(workspace_id: str, selection: dict, options: QueryOptions | None = None) -> CallToolResult:

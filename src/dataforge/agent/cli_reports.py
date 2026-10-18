@@ -75,8 +75,12 @@ def register(app, workspace_app, assets_app, lineage_app, source_app, exports_ap
         invoke(ctx, 'artifact_create', workspace, kind='graph', format=format, selection={'asset': asset, 'direction': direction})
 
     @exports_app.command('paths')
-    def path_export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = 'json', direction: str = 'upstream', max_paths: int = 50):
-        invoke(ctx, 'artifact_create', workspace, kind='paths', format=format, selection={'asset': asset, 'direction': direction, 'max_paths': max_paths})
+    def path_export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = 'json', direction: str = 'upstream', max_paths: int = 50,
+                    include_evidence: bool = False, include_source_text: bool = False):
+        """Export bounded paths as JSON, CSV or XLSX. Evidence/source options apply to XLSX."""
+        invoke(ctx, 'artifact_create', workspace, kind='paths', format=format, selection={'asset': asset,
+            'direction': direction, 'max_paths': max_paths, 'include_evidence': include_evidence,
+            'include_source_text': include_source_text})
 
     @exports_app.command('sources')
     def source_export(ctx: typer.Context, workspace: Workspace, asset: str = '', file_id: list[str] = typer.Option(None), direction: str = 'upstream'):

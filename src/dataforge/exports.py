@@ -11,6 +11,7 @@ import networkx as nx
 
 from dataforge.asset_identity import asset_job
 from dataforge.configuration import VisualizationSettings
+from dataforge.excel_exports import lineage_xlsx as lineage_xlsx
 from dataforge.ingestion import safe_relative
 
 

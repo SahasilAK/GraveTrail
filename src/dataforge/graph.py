@@ -75,7 +75,10 @@ class LineageGraph:
         return [sorted(c) for c in nx.strongly_connected_components(self.graph)
                 if len(c) > 1 or self.graph.has_edge(next(iter(c)), next(iter(c)))]
 
-    def simplified(self, edge_limit=20000, keep=()):
+    def simplified(self, edge_limit=20000, keep=(), *, preserve_paths=False, evidence_limit=None):
+        evidence_count = sum(len(attrs['evidence']) for _, _, attrs in self.graph.edges(data=True))
+        if evidence_limit is not None and evidence_count > evidence_limit:
+            raise ValueError('Temporary-stage evidence limit exceeded; include temporary stages or narrow workspace')
         graph = self.graph.copy()
         for node, attrs in list(graph.nodes(data=True)):
             if not attrs.get("temporary") or node in keep:
@@ -85,6 +88,17 @@ class LineageGraph:
                 continue
             if len(inputs) * len(outputs) + graph.number_of_edges() > edge_limit:
                 continue
+            # Parallel routes cannot become an apparently sequential list of intermediates.
+            if preserve_paths and any(graph.has_edge(source, target) for source in inputs for target in outputs):
+                continue
+            if evidence_limit is not None:
+                removed = sum(len(graph[s][t]['evidence']) for s, t in
+                    {*graph.in_edges(node), *graph.out_edges(node)})
+                added = sum(len(graph[source][node]['evidence']) + len(graph[node][target]['evidence'])
+                    for source in inputs for target in outputs)
+                if evidence_count - removed + added > evidence_limit:
+                    raise ValueError('Temporary-stage evidence limit exceeded; include temporary stages or narrow workspace')
+                evidence_count += added - removed
             for source in inputs:
                 for target in outputs:
                     if source == node or target == node:
@@ -130,17 +144,24 @@ class LineageGraph:
                     queue.append([parent, *path])
         return paths
 
-    def path_report(self, asset, direction="upstream", limit=50, depth=15):
+    def path_report(self, asset, direction="upstream", limit=50, depth=15, *,
+                    max_relationships=None, max_evidence=None, include_code=False):
         """Bounded ordered paths over this topology, with evidence and explicit boundaries."""
         if direction not in {"upstream", "downstream"} or not 1 <= limit <= 500 or not 1 <= depth <= 30:
             raise ValueError("Use upstream/downstream, 1–500 paths and 1–30 depth")
+        if any(value is not None and (type(value) is not int or value < 1)
+               for value in [max_relationships, max_evidence]):
+            raise ValueError('Path relationship/evidence limits must be positive integers')
         report = {"selected_asset": asset, "direction": direction, "max_paths": limit,
                   "max_depth": depth, "truncated": self.truncated, "paths": []}
         if asset not in self.graph:
             return report
         pending = deque([([asset], None)])
         fields = {"edge_id", "operation_id", "statement_id", "file_id", "relative_path", "source_hash",
-                  "start_line", "end_line", "kind", "method", "status", "confidence"}
+                  "start_line", "end_line", "kind", "method", "status", "confidence", "source_id", "target_id"}
+        if include_code:
+            fields.add('code')
+        relationship_count = evidence_count = 0
         while pending:
             path, boundary = pending.popleft()
             node = path[0] if direction == "upstream" else path[-1]
@@ -155,9 +176,22 @@ class LineageGraph:
             if boundary is not None:
                 if boundary == 'cycle':
                     report['truncated'] = True
+                if max_relationships is not None:
+                    remaining = max_relationships - relationship_count
+                    if len(path) > 1 and remaining == 0:
+                        report['truncated'] = True
+                        break
+                    if len(path) - 1 > remaining:
+                        path = path[-remaining - 1:] if direction == 'upstream' else path[:remaining + 1]
+                        boundary = 'relationship_limit'
+                        report['truncated'] = True
                 steps = []
                 for source, target in zip(path, path[1:]):
                     edge = self.graph[source][target]
+                    evidence_count += len(edge['evidence'])
+                    if max_evidence is not None and evidence_count > max_evidence:
+                        raise ValueError('Path evidence limit exceeded; narrow the selection')
+                    relationship_count += 1
                     steps.append({"source": self.nodes[source]["name"], "target": self.nodes[target]["name"],
                         "source_id": source, "target_id": target, "intermediates": edge.get("intermediates", []),
                         "evidence": [{k: v for k, v in e.items() if k in fields} for e in edge["evidence"]]})

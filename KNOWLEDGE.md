@@ -27,7 +27,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — “Nothing stays buried.” headline and “Every dependency leaves a trail.” supporting line, live documentation link, animated hero, installation, first workflow, features and honest limits. Branding is shared with the app sidebar, Pages homepage/banner and site description.
 - `app.py` — Entry point: shared frame, workspace dialog and context guards; ten native routes grouped into Workspace, Explore and Administration. Existing builder/explorer/settings URLs remain valid.
-- `pyproject.toml` — Package/dependency constraints, gravetrail CLI entry points with legacy aliases, official MCP SDK/Typer dependencies, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
+- `pyproject.toml` — Package/dependency constraints (including pure-Python XlsxWriter), CLI aliases, MCP SDK/Typer, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
 
 Storage selection is per-session and startup-allowlisted (DATAFORGE_STORAGE_LOCATIONS); app.py
