@@ -34,8 +34,9 @@ Ambiguous names stay unresolved. Evidence pins original source hashes and exact 
 ranges, so a later import cannot silently replace the statement behind an earlier edge.
 Temporary contraction keeps its underlying logical steps and provenance.
 
-Direct column usage reports references to the selected source. It is not transitive
-column transformation lineage. Wildcards expand only with trustworthy schema evidence.
+Direct column usage reports references to the selected source. The separate
+[transformation service](../TRANSFORMATION_LINEAGE.md) follows output/value derivations
+with bounded traversal and coverage markers. Wildcards expand only with trustworthy schema evidence.
 Logical dependency order does not establish runtime execution order.
 
 For implementation conventions and adding parsers, continue to

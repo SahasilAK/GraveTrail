@@ -2,6 +2,8 @@
 
 Workflow hub. `index.md` links canonical USER_GUIDE/DATA_MANAGEMENT, explains conservative evidence and includes real isolated SQL fixture screenshots. No copied parser/runtime implementation.
 
+Transformation lineage follows Columns as a focused route, with its own canonical coverage/workflow guide.
+
 Graph guidance covers All/fullscreen/copy/focus/history and direction-scoped files; Columns covers comma-term filters and unfiltered copyable used/unused names with schema/wildcard uncertainty.
 
 User-guide screenshot links use gravetrail-prefixed filenames synchronized with mkdocs.yml.

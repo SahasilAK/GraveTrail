@@ -13,6 +13,8 @@ import duckdb
 
 from dataforge.configuration import WorkspaceIdentity
 
+COLUMN_TABLES = ('column_dependencies', 'column_derivations', 'column_references', 'column_analysis')
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT current_timestamp);
 CREATE TABLE IF NOT EXISTS workspaces(workspace_id VARCHAR PRIMARY KEY, name VARCHAR, description VARCHAR, created_at TIMESTAMP DEFAULT current_timestamp);
@@ -65,6 +67,25 @@ class Store:
                     recovery_body BLOB, byte_count BIGINT, sha256 VARCHAR,
                     created_at TIMESTAMP DEFAULT current_timestamp, restored_at TIMESTAMP)""")
                 self.db.execute("INSERT INTO schema_migrations(version) VALUES (4)")
+            if (5,) not in versions:
+                self.db.execute("""
+                    CREATE TABLE column_references(column_id VARCHAR PRIMARY KEY, workspace_id VARCHAR,
+                        asset_id VARCHAR, table_name VARCHAR, column_name VARCHAR, column_key VARCHAR,
+                        scope VARCHAR, version VARCHAR);
+                    CREATE INDEX column_ref_asset ON column_references(workspace_id,asset_id,column_key);
+                    CREATE TABLE column_derivations(derivation_id VARCHAR PRIMARY KEY, workspace_id VARCHAR,
+                        target_column_id VARCHAR, expression VARCHAR, category VARCHAR, status VARCHAR,
+                        statement_id VARCHAR, file_id VARCHAR, operation_id VARCHAR, run_id VARCHAR,
+                        branch INTEGER, ordinal INTEGER, coverage VARCHAR);
+                    CREATE INDEX column_derivation_target ON column_derivations(workspace_id,target_column_id);
+                    CREATE TABLE column_dependencies(dependency_id VARCHAR PRIMARY KEY, workspace_id VARCHAR,
+                        derivation_id VARCHAR, source_column_id VARCHAR, role VARCHAR, ordinal INTEGER);
+                    CREATE INDEX column_input_source ON column_dependencies(workspace_id,source_column_id);
+                    CREATE INDEX column_input_derivation ON column_dependencies(workspace_id,derivation_id);
+                    CREATE TABLE column_analysis(workspace_id VARCHAR PRIMARY KEY, run_id VARCHAR,
+                        parser_version VARCHAR);
+                    INSERT INTO schema_migrations(version) VALUES (5);
+                """)
 
     @contextmanager
     def transaction(self):

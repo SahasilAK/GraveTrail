@@ -26,7 +26,7 @@ Do not copy an open database. A single MCP process shares its Store and jobs.
 
 ## Commands
 
-Verified against the registered interface on 2026-10-18: **98 executable command
+Verified against the registered interface on 2026-10-18: **100 executable command
 routes and 29 command groups**. Prefix every route below with `gravetrail`.
 Global options go before the route; command options go after it. An empty
 argument cell means no positional arguments, not that the command has no required
@@ -69,6 +69,8 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `cleanup reset` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
 | `cleanup sources` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
 | `cleanup workspace` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `columns catalog` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
+| `columns lineage` | `ASSET`, `COLUMN` | `--workspace`, `-w` **required**; `--direction`; `--status`; `--help` |
 | `columns usage` | `ASSET` | `--workspace`, `-w` **required**; `--column-query`; `--usage-type`; `--file-id`; `--group-by`; `--help` |
 | `dictionary list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
 | `export download` | `ARTIFACT_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--help` |
@@ -155,7 +157,7 @@ Groups organize commands; use `gravetrail GROUP --help` to list their children.
 | `assets` | Resolve asset names to stable IDs. |
 | `batch` | Aggregate-budget lineage queries. |
 | `cleanup` | Preview and explicitly confirm workspace cleanup. |
-| `columns` | Direct source-column usage. |
+| `columns` | Direct source-column usage and transformation tracing. |
 | `dictionary` | Declared, sampled and explicitly unknown column types. |
 | `export` | Bounded lineage exports. |
 | `history` | Local guarded history archive/recovery; metadata previews are read-only. |
@@ -296,6 +298,27 @@ Reports: `runs list|get|compare BEFORE AFTER -w ID`, `ingestions list|get -w ID`
 Artifacts: `export graph ASSET --format html|json`, `export paths ASSET --format csv|json|xlsx`, `export sources --asset ASSET` or repeated --file-id; `source download FILE DESTINATION [--content-hash HASH]`; `export report --kind KIND --format FORMAT` with --asset/--query/--before/--after; `ai results export RECORD`. All take -w ID. `export read ID --binary --offset N --length N` returns base64; `export download ID DESTINATION` reassembles/checks checksum and refuses existing destinations. Source-related creation and every read require source permission; backups are excluded.64MB/artifact,16KiB/chunk before encoding, further response-budget caps.
 
 Format allowlist: graph HTML/JSON; paths CSV/JSON/XLSX; source-bundle ZIP; original-source raw bytes; inventory/code-search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run-comparison/ai-result JSON. Unsupported combinations fail. `lineage paths|steps|graph ASSET -w ID` returns bounded logical dependency data with depth/limit/cycle boundaries; graph --view nodes|edges|tree supports --node-id/--edge-id. `columns usage` supports --column-query/--usage-type/--file-id/--group-by none|file|usage_type. No runtime execution ordering claim.
+
+Column transformation traces use the same scoped stored facts as the UI:
+
+```bash
+gravetrail --home ./automation-data --json columns catalog mart.order_totals -w WORKSPACE_ID
+gravetrail --home ./automation-data --json --max-depth 5 --max-items 200 --detail standard columns lineage mart.order_totals gross_amount -w WORKSPACE_ID
+gravetrail --home ./automation-data --json columns lineage raw.orders quantity --direction downstream --status all -w WORKSPACE_ID
+```
+
+Use an exact asset ID for ambiguous or temporary assets. `COLUMN` accepts a column
+name within that asset or an exact ID from `columns catalog`. Status choices are
+`all`, `verified`, `inferred` and `unresolved`. Global `--limit`, `--cursor`,
+`--max-depth`, `--max-items` and `--max-chars` apply. Derivations appear in `items`
+with input roles and their uncollapsed `paths`; follow `next_cursor` for later pages.
+Retain `state`, `coverage`, `truncated`, `trace_complete`, `analysis_current` and
+`boundaries` when saving output with global `--output`. Summary excludes expressions
+and code; standard expressions require source permission, and detailed original code
+requires source permission. Zero-input constants, unresolved columns, not analyzed
+assets and no known dependencies remain distinct. `columns usage` still reports
+direct references independently. The Transformation lineage UI exports bounded
+CSV/JSON with evidence and coverage markers.
 
 For Excel: `gravetrail --allow-write export paths ASSET -w ID --format xlsx
 --include-evidence` creates an artifact; `export download ARTIFACT_ID lineage.xlsx -w ID`

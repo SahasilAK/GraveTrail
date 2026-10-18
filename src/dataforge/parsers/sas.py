@@ -5,6 +5,7 @@ import re
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, file_asset, statements
 from dataforge.parsers.sas_sql import parse_proc_sql
+from dataforge.parsers.sas_transformations import data_step_derivations, proc_derivations
 
 IDENT = r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?"
 
@@ -126,7 +127,8 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
             for raw, line, last, statement, _, _ in block[1:]:
                 if re.match(r"\s*(quit|run)\b", statement, re.I):
                     continue
-                parsed = parse_proc_sql(statement, sql_dialect)
+                sql_source = raw if statement == strip_comments(raw).strip() else statement
+                parsed = parse_proc_sql(sql_source, sql_dialect)
                 for d in parsed.diagnostics:
                     d.line += line - 1
                 result.diagnostics.extend(parsed.diagnostics)
@@ -135,6 +137,16 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
                     op.targets = [ref(r.name) for r in op.targets]
                     for u in op.usages:
                         u.table = ref(u.table).name
+                    for derivation in op.derivations:
+                        if not derivation.get("scope"):
+                            derivation["target_table"] = ref(derivation["target_table"]).name
+                        for dependency in derivation["inputs"]:
+                            if not dependency.get("scope"):
+                                dependency["table"] = ref(dependency["table"]).name
+                        if re.search(r"[&%]", strip_comments(raw)):
+                            derivation["expression"] = raw
+                            derivation["status"] = "unresolved"
+                            derivation["coverage"].append("SAS macro expansion cannot replace original expression evidence")
                     op.code, op.start, op.end, op.method = raw, line, last, "sas-proc-sql"
                     result.operations.append(op)
             block, block_type = [], ""
@@ -159,9 +171,15 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
                                   for n in re.findall(r"\b[A-Za-z_]\w*\b", m.group(2))
                                   if n.casefold() != "descending")
         if sources or targets:
-            result.operations.append(Operation("DATA" if block_type == "data" else "PROC " + block_type.upper(),
+            operation = Operation("DATA" if block_type == "data" else "PROC " + block_type.upper(),
                 list({s.name: s for s in sources}.values()), list({t.name: t for t in targets}.values()),
-                raw_code, start, end, "sas-rules", usages=usages))
+                raw_code, start, end, "sas-rules", usages=usages)
+            if block_type == "data":
+                operation.derivations, diagnostics = data_step_derivations(operation, block)
+                result.diagnostics.extend(diagnostics)
+            else:
+                operation.derivations = proc_derivations(operation)
+            result.operations.append(operation)
         block, block_type, block_bad = [], "", False
 
     for raw, line, end in tokens:

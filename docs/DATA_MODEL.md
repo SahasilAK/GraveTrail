@@ -3,6 +3,7 @@
 DuckDB lives at `DATAFORGE_HOME/dataforge.duckdb`. Schema migrations are additive and execute
 inside a transaction. Version 1 creates tables; version 2 adds statement source content hashes;
 version 3 adds the compressed history recovery journal.
+Version 4 adds temporary recovery; version 5 adds indexed column transformation facts.
 Do not edit schema destructively or delete runtime data to resolve a migration error.
 
 ```mermaid
@@ -32,6 +33,10 @@ erDiagram
 | operations, operation_assets | Explicit transformation nodes with many-to-many input/output memberships |
 | edges | Derived input/output relationships with method, confidence, status and evidence keys |
 | column_usages | Scope-local direct column references and expression context |
+| column_references | Workspace/asset/column identity, quote-aware case rules, statement scope and derived variable version |
+| column_derivations | One target per expression, category/status, branch/position, source operation and committed analysis revision |
+| column_dependencies | Zero-to-many input columns or relation contexts with dependency roles |
+| column_analysis | Last committed transformation revision/parser version; absence means reanalysis required |
 | diagnostics | Parse failures, ambiguity and unresolved symbols with file/line |
 | llm_profiles | Provider config and environment variable names, never credentials |
 | llm_records, prompt_versions | AI provenance, validation outcomes, usage, prompt hashes and durable merged claims |
@@ -51,3 +56,17 @@ Migration4 adds temporary_recovery (workspace, file name, compressed bytes, orig
 SHA256 and created/restored timestamps). Bytes commit before stale staging-file removal.
 Recovery journals are not metadata-transfer payloads and are deleted only with explicit
 workspace deletion. This table never authorizes cleanup outside its application namespace.
+
+Column IDs include exact resolved asset/job identity and a shared quote-aware column key.
+Equivalent quoted and unquoted spellings share identity, while quoted case is preserved;
+quoted literal names such as `"*"` remain distinct from wildcard/rowset markers. Declared
+schemas retain original `column_identifiers` alongside unchanged name/type `columns` fields.
+Intermediate scopes
+and variable versions include immutable statement identity; they attach to an existing
+asset without adding CTE tables to the table graph. Physical columns can have multiple
+writer alternatives, which traversal does not combine into an assumed execution history.
+Constants have a derivation with no value dependencies. Original expressions and the
+statement content hash remain separate from display explanations. All column tables
+participate in workspace cleanup and full-home recovery; integrity inspection checks their
+asset, statement, input, derivation and analysis references. See
+[transformation lineage](TRANSFORMATION_LINEAGE.md).

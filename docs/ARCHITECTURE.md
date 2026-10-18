@@ -79,7 +79,7 @@ installed code and maintained documentation. No schema tables are dropped.
 Whole-home backups use DuckDB `COPY FROM DATABASE` to a checkpointed snapshot, then archive
 managed runtime files with a SHA-256 manifest. Restore validates bounded archive contents and
 schema, opens the staged database read-only and renames staging into a new destination. This
-is distinct from the bounded history/staging recovery journals. Schema versions remain 1–4;
+is distinct from the bounded history/staging recovery journals. Schema versions are additive through 5;
 maintenance adds no destructive upgrade. See [setup and deployment](SETUP_AND_DEPLOYMENT.md).
 
 ## Distribution boundary

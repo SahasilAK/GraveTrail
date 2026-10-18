@@ -25,6 +25,16 @@ not unreturned assets. Follow pages or drill into a specific downstream asset.
 Use `get_lineage_batch` for up to 20 assets; `remaining_assets` records unprocessed
 queries when aggregate budgets are reached.
 
+## Column transformation question
+
+Use `get_transformation_columns(workspace_id, asset=ASSET_ID)` to choose an exact column,
+then `get_column_lineage(workspace_id, asset=ASSET_ID, column=COLUMN_ID)` for upstream
+derivations. Use `direction="downstream"` for change effects. Read each input role and
+path effect; join/filter effects do not mean every output value reads that column.
+Follow continuation pages and inspect coverage, truncation and analysis revision before
+making a completeness claim. Standard expressions require source permission; detailed
+adds bounded original evidence. See [column transformations](TRANSFORMATION_LINEAGE.md).
+
 ## Repository automation / incremental refresh
 
 Launch with explicit writes and allowed import roots. Call `ingest_sources`, poll

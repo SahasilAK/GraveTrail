@@ -32,7 +32,7 @@ from dataforge.store import Store
 app = typer.Typer(no_args_is_help=True, help="Local evidence-backed SQL/SAS analysis and agent access.")
 workspace_app = typer.Typer(help="List, create and summarize workspaces.")
 lineage_app = typer.Typer(help="Build and query stored lineage.")
-columns_app = typer.Typer(help="Direct source-column usage.")
+columns_app = typer.Typer(help="Direct source-column usage and transformation tracing.")
 source_app = typer.Typer(help="Source inventory, literal search and explicit evidence retrieval.")
 assets_app = typer.Typer(help="Resolve asset names to stable IDs.")
 impact_app = typer.Typer(help="Stored downstream change impact.")
@@ -288,6 +288,20 @@ def columns(ctx: typer.Context, asset: str, workspace: Workspace, column_query: 
             usage_type: str = '', file_id: str = '', group_by: str = 'none'):
     invoke(ctx, "columns", workspace, asset=asset, column_query=column_query,
            usage_type=usage_type, file_id=file_id, group_by=group_by)
+
+
+@columns_app.command("catalog")
+def transformation_columns(ctx: typer.Context, asset: str, workspace: Workspace):
+    """List exact column identities available for transformation tracing."""
+    invoke(ctx, "column_catalog", workspace, asset=asset)
+
+
+@columns_app.command("lineage")
+def column_lineage(ctx: typer.Context, asset: str, column: str, workspace: Workspace,
+                   direction: str = "upstream", status: str = "all"):
+    """Trace stored transformations; use global depth, item and paging limits."""
+    invoke(ctx, "column_lineage", workspace, asset=asset, column=column,
+           direction=direction, status=status)
 
 
 @source_app.command("list")

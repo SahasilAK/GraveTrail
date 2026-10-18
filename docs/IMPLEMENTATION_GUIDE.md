@@ -92,7 +92,8 @@ Use isolated temporary homes for deletion/restore tests, including shared blobs 
 workspaces, retained history, expired preview, active jobs and redirected paths. General cleanup
 does not acquire a journaled undo guarantee simply because the older history/staging helper does.
 Opt-in expired staging cleanup runs when its UI page is visited, not in a background scheduler.
-Migration versions remain 1–4 for this feature; never delete schema as ordinary runtime reset.
+Migration 5 adds column transformation records; never delete schema as ordinary runtime reset.
+Register new column facts in cleanup dependencies, backup compatibility and integrity checks.
 
 ## Packaging and release checks
 

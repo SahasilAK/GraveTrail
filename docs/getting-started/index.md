@@ -39,7 +39,8 @@ A relationship cites its source file, analyzed version, statement, original line
 range and extraction method. Static analysis cannot discover every dynamic SQL
 expression, runtime macro or execution-order dependency. Unresolved diagnostics
 remain visible instead of being replaced by guessed edges. Direct column usage
-does not promise transitive column transformation lineage.
+is separate from the bounded [Transformation lineage](../TRANSFORMATION_LINEAGE.md) view,
+which maps tested SQL/SAS expressions and retains explicit unsupported boundaries.
 
 Keep the application bound to loopback and protect its data home: it stores
 complete imported originals. Optional AI assistance has separate configuration

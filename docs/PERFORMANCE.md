@@ -30,3 +30,23 @@ Parsing/exports and DuckDB rebuilds can still be expensive for very large script
 Analysis is synchronous in the local UI; callbacks support cooperative cancellation between
 files, but do not preempt an individual parser. The Streamlit stop control interrupts a run.
 Snapshot/parse-cache retention is manual; long-lived high-churn workspaces need storage monitoring.
+
+## Column transformation measurement (2026-10-18)
+
+Run `uv run python scripts/benchmark_transformations.py` to reproduce a disposable
+synthetic fixture: 120 stages × 20 columns, each column reading two prior-stage columns,
+plus the order-totals example. This Windows/Python 3.11 run stored 2,404 derivations;
+analysis took **42.8948 s**. An upstream query at depth 30, limit 200 returned exactly
+200 derivations/200 path-step records in **16.9428 s**, with **1,081,760 bytes** peak
+Python allocations under tracemalloc and an explicit `item_limit` marker.
+This parser-10 run predates the parser-11 identity/mapping corrections and overlapped
+the full test suite and documentation build on the same host.
+The allocator tracing excludes DuckDB/native/process memory and adds measurement overhead.
+These are measured synthetic results, not a responsiveness guarantee for real projects.
+
+Column references and input/target lookups are indexed by workspace and identity.
+Queries bound derivations and scheduled/visited column/effect states, rather than
+enumerating all possible dependency paths. Per-step inputs cap at the query limit;
+source snippets and expression previews cap at 12,000 characters. UI queries cap at
+200 derivations, while shared service/CLI/MCP limits permit up to 20,000 and depth 30.
+Large selected limits can still be slow; agent response budgets apply separately.

@@ -10,6 +10,7 @@ from sqlglot.errors import ErrorLevel, OptimizeError, ParseError, TokenError
 from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, statements
+from dataforge.parsers.sql_transformations import extract_transformations, identifier
 
 log = logging.getLogger(__name__)
 # SQLGlot fallback warnings include raw imported statements; keep sensitive source out of logs.
@@ -104,6 +105,7 @@ def declared_schema(tree, start, end, operation_index):
     if not isinstance(target, exp.Table):
         return []
     columns = None
+    column_identifiers = []
     if isinstance(tree, exp.Create) and isinstance(tree.this, exp.Schema):
         definitions = [c for c in tree.this.expressions if isinstance(c, exp.ColumnDef)]
         constraints = (exp.ColumnDef, exp.Constraint, exp.PrimaryKey, exp.ForeignKey,
@@ -115,8 +117,9 @@ def declared_schema(tree, start, end, operation_index):
         if (simple_schema and simple_properties and definitions and len(definitions) <= 4096
                 and all(c.args.get("kind") is not None for c in definitions)):
             columns = [{"name": c.name, "type": c.args["kind"].sql()} for c in definitions]
+            column_identifiers = [identifier(c.this) for c in definitions]
     records = [{"table": table_name(target), "columns": columns, "start_line": start,
-                "end_line": end, "operation_index": operation_index}]
+                "end_line": end, "operation_index": operation_index, "column_identifiers": column_identifiers}]
     if isinstance(tree, exp.Alter):
         for action in tree.args.get("actions", []):
             if isinstance(action, (exp.SwapTable, exp.AlterRename)) and isinstance(action.this, exp.Table):
@@ -160,6 +163,11 @@ def wrapped_sql(tree, dialect, depth, code, start, end):
     parsed = _parse_sql(body, dialect, depth + 1, restricted=True)
     for op in parsed.operations:
         op.code, op.start, op.end, op.method = code, start, end, method
+        for derivation in op.derivations:
+            if derivation["expression"] and derivation["expression"] not in code:
+                derivation["expression"] = ""
+                derivation["status"] = "unresolved"
+                derivation["coverage"].append("Decoded wrapper projection range unavailable; see original enclosing statement")
     for diagnostic in parsed.diagnostics:
         diagnostic.line = start
     # A definition is not proof of invocation or of an unconditional workspace schema.
@@ -316,7 +324,9 @@ def _parse_sql(content, dialect, depth=0, restricted=False):
                 continue
             if sources or targets or usages:
                 kind = "SELECT_INTO" if into is not None and target is not None else tree.key.upper() if target is not None else "SELECT"
-                result.operations.append(Operation(kind, sources, targets, code, start, end, usages=usages))
+                derivations = extract_transformations(tree, code, dialect, scopes, target)
+                result.operations.append(Operation(kind, sources, targets, code, start, end, usages=usages,
+                                                   derivations=derivations))
             elif not isinstance(tree, (exp.Set, exp.Use)):
                 result.diagnostics.append(Diagnostic("No statically analyzable table references", start, severity="info"))
             declarations = declared_schema(tree, start, end, len(result.operations) - 1)

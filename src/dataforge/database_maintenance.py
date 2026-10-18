@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 import duckdb
 
 from dataforge.cleanup import WORKSPACE_TABLES, checked_path, maintenance_guard
+from dataforge.store import COLUMN_TABLES
 
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 MAX_FILES = 50000
@@ -34,11 +35,13 @@ def inspect_database(store):
 
 
 def _inspect_database(home, rows):
+    versions = [r['version'] for r in rows('SELECT version FROM schema_migrations ORDER BY version')]
+    workspace_tables = tuple(t for t in WORKSPACE_TABLES if 5 in versions or t not in COLUMN_TABLES)
     tables = {}
-    for table in (*WORKSPACE_TABLES, 'parse_cache', 'prompt_versions'):
+    for table in (*workspace_tables, 'parse_cache', 'prompt_versions'):
         tables[table] = rows(f'SELECT count(*) AS n FROM {table}')[0]['n']
     orphaned = {}
-    for table in WORKSPACE_TABLES:
+    for table in workspace_tables:
         if table in {'workspaces', 'settings'}:
             continue
         orphaned[table] = rows(f'SELECT count(*) AS n FROM {table} WHERE workspace_id IS NULL OR workspace_id NOT IN (SELECT workspace_id FROM workspaces)')[0]['n']
@@ -51,8 +54,17 @@ def _inspect_database(home, rows):
         'columns_asset': 'SELECT count(*) AS n FROM column_usages u LEFT JOIN assets a ON u.asset_id=a.asset_id AND u.workspace_id=a.workspace_id WHERE a.asset_id IS NULL',
         'llm_file': 'SELECT count(*) AS n FROM llm_records r LEFT JOIN source_files f ON r.file_id=f.file_id AND r.workspace_id=f.workspace_id WHERE f.file_id IS NULL',
     }
+    if 5 in versions:
+        checks.update({
+            'column_reference_asset': 'SELECT count(*) AS n FROM column_references c LEFT JOIN assets a ON c.asset_id=a.asset_id AND c.workspace_id=a.workspace_id WHERE a.asset_id IS NULL',
+            'column_derivation_target': 'SELECT count(*) AS n FROM column_derivations d LEFT JOIN column_references c ON d.target_column_id=c.column_id AND d.workspace_id=c.workspace_id WHERE c.column_id IS NULL',
+            'column_derivation_statement': 'SELECT count(*) AS n FROM column_derivations d LEFT JOIN statements s ON d.statement_id=s.statement_id AND d.workspace_id=s.workspace_id WHERE s.statement_id IS NULL',
+            'column_derivation_run': 'SELECT count(*) AS n FROM column_derivations d LEFT JOIN column_analysis r ON d.workspace_id=r.workspace_id AND d.run_id=r.run_id WHERE r.run_id IS NULL',
+            'column_dependency_source': 'SELECT count(*) AS n FROM column_dependencies d LEFT JOIN column_references c ON d.source_column_id=c.column_id AND d.workspace_id=c.workspace_id WHERE c.column_id IS NULL',
+            'column_dependency_derivation': 'SELECT count(*) AS n FROM column_dependencies i LEFT JOIN column_derivations d ON i.derivation_id=d.derivation_id AND i.workspace_id=d.workspace_id WHERE d.derivation_id IS NULL',
+            'column_analysis_run': 'SELECT count(*) AS n FROM column_analysis c LEFT JOIN analysis_runs r ON c.run_id=r.run_id AND c.workspace_id=r.workspace_id WHERE r.run_id IS NULL',
+        })
     orphaned.update({key: rows(sql)[0]['n'] for key, sql in checks.items()})
-    versions = [r['version'] for r in rows('SELECT version FROM schema_migrations ORDER BY version')]
     referenced = {r['content_hash'] for r in rows('SELECT content_hash FROM source_files UNION SELECT content_hash FROM statements')}
     for row in rows("SELECT snapshot FROM analysis_runs WHERE snapshot IS NOT NULL AND snapshot<>''"):
         referenced.update(json.loads(row['snapshot']).get('files', {}).values())
@@ -64,7 +76,7 @@ def _inspect_database(home, rows):
         path = checked_path(home, 'blobs/' + digest)
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             missing.append(digest)
-    return {'ok': not any(orphaned.values()) and not missing and versions == [1, 2, 3, 4],
+    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5]),
             'schema_versions': versions, 'records': tables, 'orphan_records': orphaned,
             'missing_or_invalid_blobs': missing, 'database_bytes': (home / 'dataforge.duckdb').stat().st_size}
 
@@ -190,9 +202,11 @@ def _restore_backup(archive_path, destination):
         connection = duckdb.connect(str(database), read_only=True, config={'enable_external_access': False})
         try:
             versions = connection.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()
-            if versions != [(1,), (2,), (3,), (4,)]:
+            if versions not in ([(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)]):
                 raise ValueError('Unsupported backup schema')
             for table in WORKSPACE_TABLES:
+                if (5,) not in versions and table in COLUMN_TABLES:
+                    continue
                 connection.execute(f'SELECT count(*) FROM {table}').fetchone()
             def rows(sql):
                 cursor = connection.execute(sql)

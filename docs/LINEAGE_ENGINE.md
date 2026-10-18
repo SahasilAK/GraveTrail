@@ -10,6 +10,16 @@ statement, file and analysis run. `Store.edges` joins evidence code and exact li
 Original bytes are available through `Store.original`; the UI shows original source separately
 from extracted statement snippets. Step numbers are dependency ordering, not execution order.
 
+Column transformations are an additive contract on `Operation.derivations`, persisted by
+`transformations.materialize_columns` in the same analysis transaction. `column_catalog`
+and `trace_columns` provide shared, indexed asset/column queries. The traversal keeps
+bounded visited/scheduled column/effect states, not all-workspace paths. CTE scopes,
+SAS assignment versions, branch evidence, value-versus-row effects and cycle/limit boundaries
+survive each step. Multiple operation writers stop upstream chaining with an ambiguity
+marker. Sources are loaded lazily and snippets/expressions are capped at 12,000 characters.
+Parsing errors for previously analyzed sources abort refresh and retain committed facts.
+See [column transformation coverage and query semantics](TRANSFORMATION_LINEAGE.md).
+
 Identifiers preserve display spelling. Lookup defaults to case-insensitive canonical names;
 case-sensitive matching can be configured. An unqualified reference links only when exactly
 one qualified candidate exists; that link is inferred, with an alias record and lower confidence.

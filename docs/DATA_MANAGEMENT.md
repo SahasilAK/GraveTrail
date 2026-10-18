@@ -62,7 +62,10 @@ Restore verifies paths, checksums, file limits and schema before creating a new 
 restores a selected managed ZIP into a generated sibling directory. CLI accepts an explicit
 new destination. Existing directories are never overwritten. Stop the owner, retain the
 old home, then launch with `DATAFORGE_HOME` pointing to the restored path. Schema migrations
-remain versions 1–4; normal startup initializes missing tables without dropping user data.
+are additive through version 5; old facts open without reanalysis. Version-4 backups
+remain restorable and upgrade when opened. Column transformation tables participate in
+integrity checks, backups and cleanup previews. **Columns** cleanup clears direct usages
+and transformation coverage; analyze again to rebuild it.
 
 ## Automation
 

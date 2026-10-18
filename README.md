@@ -41,6 +41,7 @@ account, or paid service**. Imported code is never executed.
 | [Build lineage](docs/USER_GUIDE.md) | SQL AST parsing, dedicated SAS rules, CSV source metadata, and a persistent file inventory. |
 | [Explore dependencies](docs/user-guide/index.md) | Upstream/downstream trees, focused interactive graphs, cycle detection, and temporary-step collapse with provenance. |
 | [Inspect direct column usage](docs/USER_GUIDE.md) | References scoped to the selected source, including usage type, file, and exact lines. Unknown wildcards stay unknown. |
+| [Trace column transformations](docs/TRANSFORMATION_LINEAGE.md) | Follow SQL/SAS output values through scoped expressions, with separate join/filter roles, source evidence and explicit coverage gaps. |
 | [Keep the evidence](docs/DATA_MODEL.md) | Original file bytes, statement ranges, extraction methods, and versioned analysis history. |
 | [Connect tools and agents](docs/integrations/index.md) | CLI and MCP queries over stored analysis, bounded responses, explicit permissions, and managed exports. |
 | [Add optional AI assistance](docs/LLM_INTEGRATION.md) | Configurable provider profiles and task routing; grounded output validation and explicit inferred-result merges. |
@@ -140,7 +141,9 @@ run the Streamlit application locally or on your own host.
 
 This is **static analysis**, not a database or SAS runtime. Dynamic SQL, runtime macros,
 ambiguous names, and unsupported syntax produce diagnostics rather than guessed edges.
-Direct column usage is separate from transitive column lineage. See the parser coverage guides.
+Direct column usage remains separate from bounded transformation lineage. The dedicated
+Transformation lineage page traces tested SQL and SAS subsets; unsupported constructs
+remain explicit coverage boundaries. See the [coverage guide](docs/TRANSFORMATION_LINEAGE.md).
 
 The UI is intended for one trusted local user and has no multi-user authentication layer.
 Remote AI requests require privacy permission. Supply secrets through masked session
