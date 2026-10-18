@@ -250,3 +250,29 @@ and Space. Tables and code retain their own scroll areas at narrow widths.
 **Export report** groups CSV/JSON/HTML formats. In Lineage, **Export graph & sources**
 contains the offline graph, graph JSON and original source ZIP. Files are generated
 only when requested. These exports can contain private source evidence.
+
+Use **Export** beside the Lineage history controls to prepare a standalone **SVG**
+or **PNG** image. **Entire filtered graph** fits every node in the current bounded
+result, independently of browser pan/zoom. Review the selected asset, direction,
+depth, filters, temporary-step policy and node/relationship counts before downloading.
+SVG remains editable vector XML; PNG is a real raster image. Both share the live
+graph's layout, labels, palette and edge width. Full identifiers remain in SVG
+titles when compact labels are shown. Source code, evidence panels and buttons
+are excluded. Asset/workspace identifiers can still contain private business metadata.
+
+Light is the default background; dark and transparent are explicit choices.
+Transparent uses dark text/edges for placement on a light document. Choose normal
+or 2× resolution and optionally include a title and legend. Depth/node boundaries,
+filters, collapsed intermediates, stale analysis and analysis warnings appear in
+the image. These images describe the filtered result, never complete workspace coverage.
+
+Limits: 1,000 nodes, 5,000 relationships, 20,000 evidence records during temporary
+contraction, 4 MiB SVG, 16 MiB PNG; PNG additionally
+allows at most 8,192 pixels per side, 16 million pixels and 15 seconds of rasterization.
+Each application process allows two concurrent PNG workers; busy requests can retry.
+Excessive images fail with advice to reduce depth/scale or use SVG. Empty graphs
+have no image. A failed export leaves the current graph intact. No image cache
+is retained; each preparation snapshots the current committed graph/settings.
+PNG requires the bundled `resvg-py` dependency; if unavailable, SVG remains usable
+and the UI/capability response reports that PNG is unavailable. Exports never
+download software, fonts or external image resources.

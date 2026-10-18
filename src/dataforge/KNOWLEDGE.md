@@ -77,3 +77,5 @@ Windows frozen UI/CLI/MCP/worker dispatch holds launcher.windows_instance's name
 Whole-home restore staging uses a gravetrail-restore- temporary prefix; persistent backup format IDs and recognized database filenames are unchanged.
 
 Graph presentation in exports.py uses theme-aware surfaces, rounded node materials, visible focus and immediate press feedback; Enter/Space selects evidence and pointer cancellation releases panning. Live and offline graph still share the same rendering code and escaped evidence.
+
+Graph images: graph_images.py serializes inert SVG from exports.graph_data paths/bounds and rasterizes with at most two timeout-bound resvg workers. image_worker.py is the private source/frozen entry. graph_image_service.py snapshots filtered facts in UI name order, bounds contraction evidence and returns revision, counts, coverage and safe filename; exposed by services.py. artifacts.py registers SVG/PNG with source authorization and cleans incomplete publications. Graph.focus marks depth boundaries.

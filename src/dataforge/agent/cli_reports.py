@@ -71,8 +71,13 @@ def register(app, workspace_app, assets_app, lineage_app, source_app, exports_ap
         invoke(ctx, 'graph_view', workspace, asset=asset, direction=direction, view=view, node_id=node_id, edge_id=edge_id)
 
     @exports_app.command('graph')
-    def graph_export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = 'html', direction: str = 'upstream'):
-        invoke(ctx, 'artifact_create', workspace, kind='graph', format=format, selection={'asset': asset, 'direction': direction})
+    def graph_export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = 'html', direction: str = 'upstream',
+                     scale: int = 1, background: str = 'light', title: str = 'GraveTrail lineage', legend: bool = True,
+                     output: Path = typer.Option(None, '--output')):
+        """Export HTML/JSON or a fitted SVG/PNG. --output writes an exclusive new file."""
+        invoke(ctx, 'artifact_create', workspace, kind='graph', format=format, selection={'asset': asset,
+            'direction': direction, 'scale': scale, 'background': background, 'title': title, 'legend': legend},
+            download_to=output)
 
     @exports_app.command('paths')
     def path_export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = 'json', direction: str = 'upstream', max_paths: int = 50,

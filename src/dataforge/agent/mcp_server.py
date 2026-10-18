@@ -370,9 +370,12 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call('graph_view', workspace_id, options, asset=asset, direction=direction, view=view, node_id=node_id, edge_id=edge_id)
 
     @server.tool(annotations=write)
-    async def export_graph(workspace_id: str, asset: str, format: Literal['json', 'html'] = 'html', direction: str = 'upstream', options: QueryOptions | None = None) -> CallToolResult:
-        """Create offline graph artifact; get_export retrieves bounded binary chunks. Source permission required."""
-        return await call('artifact_create', workspace_id, options, kind='graph', format=format, selection={'asset': asset, 'direction': direction})
+    async def export_graph(workspace_id: str, asset: str, format: Literal['json', 'html', 'svg', 'png'] = 'html', direction: str = 'upstream', options: QueryOptions | None = None,
+                           scale: Literal[1, 2] = 1, background: Literal['light', 'dark', 'transparent'] = 'light',
+                           title: str = 'GraveTrail lineage', legend: bool = True) -> CallToolResult:
+        """Create offline graph artifact. SVG/PNG fit the entire bounded filtered graph; get_export retrieves bytes. Source permission required."""
+        return await call('artifact_create', workspace_id, options, kind='graph', format=format, selection={
+            'asset': asset, 'direction': direction, 'scale': scale, 'background': background, 'title': title, 'legend': legend})
 
     @server.tool(annotations=write)
     async def export_dependency_paths(workspace_id: str, asset: str, format: Literal['json', 'csv', 'xlsx'] = 'json', direction: str = 'upstream', max_paths: int = 50, options: QueryOptions | None = None,

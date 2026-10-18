@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from dataforge.asset_identity import AssetResolver, asset_label, source_job
 from dataforge.configuration import ParsingSettings
+from dataforge.graph_image_service import export_graph_image as export_graph_image
 from dataforge.models import AssetRef, ParseResult, stable_id
 from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas

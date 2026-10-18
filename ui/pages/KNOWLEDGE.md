@@ -19,3 +19,5 @@ Existing /builder, /explorer, /columns, /tools and /settings routes remain suppo
 Tests: AppTest route/state/guard checks plus real-browser review of graph, theme,
 responsive layouts, first import/analysis journey and actual offline HTML download.
 Hidden source/AI/tree/maintenance bodies are gated. Business rules stay in src/dataforge.
+
+Explorer Export prepares fitted SVG/PNG through services.export_graph_image; summarizes scope/appearance, explains pan/zoom independence and metadata privacy, and keeps generation errors in place. Images are built only on Prepare and are not cached.

@@ -16,3 +16,5 @@ requires explicitly adding new files in this directory; do not change user ignor
 Distribution smoke also requires the GraveTrail page title and MCP server identity. Docker smoke uses gravetrail image/CLI names and uniquely named disposable runtime resources.
 
 Frozen --cli sets the program name to gravetrail so help/errors reflect the product; worker module paths remain compatible.
+
+Image packaging: frozen_entry.py dispatches --render-graph-image; smoke.py verifies real SVG/PNG CLI files outside checkout alongside MCP and UI startup.

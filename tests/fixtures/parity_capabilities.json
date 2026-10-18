@@ -1131,7 +1131,7 @@
   },
   "E01": {
     "capability_id": "E01",
-    "description": "Interactive offline graph HTML and graph visualization JSON with appearance",
+    "description": "Offline graph HTML/JSON and fitted standalone SVG/PNG with shared appearance, coverage and bounded resolution",
     "cli": [
       [
         "export",

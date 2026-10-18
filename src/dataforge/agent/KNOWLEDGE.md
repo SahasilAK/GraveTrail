@@ -40,3 +40,5 @@ against actual help/schemas by the keyed parity fixture.
 MCP identifies as GraveTrail; gravetrail:// and legacy dataforge:// workspace/summary/job resources share handlers and permissions. Setup emits mcp_servers.gravetrail/client names while retaining dataforge.cli module paths.
 
 Managed job thread names use gravetrail-agent; journals, IDs and worker module paths are unchanged.
+
+Graph images: export graph adds SVG/PNG, scale/background/title/legend and local --output; MCP export_graph shares options and get_export chunks/revocation. capabilities reports graph_image_formats based on renderer importability. CLI refuses existing/invalid destinations before artifact creation.

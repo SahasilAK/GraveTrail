@@ -5,11 +5,13 @@ import argparse
 import asyncio
 import json
 import socket
+import struct
 import subprocess
 import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 from dataforge.build import build_environment
 
@@ -102,6 +104,18 @@ def main() -> None:
         run("lineage", "build", "--workspace", workspace)
         found = run("lineage", "upstream", "pub.kpi", "--workspace", workspace)
         assert found["items"][0]["name"] == "raw.orders"
+        for format in ('svg', 'png'):
+            destination = cwd / ('lineage.' + format)
+            result = run('export', 'graph', 'pub.kpi', '--workspace', workspace,
+                         '--format', format, '--output', str(destination))
+            assert result['bytes'] == destination.stat().st_size
+            data = destination.read_bytes()
+            if format == 'svg':
+                assert ET.fromstring(data).tag == '{http://www.w3.org/2000/svg}svg'
+            else:
+                assert data.startswith(b'\x89PNG\r\n\x1a\n')
+                width, height = struct.unpack('>II', data[16:24])
+                assert 0 < width <= 8192 and 0 < height <= 8192 and width * height <= 16_000_000
         asyncio.run(check_mcp(cli, cwd, env))
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
@@ -129,7 +143,7 @@ def main() -> None:
                 except subprocess.TimeoutExpired:
                     server.kill()
                     server.wait(timeout=15)
-        print("PASS: installed CLI import/lineage, stdio MCP query, UI health and rendered session")
+        print("PASS: installed CLI import/lineage, SVG/PNG images, stdio MCP query, UI health and rendered session")
 
 
 if __name__ == "__main__":

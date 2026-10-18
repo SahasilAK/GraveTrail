@@ -226,7 +226,9 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
 
     def _capabilities(self, w, opts):
         from dataforge.agent.capabilities import capability_catalog
-        return self._page(w, opts, 'capabilities', capability_catalog(self, w), schema_version=1)
+        from dataforge.graph_images import png_available
+        return self._page(w, opts, 'capabilities', capability_catalog(self, w), schema_version=1,
+            graph_image_formats=['svg', 'png'] if png_available() else ['svg'])
 
     def _settings_schema(self, w, opts, section=None):
         from dataforge.settings_service import settings_schema
