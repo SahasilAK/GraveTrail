@@ -9,6 +9,10 @@ on:
         description: 'Build only native distributions for the publishing workflow'
         type: boolean
         default: false
+      only_windows:
+        description: 'Run only the Windows native build when called from the standalone publish workflow'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -17,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        os: ${{ fromJSON(inputs.only_windows && '["windows-latest"]' || '["ubuntu-24.04","windows-latest","macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
