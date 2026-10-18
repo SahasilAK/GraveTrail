@@ -1,8 +1,8 @@
 site_name: GraveTrail
 site_description: Evidence-backed SQL and SAS lineage. Trace dependencies, inspect source, and keep the proof.
-site_url: https://sahasilak.github.io/dataforge-engineering-hub/
-repo_url: https://github.com/SahasilAK/dataforge-engineering-hub
-repo_name: SahasilAK/dataforge-engineering-hub
+site_url: https://sahasilak.github.io/GraveTrail/
+repo_url: https://github.com/SahasilAK/GraveTrail
+repo_name: SahasilAK/GraveTrail
 edit_uri: edit/main/docs/
 copyright: GraveTrail · Apache License 2.0
 strict: true

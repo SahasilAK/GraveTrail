@@ -61,7 +61,7 @@ Distribution regression verifies source archives exclude agent context (plans, A
 
 - `test_release.py` — Stable/matching version checks; three-platform archive staging/integrity, missing/tampered/wrong-version/duplicate/unlisted build rejection, no overwrite, Copilot timeouts/auth failures and preserved baseline/change/startup notes.
 
-Rebrand regressions: distribution script aliases and stale-wheel exclusion; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.
+Rebrand regressions: distribution script aliases, unrelated-brand/stale-version wheel exclusion and /GraveTrail/ documentation link validation; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.
 
 Frozen-dispatch regression executes the real frozen entry script with a captured CLI and asserts gravetrail is the program name.
 

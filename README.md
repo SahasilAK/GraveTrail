@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://sahasilak.github.io/dataforge-engineering-hub/"><strong>🚀 Explore the live GraveTrail documentation →</strong></a>
+  <a href="https://sahasilak.github.io/GraveTrail/"><strong>🚀 Explore the live GraveTrail documentation →</strong></a>
 </p>
 
 <p align="center">
@@ -9,12 +9,12 @@
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%2B-244766" alt="Python 3.11 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-b6532c" alt="Apache License 2.0"></a>
-  <a href="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/tests.yml"><img src="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/tests.yml/badge.svg" alt="Application tests"></a>
-  <a href="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/docs.yml"><img src="https://github.com/SahasilAK/dataforge-engineering-hub/actions/workflows/docs.yml/badge.svg" alt="Documentation build and Pages deployment"></a>
+  <a href="https://github.com/SahasilAK/GraveTrail/actions/workflows/tests.yml"><img src="https://github.com/SahasilAK/GraveTrail/actions/workflows/tests.yml/badge.svg" alt="Application tests"></a>
+  <a href="https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml"><img src="https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml/badge.svg" alt="Documentation build and Pages deployment"></a>
 </p>
 
 <p align="center">
-  <a href="https://sahasilak.github.io/dataforge-engineering-hub/"><strong>Documentation hub</strong></a> ·
+  <a href="https://sahasilak.github.io/GraveTrail/"><strong>Documentation hub</strong></a> ·
   <a href="docs/getting-started/quick-start.md">Quick start</a> ·
   <a href="docs/CLI_GUIDE.md">CLI</a> ·
   <a href="docs/MCP_INTEGRATION.md">MCP</a> ·
@@ -64,8 +64,8 @@ Install [Git](https://git-scm.com/downloads), Python 3.11+, and
 [uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
 
 ```sh
-git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
-cd dataforge-engineering-hub
+git clone https://github.com/SahasilAK/GraveTrail.git
+cd GraveTrail
 uv sync --locked --extra dev
 uv run gravetrail-ui
 ```
@@ -129,7 +129,7 @@ and [fixture verification limits](docs/TESTING.md).
 | [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Build verification](docs/BUILD_AND_RELEASE.md) |
 | [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
 
-Explore the [live documentation website](https://sahasilak.github.io/dataforge-engineering-hub/)
+Explore the [live documentation website](https://sahasilak.github.io/GraveTrail/)
 with search and light/dark mode. See the [Pages deployment guide](docs/deployment/github-pages.md)
 for publishing details. GitHub Pages hosts the documentation;
 run the Streamlit application locally or on your own host.
@@ -148,7 +148,7 @@ can contain source code. [Read the security guide](docs/SECURITY.md).
 ## Build with us
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a focused improvement or
-[report a reproducible issue](https://github.com/SahasilAK/dataforge-engineering-hub/issues/new/choose).
+[report a reproducible issue](https://github.com/SahasilAK/GraveTrail/issues/new/choose).
 For security concerns, use [SECURITY.md](SECURITY.md). Development checks:
 
 ```sh

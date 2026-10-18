@@ -65,8 +65,8 @@ metadata, pagination, and bounded responses. Retrieve original source only when 
 ## One project, one useful first run
 
 ```sh
-git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
-cd dataforge-engineering-hub
+git clone https://github.com/SahasilAK/GraveTrail.git
+cd GraveTrail
 uv sync --locked --extra dev
 uv run gravetrail-ui
 ```

@@ -31,14 +31,14 @@ def test_frozen_cli_uses_gravetrail_program_name(tmp_path, monkeypatch):
     assert calls == [["gravetrail", "--help"]]
 
 
-def test_python_build_ignores_previous_brand_and_version_artifacts(tmp_path, monkeypatch):
+def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp_path, monkeypatch):
     from dataforge.build import build_python
 
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
     output = tmp_path / "dist"
     folder = output / "python"
     folder.mkdir(parents=True)
-    for name in ("dataforge_engineering_hub-1.2.3-py3-none-any.whl", "gravetrail-1.2.2-py3-none-any.whl",
+    for name in ("unrelated_brand-1.2.3-py3-none-any.whl", "gravetrail-1.2.2-py3-none-any.whl",
                  "gravetrail-1.2.2.tar.gz", "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"):
         (folder / name).write_bytes(b"artifact")
     monkeypatch.setattr("dataforge.build._run", lambda *args, **kwargs: None)

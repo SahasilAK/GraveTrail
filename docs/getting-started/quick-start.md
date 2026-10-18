@@ -8,8 +8,8 @@ This workflow uses static analysis only; no LLM or credentials are needed.
 Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/), then run:
 
 ```sh
-git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
-cd dataforge-engineering-hub
+git clone https://github.com/SahasilAK/GraveTrail.git
+cd GraveTrail
 uv sync --locked --extra dev
 uv run gravetrail-ui --home ./.dataforge
 ```
@@ -26,7 +26,7 @@ For pip, Docker and executable alternatives, use the
 
 Create a workspace in the sidebar, then open **Lineage builder**. Choose a ZIP from
 the checkout's
-[sample data directory](https://github.com/SahasilAK/dataforge-engineering-hub/tree/main/tests/sample_data):
+[sample data directory](https://github.com/SahasilAK/GraveTrail/tree/main/tests/sample_data):
 
 | Archive | Select only |
 | --- | --- |

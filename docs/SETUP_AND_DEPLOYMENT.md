@@ -46,8 +46,8 @@ status; this does not establish Linux/macOS native executable startup.
 For engineers starting from this repository, use the locked source environment:
 
 ```sh
-git clone https://github.com/SahasilAK/dataforge-engineering-hub.git
-cd dataforge-engineering-hub
+git clone https://github.com/SahasilAK/GraveTrail.git
+cd GraveTrail
 uv sync --locked --extra dev
 uv run gravetrail-ui
 ```
@@ -230,7 +230,7 @@ Build subprocesses receive an allowlisted environment; source/package/image defi
 exclude runtime databases and common secret files. Inspect artifacts before distribution.
 
 Version comes from `pyproject.toml`. Keep `uv.lock` consistent when changing dependencies.
-The [release workflow](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/.github/workflows/release.yml) supports matching `vVERSION` tags
+The [release workflow](https://github.com/SahasilAK/GraveTrail/blob/main/.github/workflows/release.yml) supports matching `vVERSION` tags
 and manual dispatch, builds native artifacts on Windows/Linux/macOS runners, smoke-tests
 them, and uploads workflow artifacts. Its container job builds/tests the image and uploads
 metadata. It does not publish a GitHub Release or push an image. Observed remote execution
@@ -597,7 +597,7 @@ credentials remain available until the launching environment/process is changed.
 **Can I build every platform on Windows?** Executables are host-platform builds. Use
 appropriate Windows/Linux/macOS runners and test each native artifact before distribution.
 
-**What is the license?** The repository includes the [Apache License 2.0](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/LICENSE).
+**What is the license?** The repository includes the [Apache License 2.0](https://github.com/SahasilAK/GraveTrail/blob/main/LICENSE).
 Review dependency licenses when redistributing a bundled application.
 
 ## CLI and MCP UI coverage

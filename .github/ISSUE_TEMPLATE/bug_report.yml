@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Check existing issues first. Do not attach credentials, private source, live databases or backups.
-        For vulnerabilities, follow [SECURITY.md](https://github.com/SahasilAK/dataforge-engineering-hub/blob/main/SECURITY.md).
+        For vulnerabilities, follow [SECURITY.md](https://github.com/SahasilAK/GraveTrail/blob/main/SECURITY.md).
   - type: input
     id: version
     attributes:
