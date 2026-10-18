@@ -1,7 +1,7 @@
 # SAS static analysis
 
 The SAS parser is separate from SQLGlot. It groups semicolon-delimited DATA/PROC blocks,
-preserves line locations, strips comments safely, resolves configured/static `%let` literals,
+preserves line locations, strips comments safely, resolves configured/static `%let` values,
 and reports unsupported runtime constructs. PROC SQL statements use SQLGlot after SAS handling.
 
 Tested: DATA outputs, SET/MERGE/UPDATE/MODIFY inputs, explicit INFILE/FILE paths, WORK assets,
@@ -15,9 +15,24 @@ SAS `DATETIME()` is recognized as an expression. Malformed modifiers remain pars
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 8 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 9 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Lineage builder for previously analyzed workspaces; source bytes and original statement/line
-evidence remain intact. Existing packaged executables/images need rebuilding to include this fix.
+evidence remain intact. Existing packaged executables/images need rebuilding for version 9.
+
+## Static macro-variable expressions
+
+`%LET` can combine already-known direct references with literal text, for example
+`%let lib=raw; %let source=&lib..orders;`. Values resolve when assigned, so changing `lib`
+later does not change `source`. References in double-quoted paths expand; single-quoted
+paths remain literal. Original DATA/PROC code and line ranges retain the macro references.
+See SAS's [macro-variable reference rules](https://support.sas.com/documentation/cdl/en/mcrolref/61885/HTML/default/a001071889.htm).
+
+Unknown/indirect references, macro functions and oversized expansions remain unresolved.
+An unresolved reassignment invalidates the previous variable value. Unmodeled macro calls,
+conditional macro flow and CALL SYMPUT/SYMPUTX/EXECUTE invalidate known variable bindings
+conservatively; a later explicit `%LET` can establish a fresh value. Configured values cannot
+inject additional semicolon-delimited statements. Expansion is bounded to 1 MiB per statement.
+This adds static variable expressions, not macro-definition invocation or a SAS interpreter.
 
 Library mappings rewrite namespaces, not filesystem permissions. LIBNAME paths are not read.
 One-level SAS datasets use WORK; WORK objects are temporary but remain in internal lineage.

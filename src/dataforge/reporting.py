@@ -51,8 +51,8 @@ def validate_lineage_evidence(store, workspace):
         valid = bool(edge['code']) and 1 <= edge['start_line'] <= edge['end_line'] and 0 <= edge['confidence'] <= 1
         try:
             source = store.file(edge['file_id'], edge['source_hash'])
-            lines = source['raw_content'].splitlines()
-            valid &= edge['end_line'] <= len(lines) and edge['code'].strip() in '\n'.join(lines[edge['start_line'] - 1:edge['end_line']])
+            lines = source['raw_content'].splitlines(keepends=True)
+            valid &= edge['end_line'] <= len(lines) and edge['code'].strip() in ''.join(lines[edge['start_line'] - 1:edge['end_line']])
         except (ValueError, OSError):
             valid = False
         if not valid:

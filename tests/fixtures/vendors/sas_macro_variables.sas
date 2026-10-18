@@ -1,0 +1,12 @@
+%let library=raw;
+%let member=orders;
+%let source=&library..&member.;
+%let target=mart.orders;
+data &target.;
+  set &source.;
+  keep id amount;
+run;
+%let folder=input;
+%let path=&folder./orders.csv;
+proc import datafile="&path." out=work.imported dbms=csv;
+run;

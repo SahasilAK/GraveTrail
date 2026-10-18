@@ -15,7 +15,7 @@ from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 
-PARSER_VERSION = "8"
+PARSER_VERSION = "9"
 log = logging.getLogger(__name__)
 
 

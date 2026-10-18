@@ -215,7 +215,19 @@ The build approach follows the documented [uv Docker integration](https://docs.a
 [PyInstaller collection flags](https://pyinstaller.org/en/stable/usage.html), and
 [Hatch build-hook API](https://hatch.pypa.io/latest/plugins/build-hook/reference/).
 
-## Verification ledger (2026-10-16)
+## Current build acceptance — 2026-10-18
+
+The 2026-10-18 GraveTrail Windows wheel and executable passed outside-checkout SQL import,
+lineage, actual stdio MCP, HTTP health and rendered UI smoke with parser 8. The branded Linux
+Docker image passed non-root runtime and persistence checks on 2026-10-17. A fresh Docker
+attempt on 2026-10-18 was blocked by daemon availability; it does not erase the earlier pass.
+
+The current source adds parser 9. Rebuild and smoke wheel/native/container artifacts before
+distributing those rules; older artifact results do not validate changed source. Native
+Linux/macOS executables and the current hosted release/download workflow remain unrecorded
+acceptance gates here. See [the current acceptance matrix](TESTING.md#current-acceptance-summary-2026-10-18).
+
+## Historical verification ledger (2026-10-16)
 
 - Windows Python 3.11.16: focused distribution regressions cover platform homes,
   copy-once themes, tamper/missing/unsafe artifacts, credential-free build

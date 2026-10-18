@@ -15,6 +15,36 @@ def strip_comments(text: str) -> str:
                   lambda m: m.group(1) if m.group(1) else re.sub(r"[^\n]", " ", m.group()), text, flags=re.S)
 
 
+def resolve_macros(text, variables):
+    """One known-value substitution pass; never interpret functions or indirect references."""
+    unresolved = []
+    size = len(text)
+    references = r"&+[A-Za-z_]\w*\.?|%[A-Za-z_]\w*"
+
+    def replace(match):
+        nonlocal size
+        token = match.group()
+        if token.startswith("'"):
+            return token
+        if token.startswith('"'):
+            return '"' + re.sub(references, replace, token[1:-1]) + '"'
+        key = token[1:].rstrip(".").casefold()
+        value = variables.get(key) if token.startswith("&") and not token.startswith("&&") else None
+        if value is None or ";" in value or re.search(references, value):
+            unresolved.append(token)
+            if value is not None and re.search(r"%[A-Za-z_]", value):
+                unresolved.append("%runtime")
+            return token
+        size += len(value) - len(token)
+        if size > 1024 * 1024:
+            unresolved.append(token)
+            return token
+        return value
+
+    resolved = re.sub(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|" + references, replace, text)
+    return resolved, unresolved
+
+
 def parse_sas(content: str, library_mappings: dict | None = None, macros: dict | None = None,
               sql_dialect: str = "") -> ParseResult:
     result = ParseResult()
@@ -159,6 +189,7 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
                 control_depth -= 1
             continue
         if re.match(r"%(if|else|do)\b", clean, re.I):
+            variables.clear()
             if block:
                 block_bad = True
             flush()
@@ -166,28 +197,34 @@ def parse_sas(content: str, library_mappings: dict | None = None, macros: dict |
                 control_depth = 1
             result.diagnostics.append(Diagnostic("SAS macro control flow is unresolved; conditional block not analyzed", line))
             continue
-        assignment = re.fullmatch(r"%let\s+(\w+)\s*=\s*([^;&%]*);?", clean, re.I)
+        assignment = re.fullmatch(r"%let\s+([A-Za-z_]\w*)\s*=\s*(.*?);?", clean, re.I | re.S)
         if assignment:
-            variables[assignment.group(1).casefold()] = assignment.group(2).strip()
+            name = assignment.group(1).casefold()
+            value, unresolved = resolve_macros(assignment.group(2).strip(), variables)
+            if unresolved:
+                variables.pop(name, None)
+                if any(token.startswith("%") for token in unresolved):
+                    variables.clear()
+                result.diagnostics.append(Diagnostic("Unresolved SAS %LET assignment; previous value invalidated", line, symbol=name))
+            else:
+                variables[name] = value
             continue
-        unresolved = []
-
-        def substitute(m):
-            key = m.group(1).casefold()
-            if key not in variables:
-                unresolved.append(m.group(0))
-                return m.group(0)
-            return variables[key]
-
-        clean = re.sub(r"&(\w+)\.?", substitute, clean)
+        clean, unresolved = resolve_macros(clean, variables)
         if unresolved:
+            if any(token.startswith("%") for token in unresolved):
+                variables.clear()
             result.diagnostics.append(Diagnostic("Unresolved SAS macro: " + ", ".join(unresolved), line,
                                                   symbol=",".join(unresolved)))
             block_bad = True
         if re.match(r"%", clean):
+            variables.clear()
             result.diagnostics.append(Diagnostic("Dynamic SAS macro invocation/control flow is unresolved", line))
             block_bad = True
             continue
+        unquoted = re.sub(r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"", " ", clean)
+        if re.search(r"\bcall\s+(symputx?|execute)\s*\(", unquoted, re.I):
+            variables.clear()
+            result.diagnostics.append(Diagnostic("Runtime SAS macro mutation is unresolved; known variable values invalidated", line))
         header = re.match(r"(data|proc)\s+(\w+)", clean, re.I)
         if header:
             previous_bad = block_bad
