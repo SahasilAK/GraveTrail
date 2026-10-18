@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import sqlglot
 from sqlglot import exp
@@ -13,6 +14,9 @@ from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage
 log = logging.getLogger(__name__)
 # SQLGlot fallback warnings include raw imported statements; keep sensitive source out of logs.
 logging.getLogger("sqlglot").setLevel(logging.ERROR)
+ROUTINE_HEADER = re.compile(
+    r"\A(?:\s+|/\*.*?\*/|--[^\n]*(?:\n|$))*(?:CREATE(?:\s+OR\s+(?:REPLACE|ALTER))?|ALTER)"
+    r"\s+(?:PROCEDURE|PROC|FUNCTION)\b", re.I | re.S)
 
 
 def table_name(table: exp.Table) -> str:
@@ -92,13 +96,81 @@ def declared_schema(tree, start, end, operation_index):
     return records
 
 
+def wrapped_sql(tree, dialect, depth, code, start, end):
+    """Inspect bounded literal bodies, retaining the enclosing original as evidence."""
+    routine = isinstance(tree, exp.Create) and str(tree.args.get("kind", "")).upper() in {"PROCEDURE", "FUNCTION"}
+    immediate = (isinstance(tree, exp.Command) and tree.name.upper() == "EXECUTE"
+                 and dialect.__class__.__name__.lower() == "snowflake")
+    if not routine and not immediate:
+        return None
+    if depth >= 8:
+        return ParseResult(diagnostics=[Diagnostic("Static SQL wrapper nesting limit exceeded", start)])
+    method, body = "sql-procedure-body", None
+    if routine:
+        properties = tree.args.get("properties")
+        properties = properties.expressions if properties else []
+        if (dialect.__class__.__name__.lower() == "postgres"
+                and tree.args.get("kind", "").upper() == "PROCEDURE"
+                and not tree.this.expressions
+                and len(properties) == 1 and isinstance(properties[0], exp.LanguageProperty)
+                and properties[0].this.name.upper() == "SQL"
+                and isinstance(tree.expression, exp.Heredoc)):
+            body = tree.expression.this
+    else:
+        method = "sql-literal"
+        expression = tree.args.get("expression")
+        text = expression.this if isinstance(expression, exp.Literal) else ""
+        match = re.fullmatch(r"IMMEDIATE\s+(?:'((?:''|[^'\\])*)'|\$\$((?:(?!\$\$).)*)\$\$)\s*", text, re.I | re.S)
+        if match:
+            body = match.group(1).replace("''", "'") if match.group(1) is not None else match.group(2)
+            if len(list(statements(body))) != 1:
+                body = None
+    if body is None:
+        return ParseResult(diagnostics=[Diagnostic(
+            "Unresolved SQL wrapper: requires a parameterless PostgreSQL LANGUAGE SQL dollar body "
+            "or one Snowflake EXECUTE IMMEDIATE literal statement; no guessed lineage", start)])
+    parsed = _parse_sql(body, dialect, depth + 1, restricted=True)
+    for op in parsed.operations:
+        op.code, op.start, op.end, op.method = code, start, end, method
+    for diagnostic in parsed.diagnostics:
+        diagnostic.line = start
+    # A definition is not proof of invocation or of an unconditional workspace schema.
+    parsed.metadata = {}
+    if routine:
+        parsed.diagnostics.append(Diagnostic("SQL procedure definition dependencies; invocation is not established", start, "info"))
+    return parsed
+
+
 def parse_sql(content: str, dialect: str | sqlglot.Dialect = "") -> ParseResult:
+    return _parse_sql(content, dialect)
+
+
+def _parse_sql(content, dialect, depth=0, restricted=False):
     result = ParseResult()
     for code, start, end in statements(content):
+        routine_header = ROUTINE_HEADER.match(code)
         try:
+            dialect = sqlglot.Dialect.get_or_raise(dialect or None)
             tree = sqlglot.parse_one(code, read=dialect or None, error_level=ErrorLevel.RAISE)
             if tree is None:
                 continue
+            if routine_header and not (isinstance(tree, exp.Create) and isinstance(tree.expression, (exp.Heredoc, exp.Literal))):
+                # A semicolon may split an unsupported procedure before its body ends.
+                result.diagnostics.append(Diagnostic("Unsupported procedural body format; remainder of file not analyzed", start))
+                return ParseResult(diagnostics=result.diagnostics) if restricted else result
+            wrapped = wrapped_sql(tree, dialect, depth, code, start, end)
+            if wrapped is not None:
+                if restricted and any(d.severity != "info" for d in wrapped.diagnostics):
+                    return ParseResult(diagnostics=wrapped.diagnostics)
+                result.operations.extend(wrapped.operations)
+                result.diagnostics.extend(wrapped.diagnostics)
+                continue
+            if restricted and not (isinstance(tree, (exp.Select, exp.SetOperation, exp.Insert, exp.Update, exp.Delete, exp.Merge))
+                                   or isinstance(tree, exp.Create) and tree.args.get("kind", "").upper() in {"TABLE", "VIEW"}):
+                return ParseResult(diagnostics=[Diagnostic("Unsupported statement in static SQL body; no guessed lineage", start)])
+            if restricted and (tree.find(exp.Placeholder, exp.Parameter) is not None
+                               or any(not isinstance(table.this, exp.Identifier) for table in tree.find_all(exp.Table))):
+                return ParseResult(diagnostics=[Diagnostic("Runtime identifier or bind parameter in static SQL body; no guessed lineage", start)])
             if isinstance(tree, (exp.Command, exp.Block)):
                 result.diagnostics.append(Diagnostic("Unsupported SQL command or procedural block; no guessed lineage", start))
                 continue
@@ -225,4 +297,9 @@ def parse_sql(content: str, dialect: str | sqlglot.Dialect = "") -> ParseResult:
             # SQL errors may quote imported secrets; store only the type and source location.
             log.info("sql_parse_failed", extra={"line": start, "error_type": type(exc).__name__})
             result.diagnostics.append(Diagnostic(f"SQL parse failed ({type(exc).__name__}); check dialect and syntax", start, "error"))
+            if routine_header:
+                result.diagnostics.append(Diagnostic("Unsupported procedural body format; remainder of file not analyzed", start))
+                return ParseResult(diagnostics=result.diagnostics) if restricted else result
+            if restricted:
+                return ParseResult(diagnostics=result.diagnostics)
     return result

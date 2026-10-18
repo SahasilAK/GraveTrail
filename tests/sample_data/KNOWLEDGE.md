@@ -43,6 +43,13 @@ and the SQL transformations passed a SQLite compatibility execution check.
 Full DuckDB execution and licensed SAS execution have not been verified.
 These are fixture provenance notes, not results of a fresh application test.
 
+## Parser9 acceptance (2026-10-18)
+
+Fresh isolated scripts/verify_parity.py run preserves every original/SHA256,85persistent
+tables and128logical edges per ZIP; pub.all_kpis reaches sevenlayers/all16sources.
+SAS retains16WORK/144physical edges; both warm analyses reuse86caches. CLI/service/actual
+MCP, dictionary and stored evidence checks pass without provider calls or imported execution.
+
 ## Application observations (2026-10-16)
 
 Agent integration verification imported 86 scripts per ZIP using only its extension.

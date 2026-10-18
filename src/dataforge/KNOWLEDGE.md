@@ -28,7 +28,7 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 - `maintenance.py` — history_plan protects current references/latest completed runs; bounded archive_history journals recovery with removal, writes an extra checksummed file; restore_history inserts missing IDs atomically, preferring the DB journal.
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.
 - `schemas.py` — collect_schemas reconciles typed DDL through the lineage identity resolver, retaining immutable declaration evidence; conflicting/incomplete/schema-changing declarations disable expansion without guessing execution order.
-- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; schema-backed plain wildcard expansion is inferred and re-materialized on schema refresh; column_report, compare_runs and retained AI provenance use stored facts. Parser version 8 invalidates earlier SAS PROC SQL results.
+- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; schema-backed plain wildcard expansion is inferred and re-materialized on schema refresh; column_report, compare_runs and retained AI provenance use stored facts. Parser version9 refreshes earlier caches for literal SQL bodies and known-value SAS macro expressions.
 - `store.py` — Store owns locked DuckDB access, migrations v1–v4 (history and temporary recovery journals), validated workspace creation/editing, settings, source versions, immutable snapshots and transactional boundaries.
 
 ## Invariants
@@ -50,7 +50,7 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 
 - `ai_service.py` — offline chunks/diagnostic review, hash/job-pinned synchronous assistance with per-fallback authorization, durable metadata/detail/activity and idempotent inferred merge with refresh-failure reporting.
 
-- `reporting.py` — shared dictionary/provenance, health, original-evidence integrity, literal SQL/SAS matches and scoped history/inventory reports; all queries are offline.
+- `reporting.py` — shared dictionary/provenance, health, exact original-evidence integrity (preserving LF/CRLF), literal SQL/SAS matches and scoped history/inventory reports; all queries are offline.
 
 - `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifact creation, guarded managed paths and scoped/checksummed budgeted base64 reads.
 
