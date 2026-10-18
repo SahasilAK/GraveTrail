@@ -40,3 +40,8 @@ Context policy: All project KNOWLEDGE.md maps are tracked so humans and agents c
 GraveTrail branding: distribution/commands use gravetrail (legacy dataforge commands remain aliases). Internal Python package, DATAFORGE_* variables, .dataforge/platform homes, database/portable formats and Compose project/volume stay compatible. Repository URLs remain unchanged pending the user's post-merge rename. Build outputs and MCP display/resource aliases use GraveTrail.
 
 Rebrand audit: frozen CLI program name, sample install paths and cleanup guide use GraveTrail; README/guide screenshot references use gravetrail-prefixed real captures. BUILD_AND_RELEASE lists intentionally retained compatibility names.
+
+Parser9: bounded PostgreSQL SQL procedure dollar bodies, Snowflake literal dynamic SQL and
+quote-aware known-value SAS %LET expressions with stale-binding invalidation. Imported code
+never executes; original wrapper/block evidence survives. docs/TESTING.md is the tracked
+current acceptance matrix; optional local status/matrix ledgers retain dated historical records.

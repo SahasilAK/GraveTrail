@@ -1,5 +1,36 @@
 # Testing
 
+## Current acceptance summary — 2026-10-18
+
+This table distinguishes delivered behavior, dated environment evidence and still-open gates.
+Earlier numerical results below are historical; a later source change does not refresh a
+previously tested distribution artifact. Optional local `plans/` records are not shipped or
+published; this tracked summary is the public acceptance reference.
+
+| Area | Latest evidence | Remaining gate |
+| --- | --- | --- |
+| Source application | Parser cache 9 adds fixture-backed SQL procedure/literal bodies and static SAS macro expressions; full source verification is recorded below | No claim of universal SQL/SAS coverage |
+| SQL/SAS sample ZIPs | Each has 85 persistent tables, 128 logical edges, seven layers/all 16 roots; SAS adds 16 WORK assets/144 physical edges | Real client projects and large dense graphs need separate accuracy/performance acceptance |
+| CLI/MCP | Complete documented interfaces and actual SDK transport/permission regressions; fixture parity includes original bytes, evidence and warm caches | One DuckDB process owns each home |
+| OmniRoute | Bounded 2026-10-17 live discovery, connection, SQL/SAS validation, inferred merge, refresh and reopen passed with `auto/best-reasoning` | Historical gateway failures are superseded; future availability and other live providers are not established |
+| Windows wheel/executable | 2026-10-18 parser-8 artifacts passed outside-checkout CLI/import/lineage, actual stdio MCP, health and rendered UI smoke | Rebuild and smoke artifacts containing parser 9 before release |
+| Linux Docker | 2026-10-17 GraveTrail image passed non-root CLI/import/lineage/UI/MCP and volume persistence | 2026-10-18 fresh Docker checks were blocked by daemon availability; no parser-9 container result claimed |
+| Native Linux/macOS and hosted release | Build/publish workflow implemented | Target-native downloaded-artifact and current hosted release acceptance remain unrecorded here |
+| Standalone HTML | Self-contained assets, escaping, JavaScript checks and real UI download passed | Direct interaction with the downloaded `file://` artifact remains unverified because browser automation rejects file URLs |
+
+Whole-home backup/restore and guarded blob cleanup are delivered features. Scheduled retention,
+SVG/PNG export, transitive column transformations and multi-user collaboration remain optional.
+
+Final parser-9 source verification on 2026-10-18: **402 passed, 1 existing Windows symlink
+privilege skip** in 68.31 seconds. Ruff and the lock check pass. Fresh isolated SQL/SAS ZIP
+acceptance through CLI/service/actual MCP preserves exact originals, expected logical/physical
+edges, all seven layers/16 roots and 86 warm cache hits per project. The running isolated UI
+rebuilt all three new fixtures, validated zero invalid evidence records, and displayed the
+procedure upstream chain and original source on graph selection. No imported code or external
+provider was executed. Release artifacts were not rebuilt for this source change.
+
+## Test commands and historical evidence
+
 `uv run pytest -q` runs unit, integration, security and Streamlit AppTest checks. `uv run ruff
 check .` checks lint/imports. Node.js, when installed, adds a JavaScript syntax check; the app
 itself requires no Node runtime. Tests construct isolated temporary DuckDB homes and use real

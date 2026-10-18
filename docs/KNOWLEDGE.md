@@ -32,15 +32,15 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `PERFORMANCE.md` — Performance. Maintained documentation; consult implementation status for verification boundaries.
 - `PROMPT_ENGINEERING.md` — Prompt engineering. Maintained documentation; consult implementation status for verification boundaries.
 - `REVIEW.md` — Implementation review, 2026-10-15. Maintained documentation; consult implementation status for verification boundaries.
-- `SAS_PARSING.md` — SAS static rules, PROC SQL SELECT modifiers/calculated aliases, exact evidence, parser8 refresh and unresolved runtime boundaries.
+- `SAS_PARSING.md` — SAS static rules, PROC SQL modifiers/calculated aliases and parser9 quote-aware %LET expressions/stale-binding invalidation; exact evidence and runtime boundaries.
 - `SECURITY.md` — Security and privacy. Maintained documentation; consult implementation status for verification boundaries.
-- `SQL_PARSING.md` — SQL parsing. Maintained documentation; consult implementation status for verification boundaries.
-- `TESTING.md` — Testing. Maintained documentation; consult implementation status for verification boundaries.
+- `SQL_PARSING.md` — AST lineage/direct usage and parser9 bounded PostgreSQL SQL procedure/Snowflake literal bodies, original enclosing evidence and explicit runtime/DDL-schema exclusions.
+- `TESTING.md` — Tracked current acceptance matrix distinguishing source, dated Windows/Docker/OmniRoute passes and still-open native/hosted/offline-browser gates; commands and historical counts remain separate.
 - `TROUBLESHOOTING.md` — Troubleshooting. Maintained documentation; consult implementation status for verification boundaries.
 - `USER_GUIDE.md` — User guide. Maintained documentation; consult implementation status for verification boundaries.
 
 Latest verification/accounting lives in plans/REQUIREMENT_MATRIX.md and IMPLEMENTATION_STATUS;
-older numerical results in guides are historical. Parser8 handles SAS PROC SQL modifiers with exact original evidence; both ZIPs now match128 logical edges/all16 sources.
+older numerical results in guides are historical. Parser9 extends literal SQL/SAS macro coverage; both ZIPs retain128 logical edges/seven layers/all16 sources and original bytes.
 
 Maintenance/deployment guidance: `connections.py` isolates session keys; broad cleanup uses
 preview/apply guards, while older history/staging helpers remain separately recoverable.
