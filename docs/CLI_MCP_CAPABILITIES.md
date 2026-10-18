@@ -7,6 +7,12 @@ rows have working permitted reads/local routes; they do **not** claim full MCP p
 including scope, aggregate effects, required grants and current launch authorization.
 Follow `next_cursor`; availability does not mean the current caller has permission.
 
+These 46 IDs group UI capabilities; they are not command/tool counts. The registered
+interface has **98 CLI command routes, 29 CLI groups, 78 MCP tools, 2 concrete resources,
+4 resource templates and 1 prompt** (verified 2026-10-18). The CLI and MCP guides list
+every route/tool, including basic discovery commands outside this UI capability matrix.
+Documentation tests compare those references with actual registrations and inputs.
+
 Use [CLI guide](CLI_GUIDE.md) for command options/examples and [MCP integration](MCP_INTEGRATION.md)
 for typed schemas and transport setup. Every workspace operation selects an explicit ID.
 Use `--home` at launch and keep one DuckDB owning process per home. Stop that owner before

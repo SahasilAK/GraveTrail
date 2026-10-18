@@ -58,3 +58,5 @@ BUILD_AND_RELEASE.md now includes the manual Publish standalone release runbook:
 Product prose and command examples use GraveTrail; BUILD_AND_RELEASE documents preserved legacy storage, imports, variables, commands, Compose identities and unchanged repository links. Native/archive/image examples use gravetrail.
 
 Rebrand rescan aligns reset/restore phrases and sample installation paths, explicitly documents retained compatibility identifiers, and uses gravetrail-prefixed screenshot filenames.
+
+CLI/MCP references enumerate all98 executable routes/29groups, root and command flags/positional arguments,78 tools with required/optional inputs,2 concrete resources/4templates including legacy aliases and1prompt. Documentation tests compare exact registrations/inputs, independently of the46-ID UI capability catalog. Launcher/build sibling flags and the UI exception to non-Streamlit CLI behavior are explicit.

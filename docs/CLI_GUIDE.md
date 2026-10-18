@@ -1,8 +1,9 @@
 # GraveTrail CLI
 
 Install from this checkout with `uv sync --locked --extra dev`. Run `uv run gravetrail
---help` or install the wheel and use `gravetrail`. Streamlit is neither imported nor
-launched by the CLI. Python 3.11+ is required.
+--help` or install the wheel and use `gravetrail`. Analysis and query commands
+do not import or launch Streamlit; `gravetrail ui` and `gravetrail-ui` intentionally
+launch it. Python 3.11+ is required.
 
 ## First workflow
 
@@ -25,30 +26,199 @@ Do not copy an open database. A single MCP process shares its Store and jobs.
 
 ## Commands
 
-| Command | Purpose |
+Verified against the registered interface on 2026-10-18: **98 executable command
+routes and 29 command groups**. Prefix every route below with `gravetrail`.
+Global options go before the route; command options go after it. An empty
+argument cell means no positional arguments, not that the command has no required
+options. **required** marks mandatory options; all commands accept `--help`.
+Boolean positive/negative forms and short aliases are listed explicitly.
+Use `gravetrail ROUTE --help` for value types, choices, bounds and defaults.
+The reference is checked against actual registrations by `tests/test_documentation.py`.
+
+<!-- cli-commands:start -->
+| Command | Positional arguments | Command options |
+| --- | --- | --- |
+| `agent client-config` | — | `--workspace`, `-w` **required**; `--client`; `--transport`; `--help` |
+| `agent inspect` | — | `--workspace`, `-w` **required**; `--tool-name`; `--help` |
+| `agent self-test` | — | `--workspace`, `-w` **required**; `--help` |
+| `ai activity` | — | `--workspace`, `-w` **required**; `--help` |
+| `ai chunks` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--help` |
+| `ai merge` | `RECORD_ID` | `--workspace`, `-w` **required**; `--refresh`, `--no-refresh`; `--help` |
+| `ai request` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--expected-hash` **required**; `--expected-job`; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `ai results export` | `RECORD_ID` | `--workspace`, `-w` **required**; `--help` |
+| `ai results get` | `RECORD_ID` | `--workspace`, `-w` **required**; `--help` |
+| `ai results list` | — | `--workspace`, `-w` **required**; `--help` |
+| `ai review list` | — | `--workspace`, `-w` **required**; `--help` |
+| `ai review preview` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--first`; `--last`; `--help` |
+| `ai review request` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--expected-hash` **required**; `--first` **required**; `--last` **required**; `--expected-job`; `--help` |
+| `application logging get` | — | `--help` |
+| `application logging update` | `LEVEL` | `--help` |
+| `application theme apply` | `NAME` | `--help` |
+| `application theme get` | — | `--help` |
+| `application theme list` | — | `--help` |
+| `assets schema` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
+| `assets search` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
+| `batch lineage` | `ASSETS...` | `--workspace`, `-w` **required**; `--direction`; `--help` |
+| `capabilities` | — | `--workspace`; `--help` |
+| `cleanup ai` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup columns` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup history` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup inspect` | — | `--workspace`, `-w` **required**; `--help` |
+| `cleanup jobs` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup lineage` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup reset` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup sources` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `cleanup workspace` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `columns usage` | `ASSET` | `--workspace`, `-w` **required**; `--column-query`; `--usage-type`; `--file-id`; `--group-by`; `--help` |
+| `dictionary list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
+| `export download` | `ARTIFACT_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--help` |
+| `export graph` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
+| `export lineage` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
+| `export paths` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--max-paths`; `--help` |
+| `export read` | `RESULT_ID` | `--workspace`, `-w` **required**; `--format`; `--binary`, `--no-binary`; `--offset`; `--length`; `--help` |
+| `export report` | — | `--workspace`, `-w` **required**; `--kind` **required**; `--format`; `--asset`; `--query`; `--before`; `--after`; `--record-id`; `--help` |
+| `export sources` | — | `--workspace`, `-w` **required**; `--asset`; `--file-id` (repeatable); `--direction`; `--help` |
+| `history archive` | `PREVIEW` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
+| `history archives` | — | `--workspace`, `-w` **required**; `--help` |
+| `history preview` | — | `--workspace`, `-w` **required**; `--keep-runs`; `--keep-imports`; `--batch-size`; `--help` |
+| `history restore` | `ARCHIVE_ID` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
+| `impact analyze` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
+| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--background`, `--no-background`; `--help` |
+| `ingestions get` | `INGESTION_ID` | `--workspace`, `-w` **required**; `--help` |
+| `ingestions list` | — | `--workspace`, `-w` **required**; `--help` |
+| `issues` | — | `--workspace`, `-w` **required**; `--severity`; `--help` |
+| `jobs status` | `JOB_ID` | `--workspace`, `-w` **required**; `--wait`, `--no-wait`; `--help` |
+| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--help` |
+| `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
+| `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
+| `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
+| `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
+| `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
+| `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |
+| `maintenance backup` | — | `--help` |
+| `maintenance backups` | — | `--help` |
+| `maintenance checkpoint` | — | `--help` |
+| `maintenance download` | `BACKUP_ID`, `DESTINATION` | `--help` |
+| `maintenance inspect` | — | `--help` |
+| `maintenance restore` | `ARCHIVE`, `DESTINATION` | `--confirm`; `--help` |
+| `mcp` | — | `--transport`; `--host`; `--port`; `--public-url`; `--help` |
+| `providers credentials status` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--help` |
+| `providers get` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--help` |
+| `providers list` | — | `--workspace`, `-w` **required**; `--help` |
+| `providers models` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `providers remove` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
+| `providers routing get` | — | `--workspace`, `-w` **required**; `--help` |
+| `providers routing update` | `FILE` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
+| `providers save` | `FILE` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--profile-id`; `--help` |
+| `providers test` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `runs compare` | `BEFORE`, `AFTER` | `--workspace`, `-w` **required**; `--help` |
+| `runs get` | `RUN_ID` | `--workspace`, `-w` **required**; `--help` |
+| `runs list` | — | `--workspace`, `-w` **required**; `--help` |
+| `runtime info` | — | `--workspace`; `--help` |
+| `settings get` | `SECTION` | `--workspace`, `-w` **required**; `--help` |
+| `settings schema` | — | `--workspace`, `-w` **required**; `--section`; `--help` |
+| `settings update` | `SECTION`, `FILE` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
+| `source download` | `FILE_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--content-hash`; `--help` |
+| `source list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
+| `source metadata` | `FILE_ID` | `--workspace`, `-w` **required**; `--help` |
+| `source search` | `QUERY` | `--workspace`, `-w` **required**; `--include-matches`, `--no-include-matches`; `--help` |
+| `source show` | — | `--workspace`, `-w` **required**; `--file-id`; `--statement-id`; `--operation-id`; `--start-line`; `--end-line`; `--full`, `--no-full`; `--help` |
+| `staging clean` | `PREVIEW` | `--workspace`, `-w` **required**; `--confirm`; `--name` (repeatable); `--expired`, `--no-expired`; `--help` |
+| `staging preview` | — | `--workspace`, `-w` **required**; `--age-hours`; `--help` |
+| `staging recoveries` | — | `--workspace`, `-w` **required**; `--help` |
+| `staging restore` | `RECOVERY_ID` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
+| `ui` | — | `--help` |
+| `workspace config export` | — | `--workspace`, `-w` **required**; `--help` |
+| `workspace config import` | `FILE` | `--help` |
+| `workspace create` | `NAME` | `--description`; `--help` |
+| `workspace health` | — | `--workspace`, `-w` **required**; `--help` |
+| `workspace list` | — | `--query`; `--help` |
+| `workspace reset` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
+| `workspace summary` | — | `--workspace`, `-w` **required**; `--help` |
+| `workspace update` | `NAME` | `--workspace`, `-w` **required**; `--description`; `--expected-revision`; `--help` |
+<!-- cli-commands:end -->
+
+### Command groups
+
+Groups organize commands; use `gravetrail GROUP --help` to list their children.
+
+<!-- cli-groups:start -->
+| Group | Purpose |
 | --- | --- |
-| `workspace list [--query TEXT]` | Page permitted workspaces |
-| `workspace create NAME [--description TEXT]` | Create workspace with explicit startup writes |
-| `workspace summary --workspace ID` | Counts and analysis freshness |
-| `ingest PATH --extensions sql,sas,csv --workspace ID` | Allowed directory/ZIP import |
-| `lineage build --workspace ID [--force] [--file-id ID]` | Cached analysis or explicit selected refresh |
-| `lineage upstream ASSET --workspace ID` | Upstream dependencies |
-| `lineage downstream ASSET --workspace ID` | Downstream dependencies |
-| `assets search --query TEXT --workspace ID` | Asset IDs and candidate identities |
-| `columns usage ASSET --workspace ID` | Direct persisted column usage |
-| `source list --workspace ID [--query PATH]` | Metadata-only source inventory |
-| `source search TEXT --workspace ID` | Literal code search returning file references |
-| `source show --statement-id ID --workspace ID` | Original statement evidence |
-| `source show --operation-id ID --workspace ID` | Original operation evidence |
-| `source show --file-id ID --start-line N --end-line M --workspace ID` | Explicit original lines |
-| `source show --file-id ID --full --workspace ID` | Explicit complete source, still paginated/bounded |
-| `impact analyze ASSET --workspace ID` | Downstream page with per-page kind groups |
-| `issues --workspace ID [--severity warning]` | Stored analysis diagnostics |
-| `batch lineage ASSET1 ASSET2 --workspace ID` | Up to 20 assets with aggregate budgets |
-| `jobs status JOB_ID --workspace ID [--wait]` | Persisted progress/result |
-| `export lineage ASSET --workspace ID --format json` | Create a JSON/CSV/HTML page artifact |
-| `export read RESULT_ID --workspace ID [--format json]` | Retrieve explicit bounded artifact |
-| `mcp [--transport stdio]` | Independent MCP server; see MCP guide |
+| `agent` | Actual schemas, credential-free client examples and local MCP handler self-test. |
+| `ai` | Explicit hash/job-pinned grounded assistance; preview operations are offline. |
+| `ai results` | Durable results; detailed reads need source permission. |
+| `ai review` | Current diagnostic review candidates and bounded source previews. |
+| `application` | Application scope; mutation requires unrestricted write/config/application grants. |
+| `application logging` | Home-wide persisted log level; no log-content access. |
+| `application theme` | Fourteen presets; loaded UI state is unavailable to this process. |
+| `assets` | Resolve asset names to stable IDs. |
+| `batch` | Aggregate-budget lineage queries. |
+| `cleanup` | Preview and explicitly confirm workspace cleanup. |
+| `columns` | Direct source-column usage. |
+| `dictionary` | Declared, sampled and explicitly unknown column types. |
+| `export` | Bounded lineage exports. |
+| `history` | Local guarded history archive/recovery; metadata previews are read-only. |
+| `impact` | Stored downstream change impact. |
+| `ingestions` | Stored import reports and diagnostics. |
+| `jobs` | Persisted job status and results. |
+| `lineage` | Build and query stored lineage. |
+| `maintenance` | Local database inspection, backup, checkpoint and safe restore. |
+| `providers` | Profiles, approved runtime references and explicit outbound tests. |
+| `providers credentials` | Status only; use --credential-prompt on a single operation for hidden input. |
+| `providers routing` | Default, five task routes and ordered fallbacks. |
+| `runs` | Stored analysis runs and comparisons. |
+| `runtime` | Runtime owner/home context; switching requires a new invocation. |
+| `settings` | Typed atomic workspace settings; widening requires local --allow-admin. |
+| `source` | Source inventory, literal search and explicit evidence retrieval. |
+| `staging` | Local guarded stale staging cleanup/recovery; never automatic on CLI/MCP reads. |
+| `workspace` | List, create and summarize workspaces. |
+| `workspace config` | Safe configuration transfers into a new workspace. |
+<!-- cli-groups:end -->
+
+### Global options
+
+These apply to `gravetrail`, before any command. Query-specific limits may be further
+restricted by workspace settings. The generated help/completion options do not open a
+workspace or grant application permissions.
+
+<!-- cli-options:start -->
+| Option | Aliases / opposite form | Type / default | Purpose |
+| --- | --- | --- | --- |
+| `--home` | — | path; default `unset` | Runtime home: explicit path, otherwise DATAFORGE_HOME; without either override use checkout .dataforge/ or the installed platform user-data directory. |
+| `--json` | — | flag; default `False` | Compact structured JSON output. |
+| `--quiet` | `-q` | flag; default `False` | — |
+| `--allow-write` | `--no-allow-write` | flag; default `False` | Explicitly authorize mutations for this launch. |
+| `--allow-config-write` | `--no-allow-config-write` | flag; default `False` | — |
+| `--allow-llm` | `--no-allow-llm` | flag; default `False` | — |
+| `--allowed-llm-origin` | — | str; default `unset`; repeatable | — |
+| `--allowed-credential-ref` | — | str; default `unset`; repeatable | — |
+| `--allow-application-config` | `--no-allow-application-config` | flag; default `False` | — |
+| `--allow-admin` | `--no-allow-admin` | flag; default `False` | Local CLI administration only; cannot be used by MCP. |
+| `--allowed-workspace` | — | str; default `unset`; repeatable | Restrict to these workspace IDs; repeatable. |
+| `--allowed-root` | — | path; default `unset`; repeatable | Authorized import root; repeatable. |
+| `--limit` | — | int range; default `50` | — |
+| `--cursor` | — | str; default `unset` | — |
+| `--max-depth` | — | int range; default `15` | — |
+| `--max-items` | — | int range; default `2000` | — |
+| `--max-chars` | — | int range; default `12000` | — |
+| `--detail` | — | str; default `summary` | summary, standard or detailed. |
+| `--collapse-temporary` | `--keep-temporary` | flag; default `unset` | — |
+| `--output` | — | path; default `unset` | Write JSON to a new local file, without overwriting. |
+| `--install-completion` | — | flag; default `unset` | Install completion for the current shell. |
+| `--show-completion` | — | flag; default `unset` | Show completion for the current shell, to copy it or customize the installation. |
+| `--help` | — | flag; default `unset` | Show this message and exit. |
+<!-- cli-options:end -->
+
+### UI and build entry points
+
+`gravetrail ui` forwards trailing arguments to the UI launcher, for example
+`gravetrail --home ./automation-data ui --port 8502 --no-browser`.
+The separate `gravetrail-ui` launcher accepts `--home`, `--port`, `--address`,
+`--no-browser`, and `--help`; additional arguments are forwarded to Streamlit.
+The separate `gravetrail-build` utility accepts `--target python|docker|executable|all`,
+`--verify`, `--root`, `--output`, and `--help`. See [build and release](BUILD_AND_RELEASE.md).
+The legacy `dataforge`, `dataforge-ui`, and `dataforge-build` executables remain aliases.
 
 Use each command's `--help` for its full argument list. `--file-id` is repeatable.
 Imports and builds wait by default; add command option `--background` to get a job

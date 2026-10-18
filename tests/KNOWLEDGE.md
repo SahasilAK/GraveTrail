@@ -54,7 +54,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_parity_coverage.py` — Every keyed catalog field/CLI route/help/MCP schema and all mutation/network tool denials under a read-only launch.
 - `test_parity_ui.py` — Equal asset labels across workspaces retain selectable widget identity, reproducing the real-browser regression.
 
-- `test_documentation.py` — Public source safety, Windows route collisions, rendered anchors/project prefixes and artifact inventory rejection; standard-library implementation imports work without docs dependencies.
+- `test_documentation.py` — Exact CLI/MCP reference coverage against registered routes/flags/inputs/resources/prompts, plus public-source safety, Windows route collisions, rendered anchors/project prefixes and artifact inventory rejection.
 
 Distribution regression verifies source archives exclude agent context (plans, AGENTS.md, KNOWLEDGE.md, .kbignore and .codex) while retaining release tooling. KNOWLEDGE.md maps are tracked in the repository for navigation; package contents are tested separately.
 
@@ -63,3 +63,5 @@ Distribution regression verifies source archives exclude agent context (plans, A
 Rebrand regressions: distribution script aliases and stale-wheel exclusion; AppTest sidebar/client examples; export titles; MCP identity and equivalent new/legacy resource URLs; exact new/legacy cleanup and CLI restore confirmations with byte-exact originals.
 
 Frozen-dispatch regression executes the real frozen entry script with a captured CLI and asserts gravetrail is the program name.
+
+Documentation regressions walk real Typer routes/groups/flags/positional arguments and SDK MCP tool/input/resource/prompt registrations, requiring exact checked-in reference coverage and no duplicate/stale rows. Discovery uses isolated temporary storage and makes no provider calls.
