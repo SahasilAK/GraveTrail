@@ -74,6 +74,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       skip_container: true
+      only_windows: true
 
   highlights:
     if: inputs.copilot_notes
