@@ -3,7 +3,9 @@ import json
 import streamlit as st
 
 from dataforge.configuration import VisualizationSettings
+from dataforge.excel_exports import XLSX_MIME
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
+from dataforge.services import export_lineage_excel
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
 from ui.lineage_navigation import ALL_ASSETS, focus_asset, move_history, remember_view
 from ui.lineage_tree import render_tree
@@ -111,6 +113,29 @@ if asset:
                                        "dependency-paths.json", "application/json")
                     st.download_button("Download paths CSV", report_csv(path_rows(report)),
                                        "dependency-paths.csv", "text/csv")
+                with st.popover("Export to Excel", icon=":material/table_view:"):
+                    st.caption("Steps show data dependencies, not runtime execution order.")
+                    st.write(f"Selected asset: {graph.nodes[asset]['name']} · {path_direction} · depth {depth} · up to {path_limit} paths")
+                    st.caption("The workbook uses the current graph confidence/inferred filters and a committed analysis revision. Warnings and coverage limits remain visible in the workbook.")
+                    include_temporary = st.checkbox("Include temporary stages", value=not simplified)
+                    include_evidence = st.checkbox("Include supporting evidence", value=False)
+                    include_source_text = st.checkbox("Include raw SQL/SAS excerpts", value=False,
+                        disabled=not include_evidence, help="Includes analyzed source text in the Evidence sheet.")
+                    relationship_limit = st.number_input("Maximum exported relationships", 1, 20000, 2000)
+                    if st.button("Prepare Excel workbook"):
+                        try:
+                            with st.spinner("Preparing ordered lineage workbook…"):
+                                workbook, summary = export_lineage_excel(store, w, asset, direction=path_direction,
+                                    max_paths=int(path_limit), max_depth=depth, max_relationships=int(relationship_limit),
+                                    collapse_temporary=not include_temporary, include_evidence=include_evidence,
+                                    include_source_text=include_evidence and include_source_text)
+                            st.caption(f"{summary['path_count']} paths · {summary['segment_count']} segments · {summary['relationship_count']} relationships · revision {summary['revision']}")
+                            for warning in summary['warnings']:
+                                st.warning(warning)
+                            st.download_button("Download Excel workbook", workbook, f"lineage-{w[:8]}.xlsx",
+                                               XLSX_MIME, on_click="ignore")
+                        except (ValueError, OSError) as exc:
+                            st.error(f"Excel export could not be prepared: {exc}")
         with st.popover("Export graph & sources", icon=":material/download:"):
             st.download_button("Download offline graph", lambda: graph_html(focused, appearance), "lineage.html", "text/html")
             st.download_button("Download graph JSON", lambda: json.dumps(graph_data(focused, appearance), default=str, indent=2), "graph.json", "application/json")

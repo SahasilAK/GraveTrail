@@ -11,13 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from dataforge.agent.contracts import AgentError, compact
 from dataforge.cleanup import checked_path
 from dataforge.configuration import VisualizationSettings
+from dataforge.excel_exports import XLSX_MIME
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, report_html, source_bundle
 from dataforge.reporting import code_matches, data_dictionary
 from dataforge.services import column_report
 
 READS = {'artifact_read', 'paths', 'steps', 'graph_view'}
 WRITES = {'artifact_create'}
-FORMATS = {'graph': {'html', 'json'}, 'paths': {'csv', 'json'}, 'source-bundle': {'zip'},
+FORMATS = {'graph': {'html', 'json'}, 'paths': {'csv', 'json', 'xlsx'}, 'source-bundle': {'zip'},
            'original-source': {'raw'}, 'inventory': {'csv', 'json'}, 'code-search': {'csv', 'json'},
            'dictionary': {'csv', 'json', 'html'}, 'columns': {'csv', 'json', 'html'},
            'impact': {'csv', 'json', 'html'}, 'run-comparison': {'json'}, 'ai-result': {'json'}}
@@ -38,6 +39,8 @@ class Selection(BaseModel):
     after: str = Field(default='', max_length=64)
     record_id: str = Field(default='', max_length=64)
     max_paths: int = Field(default=50, ge=1, le=500)
+    include_evidence: bool = False
+    include_source_text: bool = False
 
 
 def _directory(store, workspace):
@@ -54,7 +57,7 @@ def write_artifact(store, workspace, kind, format, data, complete, source_versio
     if sum(1 for _ in directory.iterdir()) >= 2000:
         raise AgentError('resource_limit', 'Managed artifact limit reached')
     aid = uuid.uuid4().hex
-    mime = {'json': 'application/json', 'html': 'text/html', 'csv': 'text/csv', 'zip': 'application/zip', 'raw': 'application/octet-stream'}[format]
+    mime = {'json': 'application/json', 'html': 'text/html', 'csv': 'text/csv', 'zip': 'application/zip', 'raw': 'application/octet-stream', 'xlsx': XLSX_MIME}[format]
     metadata = {'artifact_id': aid, 'schema_version': 1, 'workspace_id': workspace,
         'home_id': hashlib.sha256(str(store.home).encode()).hexdigest(), 'kind': kind, 'format': format,
         'mime_type': mime, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
@@ -133,6 +136,21 @@ class ArtifactOperations:
         source_required = kind in SOURCE_KINDS
         if source_required:
             self._workspace(w, write=True, source=True)
+        if format == 'xlsx':
+            from dataforge.services import export_lineage_excel
+
+            target = self._asset(w, selection.asset)['asset_id']
+            try:
+                data, summary = export_lineage_excel(self.store, w, target, direction=selection.direction,
+                    max_paths=selection.max_paths, max_depth=opts.max_depth, max_relationships=opts.max_items,
+                    collapse_temporary=opts.collapse_temporary, include_evidence=selection.include_evidence,
+                    include_source_text=selection.include_source_text)
+            except ValueError as exc:
+                raise AgentError('resource_limit' if 'limit' in str(exc) or 'budget' in str(exc) or '32767' in str(exc)
+                                 else 'validation_failed', str(exc)) from None
+            versions = summary.pop('source_versions')
+            artifact = write_artifact(self.store, w, kind, format, data, summary['complete'], versions, source_required)
+            return {**artifact, **summary, 'filename': f'lineage-{w[:8]}.xlsx'}
         versions, complete = {}, self._current(w)
         rows = []
         if kind in {'graph', 'impact'}:

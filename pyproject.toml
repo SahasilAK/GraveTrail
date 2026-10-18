@@ -19,6 +19,7 @@ dependencies = [
   "tomlkit>=0.13,<1",
   "typer>=0.16,<1",
   "mcp>=1.26,<2",
+  "xlsxwriter>=3.2.9,<4",
 ]
 
 [project.optional-dependencies]

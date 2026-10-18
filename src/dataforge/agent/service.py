@@ -28,7 +28,6 @@ from dataforge.artifacts import READS as ARTIFACT_READS
 from dataforge.artifacts import WRITES as ARTIFACT_WRITES
 from dataforge.artifacts import ArtifactOperations
 from dataforge.asset_identity import asset_label
-from dataforge.configuration import ParsingSettings
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
@@ -386,13 +385,8 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return self._page(w, opts, 'backups', items[:1000], boundaries=['backup_limit'] if len(files) > 1000 else [])
 
     def _current(self, w):
-        files = self.store.files(w)
-        runs = self.store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [w])
-        config = ParsingSettings.model_validate({key: self.store.setting(w, key, default)
-            for key, default in ParsingSettings().model_dump().items()}).model_dump()
-        return bool(runs) and all(f["parsing_status"] != "pending" for f in files) and (
-            json.loads(runs[0]["snapshot"])["files"] == {f["relative_path"]: f["content_hash"] for f in files}
-            and json.loads(runs[0]["configuration"]) == config)
+        from dataforge.services import analysis_is_current
+        return analysis_is_current(self.store, w)
 
     def _page(self, w, opts, action, items, **metadata):
         key = [w, action, self._revision(w), opts.model_dump(exclude={"cursor", "limit", "max_chars"}),

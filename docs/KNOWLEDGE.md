@@ -19,8 +19,8 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
 - `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.
 - `SECURE_CONFIGURATION.md` — Session credential lifecycle, namespaced read-only startup variables, legacy compatibility, redaction and trusted-host limits.
-- `CLI_GUIDE.md` — Commands, jobs, scopes, import roots, exit codes, response budgets and single-owner DuckDB workflow.
-- `MCP_INTEGRATION.md` — Official SDK transports, tools/resources/prompts, current official Codex/Claude examples, private bearer auth and remote TLS-proxy boundary.
+- `CLI_GUIDE.md` — Commands, jobs, scopes, import roots, exit codes, budgets and single-owner DuckDB workflow; paths XLSX artifact creation/download and explicit evidence/excerpt flags.
+- `MCP_INTEGRATION.md` — Official SDK transports/tools/resources/prompts, Codex/Claude examples, private bearer auth and TLS-proxy boundary; XLSX dependency-path metadata and authorized chunk retrieval.
 - `AGENT_WORKFLOWS.md` — Focused metadata/evidence/columns/impact/refresh workflows and honest SQL/SAS archive acceptance.
 - `TOKEN_OPTIMIZATION.md` — Progressive disclosure, cursor/budget rules and reproducible representative character/token estimates.
 - `ARCHITECTURE.md` — Architecture. Maintained documentation; consult implementation status for verification boundaries.

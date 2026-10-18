@@ -74,7 +74,7 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `export download` | `ARTIFACT_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--help` |
 | `export graph` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
 | `export lineage` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
-| `export paths` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--max-paths`; `--help` |
+| `export paths` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--max-paths`; `--include-evidence`, `--no-include-evidence`; `--include-source-text`, `--no-include-source-text`; `--help` |
 | `export read` | `RESULT_ID` | `--workspace`, `-w` **required**; `--format`; `--binary`, `--no-binary`; `--offset`; `--length`; `--help` |
 | `export report` | — | `--workspace`, `-w` **required**; `--kind` **required**; `--format`; `--asset`; `--query`; `--before`; `--after`; `--record-id`; `--help` |
 | `export sources` | — | `--workspace`, `-w` **required**; `--asset`; `--file-id` (repeatable); `--direction`; `--help` |
@@ -293,9 +293,19 @@ AI: `ai chunks FILE -w ID --first N --last N --task sql_lineage` is offline. `ai
 
 Reports: `runs list|get|compare BEFORE AFTER -w ID`, `ingestions list|get -w ID`, `dictionary list -w ID`, `assets schema ASSET -w ID`, `workspace health -w ID`, `lineage validate -w ID`, `source metadata FILE -w ID`. Source inventory adds encoding/file_size. `source search TEXT -w ID --include-matches` explicitly returns exact code lines with source permission; default remains matching file metadata. CSV values are excluded from line search. Schema evidence code requires --detail detailed; sampled types and unknowns retain provenance. Evidence validation reads original versions, does not reparse or repair.
 
-Artifacts: `export graph ASSET --format html|json`, `export paths ASSET --format csv|json`, `export sources --asset ASSET` or repeated --file-id; `source download FILE DESTINATION [--content-hash HASH]`; `export report --kind KIND --format FORMAT` with --asset/--query/--before/--after; `ai results export RECORD`. All take -w ID. `export read ID --binary --offset N --length N` returns base64; `export download ID DESTINATION` reassembles/checks checksum and refuses existing destinations. Source-related creation and every read require source permission; backups are excluded.64MB/artifact,16KiB/chunk before encoding, further response-budget caps.
+Artifacts: `export graph ASSET --format html|json`, `export paths ASSET --format csv|json|xlsx`, `export sources --asset ASSET` or repeated --file-id; `source download FILE DESTINATION [--content-hash HASH]`; `export report --kind KIND --format FORMAT` with --asset/--query/--before/--after; `ai results export RECORD`. All take -w ID. `export read ID --binary --offset N --length N` returns base64; `export download ID DESTINATION` reassembles/checks checksum and refuses existing destinations. Source-related creation and every read require source permission; backups are excluded.64MB/artifact,16KiB/chunk before encoding, further response-budget caps.
 
-Format allowlist: graph HTML/JSON; paths CSV/JSON; source-bundle ZIP; original-source raw bytes; inventory/code-search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run-comparison/ai-result JSON. Unsupported combinations fail. `lineage paths|steps|graph ASSET -w ID` returns bounded logical dependency data with depth/limit/cycle boundaries; graph --view nodes|edges|tree supports --node-id/--edge-id. `columns usage` supports --column-query/--usage-type/--file-id/--group-by none|file|usage_type. No runtime execution ordering claim.
+Format allowlist: graph HTML/JSON; paths CSV/JSON/XLSX; source-bundle ZIP; original-source raw bytes; inventory/code-search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run-comparison/ai-result JSON. Unsupported combinations fail. `lineage paths|steps|graph ASSET -w ID` returns bounded logical dependency data with depth/limit/cycle boundaries; graph --view nodes|edges|tree supports --node-id/--edge-id. `columns usage` supports --column-query/--usage-type/--file-id/--group-by none|file|usage_type. No runtime execution ordering claim.
+
+For Excel: `gravetrail --allow-write export paths ASSET -w ID --format xlsx
+--include-evidence` creates an artifact; `export download ARTIFACT_ID lineage.xlsx -w ID`
+retrieves it without overwriting an existing file. Add `--include-source-text` only
+with `--include-evidence` to export raw analyzed SQL/SAS. Source permission is required
+at creation and every read, including when evidence is excluded. Global `--max-depth`,
+`--max-items` and `--collapse-temporary` bound the same shared scope used by Explorer.
+The response includes revision, counts, warnings, safe filename, MIME type and artifact
+ID, not workbook bytes. See [Excel workflow and limits](USER_GUIDE.md) for continuation,
+coverage and size/time behavior.
 
 Maintenance parity: `history preview --keep-runs N --keep-imports N --batch-size N -w ID`, `history archives -w ID`, `history archive PREVIEW.json -w ID --confirm NAME`, `history restore ARCHIVE_ID -w ID --confirm NAME`. `staging preview --age-hours 24 -w ID`, `staging clean PREVIEW.json -w ID --confirm NAME [--name UUID.tmp] [--expired]`, `staging recoveries|restore`. Save previews using global --output NEW_FILE; apply consumes that exact preview. Local mutations need --allow-write and unrestricted ownership; archive/clean create a recoverable whole-home backup before removal. General cleanup defaults to backup and refuses --no-backup. Specialized recovery journals remain separate from general undo. `maintenance backups` and `maintenance download BACKUP_ID NEW_DEST` require unrestricted --allow-application-config; backup/restore/checkpoint existing local guards remain. Shared cache/orphan/application apply remains UI-only.
 

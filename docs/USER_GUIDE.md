@@ -70,6 +70,31 @@ retain all intermediate evidence. Depth boundaries and cycle boundaries are expl
 path-limit truncation is reported. These reports describe the known static graph, not runtime
 execution order or proof that unresolved source constructs do not exist.
 
+Choose **Export to Excel** in that area to review the asset, direction, depth/path
+limits, temporary stages and evidence options, then **Prepare Excel workbook** and
+**Download Excel workbook**. `Lineage Paths` shows numbered dataset columns from
+source to target even for upstream traversal. `Lineage Steps` stores one ordered
+relationship per path position; several citations do not create extra steps.
+Paths wider than eight datasets continue on numbered segments with one overlapping
+dataset. Shared IDs retain joins and job-scoped temporary identity. Some temporary
+stages remain visible when collapsing them would combine distinct parallel routes.
+
+The optional `Evidence` sheet contains original file/hash/line citations. Raw
+SQL/SAS excerpts require the separate explicit option. Without that sheet, evidence
+IDs/status remain references, not offline citations. The workbook records a committed
+revision, UTC export time, filters, counts and coverage warnings. Steps show data
+dependencies, not runtime execution order. Unknown or unsupported analysis does not
+become complete lineage merely because a path reaches a known graph boundary.
+
+Excel exports are bounded to 500 paths, depth 30, 20,000 relationships and evidence
+references (2,000 relationships by default), eight dataset columns per segment,
+32 MiB of text and 64 MiB of workbook data. Graph input is capped at 20,000 assets
+and 100,000 evidence edges. Generation has a cooperative 30-second deadline, with
+checks between bounded phases and rows. Relationship/path/depth omissions are labeled;
+evidence/text/time limits fail with a narrower-selection message. A cell that cannot
+fit Excel's 32,767-character limit fails explicitly, without clipping. Labels and
+excerpts are literal text; no formulas or external links are generated.
+
 The source panel filters to relevant files. It shows original line ranges, statement snippets,
 complete syntax-highlighted source, source search and byte-exact downloads. Code blocks have a
 copy button. Old facts show the corresponding analyzed original version when newer code is pending.

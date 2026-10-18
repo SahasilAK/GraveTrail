@@ -106,7 +106,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `create_workspace` | `name` | `description` | Mutation |
 | `discover_provider_models` | `profile_id`, `workspace_id` | `options` | Mutation / outbound network |
 | `export_ai_result` | `record_id`, `workspace_id` | `options` | Mutation |
-| `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `max_paths`, `options` | Mutation |
+| `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `max_paths`, `options`, `include_evidence`, `include_source_text` | Mutation |
 | `export_graph` | `asset`, `workspace_id` | `direction`, `format`, `options` | Mutation |
 | `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` | Mutation |
 | `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` | Mutation |
@@ -233,7 +233,16 @@ AI tools: preview_ai_chunks, list_review_candidates, preview_diagnostic_review, 
 
 Report tools: list_analysis_runs, get_analysis_run, list_ingestion_runs, get_ingestion_run, compare_analysis_runs, get_source_metadata, get_data_dictionary, get_asset_schema, get_workspace_health, validate_stored_lineage. All require an authorized explicit workspace; history IDs from another workspace are refused. search_source_code adds include_matches=false; true requires source permission. Follow cursors, completeness and analysis_current.
 
-Artifacts/query tools: get_dependency_paths, get_lineage_steps, get_graph_data (nodes/edges/tree and node/edge filters), export_graph, export_dependency_paths, export_source_bundle, export_original_source, export_report, export_ai_result. get_column_usage supports column_query/usage_type/file_id/group_by. `get_export` retains result_id text reads and adds mutually exclusive artifact_id, offset, length base64 reads. Large HTML/ZIP content is never embedded in ordinary responses. IDs bind home/workspace/content; source authorization is rechecked after revocation. Backup IDs/downloads are refused. Exact historical source hashes must still be referenced. CLI guide lists the format allowlist and caps.
+Artifacts/query tools: get_dependency_paths, get_lineage_steps, get_graph_data (nodes/edges/tree and node/edge filters), export_graph, export_dependency_paths, export_source_bundle, export_original_source, export_report, export_ai_result. get_column_usage supports column_query/usage_type/file_id/group_by. `get_export` retains result_id text reads and adds mutually exclusive artifact_id, offset, length base64 reads. Large HTML/ZIP/XLSX content is never embedded in ordinary responses. IDs bind home/workspace/content; source authorization is rechecked after revocation. Backup IDs/downloads are refused. Exact historical source hashes must still be referenced. CLI guide lists the format allowlist and caps.
+
+`export_dependency_paths(format="xlsx")` creates an ordered workbook with `Lineage Paths`
+and `Lineage Steps`. `include_evidence=true` adds offline citations; raw code is excluded
+unless `include_source_text=true` is also explicit. Source permission applies even when
+the Evidence sheet is excluded. `options.max_depth`, `options.max_items` (relationship
+budget) and `options.collapse_temporary` share Explorer/CLI semantics. The result contains
+artifact metadata, safe filename, revision, counts and warnings. Retrieve the workbook
+with bounded `get_export(artifact_id=..., offset=..., length=...)` reads. See the
+[Excel workflow and limits](USER_GUIDE.md) for coverage, continuation and failure behavior.
 
 Maintenance is read-only: preview_history_archive, list_history_archives, preview_staging_cleanup, list_staging_recoveries; inspect_database_maintenance/list_runtime_backups require unrestricted --allow-application-config and expose metadata only. preview_cleanup includes shared cache/orphan/application metadata only with that explicit scope and returns requires_local_ui. No MCP cleanup/restore/checkpoint/backup/download mutation exists. Reading settings/recovery lists never starts automatic cleanup. HTTP remains workspace-scoped, so whole-home metadata is unavailable there.
 

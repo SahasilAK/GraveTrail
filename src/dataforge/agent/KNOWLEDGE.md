@@ -30,7 +30,7 @@ never a destructive cleanup tool. CLI applies fresh saved previews with explicit
 - `cli_settings.py` — explicit settings/schema and workspace identity/configuration Typer adapters; no arbitrary key execution.
 
 - `cli_ai.py` — Explicit providers/routing/runtime-reference and AI/review/result Typer adapters; hidden credentials are per invocation only.
-- `cli_reports.py` — Stored reports, managed artifacts, permitted local history/staging/backup operations; bounded JSON preview loading.
+- `cli_reports.py` — Stored reports, managed artifacts, permitted local history/staging/backup operations; bounded JSON preview loading. export paths --format xlsx offers explicit evidence/source options; MCP export_dependency_paths shares them and retrieves bytes through get_export.
 
 Long provider/request/merge operations avoid holding Store.lock across network or analysis waits;
 per-request admission is immediate. Storage APIs retain their own locks; merge locks only checking/commit.
