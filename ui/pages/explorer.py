@@ -5,6 +5,7 @@ import streamlit as st
 from dataforge.configuration import VisualizationSettings
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
+from ui.lineage_navigation import ALL_ASSETS, focus_asset, move_history, remember_view
 from ui.lineage_tree import render_tree
 from ui.presentation import section
 
@@ -12,41 +13,59 @@ title("Lineage", "Trace upstream inputs, downstream impact and the source eviden
 store, w = context()
 graph = load_graph(store, w)
 appearance = VisualizationSettings.from_store(store, w)
-asset = choose_asset(graph, "lineage")
+asset = choose_asset(graph, "lineage", allow_all=True)
 if asset:
+    all_assets = asset == ALL_ASSETS
     with st.container(horizontal=True, vertical_alignment="bottom", gap="medium"):
         direction = st.segmented_control("Graph direction", ["upstream", "downstream", "combined"],
-                                         default=appearance.graph_direction, key="graph_direction_" + w, persist_state="session")
-        view = section("Lineage view", ["Graph", "Tree"], "lineage_view_" + w)
+                                         default=appearance.graph_direction, key="graph_direction_" + w, persist_state="session", disabled=all_assets, required=True)
+        view = section("Lineage view", ["Graph", "Tree"], "lineage_view_" + w) or "Graph"
         with st.popover("Traversal options", icon=":material/tune:"):
-            depth = st.slider("Traversal depth", 1, 30, int(store.setting(w, "traversal_depth", 5)), key="graph_depth_" + w, persist_state="session")
+            depth = st.slider("Traversal depth", 1, 30, int(store.setting(w, "traversal_depth", 5)), key="graph_depth_" + w, persist_state="session", disabled=all_assets)
             simplified = st.toggle("Collapse temporary steps", value=appearance.collapse_temporary,
                                    key="graph_collapse_" + w, persist_state="session")
     view_graph = graph.simplified(keep=[asset]) if simplified else graph
     limit = int(store.setting(w, "graph_limit", 150))
 
-    focused = view_graph.focus(asset, direction, depth, limit)
-    if focused.truncated:
-        st.warning(f"Graph limited to {limit} assets. Reduce depth or focus another asset.")
-    if focused.cycles():
-        st.warning("Cyclic dependencies are present in this view. Tree expansion stops at repeated nodes.")
+    focused = view_graph if all_assets else view_graph.focus(asset, direction, depth, limit)
     default_tab = "Downstream dependencies" if appearance.graph_direction == "downstream" else "Upstream dependencies"
     evidence_key = "lineage_evidence_direction_" + w
     active_tab = st.session_state.get("lineage_direction_tabs", st.session_state.get(evidence_key, default_tab))
     # Native tabs are cleaned up while Graph is shown; this non-widget state survives.
     st.session_state[evidence_key] = active_tab
-    evidence_direction = "downstream" if active_tab == "Downstream dependencies" else "upstream"
+    history = remember_view(st.session_state, w, {"asset": asset, "query": st.session_state.get("asset_search_lineage", ""),
+        "direction": direction, "depth": depth, "simplified": simplified, "view": view, "tree_direction": active_tab})
+    with st.container(horizontal=True):
+        st.button("Back", icon=":material/arrow_back:", disabled=history["index"] <= 0,
+                  on_click=move_history, args=(st.session_state, w, -1))
+        st.button("Forward", icon=":material/arrow_forward:", disabled=history["index"] >= len(history["entries"]) - 1,
+                  on_click=move_history, args=(st.session_state, w, 1))
+    if all_assets and view == "Tree":
+        st.info("Choose an exact asset to explore its dependency tree.")
+    if focused.truncated and not all_assets:
+        st.warning(f"Graph limited to {limit} assets. Reduce depth or focus another asset.")
+    if focused.cycles():
+        st.warning("Cyclic dependencies are present in this view. Tree expansion stops at repeated nodes.")
+    evidence_direction = ("downstream" if active_tab == "Downstream dependencies" else "upstream") if view == "Tree" and not all_assets else direction
     selection = None
-    if view == "Graph":
+    if view == "Graph" or all_assets:
         revision = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? ORDER BY created_at DESC LIMIT 1", [w])
         revision = revision[0]["run_id"] if revision else "empty"
+        graph_key = f"lineage_graph_{w}_{asset}_{evidence_direction}_{depth}_{simplified}_{revision}"
+
+        def navigate_graph():
+            node = st.session_state[graph_key].get("navigate")
+            if node in focused.nodes:
+                focus_asset(st.session_state, w, node, graph.nodes[node]["name"])
+
         with st.container(key="graph_surface"):
-            result = graph_view(focused, "lineage_graph_" + w + "_" + asset + "_" + evidence_direction + "_" + revision, appearance)
+            result = graph_view(focused, graph_key, appearance, on_navigate=navigate_graph)
         selection = result.selection
-        st.caption(f"{len(focused.nodes):,} assets in view · {len(focused.graph.edges):,} relationships · {direction} · depth {depth}")
+        scope = "All assets" if all_assets else f"{direction} · depth {depth}"
+        st.caption(f"{len(focused.nodes):,} assets in view · {len(focused.graph.edges):,} relationships · {scope}")
     rows = focused.lineage_rows()
-    source_scope = active_tab
-    tree_focus = view_graph.focus(asset, evidence_direction, depth, limit)
+    source_scope = "All assets" if all_assets else evidence_direction.capitalize() + " dependencies"
+    tree_focus = focused if all_assets else view_graph.focus(asset, evidence_direction, depth, limit)
     evidence = [e for _, _, a in tree_focus.graph.edges(data=True) for e in a["evidence"]]
     if selection and "edge" in selection:
         edge_list = list(focused.graph.edges(data=True))
@@ -57,7 +76,7 @@ if asset:
         node = selection["node"]
         evidence = [e for s, t, a in focused.graph.edges(data=True) if node in {s, t} for e in a["evidence"]]
         source_scope = "Selected graph asset"
-    if view == "Tree":
+    if view == "Tree" and not all_assets:
         upstream, downstream = st.tabs(["Upstream dependencies", "Downstream dependencies"],
                                       default=active_tab, on_change="rerun", key="lineage_direction_tabs")
         for tab, d in [(upstream, "upstream"), (downstream, "downstream")]:
@@ -75,7 +94,9 @@ if asset:
         st.dataframe([{k: v for k, v in r.items() if k not in {"file_id", "statement_id"}} for r in rows], hide_index=True)
         downloads(rows, "lineage_" + direction, include_html=False)
         paths_panel = st.expander("Dependency paths and exports", on_change="rerun", key="lineage_path_panel")
-        if paths_panel.open:
+        if all_assets:
+            st.caption("Choose an exact asset to trace dependency paths.")
+        if paths_panel.open and not all_assets:
             with paths_panel:
                 path_direction = st.segmented_control("Path direction", ["upstream", "downstream"], default="upstream")
                 path_limit = st.number_input("Maximum paths", 1, 500, 50)

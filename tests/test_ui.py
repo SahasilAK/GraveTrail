@@ -65,7 +65,7 @@ def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):
     app.text_input(key="asset_search_lineage").set_value("orders").run()
     chooser = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     assert chooser.value is None
-    assert len(chooser.options) == 3
+    assert len(chooser.options) == 4  # matching assets plus All
     chooser.select(chooser.options[0]).run()
     assert not app.exception
     assert app.dataframe

@@ -16,7 +16,7 @@ published; this tracked summary is the public acceptance reference.
 | Windows wheel/executable | 2026-10-18 parser-8 artifacts passed outside-checkout CLI/import/lineage, actual stdio MCP, health and rendered UI smoke | Rebuild and smoke artifacts containing parser 9 before release |
 | Linux Docker | 2026-10-17 GraveTrail image passed non-root CLI/import/lineage/UI/MCP and volume persistence | 2026-10-18 fresh Docker checks were blocked by daemon availability; no parser-9 container result claimed |
 | Native Linux/macOS and hosted release | Build/publish workflow implemented | Target-native downloaded-artifact and current hosted release acceptance remain unrecorded here |
-| Standalone HTML | Self-contained assets, escaping, JavaScript checks and real UI download passed | Direct interaction with the downloaded `file://` artifact remains unverified because browser automation rejects file URLs |
+| Standalone HTML | Self-contained assets, escaping, JavaScript checks and real UI download passed; 2026-10-18 source-generated `file://` graph with 501 nodes/500 edges passed fullscreen, keyboard copy and evidence checks without external requests | Current packaged artifacts were not rebuilt for the QOL changes |
 
 Whole-home backup/restore and guarded blob cleanup are delivered features. Scheduled retention,
 SVG/PNG export, transitive column transformations and multi-user collaboration remain optional.
@@ -36,6 +36,17 @@ after a comment exceeded its 10-second bound before the fix and passes afterward
 SQL evidence and CREATE/ALTER procedure guards are preserved. Fresh SQL/SAS ZIP parity and
 the running isolated UI pass, including zero invalid evidence records for the padded SQL.
 Parser cache version 9 is unchanged because the fix preserves intended parsing behavior.
+
+Lineage/Columns QOL source verification on 2026-10-18: **441 passed, 2 Windows symlink
+permission skips** in 72.42 seconds; Ruff passes. AppTest covers disconnected All beyond
+focused caps, direction-specific evidence, exact focus beyond search limits, shared selection,
+Back/Forward branching and Tree-tab/control restoration. Column tests preserve unknown schema
+and wildcard coverage, distinguish unused from filtered-out names and accept comma terms.
+An isolated real Chromium session passed All, fullscreen enter/exit, exact node copy,
+double-click focus, Back/Forward, directional source files, individual/list/unused column
+copy and comma filtering with no browser errors. A separate source-generated standalone graph
+passed 501-node rendering and keyboard interactions without external requests. These checks
+do not establish performance for every large/dense graph or refresh packaged-release evidence.
 
 ## Test commands and historical evidence
 

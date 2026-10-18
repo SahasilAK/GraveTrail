@@ -78,6 +78,12 @@ Step numbers are logical dependency order, not runtime execution order.
 **Columns:** Select a source asset, filter names and group by file or usage context. This report
 contains direct references only. Wildcards show unknown coverage when no trusted schema exists.
 Ambiguous unqualified columns are diagnostics rather than assigned arbitrarily.
+Above **Group by**, **Distinct used columns** lists every known direct column independently
+of the text filter. Copy a single name with its adjacent icon or use **Copy list** for the
+comma-separated names. The column filter accepts comma-separated terms and matches any term.
+The collapsed **Unused columns** section lists declared columns without known direct usage,
+with the same copy controls. Missing/conflicting schemas and unresolved wildcards make this
+list unknown; it is not proof of non-use in a live system.
 For a consistent imported SQL CREATE TABLE schema, plain wildcards expand to known columns
 as inferred references. The declaration viewer shows the original DDL and its analyzed file
 version alongside the query evidence. Reports include the schema source location. Schema
@@ -185,9 +191,18 @@ Lineage switches between Graph and full-width Tree. Traversal depth and temporar
 collapse live in **Traversal options**. Step-wise lineage and source evidence appear below
 the active view, stacking on narrower screens.
 
-The source selector follows the active Upstream/Downstream dependency tab. Clicking a graph
-asset or edge shows that selection's evidence instead; Source scope labels the current context.
-Graph direction remains independently configurable. Switching tabs clears graph selection.
+Choose **All** in the exact asset selector to display the entire workspace graph, including
+disconnected assets. All keeps confidence and temporary-step settings but ignores focused
+depth/node limits; choose an exact asset for a tree or dependency paths. Large workspaces may
+take longer to draw. **Fullscreen** expands the graph; use **Exit fullscreen** or Escape to leave.
+Each node has an icon to copy its full asset name. Double-click a node (or Alt+Enter when
+focused) to make it the exact selected asset. **Back** and **Forward** restore previous asset
+views and their search, direction, depth and temporary-step controls within this session.
+
+In Graph, the source selector follows **upstream**, **downstream** or **combined**; in Tree,
+it follows the active dependency tab. All includes evidence across the full displayed graph.
+Clicking a graph asset or edge narrows evidence to that selection. Source scope labels the
+current context; changing graph traversal controls clears the previous graph selection.
 
 
 ## Automation & access

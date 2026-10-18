@@ -14,6 +14,7 @@ from dataforge.exports import GRAPH_BODY, GRAPH_CSS, GRAPH_JS, graph_data, repor
 from dataforge.graph import LineageGraph
 from dataforge.storage_locations import allowed_homes, validate_home
 from dataforge.store import Store
+from ui.lineage_navigation import ALL_ASSETS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,23 +88,30 @@ def _cached_graph(home, workspace, revision, min_confidence=0., include_inferred
         return LineageGraph(assets, edges, min_confidence, include_inferred)
 
 
-def choose_asset(graph, key):
+def choose_asset(graph, key, allow_all=False):
     with st.container(horizontal=True, vertical_alignment="bottom"):
         with st.container(width=360, key="asset_query_" + key):
             query = st.text_input("Search tables, datasets or file assets", placeholder="e.g. orders or mart.customer_summary", key=f"asset_search_{key}", persist_state="session")
         matches = graph.search(query)[:500]
-        if not matches:
+        if not matches and not allow_all:
             st.info("No matching assets. Import sources, then run Analysis to establish dependencies.")
             return None
         mapping = {a["asset_id"]: a for a in matches}
         choice_key = f"asset_choice_{key}_{st.session_state.get('workspace', '')}"
         shared_key = "exploration_asset_" + st.session_state.get("workspace", "")
-        if st.session_state.get(choice_key) not in mapping:
+        selected = st.session_state.get(choice_key) or st.session_state.get(shared_key)
+        # Graph navigation may target an exact ID beyond the first 500 search matches.
+        if selected in graph.nodes and query.casefold() in graph.nodes[selected]["name"].casefold():
+            mapping[selected] = graph.nodes[selected]
+        options = list(mapping) + ([ALL_ASSETS] if allow_all else [])
+        if st.session_state.get(choice_key) not in options:
             st.session_state.pop(choice_key, None)
             if st.session_state.get(shared_key) in mapping:
                 st.session_state[choice_key] = st.session_state[shared_key]
 
         def remember_asset():
+            if st.session_state.get(choice_key) == ALL_ASSETS:
+                return
             st.session_state[shared_key] = st.session_state.get(choice_key)
             for sibling in ("lineage", "columns", "impact"):
                 sibling_key = f"asset_choice_{sibling}_{st.session_state.get('workspace', '')}"
@@ -111,8 +119,8 @@ def choose_asset(graph, key):
                     st.session_state.pop(sibling_key, None)
 
         with st.container(width=360, key="asset_select_" + key):
-            chosen = st.selectbox("Choose an exact asset", list(mapping), index=None,
-                format_func=lambda k: f'{asset_label(mapping[k])}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
+            chosen = st.selectbox("Choose an exact asset", options, index=None,
+                format_func=lambda k: "All" if k == ALL_ASSETS else f'{asset_label(mapping[k])}  [{mapping[k]["kind"]}{", temporary" if mapping[k]["temporary"] else ""}]',
                 key=choice_key, persist_state="session", on_change=remember_asset)
     if len(matches) > 1:
         st.caption(f"{len(matches)} matches. Choose the exact asset to avoid ambiguous names.")
@@ -174,9 +182,9 @@ def source_viewer(store, file_ids, key="source", evidence=None):
 
 
 _GRAPH = st.components.v2.component("dataforge_graph", html=GRAPH_BODY, css=GRAPH_CSS,
-    js=GRAPH_JS + "\nexport default function(c){mountGraph(c.parentElement,c.data,v=>c.setStateValue('selection',v));}\n")
+    js=GRAPH_JS + "\nexport default function(c){return mountGraph(c.parentElement,c.data,v=>c.setStateValue('selection',v),v=>c.setTriggerValue('navigate',v));}\n")
 
 
-def graph_view(graph, key="graph", appearance=None):
+def graph_view(graph, key="graph", appearance=None, on_navigate=None):
     return _GRAPH(data=graph_data(graph, appearance), key=key, default={"selection": None},
-                  on_selection_change=lambda: None, height="content")
+                  on_selection_change=lambda: None, on_navigate_change=on_navigate or (lambda: None), height="content")

@@ -30,6 +30,18 @@ def path_rows(report):
     return rows
 
 
+COPY_JS = r"""
+async function copyText(text, target=document.body) {
+ try {await navigator.clipboard.writeText(text);return true} catch (_) {
+   const input=document.createElement('textarea');input.value=text;input.style.position='fixed';input.style.opacity='0';
+   target.appendChild(input);input.select();
+   let copied=false;try{copied=document.execCommand('copy')}catch(_){}finally{input.remove()}
+   return copied;
+ }
+}
+"""
+
+
 GRAPH_CSS = """
 .df-graph{font:14px/1.5 system-ui,sans-serif;color:var(--st-text-color,#23334a);background:var(--st-background-color,#fff);padding:12px;box-sizing:border-box;
 --node-neutral:#edf0f4;--node-unresolved:#fff0d4;--node-temporary:#ece7f7;--node-source:#e0efeb;--node-table:#e3ecfb;--node-text:#23334a;--node-border:#8d9cb1}
@@ -44,15 +56,23 @@ GRAPH_CSS = """
 .df-graph .edge.chosen{stroke-width:var(--df-selected-edge-width,4)!important}
 .df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:13px/1.7 ui-monospace,Consolas,monospace;padding:12px;border-radius:8px;background:var(--st-secondary-background-color,#f5f7fa)}
 .df-graph .hint{font-size:12px;color:inherit;opacity:.8}
+.df-graph .status{font-size:12px;min-height:18px}
+.df-graph .copy-node{cursor:pointer}.df-graph .copy-node:focus{outline:2px solid var(--st-primary-color,#2869c7)}
+.df-graph:fullscreen{width:100vw;height:100dvh;display:flex;flex-direction:column;overflow:auto}
+.df-graph:fullscreen svg{flex:1;min-height:200px;height:auto}
+.df-graph:fullscreen .detail{max-height:20vh;flex-shrink:0}
 @media(prefers-color-scheme:dark){.df-graph{--node-neutral:#303b48;--node-unresolved:#4c3823;--node-temporary:#3b3354;--node-source:#203f3d;--node-table:#273d58;--node-text:#edf2f9;--node-border:#7489a3}}
 @media(prefers-reduced-motion:reduce){.df-graph button:active{transform:none}}
 @media(prefers-contrast:more){.df-graph .hint{opacity:1}.df-graph button,.df-graph input{border-color:currentColor}}
 """
 
 
-GRAPH_JS = r"""
-function mountGraph(root, data, notify) {
+GRAPH_JS = COPY_JS + r"""
+function mountGraph(root, data, notify, navigate) {
+ if(root._graphCleanup)root._graphCleanup();
  const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
+ const container=root.querySelector('.df-graph'),status=root.querySelector('.status');
+ let clickTimer=null;
  const appearance=data.appearance||{},labels=appearance.graph_labels||'compact';
  const edgeWidth=appearance.graph_edge_width||2;
  root.querySelector('.df-graph').style.setProperty('--df-selected-edge-width',edgeWidth+2);
@@ -61,16 +81,17 @@ function mountGraph(root, data, notify) {
  stage.replaceChildren();
  const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
  const nodeLabel=n=>n.job_id&&n.job_id!=='workspace'?n.name+' [job: '+n.job_id+']':n.name;
- let width=Math.max(700,...data.nodes.map(n=>n.x+n.width+35)),height=Math.max(360,...data.nodes.map(n=>n.y+90));
+ let width=700,height=360;
+ data.nodes.forEach(n=>{width=Math.max(width,n.x+n.width+35);height=Math.max(height,n.y+90)});
  let box=[0,0,width,height];
  const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
  const highlight=(ids)=>{stage.querySelectorAll('.chosen').forEach(e=>e.classList.remove('chosen'));ids.forEach(id=>{stage.querySelectorAll('[data-node]').forEach(e=>{if(e.dataset.node===id)e.classList.add('chosen')})});};
- const inspectNode=(n)=>{
+ const inspectNode=(n,emit=true)=>{
    let related=new Set([n.asset_id]),pending=[n.asset_id];
    while(pending.length){let id=pending.pop();data.edges.forEach(e=>{if(e.target===id&&!related.has(e.source)){related.add(e.source);pending.push(e.source)}})}
    highlight(related);stage.querySelectorAll('[data-edge]').forEach(p=>{let e=data.edges[Number(p.dataset.edge)];if(related.has(e.source)&&related.has(e.target))p.classList.add('chosen')});
    details.textContent=nodeLabel(n)+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodeLabel(nodes.get(e.source))+' → '+nodeLabel(nodes.get(e.target))+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n');
-   if(notify)notify({node:n.asset_id});
+   if(emit&&notify)notify({node:n.asset_id});
  };
  data.edges.forEach((edge,i)=>{
    const a=nodes.get(edge.source),b=nodes.get(edge.target);
@@ -87,12 +108,29 @@ function mountGraph(root, data, notify) {
    make('rect',{width:n.width,height:48,rx:9,fill:color,stroke:'var(--node-border)','data-node':n.asset_id},g);
    if(labels!=='hidden'){
      const text=make('text',{x:12,y:29,fill:'var(--node-text)','font-size':13},g);
-     const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>27?label.slice(0,26)+'…':label;
-     if(labels==='full'&&text.getComputedTextLength()>n.width-24){text.setAttribute('textLength',n.width-24);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
+     const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>22?label.slice(0,21)+'…':label;
+     if(text.getComputedTextLength()>n.width-52){text.setAttribute('textLength',n.width-52);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
    }
    make('title',{},g).textContent=nodeLabel(n);
-   g.onclick=()=>inspectNode(n);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inspectNode(n)}};
+   g.onclick=()=>{clearTimeout(clickTimer);inspectNode(n,false);clickTimer=setTimeout(()=>{if(notify)notify({node:n.asset_id})},350)};
+   g.ondblclick=e=>{e.preventDefault();clearTimeout(clickTimer);if(navigate)navigate(n.asset_id);else inspectNode(n)};
+   g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(e.key==='Enter'&&e.altKey&&navigate)navigate(n.asset_id);else inspectNode(n)}};
+   const copy=make('g',{'class':'copy-node',transform:`translate(${n.x+n.width-32},${n.y+10})`,tabindex:0,role:'button','aria-label':'Copy '+n.name},stage);
+   make('rect',{width:26,height:28,rx:5,fill:color},copy);
+   make('text',{x:5,y:20,fill:'var(--node-text)','font-size':19,'pointer-events':'none'},copy).textContent='⧉';
+   make('title',{},copy).textContent='Copy '+n.name;
+   copy.onclick=async e=>{e.stopPropagation();clearTimeout(clickTimer);status.textContent=await copyText(n.name,container)?'Copied '+n.name:'Copy failed. Select the name in the details and copy manually.'};
+   copy.ondblclick=e=>{e.stopPropagation();e.preventDefault()};
+   copy.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();copy.onclick(e)}};
  });
+ const fullscreen=root.querySelector('.fullscreen');
+ const doc=container.ownerDocument;
+ const syncFullscreen=()=>{fullscreen.textContent=container.matches(':fullscreen')?'Exit fullscreen':'Fullscreen'};
+ fullscreen.onclick=async()=>{
+   try{if(container.matches(':fullscreen'))await doc.exitFullscreen();else await container.requestFullscreen();syncFullscreen()}
+   catch(_){status.textContent='Fullscreen is unavailable in this browser.'}
+ };
+ if(doc){doc.addEventListener('fullscreenchange',syncFullscreen);syncFullscreen()}
  root.querySelector('.fit').onclick=()=>{box=[0,0,width,height];view()};
  const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
  root.querySelector('.plus').onclick=()=>zoom(.8);root.querySelector('.minus').onclick=()=>zoom(1.25);
@@ -102,10 +140,12 @@ function mountGraph(root, data, notify) {
  svg.onpointermove=e=>{if(drag){box=[drag[2]-(e.clientX-drag[0])*drag[4]/svg.clientWidth,drag[3]-(e.clientY-drag[1])*drag[5]/svg.clientHeight,drag[4],drag[5]];view()}};
  svg.onpointerup=()=>drag=null;svg.onpointercancel=()=>drag=null;
  root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
+ root._graphCleanup=()=>{clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
+ return root._graphCleanup;
 }
 """
 
-GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select a node or edge for evidence. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
+GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
 
 
 def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:

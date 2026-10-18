@@ -37,7 +37,7 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 - `SQL_PARSING.md` — AST lineage/direct usage and parser9 bounded PostgreSQL SQL procedure/Snowflake literal bodies, original enclosing evidence and explicit runtime/DDL-schema exclusions.
 - `TESTING.md` — Tracked current acceptance matrix distinguishing source, dated Windows/Docker/OmniRoute passes and still-open native/hosted/offline-browser gates; commands and historical counts remain separate.
 - `TROUBLESHOOTING.md` — Troubleshooting. Maintained documentation; consult implementation status for verification boundaries.
-- `USER_GUIDE.md` — User guide. Maintained documentation; consult implementation status for verification boundaries.
+- `USER_GUIDE.md` — User guide including All graph, fullscreen/copy/focus/history, direction-scoped evidence and copyable used/unused column lists with conservative schema/wildcard limits.
 
 Latest verification/accounting lives in plans/REQUIREMENT_MATRIX.md and IMPLEMENTATION_STATUS;
 older numerical results in guides are historical. Parser9 extends literal SQL/SAS macro coverage; both ZIPs retain128 logical edges/seven layers/all16 sources and original bytes.

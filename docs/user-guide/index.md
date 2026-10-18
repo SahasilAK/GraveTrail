@@ -36,10 +36,17 @@ in different schemas or temporary jobs are separate candidates. Upstream traces 
 downstream traces consumers. Choose Graph or Tree and a graph direction. Use **Traversal options** for depth and whether to
 collapse temporary stages for the question you are answering.
 
+Select **All** to see the complete workspace graph, including disconnected assets, without
+focused traversal depth/node limits. Confidence and temporary-step settings still apply.
+Use **Fullscreen** to expand the graph and Escape or **Exit fullscreen** to leave.
+Copy a node's full name with its adjacent icon. Double-click a node (or Alt+Enter) to select
+it as the exact asset; **Back** and **Forward** restore earlier asset views in the session.
+
 Trees load branches progressively. Graph/tree limits and path boundaries can restrict
 what is visible; a bounded view is not evidence that no more dependencies exist. Cycles
 are reported and traversal terminates. Selecting a node or edge changes the source
-evidence scope, while the upstream/downstream tabs control their own tree context.
+evidence scope. Graph source files follow the selected upstream/downstream/combined direction;
+the upstream/downstream tabs control their own tree context.
 
 Every relationship retains source version, statement, original line range and extraction
 method. If new code is pending, an older relationship displays the original analyzed
@@ -57,6 +64,13 @@ or usage context. Results describe direct references. Unqualified ambiguous colu
 remain diagnostics. A plain wildcard can expand from consistent imported SQL CREATE
 TABLE declarations as inferred references, with declaration provenance; otherwise
 coverage remains unknown. No live database lookup or CSV/table-name guess fills gaps.
+
+**Distinct used columns** shows comma-separated names above grouping, with individual and
+list copy controls. Paste comma-separated terms into the column filter to match any term.
+The collapsed **Unused columns** section offers the same copy controls for declared columns
+without known direct references. Both lists ignore the text filter. Missing/conflicting schemas
+or unresolved wildcards prevent an unused list; a displayed list describes analyzed sources,
+not non-use in the live system.
 
 ## Use diagnostics and optional assistance
 

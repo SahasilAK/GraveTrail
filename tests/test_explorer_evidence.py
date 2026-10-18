@@ -8,7 +8,7 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_source_panel_follows_active_tree_tab_unless_graph_evidence_is_selected(tmp_path, monkeypatch):
+def test_source_panel_follows_graph_direction_or_active_tree_tab(tmp_path, monkeypatch):
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve()).run()
     store = Store(tmp_path)
@@ -22,6 +22,7 @@ def test_source_panel_follows_active_tree_tab_unless_graph_evidence_is_selected(
         next(s for s in app.selectbox if s.label == "Choose an exact asset").set_value(middle).run()
         assert next(s for s in app.selectbox if s.label == "Source file").options == ["up.sql"]
         source_widget_key = next(s for s in app.selectbox if s.label == "Source file").key
+        next(s for s in app.segmented_control if s.label == "Lineage view").set_value("Tree").run()
         app.session_state["lineage_direction_tabs"] = "Downstream dependencies"
         app.run()
         assert not app.exception
@@ -30,10 +31,10 @@ def test_source_panel_follows_active_tree_tab_unless_graph_evidence_is_selected(
         next(s for s in app.segmented_control if s.label == "Lineage view").set_value("Tree").run()
         next(s for s in app.segmented_control if s.label == "Lineage view").set_value("Graph").run()
         app.run()
-        assert next(s for s in app.selectbox if s.label == "Source file").options == ["down.sql"]
-        assert app.segmented_control[0].value == "upstream"  # graph controls stay independent
+        assert next(s for s in app.selectbox if s.label == "Source file").options == ["up.sql"]
+        assert app.segmented_control[0].value == "upstream"
         from ui import common
-        monkeypatch.setattr(common, "graph_view", lambda *args: SimpleNamespace(selection={"edge": 0}))
+        monkeypatch.setattr(common, "graph_view", lambda *args, **kwargs: SimpleNamespace(selection={"edge": 0}))
         app.run()
         assert next(s for s in app.selectbox if s.label == "Source file").options == ["up.sql"]
     finally:
@@ -54,6 +55,6 @@ def test_explorer_reports_missing_assets_without_crashing(tmp_path, monkeypatch)
     assert not app.exception
     assert any("relationships reference missing assets" in item.value for item in app.warning)
     selector = next(s for s in app.selectbox if s.label == "Choose an exact asset")
-    assert selector.options == ["mart.output  [table]"]
+    assert selector.options == ["mart.output  [table]", "All"]
     selector.set_value("mart").run()
     assert not app.exception
