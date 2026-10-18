@@ -16,7 +16,7 @@ workspace** to open a creation dialog. Changing pages never starts an analysis o
 | Explore | Lineage | Graph or full-width Tree; source evidence, paths and graph/source exports |
 | Explore | Columns | Direct usage, grouping, declared schema evidence and reports |
 | Explore | Engineering tools | Code search, data dictionary and downstream impact |
-| Administration | Workspace settings | Parsing, Resources and Appearance, including all fourteen themes |
+| Administration | Workspace settings | Parsing, Resources and Appearance, including all eighteen themes |
 | Administration | Connections & AI | Provider profiles, session credentials, routing and Privacy |
 | Administration | Data management | Storage & transfers, Backups & integrity, Cleanup & recovery, History & staging |
 | Administration | Automation & access | Agent permissions, response budgets, client configuration and local connection test |
@@ -123,7 +123,9 @@ The orange choices are inspired by Claude's warm palette. Existing theme names a
 are preserved. Adding these options does not apply a different theme; choose **Apply theme**
 only when you want to change the current appearance.
 
-The selector is a dropdown with fourteen named options (five dark and nine light).
+Four curated palettes add quieter, coordinated surfaces: **Porcelain light** (warm stone and mineral blue), **Celadon light** (botanical neutrals and jade), **Ink dark** (graphite and cobalt), and **Aubergine dark** (deep plum and muted orchid).
+
+The selector is a dropdown with eighteen named options (seven dark and eleven light).
 If an older running server still shows four theme buttons after an upgrade, restart
 the Streamlit server from the updated checkout, then refresh the browser page.
 

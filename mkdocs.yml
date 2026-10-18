@@ -19,14 +19,26 @@ theme:
       accent: custom
       toggle:
         icon: material/weather-night
-        name: Switch to dark mode
+        name: Switch to Ink dark
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: custom
       accent: custom
       toggle:
         icon: material/weather-sunny
-        name: Switch to light mode
+        name: Switch to Celadon light
+    - scheme: celadon
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/leaf
+        name: Switch to Aubergine dark
+    - scheme: aubergine
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/palette-outline
+        name: Switch to Porcelain light
   features:
     - navigation.tabs
     - navigation.sections
@@ -43,6 +55,8 @@ hooks:
   - scripts/docs/hooks.py
 extra_css:
   - assets/stylesheets/extra.css
+extra_javascript:
+  - assets/javascripts/themes.js
 extra:
   generator: false
   public_assets:
@@ -50,6 +64,7 @@ extra:
     - assets/images/banner.svg
     - assets/diagrams/lineage.svg
     - assets/stylesheets/extra.css
+    - assets/javascripts/themes.js
     - assets/images/gravetrail-workspace-dashboard.png
     - assets/images/gravetrail-lineage-explorer.png
     - assets/images/gravetrail-source-evidence.png

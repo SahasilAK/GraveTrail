@@ -49,7 +49,7 @@ and agents browsing the repository; they are excluded from documentation site pa
    uv run --group docs pytest tests/test_documentation.py -q
    ```
 
-6. Review desktop/mobile presentation, keyboard navigation, both themes and search.
+6. Review desktop/mobile presentation, keyboard navigation, all four themes, the theme selector and search.
    Update implementation status/affected knowledge maps for substantial changes.
 7. Open a pull request. After it merges to `main`, the workflow publishes relevant changes.
 

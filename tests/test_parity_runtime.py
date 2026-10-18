@@ -20,7 +20,7 @@ def test_application_theme_logging_scope_and_setup(tmp_path, monkeypatch):
     owner = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True, allow_application_config=True))
     try:
         presets = owner.call('theme_list')
-        assert len(presets['items']) == 14
+        assert len(presets['items']) == 18
         result = owner.call('theme_apply', name='Forest light')
         assert result['configured'] == 'Forest light' and result['loaded'] is None and result['reload_required']
         assert '# preserved' in config.read_text() and 'serif' in config.read_text()

@@ -54,7 +54,7 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 
 - `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifact creation, guarded managed paths and scoped/checksummed budgeted base64 reads.
 
-- `theme_configuration.py` — exact existing14 preset palettes, detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.
+- `theme_configuration.py` — 18 preset palettes (existing14 preserved plus Porcelain/Celadon/Ink/Aubergine), detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.
 
 Provider runtime bindings include a saved-profile fingerprint: profile edits invalidate old credentials,
 including edits by another adapter. Fallbacks resolve their own approved credentials. AI pins hash/job

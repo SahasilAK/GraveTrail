@@ -51,7 +51,7 @@ Use the focused administration destinations:
 
 - **Workspace settings → Parsing:** dialect/folder/extension overrides, SAS mappings,
   job/session identities and case handling. **Resources** sets import/worker budgets;
-  **Appearance** sets graph/source defaults and all fourteen theme presets.
+  **Appearance** sets graph/source defaults and all eighteen theme presets.
 - **Connections & AI:** provider profiles, session credentials, routing and Privacy.
 - **Data management:** workspace details, configuration transfers, backup/restore,
   cleanup previews, history recovery and permitted storage locations.

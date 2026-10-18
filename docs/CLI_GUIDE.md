@@ -151,7 +151,7 @@ Groups organize commands; use `gravetrail GROUP --help` to list their children.
 | `ai review` | Current diagnostic review candidates and bounded source previews. |
 | `application` | Application scope; mutation requires unrestricted write/config/application grants. |
 | `application logging` | Home-wide persisted log level; no log-content access. |
-| `application theme` | Fourteen presets; loaded UI state is unavailable to this process. |
+| `application theme` | Eighteen presets; loaded UI state is unavailable to this process. |
 | `assets` | Resolve asset names to stable IDs. |
 | `batch` | Aggregate-budget lineage queries. |
 | `cleanup` | Preview and explicitly confirm workspace cleanup. |

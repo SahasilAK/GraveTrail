@@ -4,6 +4,11 @@ This repository builds its Markdown documentation with Material for MkDocs. GitH
 Actions validates the site on pull requests and deploys the static output from `main`.
 GitHub Pages does not run the Streamlit application, Python services, or your workspaces.
 
+The header's **Color theme** selector offers four coordinated appearances: **Porcelain · light**,
+**Celadon · light**, **Ink · dark** and **Aubergine · dark**. Your selection persists in this
+browser across guide pages and reloads. A first visit follows the system appearance with
+Porcelain or Ink. The app offers these same palettes alongside its existing themes.
+
 ## Prerequisites
 
 - A GitHub repository with Pages available on its plan. Public repositories can use Pages

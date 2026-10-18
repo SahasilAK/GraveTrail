@@ -10,7 +10,7 @@ Existing /builder, /explorer, /columns, /tools and /settings routes remain suppo
 - `explorer.py` — Lineage: persistent exact asset/direction, Graph / full-width Tree, Traversal options, contextual step-wise/source details, bounded paths and deferred offline graph/source exports. Native tree tabs have durable evidence-direction state; explicit graph evidence overrides source scope.
 - `columns.py` — Direct column usage/filter/grouping, inferred wildcard provenance, declared schema evidence and exports. Shares valid asset context with Lineage/Impact.
 - `tools.py` — Code search / Data dictionary / Impact analysis. Run comparison now belongs to Analysis → History.
-- `settings.py` — Workspace settings: Parsing / Resources / Appearance. Shared extracted forms preserve fourteen native theme presets, parsing/job identities, resource limits and graph/source defaults.
+- `settings.py` — Workspace settings: Parsing / Resources / Appearance. Shared extracted forms preserve eighteen native theme presets, parsing/job identities, resource limits and graph/source defaults.
 - `connections.py` — Connections & AI: Providers & routing / Privacy, external-request status, session credentials, logging/host roots and shared privacy validators.
 - `management.py` — Data management: Storage & transfers / Backups & integrity / Cleanup & recovery / History & staging. Existing storage allowlists, mandatory backup/typed cleanup confirmation and new-home restore remain intact.
 - `automation.py` — Automation & access: existing agent permissions, source disclosure/budgets, client setup and real in-process MCP handler test.
