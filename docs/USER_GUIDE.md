@@ -161,7 +161,7 @@ preset-owned sidebar colors reset when returning to Ocean dark or Ink dark.
 An existing customized or retired palette stays active until you apply a supported preset.
 
 GitHub Pages offers the same nine new palettes alongside its original **Ink dark** and
-**Celadon light**. The site remembers its selection independently of the local app.
+**Celadon light**. First visits load **Obsidian & Ember**. The site remembers dropdown selections independently of the local app.
 
 Choose complete source expanded or relevant statements first, and whether code displays line
 numbers. Relevant-first mode keeps the **Complete source** panel closed when evidence snippets

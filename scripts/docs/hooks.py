@@ -10,9 +10,8 @@ def on_config(config):
     config.extra["palette_css"] = themes["site_theme_css"]()
     config.theme["palette"] = [
         {"scheme": scheme, "primary": "custom", "accent": "custom",
-         "toggle": {"icon": "material/palette-outline", "name": name},
-         **({"media": f"(prefers-color-scheme: {'light' if i == 0 else 'dark'})"} if i < 2 else {})}
-        for i, (scheme, name) in enumerate(themes["SITE_THEMES"].items())]
+         "toggle": {"icon": "material/palette-outline", "name": name}}
+        for scheme, name in sorted(themes["SITE_THEMES"].items(), key=lambda item: item[0] != "obsidian-ember")]
     return config
 
 
