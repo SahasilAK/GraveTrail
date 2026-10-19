@@ -3,12 +3,6 @@
   --md-text-font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --md-code-font: "Cascadia Code", ui-monospace, Consolas, monospace;
 }
-[data-md-color-scheme="default"] {
-  color-scheme: light;
-  --gt-paper: #faf9f6; --gt-surface: #efede7; --gt-ink: #242a30; --gt-muted: #626b70;
-  --gt-line: #d6d4cc; --gt-link: #35596e; --gt-accent: #3f5f73; --gt-string: #386653;
-  --gt-shadow: 0 1rem 3rem #242a3010;
-}
 [data-md-color-scheme="celadon"] {
   color-scheme: light;
   --gt-paper: #f4f7f2; --gt-surface: #e7eee5; --gt-ink: #273b31; --gt-muted: #5b6e60;
@@ -19,12 +13,6 @@
   color-scheme: dark;
   --gt-paper: #17191e; --gt-surface: #22252c; --gt-ink: #eceef2; --gt-muted: #a7aebc;
   --gt-line: #404650; --gt-link: #a9bfe7; --gt-accent: #4169ad; --gt-string: #8abaaa;
-  --gt-shadow: 0 1rem 3rem #0003;
-}
-[data-md-color-scheme="aubergine"] {
-  color-scheme: dark;
-  --gt-paper: #211b24; --gt-surface: #302734; --gt-ink: #f2eaf2; --gt-muted: #bbaabc;
-  --gt-line: #57465c; --gt-link: #d8b5d2; --gt-accent: #885a7e; --gt-string: #9bbeb3;
   --gt-shadow: 0 1rem 3rem #0003;
 }
 body[data-md-color-scheme] {
@@ -76,8 +64,8 @@ body { -webkit-font-smoothing: antialiased; }
 .md-typeset .md-button { padding: .65em 1.25em; border: 1px solid var(--gt-line); border-radius: 2rem;
   font-size: .78rem; font-weight: 550; color: var(--gt-link); transition: background-color 140ms ease; }
 .md-typeset .md-button:hover { background: var(--gt-surface); border-color: var(--gt-link); text-decoration: none; }
-.md-typeset .md-button--primary { background: var(--gt-accent); border-color: var(--gt-accent); color: #fff; }
-.md-typeset .md-button--primary:hover { background: color-mix(in srgb, var(--gt-accent) 90%, #000); border-color: var(--gt-accent); color: #fff; }
+.md-typeset .md-button--primary { background: var(--gt-accent); border-color: var(--gt-accent); color: var(--gt-on-accent, #fff); }
+.md-typeset .md-button--primary:hover { background: var(--gt-accent-hover, color-mix(in srgb, var(--gt-accent) 90%, #000)); border-color: var(--gt-accent); color: var(--gt-on-accent, #fff); }
 .md-typeset .md-button:active { transform: scale(.98); }
 .md-typeset :is(pre, .highlight) { border-radius: .65rem; overflow: hidden; }
 .md-typeset pre > code { padding: 1.2rem; line-height: 1.8; }
@@ -135,3 +123,6 @@ body { -webkit-font-smoothing: antialiased; }
   .md-tabs__link { opacity: 1; }
   .md-typeset .md-button { border-color: currentColor; }
 }
+
+.gt-wordmark-trail { color: var(--gt-link); }
+body[data-md-color-scheme] .md-sidebar { background: var(--gt-sidebar, transparent); }

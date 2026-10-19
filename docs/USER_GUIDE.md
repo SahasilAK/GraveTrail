@@ -17,7 +17,7 @@ workspace** to open a creation dialog. Changing pages never starts an analysis o
 | Explore | Columns | Direct usage, grouping, declared schema evidence and reports |
 | Explore | Transformation lineage | Output/value transformations, distinct dependency roles, coverage and original source evidence |
 | Explore | Engineering tools | Code search, data dictionary and downstream impact |
-| Administration | Workspace settings | Parsing, Resources and Appearance, including all eighteen themes |
+| Administration | Workspace settings | Parsing, Resources and Appearance, including all eleven themes |
 | Administration | Connections & AI | Provider profiles, session credentials, routing and Privacy |
 | Administration | Data management | Storage & transfers, Backups & integrity, Cleanup & recovery, History & staging |
 | Administration | Automation & access | Agent permissions, response budgets, client configuration and local connection test |
@@ -141,25 +141,27 @@ one fill. Live Explorer and offline graph HTML/JSON share these settings. Direct
 remain adjustable for the current exploration. Preferences belong to each workspace and are
 included in safe configuration transfers.
 
-**Color themes:** In Workspace settings → Appearance choose **Ocean dark**, **Forest dark**,
-**Amethyst dark** or **Graphite dark**, or one of their four light equivalents, then click
-**Apply theme**. Dark presets apply dark appearance directly, including native forms, tables,
-charts and sidebar. Presets apply across the local app and all workspaces and persist in its
-native `.streamlit/config.toml`, separately from workspace configuration transfers. The picker
+**Color themes:** In Workspace settings → Appearance choose a preset, then click
+**Apply theme**. **Ocean dark** is the default; its original colors and those of
+**Ink dark** are preserved. Nine additional palettes are available: **Obsidian & Ember**,
+**Arctic Mint**, **Amethyst Terminal**, **Fossil & Copper**, **Carbon & Volt**,
+**Crimson Forge**, **Cobalt Atlas**, **Rose Circuit**, and **Steel Glacier**.
+
+Each new palette has separate canvas, sidebar, panel, text, border and action colors.
+Its graph distinguishes source, intermediate and target nodes, secondary edges,
+highlighted paths and selected evidence. Node layout and graph controls are unchanged.
+Bright action backgrounds use readable dark labels; links and the two-color GraveTrail
+wordmark use a readable shade of the theme accent. The supplied icon has a transparent exterior.
+
+Presets apply across the local app and all workspaces and persist in its native
+`.streamlit/config.toml`, separately from workspace configuration transfers. The picker
 waits briefly for native configuration reload; refresh the page if a reload hint appears.
-The configuration must be writable. Custom layout/sidebar overrides are retained.
+The configuration must be writable. Fonts, spacing and sidebar layout overrides are retained;
+preset-owned sidebar colors reset when returning to Ocean dark or Ink dark.
+An existing customized or retired palette stays active until you apply a supported preset.
 
-Six additional choices are available alongside those original eight: **Claude orange light**,
-**Claude orange dark**, **Nord light**, **Rose light**, **Sand light** and **Mint light**.
-The orange choices are inspired by Claude's warm palette. Existing theme names and colors
-are preserved. Adding these options does not apply a different theme; choose **Apply theme**
-only when you want to change the current appearance.
-
-Four curated palettes add quieter, coordinated surfaces: **Porcelain light** (warm stone and mineral blue), **Celadon light** (botanical neutrals and jade), **Ink dark** (graphite and cobalt), and **Aubergine dark** (deep plum and muted orchid).
-
-The selector is a dropdown with eighteen named options (seven dark and eleven light).
-If an older running server still shows four theme buttons after an upgrade, restart
-the Streamlit server from the updated checkout, then refresh the browser page.
+GitHub Pages offers the same nine new palettes alongside its original **Ink dark** and
+**Celadon light**. The site remembers its selection independently of the local app.
 
 Choose complete source expanded or relevant statements first, and whether code displays line
 numbers. Relevant-first mode keeps the **Complete source** panel closed when evidence snippets

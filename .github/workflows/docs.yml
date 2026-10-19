@@ -12,6 +12,7 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - 'scripts/docs/**'
+      - 'src/dataforge/theme_configuration.py'
       - 'tests/test_documentation.py'
       - '.github/workflows/docs.yml'
   pull_request:

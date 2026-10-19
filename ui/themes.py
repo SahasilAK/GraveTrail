@@ -15,7 +15,8 @@ def _loaded_preset():
     import streamlit as st
 
     return next((name for name, values in PRESETS.items() if all(
-        st.get_option(f"theme.{key}") == value for key, value in values.items())), None)
+        all(st.get_option(f"theme.sidebar.{k}") == v for k, v in value.items()) if key == "sidebar"
+        else st.get_option(f"theme.{key}") == value for key, value in values.items())), None)
 
 
 def render_theme_picker():
@@ -46,7 +47,7 @@ def render_theme_picker():
         selected = st.selectbox("Theme preset", choices, index=choices.index(active) if active else 0)
         if description := PRESET_DESCRIPTIONS.get(selected):
             st.caption(description)
-        st.caption("18 themes, including Porcelain, Celadon, Ink and Aubergine. Choose Apply theme to change this local app's appearance across workspaces.")
+        st.caption("11 themes, including the original Ocean dark and Ink dark. Choose Apply theme to change this local app's appearance across workspaces.")
         if active is None:
             st.caption("Current palette is customized. Applying a preset replaces its colors and appearance; custom layout/sidebar overrides remain.")
         if st.button("Apply theme", disabled=selected is None or selected == active):

@@ -29,18 +29,18 @@ def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, 
     app.segmented_control[0].set_value("Appearance").run()
     palette = next(c for c in app.selectbox if c.label == "Theme preset")
     assert palette.options == list(PRESETS)
-    assert len(palette.options) == 18
+    assert len(palette.options) == 11
     assert not any(c.label == "Theme preset" for c in app.segmented_control)
-    assert all(name + " dark" in palette.options for name in ["Ocean", "Forest", "Amethyst", "Graphite"])
-    palette.set_value("Aubergine dark").run()
+    assert palette.options[:2] == ["Ocean dark", "Ink dark"]
+    palette.set_value("Rose Circuit").run()
     next(b for b in app.button if b.label == "Apply theme").click().run()
-    assert not app.exception and current_preset(config) == "Aubergine dark"
+    assert not app.exception and current_preset(config) == "Rose Circuit"
     assert app.session_state["workspace"] == workspace
-    assert app.session_state["theme_pending"][0] == "Aubergine dark"
+    assert app.session_state["theme_pending"][0] == "Rose Circuit"
     assert not app.success
-    monkeypatch.setattr("ui.themes._loaded_preset", lambda: "Aubergine dark")
+    monkeypatch.setattr("ui.themes._loaded_preset", lambda: "Rose Circuit")
     app.run()
-    assert any("Aubergine dark theme applied" in s.value for s in app.success)
+    assert any("Rose Circuit theme applied" in s.value for s in app.success)
 
 
 def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):

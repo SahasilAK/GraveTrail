@@ -20,9 +20,9 @@ def test_application_theme_logging_scope_and_setup(tmp_path, monkeypatch):
     owner = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True, allow_application_config=True))
     try:
         presets = owner.call('theme_list')
-        assert len(presets['items']) == 18
-        result = owner.call('theme_apply', name='Forest light')
-        assert result['configured'] == 'Forest light' and result['loaded'] is None and result['reload_required']
+        assert len(presets['items']) == 11
+        result = owner.call('theme_apply', name='Arctic Mint')
+        assert result['configured'] == 'Arctic Mint' and result['loaded'] is None and result['reload_required']
         assert '# preserved' in config.read_text() and 'serif' in config.read_text()
         server = create_server(owner)
         actual = asyncio.run(server.call_tool('update_application_logging', {'level': 'WARNING'}))
@@ -34,7 +34,7 @@ def test_application_theme_logging_scope_and_setup(tmp_path, monkeypatch):
         restricted = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True, allow_application_config=True, workspaces=(w,)))
         try:
             with pytest.raises(AgentError):
-                restricted.call('theme_apply', name='Forest dark')
+                restricted.call('theme_apply', name='Ocean dark')
             assert 'home' not in restricted.call('runtime_info', w)
         finally:
             restricted.close()

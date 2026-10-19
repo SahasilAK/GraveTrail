@@ -1,14 +1,19 @@
 /* Keep Material's native palette persistence and first-paint handling. */
 (() => {
+  const title = document.querySelector('.md-header__topic:first-child .md-ellipsis');
+  if (title?.textContent.trim() === "GraveTrail") {
+    const trail = document.createElement("span");
+    trail.className = "gt-wordmark-trail";
+    trail.textContent = "Trail";
+    title.replaceChildren(document.createTextNode("Grave"), trail);
+  }
   const palette = document.querySelector('[data-md-component="palette"]');
   if (!palette) return;
-  const names = { default: "Porcelain · light", celadon: "Celadon · light",
-    slate: "Ink · dark", aubergine: "Aubergine · dark" };
   const inputs = Array.from(palette.querySelectorAll('input[name="__palette"]'));
   const select = document.createElement("select");
   select.className = "gt-theme-select";
   select.setAttribute("aria-label", "Color theme");
-  for (const [scheme, name] of Object.entries(names)) select.add(new Option(name, scheme));
+  for (const input of inputs) select.add(new Option(input.getAttribute("aria-label"), input.dataset.mdColorScheme));
   const sync = () => { select.value = document.body.dataset.mdColorScheme; };
   sync();
   select.addEventListener("change", () => {

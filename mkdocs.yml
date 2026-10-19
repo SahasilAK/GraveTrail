@@ -10,35 +10,10 @@ theme:
   name: material
   language: en
   font: false
-  logo: assets/images/mark.svg
-  favicon: assets/images/mark.svg
-  palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/weather-night
-        name: Switch to Ink dark
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/weather-sunny
-        name: Switch to Celadon light
-    - scheme: celadon
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/leaf
-        name: Switch to Aubergine dark
-    - scheme: aubergine
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/palette-outline
-        name: Switch to Porcelain light
+  logo: assets/images/icon.png
+  favicon: assets/images/icon.png
+  custom_dir: docs/overrides
+  # The shared registry supplies palette choices through scripts/docs/hooks.py.
   features:
     - navigation.tabs
     - navigation.sections
@@ -60,7 +35,7 @@ extra_javascript:
 extra:
   generator: false
   public_assets:
-    - assets/images/mark.svg
+    - assets/images/icon.png
     - assets/images/banner.svg
     - assets/diagrams/lineage.svg
     - assets/stylesheets/extra.css

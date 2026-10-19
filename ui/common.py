@@ -186,5 +186,7 @@ _GRAPH = st.components.v2.component("dataforge_graph", html=GRAPH_BODY, css=GRAP
 
 
 def graph_view(graph, key="graph", appearance=None, on_navigate=None):
-    return _GRAPH(data=graph_data(graph, appearance), key=key, default={"selection": None},
+    from ui.themes import _loaded_preset
+
+    return _GRAPH(data=graph_data(graph, appearance, theme=_loaded_preset()), key=key, default={"selection": None},
                   on_selection_change=lambda: None, on_navigate_change=on_navigate or (lambda: None), height="content")

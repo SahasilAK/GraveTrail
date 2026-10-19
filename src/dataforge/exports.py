@@ -58,6 +58,16 @@ GRAPH_CSS = """
 .df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:13px/1.7 ui-monospace,Consolas,monospace;padding:12px;border-radius:8px;background:var(--st-secondary-background-color,#f5f7fa)}
 .df-graph .hint{font-size:12px;color:inherit;opacity:.8}
 .df-graph .status{font-size:12px;min-height:18px}
+.df-graph[data-themed]{color:var(--node-text);background:var(--graph-bg);color-scheme:var(--graph-mode)}
+.df-graph[data-themed] svg{background:var(--graph-bg);border-color:var(--graph-border)}
+.df-graph[data-themed] :is(button,input,.detail){background:var(--graph-surface);border-color:var(--graph-border)}
+.df-graph[data-themed] .edge{stroke:var(--graph-edge)}
+.df-graph[data-themed] .edge.chosen{stroke:var(--graph-path)!important}
+.df-graph[data-themed] rect.chosen,.df-graph[data-themed] .node:focus rect{stroke:var(--graph-selected)!important;stroke-width:3!important}
+.df-graph[data-themed] .edge:focus{stroke:var(--graph-path)}
+.df-graph[data-themed] :is(button,input):focus-visible{outline-color:var(--graph-path)}
+.df-graph[data-light] :is(rect.chosen,.node:focus rect,.edge.chosen,.edge:focus){filter:drop-shadow(1px 0 0 var(--node-text)) drop-shadow(-1px 0 0 var(--node-text)) drop-shadow(0 1px 0 var(--node-text)) drop-shadow(0 -1px 0 var(--node-text))}
+.df-graph[data-light] :is(button,input):focus-visible{outline-color:var(--node-text)}
 .df-graph .copy-node{cursor:pointer}.df-graph .copy-node:focus{outline:2px solid var(--st-primary-color,#2869c7)}
 .df-graph:fullscreen{width:100vw;height:100dvh;display:flex;flex-direction:column;overflow:auto}
 .df-graph:fullscreen svg{flex:1;min-height:200px;height:auto}
@@ -73,6 +83,17 @@ function mountGraph(root, data, notify, navigate) {
  if(root._graphCleanup)root._graphCleanup();
  const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
  const container=root.querySelector('.df-graph'),status=root.querySelector('.status');
+ const theme=data.theme;
+ container.toggleAttribute('data-themed',!!theme);
+ container.toggleAttribute('data-light',theme?.mode==='light');
+ if(theme){
+   const tokens={'node-text':theme.text,'graph-bg':theme.graph,'graph-mode':theme.mode,'graph-border':theme.border,
+     'graph-surface':theme.surface,'graph-edge':theme.edge,'graph-path':theme.path,'graph-selected':theme.selected};
+   Object.entries(tokens).forEach(([key,value])=>container.style.setProperty('--'+key,value));
+ }else{
+   ['node-text','graph-bg','graph-mode','graph-border','graph-surface','graph-edge','graph-path','graph-selected'].forEach(key=>container.style.removeProperty('--'+key));
+ }
+ root.querySelector('#df-arrow path').setAttribute('fill',theme?theme.edge:'#829ab1');
  let clickTimer=null;
  const appearance=data.appearance||{},labels=appearance.graph_labels||'compact';
  const edgeWidth=appearance.graph_edge_width||2;
@@ -103,8 +124,10 @@ function mountGraph(root, data, notify, navigate) {
  });
  data.nodes.forEach(n=>{
    const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':nodeLabel(n)},stage);
-   const color=appearance.graph_palette==='neutral'?'var(--node-neutral)':n.kind==='unresolved'?'var(--node-unresolved)':n.temporary?'var(--node-temporary)':n.source?'var(--node-source)':'var(--node-table)';
-   make('rect',{width:n.width,height:48,rx:9,fill:color,stroke:'var(--node-border)','data-node':n.asset_id},g);
+   const role=theme&&(n.kind==='unresolved'?theme.selected:n.source?theme.source:n.target?theme.target:theme.intermediate);
+   const semantic=theme&&appearance.graph_palette!=='neutral';
+   const color=theme?(semantic?`color-mix(in srgb, ${role} 25%, ${theme.graph})`:theme.surface):appearance.graph_palette==='neutral'?'var(--node-neutral)':n.kind==='unresolved'?'var(--node-unresolved)':n.temporary?'var(--node-temporary)':n.source?'var(--node-source)':'var(--node-table)';
+   make('rect',{width:n.width,height:48,rx:9,fill:color,stroke:theme?(semantic?role:theme.border):'var(--node-border)','data-node':n.asset_id},g);
    if(labels!=='hidden'){
      const text=make('text',{x:12,y:29,fill:'var(--node-text)','font-size':13},g);
      const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>22?label.slice(0,21)+'…':label;
@@ -147,7 +170,7 @@ function mountGraph(root, data, notify, navigate) {
 GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
 
 
-def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
+def graph_data(graph, appearance: VisualizationSettings | None = None, *, theme: str | None = None) -> dict:
     appearance = appearance or VisualizationSettings()
     condensed = nx.condensation(graph.graph)
     groups = list(nx.topological_generations(condensed))
@@ -158,7 +181,8 @@ def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
         for row, node in enumerate(ids):
             attrs = dict(graph.nodes[node])
             attrs.update(x=20 + level * (width + 85), y=20 + row * 85, width=width,
-                         source=graph.graph.in_degree(node) == 0, job_id=asset_job(attrs))
+                         source=graph.graph.in_degree(node) == 0,
+                         target=graph.graph.out_degree(node) == 0, job_id=asset_job(attrs))
             nodes.append(attrs)
     edges = [{"source": s, "target": t, "evidence": a["evidence"], "intermediates": a.get("intermediates", [])}
              for s, t, a in graph.graph.edges(data=True)]
@@ -171,8 +195,13 @@ def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
                         f'M {x1} {y1} C {x1+70} {y1} {x2-70} {y2} {x2} {y2}')
     bounds = [-80, -80, max([780] + [n['x'] + n['width'] + 180 for n in nodes]),
               max([360] + [n['y'] + 180 for n in nodes])]
-    return {"nodes": nodes, "edges": edges, "bounds": bounds, "appearance": appearance.model_dump(include={
+    from dataforge.theme_configuration import PALETTES
+
+    scene = {"nodes": nodes, "edges": edges, "bounds": bounds, "appearance": appearance.model_dump(include={
         "graph_labels", "graph_palette", "graph_edge_width"})}
+    if theme in PALETTES:
+        scene["theme"] = PALETTES[theme]
+    return scene
 
 
 def graph_html(graph, appearance: VisualizationSettings | None = None) -> str:

@@ -2,6 +2,20 @@
 from pathlib import Path, PurePosixPath
 
 
+def on_config(config):
+    # Docs-only builds load the shared definitions without installing the app dependencies.
+    from runpy import run_path
+
+    themes = run_path(str(Path(__file__).resolve().parents[2] / "src/dataforge/theme_configuration.py"))
+    config.extra["palette_css"] = themes["site_theme_css"]()
+    config.theme["palette"] = [
+        {"scheme": scheme, "primary": "custom", "accent": "custom",
+         "toggle": {"icon": "material/palette-outline", "name": name},
+         **({"media": f"(prefers-color-scheme: {'light' if i == 0 else 'dark'})"} if i < 2 else {})}
+        for i, (scheme, name) in enumerate(themes["SITE_THEMES"].items())]
+    return config
+
+
 def nav_documents(nav):
     for entry in nav:
         if isinstance(entry, dict):

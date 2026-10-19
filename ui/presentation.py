@@ -1,17 +1,47 @@
 """Small, theme-derived presentation helpers for the native Streamlit shell."""
+from base64 import b64encode
+from functools import lru_cache
 from html import escape
 from pathlib import Path
 
 import streamlit as st
 
+from dataforge.theme_configuration import PALETTES, hover_accent, on_accent
+
+ICON_PATH = Path(__file__).with_name("icon.png")
+
+
+@lru_cache(maxsize=1)
+def _icon_uri():
+    return "data:image/png;base64," + b64encode(ICON_PATH.read_bytes()).decode("ascii")
+
+
+def brand_title():
+    color = st.get_option("theme.linkColor") or st.get_option("theme.primaryColor") or "currentColor"
+    return f'![GraveTrail icon]({_icon_uri()}) Grave:color[Trail]{{foreground="{color}"}}'
+
 
 def apply_style():
+    from ui.themes import _loaded_preset
+
     colors = {name: st.get_option("theme." + option) for name, option in {
         "bg": "backgroundColor", "surface": "secondaryBackgroundColor", "text": "textColor",
         "accent": "primaryColor", "border": "borderColor", "link": "linkColor",
     }.items()}
     tokens = ";".join(f"--gt-{key}:{value}" for key, value in colors.items() if value)
-    st.html("<style>:root{" + tokens + "}" + Path(__file__).with_name("style.css").read_text() + "</style>")
+    extra = ""
+    if palette := PALETTES.get(_loaded_preset()):
+        tokens += f';--gt-muted:{palette["muted"]};--gt-on-accent:{on_accent(palette["accent"])}'
+        tokens += f';--gt-accent-hover:{hover_accent(palette["accent"])}'
+        extra = """
+        button[kind^="primary"],button[kind^="primary"] p {color:var(--gt-on-accent)}
+        button[kind^="primary"]:hover {background:var(--gt-accent-hover)}
+        .st-key-app_workspace [data-testid="stCaptionContainer"],
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {color:var(--gt-muted);opacity:1}
+        .gt-eyebrow {color:var(--gt-muted);opacity:1}
+        .st-key-empty_state,.st-key-overview_next {background:var(--gt-surface)}
+        """
+    st.html("<style>:root{" + tokens + "}" + Path(__file__).with_name("style.css").read_text() + extra + "</style>")
 
 
 def eyebrow(text):

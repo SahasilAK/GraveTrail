@@ -1,27 +1,37 @@
-"""The four published appearances stay coordinated with native app palettes."""
+"""Published appearances share the app registry and retain Ink/Celadon."""
 import re
 from pathlib import Path
 
 import pytest
 
-from dataforge.theme_configuration import PRESETS
+from dataforge.theme_configuration import PALETTES, PRESETS
+from scripts.docs.hooks import on_config
 
 
-def test_site_has_four_palettes_and_publishes_the_native_theme_selector():
-    config = pytest.importorskip('mkdocs.config').load_config('mkdocs.yml')
+def test_site_publishes_eleven_palettes_with_native_persistence():
+    config = on_config(pytest.importorskip('mkdocs.config').load_config('mkdocs.yml'))
     schemes = [palette['scheme'] for palette in config.theme['palette']]
-    assert schemes == ['default', 'slate', 'celadon', 'aubergine']
+    assert schemes == ['celadon', 'slate', 'obsidian-ember', 'arctic-mint', 'amethyst-terminal',
+        'fossil-copper', 'carbon-volt', 'crimson-forge', 'cobalt-atlas', 'rose-circuit', 'steel-glacier']
+    assert config.theme['palette'][0]['media'] == '(prefers-color-scheme: light)'
+    assert config.theme['palette'][1]['media'] == '(prefers-color-scheme: dark)'
     assert 'assets/javascripts/themes.js' in config.extra_javascript
     assert 'assets/javascripts/themes.js' in config.extra['public_assets']
 
 
-def test_site_palettes_match_app_surfaces_and_actions():
-    css = Path('docs/assets/stylesheets/extra.css').read_text(encoding='utf-8')
-    for scheme, name in [('default', 'Porcelain light'), ('celadon', 'Celadon light'),
-                         ('slate', 'Ink dark'), ('aubergine', 'Aubergine dark')]:
-        block = re.search(r'\[data-md-color-scheme="' + scheme + r'"\]\s*\{([^}]+)', css)[1]
-        tokens = dict(re.findall(r'--gt-([\w-]+):\s*(#[\da-f]{6})\s*;', block))
+def test_published_new_theme_tokens_match_app_and_sidebar_roles():
+    config = on_config(pytest.importorskip('mkdocs.config').load_config('mkdocs.yml'))
+    css = config.extra['palette_css']
+    for entry in config.theme['palette'][2:]:
+        name = entry['toggle']['name']
+        block = re.search(r'\[data-md-color-scheme="' + entry['scheme'] + r'"\]\{([^}]+)', css)[1]
+        tokens = dict(re.findall(r'--gt-([\w-]+):\s*(#[\da-f]{6})\s*[;}]?', block))
         for token, native in {'paper': 'backgroundColor', 'surface': 'secondaryBackgroundColor',
                               'ink': 'textColor', 'line': 'borderColor', 'link': 'linkColor',
                               'accent': 'primaryColor'}.items():
-            assert tokens[token] == PRESETS[name][native], (scheme, token)
+            assert tokens[token] == PRESETS[name][native], (name, token)
+        assert tokens['sidebar'] == PALETTES[name]['sidebar']
+    legacy = Path('docs/assets/stylesheets/extra.css').read_text(encoding='utf-8')
+    assert '--gt-paper: #f4f7f2' in legacy and '--gt-paper: #17191e' in legacy
+    assert 'data-md-color-scheme="default"' not in legacy
+    assert 'data-md-color-scheme="aubergine"' not in legacy
