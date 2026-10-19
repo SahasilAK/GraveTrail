@@ -11,7 +11,7 @@ Existing /builder, /explorer, /columns, /tools and /settings routes remain suppo
 - `columns.py` — Direct column usage/comma-term filtering/grouping, inferred wildcard provenance, declared schema evidence and exports. Unfiltered distinct used and conservatively known unused names have individual/list copy controls; unused panel stays lazy. Shares valid asset context with Lineage/Impact.
 - `transformations.py` — Focused exact-column upstream/downstream traces with bounded depth/status, coverage states, roles and uncollapsed paths; lazy original-version evidence (200 lines/12k chars), guarded selector identities and bounded CSV/JSON exports with completeness markers.
 - `tools.py` — Code search / Data dictionary / Impact analysis. Run comparison now belongs to Analysis → History.
-- `settings.py` — Workspace settings: Parsing / Resources / Appearance. Shared extracted forms preserve eighteen native theme presets, parsing/job identities, resource limits and graph/source defaults.
+- `settings.py` — Workspace settings: Parsing / Resources / Appearance. Shared extracted forms preserve eleven native theme presets, parsing/job identities, resource limits and graph/source defaults.
 - `connections.py` — Connections & AI: Providers & routing / Privacy, external-request status, session credentials, logging/host roots and shared privacy validators.
 - `management.py` — Data management: Storage & transfers / Backups & integrity / Cleanup & recovery / History & staging. Existing storage allowlists, mandatory backup/typed cleanup confirmation and new-home restore remain intact.
 - `automation.py` — Automation & access: existing agent permissions, source disclosure/budgets, client setup and real in-process MCP handler test.

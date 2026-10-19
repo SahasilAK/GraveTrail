@@ -6,6 +6,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 
 ## Files
+- `icon.png` — Supplied navy/orange icon with transparent exterior, shared byte-for-byte with Pages and packaged with the UI.
 - `data_management.py` — Data management cleanup metrics, dry-run/typed confirmation, mandatory whole-home backup, rebuild, integrity/checkpoint/new-home restore and opt-in expired staging cleanup.
 - `agent_settings.py` — Workspace agent permissions/budgets/auditing, client setup examples and actual in-process MCP handler test; discovers tools only when its local test panel opens. Publishes credential-free status-polling revocation snapshots.
 - `temporary_cleanup.py` — Lazy Storage panel for bounded stale staging preview, explicit selection/cleanup and retained restore; safe failure messages, per-workspace notices.
@@ -17,7 +18,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `lineage_navigation.py` — ALL_ASSETS sentinel, exact graph focus and workspace-scoped Back/Forward history of asset/query/direction/depth/collapse/view/Tree-tab controls; new asset navigation clears the forward branch.
 - `copy_names.py` — Theme-aware v2 comma-separated name lists with individual/list clipboard controls; textContent preserves imported names safely and COPY_JS supplies offline fallback.
 - `provider_settings.py` — Shared validated profile/routing saves and safe environment references, masked session credential connect/clear, sanitized connection/model discovery and task/fallback routing.
-- `themes.py` — Eighteen native presets: original fourteen unchanged plus curated Porcelain/Celadon/Ink/Aubergine. Selection descriptions distinguish the new palettes. TOML-aware atomic config updates, detection and bounded reload acknowledgement. Applies only on explicit request, app-wide.
+- `themes.py` — Eleven native presets: unchanged Ocean dark/Ink dark plus nine semantic palettes. Loaded-preset detection includes sidebar colors. TOML-aware atomic config updates, detection and bounded reload acknowledgement. Applies only on explicit request, app-wide.
 - `unresolved_review.py` — Offline bounded diagnostic selector/context preview with adjustable source ranges and explicit hash-pinned review button; uses shared durable result presentation.
 - `workspace_history.py` — Lazy native Settings panel previews bounded history eligibility, archives with retained recovery and restores missing records; all persistence lives in maintenance.py.
 
@@ -33,8 +34,8 @@ opens before resetting current-session controls. Other sessions retain their sto
 
 GraveTrail presentation: app page/sidebar title and agent examples use the new name. Reset/restore forms show RESET GRAVETRAIL / RESTORE GRAVETRAIL; services retain legacy exact phrases for scripted compatibility. Storage identifiers are unchanged.
 
-- `presentation.py` — apply_style/eyebrow/empty_state/section and sync_context: theme-derived chrome, session-persistent local selectors, workspace/source revision invalidation of transient evidence and cleanup plans.
-- `style.css` — App-owned key classes and semantic controls; responsive type/spacing, immediate focus/press feedback, reduced motion/transparency and contrast alternatives. Packaged by hatch_assets.py.
+- `presentation.py` — apply_style/eyebrow/empty_state/section and sync_context: theme-derived chrome, cached supplied icon/two-color wordmark, readable action labels, session-persistent local selectors, workspace/source revision invalidation of transient evidence and cleanup plans.
+- `style.css` — App-owned key classes and semantic controls; responsive type/spacing, immediate focus/press feedback, reduced motion/transparency and contrast alternatives. Packaged with icon.png by hatch_assets.py. Legacy chrome remains unchanged; new palettes add muted/card roles.
 - `workspace_settings.py` — Extracted render_parsing/render_resources/render_appearance/render_privacy/render_storage forms; validators and service behavior unchanged. Forms include workspace identity; advanced mappings stay secondary.
 - `analysis_sections.py` — Lazy diagnostics with pending-source gates and exact version pinning, optional preview/request/merge panels, recent runs/comparison.
 

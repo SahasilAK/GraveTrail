@@ -46,6 +46,8 @@ quote-aware known-value SAS %LET expressions with stale-binding invalidation. Im
 never executes; original wrapper/block evidence survives. docs/TESTING.md is the tracked
 current acceptance matrix; optional local status/matrix ledgers retain dated historical records.
 
+Palette update: app retains Ocean dark (default)/Ink dark plus nine shared semantic palettes; Pages retains Ink dark/Celadon light plus those nine. Supplied icon and two-color wordmark; names, layout and interactions stay unchanged.
+
 UI redesign: Apple Design guides system typography, native theme tokens and scoped presentation CSS. Sources and Analysis are separate; administration has four focused routes. App/Pages share the visual language, with no entrance animations or remote font dependency. Navigation/state and delivery checklist: docs/USER_GUIDE.md; local plan: plans/UI_REDESIGN.md when available.
 
 Column transformations: parser11/migration5 add scoped SQL/PROC SQL and bounded DATA-step

@@ -80,7 +80,8 @@ const attributes={},properties={};
 const elements={
   'svg':{setAttribute:(k,v)=>attributes[k]=v},
   '.stage':{replaceChildren:()=>{}}, '.detail':{},
-  '.df-graph':{style:{setProperty:(k,v)=>properties[k]=v}},
+  '.df-graph':{toggleAttribute(){},style:{setProperty:(k,v)=>properties[k]=v,removeProperty(){}}},
+  '#df-arrow path':{setAttribute(){}},
   '.fit':{}, '.plus':{}, '.minus':{}, '.find':{}, '.fullscreen':{}, '.status':{}
 };
 mountGraph({querySelector:s=>elements[s]},
@@ -101,7 +102,8 @@ def test_graph_double_click_cancels_selection_and_copy_keeps_full_name():
     script = GRAPH_JS + r'''
 (async()=>{
   class Element {
-    constructor(){this.children=[];this.attrs={};this.style={setProperty(){}};this.classList={add(){},remove(){}}}
+    constructor(){this.children=[];this.attrs={};this.style={setProperty(){},removeProperty(){}};this.classList={add(){},remove(){}}}
+    toggleAttribute(){}
     setAttribute(k,v){this.attrs[k]=v}
     appendChild(e){this.children.push(e)}
     replaceChildren(){this.children=[]}
@@ -111,7 +113,7 @@ def test_graph_double_click_cancels_selection_and_copy_keeps_full_name():
   const copied=[],selected=[],navigated=[];
   global.document={createElementNS:()=>new Element()};
   Object.defineProperty(global,'navigator',{value:{clipboard:{writeText:async text=>copied.push(text)}}});
-  const elements=Object.fromEntries(['svg','.stage','.detail','.df-graph','.fit','.plus','.minus','.find','.fullscreen','.status'].map(k=>[k,new Element()]));
+  const elements=Object.fromEntries(['svg','.stage','.detail','.df-graph','.fit','.plus','.minus','.find','.fullscreen','.status','#df-arrow path'].map(k=>[k,new Element()]));
   const root={querySelector:s=>elements[s]};
   const container=elements['.df-graph'];let active=false;
   container.matches=()=>active;

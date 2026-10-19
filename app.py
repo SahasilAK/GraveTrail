@@ -5,10 +5,10 @@ import streamlit as st
 from dataforge.connections import RuntimeConnections, connection_scope
 from dataforge.logging_config import configure_logging
 from ui.common import current_home, get_store
-from ui.presentation import apply_style, eyebrow, sync_context
+from ui.presentation import ICON_PATH, apply_style, brand_title, eyebrow, sync_context
 
 configure_logging()
-st.set_page_config(page_title="GraveTrail | Engineering workspace", page_icon=":material/account_tree:", layout="wide")
+st.set_page_config(page_title="GraveTrail | Engineering workspace", page_icon=str(ICON_PATH), layout="wide")
 try:
     store = get_store(current_home())
 except (ValueError, OSError, duckdb.Error):
@@ -54,7 +54,7 @@ pages = {
 page = st.navigation(pages, position="hidden")
 with st.sidebar:
     with st.container(key="brand"):
-        st.header(":material/account_tree: GraveTrail")
+        st.header(brand_title())
         st.caption("**Nothing stays buried.**  \nEvery dependency leaves a trail.")
     options = {w["workspace_id"]: w["name"] for w in workspaces}
     if st.session_state.get("workspace") not in options:

@@ -6,8 +6,6 @@ import tomllib
 from collections.abc import MutableMapping
 from pathlib import Path
 
-import tomlkit
-
 CONFIG_PATH = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(Path(__file__).resolve().parents[2] / '.streamlit' / 'config.toml')))
 _LOCK = threading.Lock()
 
@@ -17,90 +15,127 @@ def _colors(primary, background, secondary, text, border, link, chart):
                 textColor=text, borderColor=border, linkColor=link, chartCategoricalColors=chart)
 
 
+def _palette(mode, ui, graph, description):
+    # Roles stay fixed; future palettes only supply another row of values.
+    roles = "bg sidebar surface accent text muted border source intermediate target path edge graph selected".split()
+    return dict(zip(roles, (ui + " " + graph).lower().split(), strict=True), mode=mode, description=description)
+
+
 PALETTES = {
-    "Ocean": {
-        "light": _colors("#2869c7", "#ffffff", "#f1f5fa", "#17324d", "#d7e0ea", "#2869c7",
-                         ["#2869c7", "#177e89", "#9465bb", "#b66a16"]),
-        "dark": _colors("#2869c7", "#15202e", "#1f2e40", "#e7eef7", "#3b4f65", "#9abcf0",
-                        ["#71a7ee", "#52c5c5", "#bb9cde", "#e1ad66"]),
-    },
-    "Forest": {
-        "light": _colors("#16765b", "#fcfefc", "#edf4ef", "#20392e", "#c6d8cc", "#15694f",
-                         ["#16765b", "#4e708f", "#947040", "#786393"]),
-        "dark": _colors("#16765b", "#14251f", "#20382d", "#e3f2eb", "#4b6658", "#8bd3b1",
-                        ["#80c8a1", "#8eb8df", "#d9b77d", "#bea1d7"]),
-    },
-    "Amethyst": {
-        "light": _colors("#76509e", "#fdfcfe", "#f2edf7", "#362743", "#d8cce3", "#704897",
-                         ["#76509e", "#347d83", "#a26743", "#526ca3"]),
-        "dark": _colors("#76509e", "#221b30", "#322840", "#f0e9fa", "#645476", "#c7a9ed",
-                        ["#c1a0e5", "#82c5cb", "#dfae88", "#99b2e9"]),
-    },
-    "Graphite": {
-        "light": _colors("#526171", "#fdfdfd", "#edf0f3", "#26303a", "#c4cbd3", "#43566a",
-                         ["#526171", "#397e88", "#8c7055", "#806d92"]),
-        "dark": _colors("#526171", "#1e2227", "#2b3139", "#edf0f4", "#5b6570", "#b6c5d6",
-                        ["#b6c5d6", "#85bdc5", "#ccb08c", "#b7a4cb"]),
-    },
+    "Obsidian & Ember": _palette("dark",
+        "#0A0B0D #11161C #1A2230 #F97316 #F8FAFC #9CA3AF #2A3240",
+        "#F97316 #F59E0B #FDBA74 #FF8A3D #475569 #0D1117 #FDE68A", "Dark · Premium · Industrial"),
+    "Arctic Mint": _palette("light",
+        "#F8FFFD #E6F7F4 #FFFFFF #14B8A6 #0F172A #64748B #D6EDE9",
+        "#10B981 #34D399 #60A5FA #2DD4BF #94D2BD #F1FDFA #A7F3D0", "Light · Clean · Modern"),
+    "Amethyst Terminal": _palette("dark",
+        "#0A0614 #150B28 #1E1340 #8B5CF6 #F8F6FF #A78BFA #2D1B53",
+        "#A855F7 #C084FC #818CF8 #D946EF #6B46C1 #0F0820 #E9D5FF", "Dark · Futuristic · Developer-focused"),
+    "Fossil & Copper": _palette("light",
+        "#FFFAF5 #F2E6D9 #FFFFFF #C9693C #2D1F14 #7A6A58 #E6D8C7",
+        "#C9693C #D7875A #E8B895 #FF9E73 #B09A8A #FCF6F1 #FCD34D", "Light · Editorial · Distinctive"),
+    "Carbon & Volt": _palette("dark",
+        "#050A08 #0B1F14 #10281D #84CC16 #ECFDF5 #86A792 #1F3A2B",
+        "#22C55E #10B981 #14F195 #A3E635 #2F6B52 #06140E #D9F99D", "Dark · Bold · High-tech"),
+    "Crimson Forge": _palette("dark",
+        "#0A0D12 #141821 #1E242E #DC2626 #F1F5F9 #94A3B8 #2E3642",
+        "#22C55E #3B82F6 #EF4444 #F97316 #64748B #0F1117 #FDE047", "Dark · Bold · Industrial"),
+    "Cobalt Atlas": _palette("dark",
+        "#0A1320 #0F2138 #152B46 #0EA5E9 #E2E8F0 #94A3B8 #2A3F5F",
+        "#22C55E #3B82F6 #A855F7 #38BDF8 #64748B #0B1524 #FDE68A", "Dark · Technical · Trustworthy"),
+    "Rose Circuit": _palette("dark",
+        "#150B18 #24142A #2D1B34 #EC4899 #F8FAFC #A78BFA #3B2A45",
+        "#22C55E #8B5CF6 #EC4899 #F472B6 #6B7280 #150B18 #F9A8D4", "Dark · Elegant · Modern"),
+    "Steel Glacier": _palette("dark",
+        "#0E1A26 #1F2F3F #263B4D #22D3EE #E2E8F0 #94A3B8 #334155",
+        "#22C55E #38BDF8 #60A5FA #67E8F9 #64748B #0E1A26 #A7F3D0", "Cool · Minimal · Analytical"),
 }
 
-PRESETS = {f"{name} {mode}": {"base": mode, **modes[mode]}
-           for mode in ("dark", "light") for name, modes in PALETTES.items()}
 
-# Additional choices leave the original eight definitions and their order intact.
-PRESETS.update({
-    "Claude orange light": {"base": "light", **_colors(
-        "#a84b2f", "#faf7f2", "#eee7dc", "#3d332c", "#d6cabb", "#a0482e",
-        ["#a84b2f", "#607568", "#8c7197", "#92733f"])},
-    "Claude orange dark": {"base": "dark", **_colors(
-        "#a84b2f", "#26231f", "#342e28", "#f0e7dd", "#746354", "#edaa85",
-        ["#e6a180", "#a0baa2", "#c6a8d3", "#d6bd87"])},
-    "Nord light": {"base": "light", **_colors(
-        "#466384", "#f4f7fb", "#e6edf5", "#2e3440", "#c5d0df", "#3e5d7e",
-        ["#466384", "#4b7a81", "#8b6799", "#9b7046"])},
-    "Rose light": {"base": "light", **_colors(
-        "#9d4162", "#fffafb", "#f8eaf0", "#4a2938", "#dfc3cf", "#963857",
-        ["#9d4162", "#527e78", "#7d6ba8", "#9a7138"])},
-    "Sand light": {"base": "light", **_colors(
-        "#886315", "#fcfaf4", "#eee9dc", "#403b2e", "#d4c9af", "#76540f",
-        ["#886315", "#4e7772", "#8d6689", "#586d9a"])},
-    "Mint light": {"base": "light", **_colors(
-        "#226d5a", "#f7fcfa", "#e6f2ee", "#253d36", "#bed8cf", "#1c6654",
-        ["#226d5a", "#5679a1", "#937042", "#8b679c"])},
-})
+def contrast(first, second):
+    def luminance(color):
+        rgb = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        return sum((v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4) * w
+                   for v, w in zip(rgb, (.2126, .7152, .0722)))
+    high, low = sorted((luminance(first), luminance(second)), reverse=True)
+    return (high + .05) / (low + .05)
 
-# Restrained neutrals carry the interface; accents are reserved for actions and data.
-PRESETS.update({
-    "Porcelain light": {"base": "light", **_colors(
-        "#3f5f73", "#faf9f6", "#efede7", "#242a30", "#d6d4cc", "#35596e",
-        ["#3f5f73", "#617b68", "#97704b", "#87728c"])},
-    "Celadon light": {"base": "light", **_colors(
-        "#386653", "#f4f7f2", "#e7eee5", "#273b31", "#c8d4c7", "#315f4c",
-        ["#386653", "#57768a", "#a07841", "#8d6880"])},
+
+def on_accent(color):
+    return max(("#ffffff", "#000000"), key=lambda text: contrast(text, color))
+
+
+def hover_accent(color):
+    tint = 255 if on_accent(color) == "#000000" else 0
+    return "#" + "".join(f"{round(int(color[i:i + 2], 16) * .9 + tint * .1):02x}" for i in (1, 3, 5))
+
+
+def readable_accent(palette):
+    accent, text = ([int(palette[key][i:i + 2], 16) for i in (1, 3, 5)] for key in ("accent", "text"))
+    for weight in range(11):
+        color = "#" + "".join(f"{round((a * (10 - weight) + t * weight) / 10):02x}" for a, t in zip(accent, text))
+        if all(contrast(color, palette[bg]) >= 4.5 for bg in ("bg", "surface", "sidebar")):
+            return color
+    return palette["text"]
+
+
+# These native definitions are intentionally unchanged, including inherited sidebar colors.
+PRESETS = {
+    "Ocean dark": {"base": "dark", **_colors(
+        "#2869c7", "#15202e", "#1f2e40", "#e7eef7", "#3b4f65", "#9abcf0",
+        ["#71a7ee", "#52c5c5", "#bb9cde", "#e1ad66"])},
     "Ink dark": {"base": "dark", **_colors(
         "#4169ad", "#17191e", "#22252c", "#eceef2", "#404650", "#a9bfe7",
         ["#a9bfe7", "#8abaaa", "#d4b482", "#bea4ca"])},
-    "Aubergine dark": {"base": "dark", **_colors(
-        "#885a7e", "#211b24", "#302734", "#f2eaf2", "#57465c", "#d8b5d2",
-        ["#d8b5d2", "#9bbeb3", "#d9b88b", "#a8b8dd"])},
-})
-
-PRESET_DESCRIPTIONS = {
-    "Porcelain light": "Warm porcelain, stone surfaces and a quiet mineral-blue accent.",
-    "Celadon light": "Soft botanical neutrals with deep jade controls and crisp forest text.",
-    "Ink dark": "Near-black graphite, cool silver text and a measured cobalt accent.",
-    "Aubergine dark": "Deep plum surfaces, warm pearl text and a muted orchid accent.",
 }
+for name, p in PALETTES.items():
+    link = readable_accent(p)
+    PRESETS[name] = {"base": p["mode"], **_colors(p["accent"], p["bg"], p["surface"], p["text"], p["border"],
+        link, [p["source"], p["intermediate"], p["target"], p["path"]]),
+        "sidebar": {"backgroundColor": p["sidebar"], "secondaryBackgroundColor": p["surface"]}}
+
+PRESET_DESCRIPTIONS = {name: p["description"] for name, p in PALETTES.items()}
+PRESET_DESCRIPTIONS.update({"Ocean dark": "Original ocean-blue appearance.",
+                           "Ink dark": "Original graphite and cobalt appearance."})
+
+# Pages keeps its original Ink/Celadon schemes and uses the same nine new definitions.
+SITE_THEMES = {"celadon": "Celadon light", "slate": "Ink dark",
+               **{name.lower().replace(" & ", "-").replace(" ", "-"): name for name in PALETTES}}
+
+
+def site_theme_css():
+    blocks = []
+    roles = {"paper": "bg", "surface": "surface", "sidebar": "sidebar", "ink": "text",
+             "muted": "muted", "line": "border", "accent": "accent", "string": "source"}
+    for scheme, name in SITE_THEMES.items():
+        if name not in PALETTES:
+            continue
+        p = PALETTES[name]
+        tokens = {key: p[role] for key, role in roles.items()}
+        tokens.update(link=PRESETS[name]["linkColor"], **{"on-accent": on_accent(p["accent"]),
+                      "accent-hover": hover_accent(p["accent"]),
+                      "shadow": "0 1rem 3rem #0003" if p["mode"] == "dark" else "0 1rem 3rem #242a3010"})
+        blocks.append(f'[data-md-color-scheme="{scheme}"]' + "{color-scheme:" + p["mode"] + ";" +
+                      ";".join(f"--gt-{key}:{value}" for key, value in tokens.items()) + "}")
+    return "\n".join(blocks)
+
+
+def matches_preset(theme, values):
+    if not isinstance(theme, MutableMapping):
+        return False
+    return all(matches_preset(theme.get(key, {}), value) if isinstance(value, dict)
+               else theme.get(key) == value for key, value in values.items())
 
 
 def current_preset(path):
     theme = tomllib.loads(Path(path).read_text(encoding="utf-8")).get("theme", {})
-    return next((name for name, values in PRESETS.items() if all(
-        theme.get(key) == value for key, value in values.items())
+    return next((name for name, values in PRESETS.items() if matches_preset(theme, values)
         and not theme.get("light") and not theme.get("dark")), None)
 
 
 def apply_preset(path, name):
+    import tomlkit
+
     if name not in PRESETS:
         raise ValueError("Choose a supported theme preset")
     path = Path(path)
@@ -129,7 +164,18 @@ def apply_preset(path, name):
                     sidebar.update(value)
                 elif key not in PRESETS[name]:
                     theme[key] = value
-        theme.update(PRESETS[name])
+        # Replace owned colors while retaining sidebar padding, fonts and other layout overrides.
+        sidebar = theme.get("sidebar", {})
+        if not isinstance(sidebar, MutableMapping):
+            raise ValueError("Theme sidebar must be a table")
+        for key in ("backgroundColor", "secondaryBackgroundColor"):
+            sidebar.pop(key, None)
+        sidebar.update(PRESETS[name].get("sidebar", {}))
+        if sidebar:
+            theme["sidebar"] = sidebar
+        else:
+            theme.pop("sidebar", None)
+        theme.update({key: value for key, value in PRESETS[name].items() if key != "sidebar"})
         text = tomlkit.dumps(document)
         tomllib.loads(text)
         temporary = None

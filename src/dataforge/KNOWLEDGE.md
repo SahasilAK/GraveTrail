@@ -63,7 +63,7 @@ against new requests. Whole-home backups require unrestricted local authorizatio
 
 - `artifacts.py` — explicit Selection/format allowlists, focused graph/tree/path/step queries, original-version artifacts and guarded scoped/checksummed base64 reads. Paths accept XLSX with optional evidence/excerpts, revision/count/warning/filename metadata and source authorization rechecked at retrieval.
 
-- `theme_configuration.py` — 18 preset palettes (existing14 preserved plus Porcelain/Celadon/Ink/Aubergine), detection and atomic TOML updates without Streamlit; ui/themes reexports compatibility names and handles loaded UI state.
+- `theme_configuration.py` — Shared semantic UI/graph roles for nine palettes; unchanged Ocean dark/Ink dark native presets. Generates Pages palette CSS; contrast-derived link/button text; nested detection and atomic TOML updates preserve sidebar layout while replacing palette colors.
 
 Provider runtime bindings include a saved-profile fingerprint: profile edits invalidate old credentials,
 including edits by another adapter. Fallbacks resolve their own approved credentials. AI pins hash/job

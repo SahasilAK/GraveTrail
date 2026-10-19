@@ -8,6 +8,7 @@ through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CL
 references now enumerate100 executable routes and80 tools; UI has eleven destinations.
 
 ## Subfolders
+- `overrides/` — [overrides/KNOWLEDGE.md](overrides/KNOWLEDGE.md): inject shared theme CSS into Material without app dependencies.
 - `getting-started/` — [getting-started/KNOWLEDGE.md](getting-started/KNOWLEDGE.md).
 - `user-guide/` — [user-guide/KNOWLEDGE.md](user-guide/KNOWLEDGE.md).
 - `integrations/` — [integrations/KNOWLEDGE.md](integrations/KNOWLEDGE.md).
