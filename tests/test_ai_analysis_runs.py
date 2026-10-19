@@ -57,6 +57,21 @@ def test_hybrid_build_publishes_columns_and_cache_revalidates_offline(project, m
     assert cached.status == 'committed' and cached.counts['cache_hits'] == 1
 
 
+def test_repeated_cached_builds_rebind_all_historical_support(project, monkeypatch):
+    from dataforge.analysis_service import run_analysis
+    store, w = project
+    monkeypatch.setattr('dataforge.analysis_service.invoke_analysis_unit', fake_response)
+    home = store.home
+    for index in range(6):
+        if index:
+            store = Store(home)
+        report = run_analysis(store, w, AnalysisRequest(mode='hybrid'))
+        assert report.status == 'committed', report.reasons
+        assert len(store.edges(w)) == 1
+        assert store.rows('SELECT COUNT(*) AS n FROM analysis_fact_support')[0]['n'] == 2 * (index + 1)
+        store.close()
+
+
 def test_source_changed_during_ai_retains_previous_graph(project, monkeypatch):
     from dataforge.analysis_service import run_analysis
     store, w = project

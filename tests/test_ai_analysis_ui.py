@@ -39,7 +39,7 @@ def test_completed_worker_refreshes_the_whole_report_once(tmp_path, monkeypatch)
 
     class CompletedJobs:
         def read(self, *args):
-            return {'status': 'completed', 'progress': 1., 'stage': 'Publication complete',
+            return {'status': 'completed', 'progress': 1, 'stage': 'Publication complete',
                     'result': {'status': 'committed', 'run_id': 'finished'}}
 
     monkeypatch.setattr('ui.analysis_ai.analysis_jobs', lambda *args: CompletedJobs())
@@ -50,6 +50,7 @@ def test_completed_worker_refreshes_the_whole_report_once(tmp_path, monkeypatch)
     assert not view.exception
     assert view.session_state['ai_analysis_refreshed_' + w] == 'job'
     assert view.session_state['ai_report_choice_' + w] == 'finished'
+    assert view.get('progress')[0].proto.value == 100
     assert any('Requests: 1' in text.value and 'accepted: 3' in text.value for text in view.markdown)
     import streamlit as st
     st.cache_resource.clear()

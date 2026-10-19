@@ -69,7 +69,7 @@ def progress(store, workspace):
         return
     jobs = analysis_jobs(str(store.home))
     record = jobs.read(job_id, workspace)
-    st.progress(record['progress'], text=record.get('stage', record['status']))
+    st.progress(float(record['progress']), text=record.get('stage', record['status']))
     if record['status'] not in TERMINAL:
         if st.button('Cancel AI analysis', key='ai_cancel_' + workspace):
             jobs.cancel(job_id, workspace)
