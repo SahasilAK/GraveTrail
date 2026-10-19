@@ -42,9 +42,18 @@ are redacted. Profiles retain validated non-secret settings and environment vari
 never entered key values. Masked runtime entry stays in the active browser session's
 `RuntimeConnections`; adapters receive it through a context-local scope. Clearing runtime
 credentials removes session entries, while explicitly named launch environment credentials
-remain available. Fresh sessions/restarts require re-entry unless provisioned at launch.
+remain available. Fresh sessions require re-entry for session overrides; environment
+credentials remain available across sessions until the owning process exits.
 Application-controlled names use `DATAFORGE_`; legacy explicitly named references are read-only.
 Session entry never mutates the global process environment or writes a `.env` file.
+The separate **Optional: Set environment variable here** form explicitly sets a
+`DATAFORGE_` variable in the running app's `os.environ`. This value is shared across the
+owning process's sessions and future child processes until exit; it is not persisted to
+OS settings, files, profiles, databases or logs. Its masked input is cleared on submission,
+including validation failure, and environment lookups retain names rather than secret copies
+in session managers. Streamlit handles input transiently before the callback clears it.
+Clearing session credentials does not clear environment values; restart the app to discard
+UI-entered environment values. See [secure configuration](SECURE_CONFIGURATION.md).
 Secret-bearing URL userinfo/query parameters are rejected. Provider-echoed known credentials
 are redacted before retaining results; complete imported originals are intentionally unchanged.
 Redirects and ambient proxy credentials are disabled. A loopback gateway can forward traffic;

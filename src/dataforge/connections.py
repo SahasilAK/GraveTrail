@@ -1,4 +1,4 @@
-"""Runtime-only credentials. Scope a manager per session; never mutate os.environ."""
+"""Session credentials and explicit process-environment credential entry."""
 from __future__ import annotations
 
 import json
@@ -19,16 +19,26 @@ DEFAULT_KEY_ENV = {
 }
 
 
+def _validate_credential(name: str, secret: str):
+    if not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name):
+        raise ValueError('Runtime credential names must start with DATAFORGE_')
+    if not secret or len(secret) > 16384 or any(char in secret for char in '\n\r\0'):
+        raise ValueError('Enter a nonempty, single-line runtime credential without null characters')
+
+
+def set_credential_environment(name: str, secret: str):
+    """Set only this process's environment; never write files or session credentials."""
+    _validate_credential(name, secret)
+    os.environ[name] = secret
+
+
 class RuntimeConnections:
     def __init__(self):
         self._credentials: dict[str, tuple[str, float | None]] = {}
-        self._resolved: dict[str, str] = {}
+        self._resolved: set[str] = set()
 
     def register(self, name: str, secret: str, ttl: float | None = None):
-        if not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name):
-            raise ValueError('Runtime credential names must start with DATAFORGE_')
-        if not secret or len(secret) > 16384 or '\n' in secret or '\r' in secret:
-            raise ValueError('Enter a nonempty, single-line runtime credential')
+        _validate_credential(name, secret)
         self._credentials[name] = (secret, None if ttl is None else time.monotonic() + ttl)
 
     def registered(self, name: str) -> bool:
@@ -40,13 +50,12 @@ class RuntimeConnections:
         if credential:
             secret, expires = credential
             if expires is None or expires > time.monotonic():
-                self._resolved[name] = secret
                 return secret
             self._credentials.pop(name, None)
-        # Explicit legacy environment references remain read-only for compatibility.
+        # Remember names for redaction, never copy environment secrets into session state.
         value = os.environ.get(name, '') if name else ''
         if value:
-            self._resolved[name] = value
+            self._resolved.add(name)
         return value
 
     def clear(self, name: str | None = None):
@@ -55,16 +64,16 @@ class RuntimeConnections:
             self._resolved.clear()
         else:
             self._credentials.pop(name, None)
-            self._resolved.pop(name, None)
+            self._resolved.discard(name)
 
     def scoped_environment(self, names: list[str]) -> dict[str, str]:
         if any(not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name) for name in names):
             raise ValueError('Only application-prefixed variables may be injected')
         return {name: value for name in names if (value := self.resolve(name))}
 
-    def redact(self, text: str) -> str:
-        secrets = [value[0] for value in self._credentials.values()]
-        secrets.extend(self._resolved.values())
+    def redact(self, text: str, request_secrets: tuple[str, ...] = ()) -> str:
+        secrets = [*request_secrets, *(value[0] for value in self._credentials.values())]
+        secrets.extend(os.environ[name] for name in self._resolved if os.environ.get(name))
         secrets.extend(value for name, value in os.environ.items()
                        if re.search(r'(?:KEY|TOKEN|PASSWORD|SECRET)$', name, re.I) and value)
         for secret in sorted(set(secrets), key=len, reverse=True):
@@ -75,13 +84,13 @@ class RuntimeConnections:
         return re.sub(r"(?i)(\b(?:password|api[_-]?key|token|secret)\s*[=:]\s*)(['\"]?)[^\s;'\"]+\2",
                       r"\1'[REDACTED]'", text)
 
-    def sanitize(self, value):
+    def sanitize(self, value, request_secrets: tuple[str, ...] = ()):
         """Redact copies of dict/list trees; reject cycles or more than 64 containers deep."""
         ancestors: set[int] = set()
 
         def visit(item, depth):
             if isinstance(item, str):
-                return self.redact(item)
+                return self.redact(item, request_secrets)
             if not isinstance(item, (dict, list)):
                 return item
             if depth >= 64:
@@ -92,7 +101,7 @@ class RuntimeConnections:
             ancestors.add(identity)
             try:
                 if isinstance(item, dict):
-                    return {self.redact(k): visit(v, depth + 1) for k, v in item.items()}
+                    return {self.redact(k, request_secrets): visit(v, depth + 1) for k, v in item.items()}
                 return [visit(child, depth + 1) for child in item]
             finally:
                 ancestors.remove(identity)

@@ -160,7 +160,11 @@ class Adapter:
             if self.cancelled and self.cancelled():
                 raise ProviderError("AI request cancelled; no further retries")
             try:
-                with self.client.stream(method, self.profile.base_url + path, headers=self._headers(), json=payload) as response:
+                headers = self._headers()
+                # Keep sent credentials local through sanitization if another session rotates the environment.
+                request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
+                    if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
+                with self.client.stream(method, self.profile.base_url + path, headers=headers, json=payload) as response:
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < self.profile.retries:
                             time.sleep(.25 * (attempt + 1))
@@ -180,7 +184,7 @@ class Adapter:
                         data = json.loads(b"".join(chunks))
                         if not isinstance(data, dict):
                             raise ProviderError("Provider response must be a JSON object")
-                        return self.connections.sanitize(data)
+                        return self.connections.sanitize(data, request_secrets)
                     except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
             except httpx.TransportError:

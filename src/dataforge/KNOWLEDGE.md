@@ -32,7 +32,7 @@ integrity and full-home backup/restore include all four column tables and legacy
 - `excel_exports.py` — lineage_xlsx renders streaming literal-text XLSX paths/steps and optional evidence, overlapping eight-dataset continuation segments, coverage/scope legend, typed cells, filters/frozen context and bounded text/evidence/time/bytes; owned temporary files are cleaned on failures.
 - `graph.py` — LineageGraph retains missing-endpoint evidence in unresolved_edges, excludes anonymous nodes and propagates incomplete-view state; bounded paths preserve source-to-target order with optional relationship/evidence budgets and explicit raw-code opt-in. Excel contraction preserves parallel routes and caps evidence before multiplication.
 - `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Directory inputs are lexically normalized and checked against separator-bounded, case-normalized startup roots before filesystem resolution; resolved containment and child symlink guards remain. Original blobs are SHA-256 named.
-- `llm.py` — Profile/Adapter implement protocols/discovery/nonstreaming chat; response_object accepts one enclosing JSON fence; assist/assist_task enforce privacy/routing and optional preview hash pinning; strict grounded claims/quarantine and inferred merge.
+- `llm.py` — Profile/Adapter implement protocols/discovery/nonstreaming chat with request-local sent-credential redaction across environment rotation; response_object accepts one enclosing JSON fence; assist/assist_task enforce privacy/routing and optional preview hash pinning; strict grounded claims/quarantine and inferred merge.
 - `logging_config.py` — JsonFormatter/configure_logging emit application events with an explicit safe metadata allowlist; no raw source/key fields.
 - `maintenance.py` — history_plan protects current references/latest completed runs; bounded archive_history journals recovery with removal, writes an extra checksummed file; restore_history inserts missing IDs atomically, preferring the DB journal.
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.
@@ -44,8 +44,9 @@ integrity and full-home backup/restore include all four column tables and legacy
 Every edge has exact statement/file/version evidence. UI never executes imported code. Cache changes require a parser-version bump. New migrations preserve facts. External AI is opt-in; unknown references remain diagnostics.
 # Runtime credentials
 
-`connections.py` owns session-local credentials, context scopes, read-only environment
-resolution and JSON-escaped secret redaction. sanitize copies dict/list trees, allows shared
+`connections.py` owns session-local credentials, context scopes, explicit validated
+`set_credential_environment` for process-only DATAFORGE_ entry, environment resolution retaining
+names rather than secret copies, and JSON-escaped secret redaction. sanitize copies dict/list trees, allows shared
 references, and raises ValueError for ancestor cycles or more than 64 nested containers;
 Adapter converts these validation failures to ProviderError. Never cache a session manager
 globally or persist it. `docs/SECURE_CONFIGURATION.md` describes limits and environment names.
