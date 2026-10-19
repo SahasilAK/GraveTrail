@@ -24,7 +24,7 @@ references now enumerate100 executable routes and80 tools; UI has eleven destina
 - `BUILD_AND_RELEASE.md` — Launcher/build options, Windows per-user installer lifecycle and signing setup/limitations, exact-or-bumped dynamic release versions, branch validation vs default-branch publication, integrity/source/trust gates, Docker behavior and dated platform evidence.
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
 - `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.
-- `SECURE_CONFIGURATION.md` — Session credential lifecycle, namespaced read-only startup variables, legacy compatibility, redaction and trusted-host limits.
+- `SECURE_CONFIGURATION.md` — Endpoint-first setup, credentials/test/discovery before profile save, fetched/manual models, and session versus masked process-environment credentials; clearing, lifetime/sharing, legacy compatibility, redaction and trusted-host limits.
 - `CLI_GUIDE.md` — Commands, jobs, scopes, import roots, exit codes, budgets and single-owner DuckDB workflow; paths XLSX artifact creation/download and explicit evidence/excerpt flags.
 - `MCP_INTEGRATION.md` — Official SDK transports/tools/resources/prompts, Codex/Claude examples, private bearer auth and TLS-proxy boundary; XLSX dependency-path metadata and authorized chunk retrieval.
 - `AGENT_WORKFLOWS.md` — Focused metadata/evidence/columns/impact/refresh workflows and honest SQL/SAS archive acceptance.

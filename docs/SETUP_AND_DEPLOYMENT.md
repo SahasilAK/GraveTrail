@@ -291,21 +291,30 @@ credentials or authentication query parameters are rejected.
 | OpenRouter | `DATAFORGE_OPENROUTER_API_KEY` |
 | OpenAI compatible | `DATAFORGE_CUSTOM_API_KEY` |
 
-For a saved profile, enter the value in the masked **Runtime credential** field and choose
+Configure **API base URL**, then **Credentials**, then use **Test connection** to check the
+endpoint and fetch available models before saving. Select a **Fetched models** entry to fill
+the editable model identifier or type one manually, then **Save provider profile**.
+Changing the endpoint, credential reference or authentication discards previous model choices.
+
+Under **Session-only credential (optional)**, enter the masked **Runtime credential** and choose
 **Connect for this session**. It stays in that browser session's runtime manager and is
 passed directly to adapters. **Clear runtime credentials** removes these in-memory values.
-The application does not save entered keys to DuckDB, files, exports or the OS environment.
+This session action does not save entered keys to DuckDB, files, exports or the OS environment.
 Re-enter them after a fresh session/restart unless supplied by the launch environment.
 Clearing session values cannot erase a credential inherited from that environment.
 
-Alternatively, provision the named variable through the launcher/service secret manager.
-Startup variables are read-only. Existing profiles that explicitly name legacy variables
+Alternatively, **Optional: Set environment variable here** writes the named `DATAFORGE_`
+variable to the running app's actual process environment. The input clears on submission;
+the value is shared across this process's sessions until exit, with no `.env` file or permanent
+OS settings change. Or provision the named variable through the launcher/service secret manager.
+Existing profiles that explicitly name legacy variables
 remain compatible; the app does not overwrite unrelated `OPENAI_API_KEY` or similar values.
 Never put a key in command arguments, committed configuration, `.env` files or build inputs.
 Privileged local processes may inspect process memory/environment; session isolation is
 not an OS security boundary or a guarantee of forensic memory erasure.
 
-Use **Discover models** and **Test model connection** explicitly. Enable remote requests
+Use **Discover models** to refresh the list and **Test model connection** to check the chosen
+model. Azure deployments require manual identifiers and the model test. Enable remote requests
 under **Connections & AI → Privacy** before using a non-loopback endpoint. Full-source remote
 transmission has a separate permission. Local Ollama/LM Studio endpoints may need no key.
 Network-mounted or container-host model endpoints may be classified as remote.

@@ -11,13 +11,23 @@ declared resolved. Queue request/merge tests use synthetic HTTP payloads, not a 
 
 The application is fully usable without an LLM. Connections & AI → Providers & routing stores multiple
 profiles, task overrides, same-host ordered fallbacks and environment variable names for keys.
-For a saved profile, enter a masked **Runtime credential** and choose **Connect for this
+Setup follows endpoint, credentials, connection test/model discovery, then model selection
+or manual entry and profile save. **Test connection** fetches models using the current draft
+without requiring a saved profile or selected model. **Fetched models** fills the editable
+model identifier; **Test model connection** optionally validates that model. Azure deployments
+use manual entry and the model test.
+
+Enter a masked **Runtime credential** under **Session-only credential (optional)** and choose **Connect for this
 session**, or provision the named variable before startup. A session's `RuntimeConnections`
 manager holds entered keys in memory and passes them directly to provider adapters through
 a context-local scope; the process environment is never changed for session credentials.
 **Clear runtime credentials** removes session entries. Launch variables remain read-only
 and available, so clearing a session entry does not disconnect a startup-provisioned key.
 Re-enter credentials in a fresh session/restart unless supplied at launch.
+Alternatively, **Optional: Set environment variable here** sets the actual named variable
+in the running app's process environment, including before a new profile is saved. That
+value is shared across its sessions until exit; the input clears on submission and no `.env`
+file or permanent OS setting is written. See [secure configuration](SECURE_CONFIGURATION.md).
 
 New provider references default to `DATAFORGE_` names, such as `DATAFORGE_OPENAI_API_KEY`,
 `DATAFORGE_ANTHROPIC_API_KEY` and `DATAFORGE_DATABRICKS_TOKEN`. Explicit legacy references
