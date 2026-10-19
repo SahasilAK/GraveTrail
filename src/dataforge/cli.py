@@ -126,6 +126,8 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
     try:
         config = ctx.obj
         download_to = arguments.pop('download_to', None)
+        if download_to is not None and (download_to.exists() or download_to.is_symlink() or not download_to.parent.is_dir()):
+            raise AgentError('invalid_path', 'Output must be a new file in an existing directory')
         if action == "job":
             if not config["policy"].permits(workspace_id):
                 raise AgentError("forbidden", "Workspace is not authorized")

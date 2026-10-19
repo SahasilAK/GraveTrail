@@ -107,7 +107,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `discover_provider_models` | `profile_id`, `workspace_id` | `options` | Mutation / outbound network |
 | `export_ai_result` | `record_id`, `workspace_id` | `options` | Mutation |
 | `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `max_paths`, `options`, `include_evidence`, `include_source_text` | Mutation |
-| `export_graph` | `asset`, `workspace_id` | `direction`, `format`, `options` | Mutation |
+| `export_graph` | `asset`, `workspace_id` | `background`, `legend`, `scale`, `title`, `direction`, `format`, `options`| Mutation |
 | `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` | Mutation |
 | `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` | Mutation |
 | `export_results` | `asset`, `workspace_id` | `direction`, `format`, `options` | Mutation |
@@ -266,3 +266,16 @@ Application/setup tools: list_theme_presets, get_application_theme, apply_applic
 See the [complete UI capability matrix](CLI_MCP_CAPABILITIES.md) for every coverage ID, exact command/tool names and policy restrictions.
 
 The server identifies itself as **GraveTrail**. The previous `dataforge://` resource URLs remain aliases of `gravetrail://` with identical permissions and responses. Existing client configuration names can be retained. Python module paths and `DATAFORGE_*` variables are unchanged.
+
+### Static graph images
+
+`export_graph` accepts `format: "svg"` or `"png"` alongside HTML/JSON, plus
+`scale: 1|2`, `background: "light"|"dark"|"transparent"`, `title` and `legend`.
+`options.max_depth`, `options.max_items` and `options.collapse_temporary` bound
+the same filtered graph as Explorer. The response describes an authorized managed
+artifact: MIME type, safe filename, byte count, analysis/graph revision, node and
+edge counts, coverage and warnings. Use `get_export(artifact_id=..., offset=...)`
+for bounded binary chunks; large base64 images are never included in creation
+responses. Write/source permissions and read-time revocation match other graph
+artifacts. `get_capabilities` reports `graph_image_formats`; unavailable PNG
+support yields a clear renderer error. See the [image limits](USER_GUIDE.md).

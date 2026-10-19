@@ -84,7 +84,7 @@ const elements={
   '.fit':{}, '.plus':{}, '.minus':{}, '.find':{}, '.fullscreen':{}, '.status':{}
 };
 mountGraph({querySelector:s=>elements[s]},
-  {nodes:[],edges:[],appearance:{graph_edge_width:4}},null);
+  {nodes:[],edges:[],bounds:[-80,-80,780,360],appearance:{graph_edge_width:4}},null);
 console.log(JSON.stringify({attributes,properties}));
 '''
         result = subprocess.run([node], input=script, text=True, encoding="utf-8", capture_output=True)
@@ -117,7 +117,7 @@ def test_graph_double_click_cancels_selection_and_copy_keeps_full_name():
   container.matches=()=>active;
   container.ownerDocument={fullscreenElement:{},addEventListener(){},removeEventListener(){},exitFullscreen:async()=>{active=false}};
   container.requestFullscreen=async()=>{active=true};
-  mountGraph(root,{nodes:[{asset_id:'a',name:'catalog.schema.a_very_long_table_name',x:20,y:20,width:215,kind:'table'}],edges:[]},
+  mountGraph(root,{nodes:[{asset_id:'a',name:'catalog.schema.a_very_long_table_name',x:20,y:20,width:215,kind:'table'}],edges:[],bounds:[-80,-80,780,360]},
     v=>selected.push(v),v=>navigated.push(v));
   const node=elements['.stage'].children.find(e=>e.attrs.class==='node');
   node.onclick({detail:1});

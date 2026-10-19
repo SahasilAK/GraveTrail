@@ -5,7 +5,8 @@ import streamlit as st
 from dataforge.configuration import VisualizationSettings
 from dataforge.excel_exports import XLSX_MIME
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
-from dataforge.services import export_lineage_excel
+from dataforge.graph_images import png_available
+from dataforge.services import export_graph_image, export_lineage_excel
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
 from ui.lineage_navigation import ALL_ASSETS, focus_asset, move_history, remember_view
 from ui.lineage_tree import render_tree
@@ -42,6 +43,31 @@ if asset:
                   on_click=move_history, args=(st.session_state, w, -1))
         st.button("Forward", icon=":material/arrow_forward:", disabled=history["index"] >= len(history["entries"]) - 1,
                   on_click=move_history, args=(st.session_state, w, 1))
+        with st.popover('Export', icon=':material/download:'):
+            st.caption('Entire filtered graph — fit all nodes in the current bounded result, independent of browser pan/zoom.')
+            label = 'All filtered assets' if all_assets else focused.nodes[asset]['name']
+            st.write(f'{label} · {direction if not all_assets else "all directions"} · depth {depth}')
+            st.caption(f'{len(focused.nodes)} nodes · {len(focused.graph.edges)} relationships · temporary steps {"collapsed" if simplified else "included"}')
+            st.caption(f'Minimum confidence {store.setting(w, "min_lineage_confidence", 0.):g}; inferred {"included" if store.setting(w, "include_inferred", True) else "excluded"}.')
+            image_format = st.selectbox('Image format', ['SVG', 'PNG'] if png_available() else ['SVG'])
+            if not png_available():
+                st.caption('PNG renderer unavailable; install resvg-py to enable PNG.')
+            background = st.selectbox('Image background', ['light', 'dark', 'transparent'])
+            scale = st.selectbox('Image scale', [1, 2], format_func=lambda n: 'Normal' if n == 1 else 'High resolution (2×)')
+            image_title = st.text_input('Image title', value='GraveTrail lineage', max_chars=200)
+            legend = st.checkbox('Include legend', value=True)
+            st.caption('Images include asset/workspace business metadata. Raw source code is excluded.')
+            if st.button('Prepare graph image'):
+                try:
+                    image, summary = export_graph_image(store, w, '' if all_assets else asset,
+                        direction=direction, max_depth=depth, max_nodes=max(limit, len(focused.nodes)) if all_assets else limit,
+                        collapse_temporary=simplified, format=image_format.lower(), appearance=appearance,
+                        options={'scale': scale, 'background': background, 'title': image_title, 'legend': legend})
+                    for warning in summary['warnings']:
+                        st.warning(warning)
+                    st.download_button(f'Download {image_format}', image, summary['filename'], summary['mime_type'], on_click='ignore')
+                except (ValueError, OSError) as exc:
+                    st.error(f'Graph image could not be prepared: {exc}')
     if all_assets and view == "Tree":
         st.info("Choose an exact asset to explore its dependency tree.")
     if focused.truncated and not all_assets:

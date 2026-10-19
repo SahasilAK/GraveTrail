@@ -74,7 +74,7 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `columns usage` | `ASSET` | `--workspace`, `-w` **required**; `--column-query`; `--usage-type`; `--file-id`; `--group-by`; `--help` |
 | `dictionary list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
 | `export download` | `ARTIFACT_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--help` |
-| `export graph` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
+| `export graph` | `ASSET` | `--background`, `--legend`, `--no-legend`, `--output`, `--scale`, `--title`, `--workspace`, `-w` **required**; `--format`; `--direction`; `--help`|
 | `export lineage` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
 | `export paths` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--max-paths`; `--include-evidence`, `--no-include-evidence`; `--include-source-text`, `--no-include-source-text`; `--help` |
 | `export read` | `RESULT_ID` | `--workspace`, `-w` **required**; `--format`; `--binary`, `--no-binary`; `--offset`; `--length`; `--help` |
@@ -295,9 +295,9 @@ AI: `ai chunks FILE -w ID --first N --last N --task sql_lineage` is offline. `ai
 
 Reports: `runs list|get|compare BEFORE AFTER -w ID`, `ingestions list|get -w ID`, `dictionary list -w ID`, `assets schema ASSET -w ID`, `workspace health -w ID`, `lineage validate -w ID`, `source metadata FILE -w ID`. Source inventory adds encoding/file_size. `source search TEXT -w ID --include-matches` explicitly returns exact code lines with source permission; default remains matching file metadata. CSV values are excluded from line search. Schema evidence code requires --detail detailed; sampled types and unknowns retain provenance. Evidence validation reads original versions, does not reparse or repair.
 
-Artifacts: `export graph ASSET --format html|json`, `export paths ASSET --format csv|json|xlsx`, `export sources --asset ASSET` or repeated --file-id; `source download FILE DESTINATION [--content-hash HASH]`; `export report --kind KIND --format FORMAT` with --asset/--query/--before/--after; `ai results export RECORD`. All take -w ID. `export read ID --binary --offset N --length N` returns base64; `export download ID DESTINATION` reassembles/checks checksum and refuses existing destinations. Source-related creation and every read require source permission; backups are excluded.64MB/artifact,16KiB/chunk before encoding, further response-budget caps.
+Artifacts: `export graph ASSET --format html|json|svg|png`, `export paths ASSET --format csv|json|xlsx`, `export sources --asset ASSET` or repeated --file-id; `source download FILE DESTINATION [--content-hash HASH]`; `export report --kind KIND --format FORMAT` with --asset/--query/--before/--after; `ai results export RECORD`. All take -w ID. `export read ID --binary --offset N --length N` returns base64; `export download ID DESTINATION` reassembles/checks checksum and refuses existing destinations. Source-related creation and every read require source permission; backups are excluded.64MB/artifact,16KiB/chunk before encoding, further response-budget caps.
 
-Format allowlist: graph HTML/JSON; paths CSV/JSON/XLSX; source-bundle ZIP; original-source raw bytes; inventory/code-search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run-comparison/ai-result JSON. Unsupported combinations fail. `lineage paths|steps|graph ASSET -w ID` returns bounded logical dependency data with depth/limit/cycle boundaries; graph --view nodes|edges|tree supports --node-id/--edge-id. `columns usage` supports --column-query/--usage-type/--file-id/--group-by none|file|usage_type. No runtime execution ordering claim.
+Format allowlist: graph HTML/JSON/SVG/PNG; paths CSV/JSON/XLSX; source-bundle ZIP; original-source raw bytes; inventory/code-search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run-comparison/ai-result JSON. Unsupported combinations fail. `lineage paths|steps|graph ASSET -w ID` returns bounded logical dependency data with depth/limit/cycle boundaries; graph --view nodes|edges|tree supports --node-id/--edge-id. `columns usage` supports --column-query/--usage-type/--file-id/--group-by none|file|usage_type. No runtime execution ordering claim.
 
 Column transformation traces use the same scoped stored facts as the UI:
 
@@ -335,3 +335,18 @@ Maintenance parity: `history preview --keep-runs N --keep-imports N --batch-size
 Application/runtime: `application theme list|get|apply NAME`, `application logging get|update LEVEL`, `runtime info`, `agent inspect -w ID [--tool-name NAME]`, `agent client-config -w ID --client codex|claude --transport stdio|streamable-http`, `agent self-test -w ID`. Application mutations need --allow-write --allow-config-write --allow-application-config with unrestricted workspace scope. Theme path is startup-selected DATAFORGE_THEME_CONFIG or source-checkout .streamlit/config.toml; installed UI selects its home copy. Theme reads report configured/detected state, loaded=null, reload_required=true; never restart another owner. Logging is persisted per home. Self-test runs the actual in-process handler; external transport/client tests remain separate.
 
 See the [complete UI capability matrix](CLI_MCP_CAPABILITIES.md) for every coverage ID, exact command/tool names and policy restrictions.
+
+Graph images use the same filtered scene as Explorer. For example:
+```bash
+gravetrail --home ./automation-data --json --allow-write --max-depth 5 --max-items 150 export graph mart.sales -w WORKSPACE_ID --format svg --output lineage.svg
+gravetrail --home ./automation-data --json --allow-write export graph mart.sales -w WORKSPACE_ID --format png --scale 2 --background light --title "Design review" --output lineage.png
+```
+`export graph --output` writes the image to a new file and stdout describes its
+artifact/destination. The global `--output` before the subcommand still writes
+response JSON. Existing destinations are refused before image creation. Omit
+local `--output` to create a managed artifact for later `export download`.
+Image options: `--scale 1|2`, `--background light|dark|transparent`, `--title TEXT`
+(empty omits it), and `--legend/--no-legend`. Global traversal bounds, temporary
+collapse and workspace confidence/inferred filters apply. Responses contain MIME,
+filename, revision, graph revision, counts and explicit coverage/truncation.
+See the [user guide](USER_GUIDE.md) for image bounds and metadata privacy.

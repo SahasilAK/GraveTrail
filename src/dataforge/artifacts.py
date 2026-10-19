@@ -18,7 +18,7 @@ from dataforge.services import column_report
 
 READS = {'artifact_read', 'paths', 'steps', 'graph_view'}
 WRITES = {'artifact_create'}
-FORMATS = {'graph': {'html', 'json'}, 'paths': {'csv', 'json', 'xlsx'}, 'source-bundle': {'zip'},
+FORMATS = {'graph': {'html', 'json', 'svg', 'png'}, 'paths': {'csv', 'json', 'xlsx'}, 'source-bundle': {'zip'},
            'original-source': {'raw'}, 'inventory': {'csv', 'json'}, 'code-search': {'csv', 'json'},
            'dictionary': {'csv', 'json', 'html'}, 'columns': {'csv', 'json', 'html'},
            'impact': {'csv', 'json', 'html'}, 'run-comparison': {'json'}, 'ai-result': {'json'}}
@@ -41,6 +41,10 @@ class Selection(BaseModel):
     max_paths: int = Field(default=50, ge=1, le=500)
     include_evidence: bool = False
     include_source_text: bool = False
+    scale: Literal[1, 2] = 1
+    background: Literal['light', 'dark', 'transparent'] = 'light'
+    title: str = Field(default='GraveTrail lineage', max_length=200)
+    legend: bool = True
 
 
 def _directory(store, workspace):
@@ -57,15 +61,24 @@ def write_artifact(store, workspace, kind, format, data, complete, source_versio
     if sum(1 for _ in directory.iterdir()) >= 2000:
         raise AgentError('resource_limit', 'Managed artifact limit reached')
     aid = uuid.uuid4().hex
-    mime = {'json': 'application/json', 'html': 'text/html', 'csv': 'text/csv', 'zip': 'application/zip', 'raw': 'application/octet-stream', 'xlsx': XLSX_MIME}[format]
+    mime = {'json': 'application/json', 'html': 'text/html', 'csv': 'text/csv', 'zip': 'application/zip', 'raw': 'application/octet-stream', 'xlsx': XLSX_MIME, 'svg': 'image/svg+xml', 'png': 'image/png'}[format]
     metadata = {'artifact_id': aid, 'schema_version': 1, 'workspace_id': workspace,
         'home_id': hashlib.sha256(str(store.home).encode()).hexdigest(), 'kind': kind, 'format': format,
         'mime_type': mime, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
         'complete': complete, 'source_required': source_required, 'source_versions': source_versions}
-    with (directory / (aid + '.bin')).open('xb') as stream:
-        stream.write(data)
-    with (directory / (aid + '.json')).open('x', encoding='utf-8') as stream:
-        stream.write(compact(metadata))
+    created = []
+    try:
+        binary, manifest = directory / (aid + '.bin'), directory / (aid + '.json')
+        with binary.open('xb') as stream:
+            created.append(binary)
+            stream.write(data)
+        with manifest.open('x', encoding='utf-8') as stream:
+            created.append(manifest)
+            stream.write(compact(metadata))
+    except OSError:
+        for path in created:
+            path.unlink(missing_ok=True)
+        raise
     return {k: v for k, v in metadata.items() if k not in {'home_id', 'source_required', 'source_versions'}}
 
 
@@ -136,6 +149,19 @@ class ArtifactOperations:
         source_required = kind in SOURCE_KINDS
         if source_required:
             self._workspace(w, write=True, source=True)
+        if kind == 'graph' and format in {'svg', 'png'}:
+            from dataforge.services import export_graph_image
+
+            target = self._asset(w, selection.asset)['asset_id'] if selection.asset else ''
+            try:
+                data, summary = export_graph_image(self.store, w, target, direction=selection.direction,
+                    max_depth=opts.max_depth, max_nodes=opts.max_items, collapse_temporary=opts.collapse_temporary,
+                    format=format, options=selection.model_dump(include={'scale', 'background', 'title', 'legend'}))
+            except ValueError as exc:
+                raise AgentError('resource_limit' if any(s in str(exc) for s in ('limit', 'exceeds', 'budget'))
+                                 else 'validation_failed', str(exc)) from None
+            artifact = write_artifact(self.store, w, kind, format, data, summary['complete'], {}, source_required)
+            return {**artifact, **summary}
         if format == 'xlsx':
             from dataforge.services import export_lineage_excel
 

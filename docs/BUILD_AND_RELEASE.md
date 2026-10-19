@@ -358,3 +358,36 @@ contribution links use the renamed repository.
 README and guide screenshots use explicit `gravetrail-*` asset filenames and show the
 GraveTrail sidebar. Any old name in their source-file selectors comes from the supplied
 fixture's original path, not the application branding.
+
+## Graph image renderer and distribution proof
+
+SVG/PNG use a shared server-side scene. Browser canvas alone would not provide
+headless automation parity; a headless browser would add an executable/runtime.
+`resvg-py` 0.5 supplies platform wheels and rasterizes the internally constructed
+SVG without Cairo or a browser installation. No rasterizer input API accepts
+uploaded SVG, URLs or arbitrary resources. Generated SVG uses fixed elements,
+explicit colors, generic/local fonts and escaped text; no image links, scripts,
+HTML controls or external references are emitted. PNG runs in a disposable,
+timeout-bound subprocess; the frozen entry dispatches `--render-graph-image`.
+The Docker runtime installs `fonts-dejavu-core` for local label rendering.
+System font availability controls glyph fallback, including Unicode glyphs.
+No fonts or executables are fetched during an export.
+
+Verification recorded 2026-10-19 on Windows x64 / Python 3.11:
+
+| Distribution | SVG | PNG | Evidence / limit |
+| --- | --- | --- | --- |
+| Source editable install | Passed | Passed | `uv run python scripts/build/smoke.py --python .venv/Scripts/python.exe`; subprocesses run from a disposable directory outside checkout |
+| Clean wheel built from sdist | Passed | Passed | `uv run gravetrail-build --target executable --output dist/graph-images-final` installs the wheel in its clean build environment; `uv run python scripts/build/smoke.py --python dist/graph-images-final/.build/venv/Scripts/python.exe` runs outside checkout |
+| Windows x64 native bundle | Passed | Passed | `uv run python scripts/build/smoke.py --executable dist/graph-images-final/.build/bundle/gravetrail/gravetrail.exe` exercises the frozen raster subprocess outside checkout |
+| Linux Docker | Not run | Not run | Docker daemon unavailable on the verification host; font install and renderer dependency are configured, runtime support is unverified |
+| macOS / Linux native | Not run | Not run | Require builds and smoke checks on their target hosts |
+
+Each smoke validates standalone SVG XML and a real PNG signature/dimensions, plus
+CLI lineage, stdio MCP startup and a rendered UI session. Browser checks downloaded
+both formats from Explorer. Visual inspection covered fitted arrowheads, full-label
+Unicode titles, cycles, a self-loop, disconnected assets, legends, warning text,
+light/dark contrast and transparent output intended for a light document.
+Source tests additionally cover dimension/pixel/graph/evidence/output budgets,
+missing renderer, timeout/concurrency, revocation and failed artifact cleanup.
+No remote provider tests or release publication were performed for this feature.

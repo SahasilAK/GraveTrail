@@ -69,6 +69,15 @@ class LineageGraph:
                         continue
                     seen.add(neighbor)
                     queue.append((neighbor, level + 1))
+        for node in seen:
+            neighbors = set()
+            if direction in {'upstream', 'combined'}:
+                neighbors.update(self.graph.predecessors(node))
+            if direction in {'downstream', 'combined'}:
+                neighbors.update(self.graph.successors(node))
+            if neighbors - seen:
+                truncated = True
+                break
         return self._from_graph(self.graph.subgraph(seen).copy(), truncated)
 
     def cycles(self) -> list[list[str]]:

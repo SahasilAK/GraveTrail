@@ -82,9 +82,8 @@ function mountGraph(root, data, notify, navigate) {
  stage.replaceChildren();
  const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
  const nodeLabel=n=>n.job_id&&n.job_id!=='workspace'?n.name+' [job: '+n.job_id+']':n.name;
- let width=700,height=360;
- data.nodes.forEach(n=>{width=Math.max(width,n.x+n.width+35);height=Math.max(height,n.y+90)});
- let box=[0,0,width,height];
+ const fitted=data.bounds;
+ let box=[...fitted];
  const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
  const highlight=(ids)=>{stage.querySelectorAll('.chosen').forEach(e=>e.classList.remove('chosen'));ids.forEach(id=>{stage.querySelectorAll('[data-node]').forEach(e=>{if(e.dataset.node===id)e.classList.add('chosen')})});};
  const inspectNode=(n,emit=true)=>{
@@ -96,8 +95,7 @@ function mountGraph(root, data, notify, navigate) {
  };
  data.edges.forEach((edge,i)=>{
    const a=nodes.get(edge.source),b=nodes.get(edge.target);
-   let x1=a.x+a.width,y1=a.y+24,x2=b.x,y2=b.y+24;
-   const d=edge.source===edge.target?`M ${x1} ${y1} c 70 -80 ${-a.width-25} -80 ${5-a.width} 0`:`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`;
+   const d=edge.path;
    const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':nodeLabel(a)+' to '+nodeLabel(b)},stage);
    p.style.strokeWidth=edgeWidth;
    const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
@@ -132,7 +130,7 @@ function mountGraph(root, data, notify, navigate) {
    catch(_){status.textContent='Fullscreen is unavailable in this browser.'}
  };
  if(doc){doc.addEventListener('fullscreenchange',syncFullscreen);syncFullscreen()}
- root.querySelector('.fit').onclick=()=>{box=[0,0,width,height];view()};
+ root.querySelector('.fit').onclick=()=>{box=[...fitted];view()};
  const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
  root.querySelector('.plus').onclick=()=>zoom(.8);root.querySelector('.minus').onclick=()=>zoom(1.25);
  svg.onwheel=e=>{e.preventDefault();zoom(e.deltaY>0?1.1:.9)};
@@ -164,7 +162,16 @@ def graph_data(graph, appearance: VisualizationSettings | None = None) -> dict:
             nodes.append(attrs)
     edges = [{"source": s, "target": t, "evidence": a["evidence"], "intermediates": a.get("intermediates", [])}
              for s, t, a in graph.graph.edges(data=True)]
-    return {"nodes": nodes, "edges": edges, "appearance": appearance.model_dump(include={
+    by_id = {n['asset_id']: n for n in nodes}
+    for edge in edges:
+        a, b = by_id[edge['source']], by_id[edge['target']]
+        x1, y1, x2, y2 = a['x'] + a['width'], a['y'] + 24, b['x'], b['y'] + 24
+        edge['path'] = (f"M {x1} {y1} c 70 -80 {-a['width']-25} -80 {5-a['width']} 0"
+                        if edge['source'] == edge['target'] else
+                        f'M {x1} {y1} C {x1+70} {y1} {x2-70} {y2} {x2} {y2}')
+    bounds = [-80, -80, max([780] + [n['x'] + n['width'] + 180 for n in nodes]),
+              max([360] + [n['y'] + 180 for n in nodes])]
+    return {"nodes": nodes, "edges": edges, "bounds": bounds, "appearance": appearance.model_dump(include={
         "graph_labels", "graph_palette", "graph_edge_width"})}
 
 

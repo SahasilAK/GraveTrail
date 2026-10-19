@@ -13,6 +13,7 @@ COPY .streamlit/config.toml ./.streamlit/config.toml
 RUN uv sync --locked --no-dev --no-editable --no-cache
 
 FROM python:3.11-slim-bookworm AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 RUN useradd --uid 10001 --create-home gravetrail && mkdir /data && chown gravetrail:gravetrail /data
 COPY --from=build /build/.venv /build/.venv
 ENV PATH="/build/.venv/bin:$PATH" DATAFORGE_HOME=/data PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

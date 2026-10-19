@@ -52,3 +52,5 @@ Column transformations: parser11/migration5 add scoped SQL/PROC SQL and bounded 
 derivations alongside direct usage. `transformations.py` shares identity, materialization,
 catalog and bounded traversal across the new page, CLI and MCP. Coverage/upgrade limits:
 docs/TRANSFORMATION_LINEAGE.md; benchmark: scripts/benchmark_transformations.py.
+
+Static graph images share the browser scene and filtered graph across UI, CLI and MCP. resvg-py wheels provide PNG without Cairo/browser runtimes; Docker includes DejaVu fonts and frozen builds dispatch a private render worker. Limits and packaging evidence: docs/USER_GUIDE.md and docs/BUILD_AND_RELEASE.md.
