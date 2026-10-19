@@ -186,6 +186,7 @@ AGENTS.md
 
 # DataForge local runtime and analysis artifacts
 .dataforge/
+.streamlit/
 .venv-clean/
 .knowledge-base/
 
