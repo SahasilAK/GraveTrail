@@ -1,6 +1,6 @@
 # Testing
 
-## Current acceptance summary — 2026-10-18
+## Current acceptance summary — 2026-10-20
 
 This table distinguishes delivered behavior, dated environment evidence and still-open gates.
 Earlier numerical results below are historical; a later source change does not refresh a
@@ -9,11 +9,11 @@ published; this tracked summary is the public acceptance reference.
 
 | Area | Latest evidence | Remaining gate |
 | --- | --- | --- |
-| Source application | Parser cache 11 adds SQL/SAS column derivations, migration 5, bounded shared queries and a dedicated UI; full source verification is recorded below | No claim of universal SQL/SAS coverage |
+| Source application | Parser cache12/migration6 add explicit hybrid/experimental AI project builds, strict evidence/semantic checks, bounded review, provenance and atomic publication; 738 tests pass with 2 existing Windows skips | No claim of universal SQL/SAS coverage or qualified live-model precision |
 | SQL/SAS sample ZIPs | Each has 85 persistent tables, 128 logical edges, seven layers/all 16 roots; SAS adds 16 WORK assets/144 physical edges | Real client projects and large dense graphs need separate accuracy/performance acceptance |
 | CLI/MCP | Complete documented interfaces and actual SDK transport/permission regressions; fixture parity includes original bytes, evidence and warm caches | One DuckDB process owns each home |
-| OmniRoute | Bounded 2026-10-17 live discovery, connection, SQL/SAS validation, inferred merge, refresh and reopen passed with `auto/best-reasoning` | Historical gateway failures are superseded; future availability and other live providers are not established |
-| Windows wheel/executable | 2026-10-18 parser-8 artifacts passed outside-checkout CLI/import/lineage, actual stdio MCP, health and rendered UI smoke | Rebuild and smoke artifacts containing parser 11 before release |
+| OmniRoute | 2026-10-20 project smoke: two synthetic SQL units committed, two requests with known usage, seven accepted claims including one AI-only UPDATE derivation; earlier manual SQL/SAS gate remains historical | Development smoke after prompt tuning is not an independent precision evaluation or SAS project qualification |
+| Windows wheel/executable | 2026-10-20 clean installed wheel outside checkout passed packaged prompts/schemas, real adapter with mock HTTP, accepted lineage/column publication and support; 2026-10-18 executable smoke remains historical | Current native executable/container and target-native release acceptance remain open |
 | Linux Docker | 2026-10-17 GraveTrail image passed non-root CLI/import/lineage/UI/MCP and volume persistence | 2026-10-18 fresh Docker checks were blocked by daemon availability; no parser-9 container result claimed |
 | Native Linux/macOS and hosted release | Build/publish workflow implemented | Target-native downloaded-artifact and current hosted release acceptance remain unrecorded here |
 | Standalone HTML | Self-contained assets, escaping, JavaScript checks and real UI download passed; 2026-10-18 source-generated `file://` graph with 501 nodes/500 edges passed fullscreen, keyboard copy and evidence checks without external requests | Current packaged artifacts were not rebuilt for the QOL changes |
@@ -153,4 +153,20 @@ exact SAS FORMAT-modifier evidence and the remaining static-analysis diagnostics
 
 ## CLI/MCP UI parity verification
 
-Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The keyed 46-ID fixture is checked against actual CLI help and MCP schemas; new network/mutation tools must reject a read-only launch. Provider mocks are repeatable and require no keys. `uv run python scripts/verify_parity.py --home NEW_ISOLATED_HOME --output NEW_REPORT.json` exercises both supplied ZIPs through CLI/service/actual MCP and owner reopen, including every original byte/hash, exact logical edges, seven layers/all16 roots and warm cache reuse. Never point destructive tests at an existing user home. Record running UI/live/transport evidence and unexecuted gates in the local report.
+Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The keyed 48-ID fixture is checked against actual CLI help and MCP schemas; new network/mutation tools must reject a read-only launch. Provider mocks are repeatable and require no keys. `uv run python scripts/verify_parity.py --home NEW_ISOLATED_HOME --output NEW_REPORT.json` exercises both supplied ZIPs through CLI/service/actual MCP and owner reopen, including every original byte/hash, exact logical edges, seven layers/all16 roots and warm cache reuse. Never point destructive tests at an existing user home. Record running UI/live/transport evidence and unexecuted gates in the local report.
+
+## AI project analysis qualification — 2026-10-20
+
+New contract/context/transport/validator/reconciliation/orchestration tests use synthetic originals and HTTPX MockTransport. Strict evidence and negative fixtures cover fragments/splices, ambiguous ownership, unused CTEs, scope/role/version mapping, static UPDATE/MERGE gaps, retry/fallback budgeting, truncation, unknown usage and cooperative deadline/cancellation. Fourteen versioned SQL/SAS holdout scripts label expected facts and abstentions separately from prompt examples.
+
+These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-current-limits) records the still-open language-specific live precision, coverage and sample-size targets.
+
+Full source verification on 2026-10-20: **738 passed, 2 existing Windows symlink skips** in 178.66 seconds. The actual browser confirmed unchecked defaults, hybrid opt-in/preview, background publication and accepted table/column claims in the report using synthetic mocked extraction. Follow-up AppTest/browser checks cover automatic terminal report refresh and selection. A clean wheel installed in a separate environment ran outside the checkout, loading packaged project prompts/schemas and publishing one table edge/column derivation with durable support through mock HTTP. Ruff, lock and strict Pages validation are recorded with the PR. The bounded two-case live OmniRoute smoke described above verifies requests/usage and AI gap publication, but its sample is too small and was used in prompt development; do not infer a precision percentage.
+
+The offline scorer can be reproduced with:
+
+```bash
+uv run --locked python scripts/benchmark_ai_analysis.py --project-gold --output metrics.json
+```
+
+It scores the parser baseline against separate `evaluation_gold.json` operation/scope/version/role labels and optionally both synthetic archive manifests. `--predictions saved.json` scores explicit saved predictions; this remains unqualified saved evidence. Live evaluation requires `--live`, explicit `--cases`, `DATAFORGE_AI_BENCHMARK_LIVE=1`, an existing named credential reference and bounded attempt/time options. The synthetic live route is fixed to loopback OmniRoute `auto/best-reasoning`. No live qualification follows from offline or mock scores. Gold/expected files are scorer inputs and never model context.

@@ -1,15 +1,15 @@
 # CLI and MCP capability coverage
 
-Verified source implementation: 2026-10-17. All 46 UI coverage IDs are accounted for:
-36 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
+Verified source implementation: 2026-10-20. All 48 UI coverage IDs are accounted for:
+38 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
 rows have working permitted reads/local routes; they do **not** claim full MCP parity.
 `gravetrail capabilities` and MCP `get_capabilities` return this versioned inventory,
 including scope, aggregate effects, required grants and current launch authorization.
 Follow `next_cursor`; availability does not mean the current caller has permission.
 
-These 46 IDs group UI capabilities; they are not command/tool counts. The registered
-interface has **98 CLI command routes, 29 CLI groups, 78 MCP tools, 2 concrete resources,
-4 resource templates and 1 prompt** (verified 2026-10-18). The CLI and MCP guides list
+These 48 IDs group UI capabilities; they are not command/tool counts. The registered
+interface has **103 CLI command routes, 29 CLI groups, 83 MCP tools, 2 concrete resources,
+4 resource templates and 1 prompt** (verified 2026-10-19). The CLI and MCP guides list
 every route/tool, including basic discovery commands outside this UI capability matrix.
 Documentation tests compare those references with actual registrations and inputs.
 
@@ -41,7 +41,7 @@ is used for session credentials. Redirects are refused.
 | P02 | Session connect/status/clear; reference compatibility and restart behavior | `providers credentials status`<br>`providers test`<br>`ai request` | `connect_runtime_reference`<br>`get_runtime_connection_status`<br>`clear_runtime_connection` | **Restricted:** MCP binds only an approved named launch reference. Raw credentials use hidden per-invocation CLI input or a UI session; never tool arguments. |
 | P03 | Model discovery with sanitized results | `providers models` | `discover_provider_models` | Implemented |
 | P04 | Actual model connection test and sanitized usage/failure | `providers test` | `test_provider_connection` | Implemented |
-| P05 | Default profile, each of five task routes and ordered fallback profiles | `providers routing get`<br>`providers routing update` | `get_model_routing`<br>`update_model_routing` | Implemented |
+| P05 | Default profile, five manual and two project task routes, and ordered fallback profiles | `providers routing get`<br>`providers routing update` | `get_model_routing`<br>`update_model_routing` | Implemented |
 | A01 | Selected evidence analysis: SQL lineage, SAS lineage, lineage validation, column usage, code explanation | `ai request` | `request_ai_assistance` | Implemented |
 | A02 | Offline statement chunk preview, selected chunk/range and budget information | `ai chunks` | `preview_ai_chunks` | Implemented |
 | A03 | Unresolved warning/error review queue, recommended source context, custom bounds and explicit AI review | `ai review list`<br>`ai review preview`<br>`ai review request` | `list_review_candidates`<br>`preview_diagnostic_review`<br>`request_diagnostic_review` | Implemented |
@@ -108,3 +108,11 @@ Runtime reset and schema removal remain separate operations.
 The checked-in [capability fixture](https://github.com/SahasilAK/GraveTrail/blob/main/tests/fixtures/parity_capabilities.json) is tested against
 actual Typer routes/help, MCP schemas and authorization. The [testing guide](TESTING.md)
 describes parity checks for transports, the running UI, both real ZIPs and live providers.
+
+## Project AI analysis parity
+
+The Analysis build workflow adds explicit `parser` (default), `hybrid` and experimental `ai` modes to the shared build service. CLI uses `lineage build`, `lineage preview`, `lineage analysis-report` and `jobs cancel`; MCP uses `start_lineage_analysis`, `preview_project_analysis`, `get_project_analysis_report` and `cancel_job`. Previews/reports stay offline. AI execution requires independent source/write/network grants plus current origin/reference/privacy checks; report details remain source-gated.
+
+Provider routing accepts both v1 project tasks, `project_lineage` and `lineage_review`, alongside the five existing manual tasks. The manual range selector retains its five contracts. Complete-source disclosure across chunks, physical attempt/output/deadline ceilings, validation, atomic publication and compatible offline reuse follow the [same project-analysis policy](AI_ANALYSIS.md) across interfaces.
+
+Project analysis adds A06 (explicit AI/hybrid build, offline preview and paged validation report) and A07 (cooperative analysis cancellation). Parser remains the default; AI-generated mode is experimental. See [project AI analysis](AI_ANALYSIS.md).

@@ -9,11 +9,11 @@ import time
 from contextlib import contextmanager
 
 from dataforge.maintenance import _idle
-from dataforge.store import COLUMN_TABLES
+from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES
 
 GRAPH = (*COLUMN_TABLES, 'edges', 'column_usages', 'operation_assets', 'operations', 'statements',
          'asset_aliases', 'assets', 'diagnostics')
-WORKSPACE_TABLES = (*GRAPH, 'analysis_runs', 'llm_records', 'ingestion_runs', 'source_files',
+WORKSPACE_TABLES = (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'ingestion_runs', 'source_files',
                     'history_archives', 'temporary_recovery', 'llm_profiles', 'settings', 'workspaces')
 CATEGORIES = ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'cache', 'reset',
               'workspace', 'orphans', 'application')
@@ -46,8 +46,11 @@ def _job_files(store):
 
 def assert_idle(store, workspace=''):
     """Also catch queued imports and provider requests which do not own analysis_lock."""
+    from dataforge.ai_analysis_store import active_project_runs
     from dataforge.llm_resources import has_active_requests
 
+    if active_project_runs(store, workspace):
+        raise ValueError('An active AI analysis blocks cleanup; recover interrupted runs first')
     if has_active_requests(store.home, workspace):
         raise ValueError('An active AI request blocks cleanup')
     for path in _job_files(store):
@@ -55,7 +58,7 @@ def assert_idle(store, workspace=''):
         if path.stat().st_size > 16 * 1024 * 1024:
             raise ValueError('Job journal exceeds maintenance limit')
         record = json.loads(path.read_text(encoding='utf-8'))
-        if (not workspace or record['workspace_id'] == workspace) and record['status'] not in {'completed', 'failed', 'interrupted'}:
+        if (not workspace or record['workspace_id'] == workspace) and record['status'] not in {'completed', 'failed', 'interrupted', 'cancelled'}:
             if time.time() - record['updated_at'] <= 30:
                 raise ValueError('An active job blocks cleanup')
     params = [workspace] if workspace else []
@@ -85,7 +88,7 @@ def _files(store, workspace, category):
         for path in _job_files(store):
             record = json.loads(checked_path(store.home, path.relative_to(store.home)).read_text(encoding='utf-8'))
             if category == 'application' or record['workspace_id'] == workspace:
-                if record['status'] in {'completed', 'failed', 'interrupted'} or time.time() - record['updated_at'] > 30:
+                if record['status'] in {'completed', 'failed', 'interrupted', 'cancelled'} or time.time() - record['updated_at'] > 30:
                     files.append(path)
     scopes = []
     if category in {'sources', 'reset', 'workspace', 'application'}:
@@ -114,6 +117,9 @@ def _files(store, workspace, category):
         referenced = {r['content_hash'] for r in store.rows('SELECT content_hash FROM source_files UNION SELECT content_hash FROM statements')}
         for row in store.rows("SELECT snapshot FROM analysis_runs WHERE snapshot IS NOT NULL AND snapshot<>''"):
             referenced.update(json.loads(row['snapshot']).get('files', {}).values())
+        referenced.update(r['content_hash'] for r in store.rows('SELECT content_hash FROM ai_analysis_units'))
+        for row in store.rows("SELECT accepted_results FROM ai_analysis_runs WHERE status='committed'"):
+            referenced.update(item['metadata']['content_hash'] for item in json.loads(row['accepted_results']))
         # Recovery archives can retain references to older source versions. Preserve conservatively.
         archived = bool(store.rows('SELECT 1 FROM history_archives LIMIT 1'))
         directory = checked_path(store.home, 'blobs')
@@ -141,11 +147,11 @@ def _selection(store, workspace, category, file_ids, run_id):
     if run_id and category != 'history':
         raise ValueError('Run selection is supported only for unreferenced analysis history')
     tables = {
-        'sources': (*GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'source_files'),
-        'lineage': (*GRAPH, 'analysis_runs'), 'columns': (*COLUMN_TABLES, 'column_usages'),
-        'ai': (*GRAPH, 'analysis_runs', 'llm_records'),  # remove dependent inferred graph, rebuild deterministically
+        'sources': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'source_files'),
+        'lineage': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs'), 'columns': ('analysis_fact_support', *COLUMN_TABLES, 'column_usages'),
+        'ai': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records'),  # remove dependent inferred graph, rebuild deterministically
         'history': ('analysis_runs', 'ingestion_runs'), 'jobs': (), 'cache': ('parse_cache',),
-        'reset': (*GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'ingestion_runs'),
+        'reset': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'ingestion_runs'),
         'workspace': WORKSPACE_TABLES, 'orphans': (),
         'application': (*WORKSPACE_TABLES, 'parse_cache', 'prompt_versions'),
     }[category]
@@ -162,6 +168,8 @@ def _selection(store, workspace, category, file_ids, run_id):
                 where += " AND status IN ('completed','failed','cancelled') AND run_id NOT IN (SELECT run_id FROM edges WHERE workspace_id=?)"
                 params.append(workspace)
                 where += ' AND run_id NOT IN (SELECT run_id FROM column_analysis WHERE workspace_id=?)'
+                params.append(workspace)
+                where += ' AND run_id NOT IN (SELECT analysis_run_id FROM ai_analysis_runs WHERE workspace_id=? AND analysis_run_id IS NOT NULL)'
                 params.append(workspace)
                 if run_id:
                     where += ' AND run_id=?'

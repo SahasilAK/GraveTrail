@@ -15,6 +15,7 @@ from urllib.parse import quote, urlparse
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from dataforge.ai_analysis_models import LineageReviewResponse, ProjectLineageResponse, UnitAttemptResult
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
@@ -28,7 +29,11 @@ PROVIDERS = {"OpenAI": "https://api.openai.com/v1", "Anthropic": "https://api.an
     "OmniRoute": "http://localhost:20128/v1", "OpenAI compatible": "http://localhost:8000/v1",
     "Databricks": "https://your-workspace.cloud.databricks.com", "Azure OpenAI": "https://your-resource.openai.azure.com",
     "Gemini": "https://generativelanguage.googleapis.com/v1beta", "OpenRouter": "https://openrouter.ai/api/v1"}
-TASKS = ["sas_lineage", "sql_lineage", "lineage_validation", "column_usage", "code_explanation"]
+MANUAL_TASKS = ["sas_lineage", "sql_lineage", "lineage_validation", "column_usage", "code_explanation"]
+PROJECT_TASKS = ["project_lineage", "lineage_review"]
+ROUTABLE_TASKS = MANUAL_TASKS + PROJECT_TASKS
+TASKS = MANUAL_TASKS  # Existing manual selectors must keep their five contracts.
+PROJECT_SCHEMAS = {"project_lineage": ProjectLineageResponse, "lineage_review": LineageReviewResponse}
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 if not PROMPTS.is_dir():
     PROMPTS = Path(__file__).resolve().parent / "prompts"
@@ -128,10 +133,13 @@ def response_object(text: str) -> dict:
 
 
 class Adapter:
-    def __init__(self, profile: Profile, transport=None, cancelled=None):
+    def __init__(self, profile: Profile, transport=None, cancelled=None, before_attempt=None, check=None):
         self.profile = profile
         self.connections = current_connections()
         self.cancelled = cancelled
+        self.before_attempt = before_attempt
+        self.check = check
+        self.completion_metadata = {}
         self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
 
     def __enter__(self):
@@ -164,7 +172,11 @@ class Adapter:
                 # Keep sent credentials local through sanitization if another session rotates the environment.
                 request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
                     if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
-                with self.client.stream(method, self.profile.base_url + path, headers=headers, json=payload) as response:
+                timeout = self.before_attempt(self.profile) if self.before_attempt else self.profile.timeout
+                if self.check:
+                    self.check()
+                with self.client.stream(method, self.profile.base_url + path, headers=headers, json=payload,
+                                        timeout=timeout or self.profile.timeout) as response:
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < self.profile.retries:
                             time.sleep(.25 * (attempt + 1))
@@ -174,6 +186,8 @@ class Adapter:
                                             response.status_code == 429 or response.status_code >= 500)
                     chunks, total = [], 0
                     for chunk in response.iter_bytes():
+                        if self.check:
+                            self.check()
                         if self.cancelled and self.cancelled():
                             raise ProviderError("AI request cancelled while receiving response")
                         total += len(chunk)
@@ -231,6 +245,27 @@ class Adapter:
         if p.temperature is not None and p.provider not in {"Gemini", "Ollama"}:
             payload["temperature"] = p.temperature
         data = self._request("POST", path, payload)
+        finish = None
+        envelope_key = 'candidates' if p.provider == 'Gemini' else 'choices'
+        if p.provider not in {'Anthropic','Ollama'}:
+            choices = data.get(envelope_key)
+            if not isinstance(choices,list) or not choices or not isinstance(choices[0],dict):
+                raise ProviderError('Provider returned an unsupported response shape')
+        if p.provider == 'Anthropic':
+            finish = data.get('stop_reason')
+        elif p.provider == 'Ollama':
+            finish = data.get('done_reason')
+        elif p.provider == 'Gemini':
+            finish = (data.get('candidates') or [{}])[0].get('finishReason')
+        else:
+            finish = (data.get('choices') or [{}])[0].get('finish_reason')
+        reported_usage = data.get('usage', data.get('usageMetadata', {}))
+        if p.provider == 'Ollama':
+            reported_usage = {k:data[k] for k in ['prompt_eval_count','eval_count'] if k in data}
+        self.completion_metadata = {'finish_reason':finish,
+            'truncated':finish in {'length','max_tokens','MAX_TOKENS','model_length'},
+            'usage_known':any(type(v) is int for v in reported_usage.values()) if isinstance(reported_usage,dict) else False,
+            'resolved_model':data.get('model'), 'requested_model':p.model}
         try:
             if p.provider == "Anthropic":
                 return "".join(c.get("text", "") for c in data["content"]), data.get("usage", {})
@@ -239,7 +274,7 @@ class Adapter:
             if p.provider == "Gemini":
                 return "".join(c.get("text", "") for c in data["candidates"][0]["content"]["parts"]), data.get("usageMetadata", {})
             return data["choices"][0]["message"]["content"], data.get("usage", {})
-        except (KeyError, IndexError, TypeError):
+        except (KeyError, IndexError, TypeError, AttributeError):
             raise ProviderError("Provider returned an unsupported response shape") from None
 
     def models(self) -> list[str]:
@@ -282,6 +317,23 @@ def validate_response(response: GroundedResponse, code: str, known: set[str], fi
 
 def redact(text: str) -> str:
     return current_connections().redact(text)
+
+
+def expire_ai_history(store, workspace):
+    """Expire optional bodies without deleting evidence still used by active facts."""
+    days = int(store.setting(workspace, 'llm_retention_days', 30))
+    referenced = {r['record_id'] for r in store.rows('''SELECT record_id FROM ai_analysis_units WHERE workspace_id=?
+        UNION SELECT record_id FROM analysis_fact_support WHERE workspace_id=?''', [workspace, workspace])
+        if r['record_id']}
+    for record in store.rows("SELECT record_id,outcome,details FROM llm_records WHERE workspace_id=? AND created_at < current_timestamp - ? * INTERVAL '1 day'", [workspace, days]):
+        if record['outcome'] == 'merged' or record['record_id'] in referenced:
+            minimal = json.loads(record['details'])
+            minimal.pop('context', None)
+            minimal.pop('response', None)
+            store.execute('UPDATE llm_records SET details=? WHERE record_id=?',
+                          [json.dumps(minimal), record['record_id']])
+        else:
+            store.execute('DELETE FROM llm_records WHERE record_id=?', [record['record_id']])
 
 
 def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
@@ -375,14 +427,7 @@ def _assist(store, workspace, profile, file_id, first, last, task, profile_id, t
         store.execute("INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       [record_id, workspace, profile_id, task, file_id, first, prompt_hash, profile.provider,
                        profile.model, outcome, time.perf_counter() - start, json.dumps(usage), json.dumps(details)])
-        days = int(store.setting(workspace, "llm_retention_days", 30))
-        expired = store.rows("SELECT record_id,details FROM llm_records WHERE workspace_id=? AND outcome='merged' AND created_at < current_timestamp - ? * INTERVAL '1 day'", [workspace, days])
-        for old in expired:
-            minimal = json.loads(old["details"])
-            minimal.pop("context", None)
-            minimal.pop("response", None)
-            store.execute("UPDATE llm_records SET details=? WHERE record_id=?", [json.dumps(minimal), old["record_id"]])
-        store.execute("DELETE FROM llm_records WHERE workspace_id=? AND outcome<>'merged' AND created_at < current_timestamp - ? * INTERVAL '1 day'", [workspace, days])
+        expire_ai_history(store, workspace)
     return {"record_id": record_id, "outcome": outcome, "reason": reason,
             "result": validated.model_dump() if outcome == "validated" else None, "usage": usage,
             "retryable": retryable}
@@ -446,5 +491,204 @@ def assist_task(store, workspace, file_id, first, last, task, transport=None, ex
         result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
                         expected_hash=expected_hash, cancelled=cancelled, expected_job=expected_job)
         if not result["retryable"]:
+            return result
+    return result
+
+
+def analysis_routes(store, workspace, task):
+    """Resolve only same-recipient configured routes, entirely offline."""
+    if task not in PROJECT_TASKS:
+        raise ValueError('Project invocation requires a project task')
+    profiles = {r['profile_id']:Profile.model_validate_json(r['config'])
+                for r in store.rows('SELECT profile_id,config FROM llm_profiles WHERE workspace_id=?',[workspace])}
+    chosen = store.setting(workspace,'task_models',{}).get(task) or store.setting(workspace,'default_profile','')
+    if chosen not in profiles:
+        raise ValueError('Configure a default or project-task provider profile first')
+    first = profiles[chosen]
+    routes = [(pid,profiles[pid]) for pid in dict.fromkeys([chosen,*store.setting(workspace,'fallback_profiles',[])])
+              if pid in profiles and urlparse(profiles[pid].base_url).netloc == urlparse(first.base_url).netloc]
+    return routes
+
+
+def _transmitted_schema(value):
+    """Drop only schema annotations; keep validation keywords and named properties."""
+    if isinstance(value,list):
+        return [_transmitted_schema(item) for item in value]
+    if not isinstance(value,dict):
+        return value
+    result = {}
+    for key,item in value.items():
+        if key in {'title','default','description','examples'}:
+            continue
+        if key in {'const','enum','dependentRequired'}:
+            result[key] = item
+        elif key in {'properties','$defs','definitions','patternProperties','dependentSchemas','dependencies'}:
+            result[key] = {name:_transmitted_schema(schema) for name,schema in item.items()}
+        else:
+            result[key] = _transmitted_schema(item)
+    return result
+
+
+REVIEW_CONTEXT_CHARS = 2000
+
+
+def review_payload(facts):
+    """One bounded review request; overflow never receives implicit AI approval."""
+    candidates, omitted = [], set()
+    for fact in facts:
+        candidate = fact.model_dump(exclude={'detail', 'evidence', 'unit_id', 'evidence_key', 'status', 'origin'}, exclude_defaults=True)
+        proposed = json.dumps([*candidates, candidate], ensure_ascii=False, separators=(',', ':'))
+        if len(proposed) <= REVIEW_CONTEXT_CHARS:
+            candidates.append(candidate)
+        else:
+            omitted.add(fact.candidate_id)
+    return candidates, omitted
+
+
+def analysis_prompt(unit, task, execution, *, reserve_review=False):
+    """One JSON user context; prompt/schema/source overhead all count toward the limit."""
+    if task not in PROJECT_SCHEMAS:
+        raise ValueError('Unknown project task')
+    system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
+    template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
+    schema = _transmitted_schema(PROJECT_SCHEMAS[task].model_json_schema())
+    digest = hashlib.sha256((system+template+json.dumps(schema,sort_keys=True,separators=(',',':'))).encode()).hexdigest()
+    context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
+               'schema':schema,'schema_version':'1'}
+    from dataforge.ai_analysis_models import EvidenceCitation
+    context['evidence_template'] = EvidenceCitation.from_unit(unit).model_dump()
+    if task == 'lineage_review':
+        context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review else execution.review_candidates
+    user = template.replace('{{context}}',json.dumps(context,ensure_ascii=False,separators=(',',':')))
+    return system,user,digest
+
+
+def preview_analysis_routes(store, workspace, units, execution):
+    """Offline route, envelope and cumulative full-source permission checks."""
+    blocked,routes = [],{}
+    tasks = ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
+    for task in tasks:
+        try:
+            selected = analysis_routes(store,workspace,task)
+        except ValueError as exc:
+            blocked.append({'task':task,'reason':str(exc)})
+            continue
+        routes[task] = [{'profile_id':pid,'provider':p.provider,'model':p.model,'base_url':p.base_url,
+                         'max_tokens':p.max_tokens,'attempts_per_unit':p.retries+1} for pid,p in selected]
+        for pid,profile in selected:
+            manager = execution.connections or current_connections()
+            if hasattr(manager, 'for_profile'):
+                manager = manager.for_profile(pid, profile)
+            if profile.key_env and not manager.resolve(profile.key_env):
+                blocked.append({'task':task,'profile_id':pid,'reason':'credential_unavailable'})
+            if not is_local(profile.base_url) and not store.setting(workspace,'external_llm',False):
+                blocked.append({'task':task,'profile_id':pid,'reason':'external_requests_disabled'})
+            if not is_local(profile.base_url) and not store.setting(workspace,'allow_full_source',False):
+                blocked.append({'task':task,'profile_id':pid,'reason':'complete_source_permission_required'})
+            for unit in units:
+                system,user,_ = analysis_prompt(unit,task,execution,reserve_review=task == 'lineage_review')
+                if len(system)+len(user) > min(profile.context_chars,store.setting(workspace,'max_context_chars',8000)):
+                    blocked.append({'task':task,'unit_id':unit.unit_id,'profile_id':pid,'reason':'complete_prompt_exceeds_context_budget'})
+    ceiling = sum(sum(p['attempts_per_unit'] for p in rr) for rr in routes.values()) * len(units)
+    tokens = sum(sum(p['max_tokens']*p['attempts_per_unit'] for p in rr) for rr in routes.values()) * len(units)
+    if ceiling > execution.request.max_provider_attempts:
+        blocked.append({'reason':'worst_case_provider_attempt_budget'})
+    if tokens > execution.request.max_output_tokens_total:
+        blocked.append({'reason':'worst_case_output_reservation_budget'})
+    return {'routes':routes,'blocked':blocked,'valid':not blocked,'max_provider_attempts':ceiling,
+            'max_output_tokens_reserved':tokens}
+
+
+def invoke_analysis_unit(store, workspace, unit, task, execution):
+    """Routed project extraction, with each physical attempt reauthorized and reserved."""
+    execution.check()
+    routes = analysis_routes(store,workspace,task)
+    system,user,prompt_hash = analysis_prompt(unit,task,execution)
+    manager = execution.connections or current_connections()
+    result = None
+    invocation_start = execution.attempts
+    for pid,profile in routes:
+        manager = execution.connections or current_connections()
+        if hasattr(manager, 'for_profile'):
+            manager = manager.for_profile(pid, profile)
+        execution.check()
+        if len(system)+len(user) > min(profile.context_chars,store.setting(workspace,'max_context_chars',8000)):
+            raise ValueError('Complete prompt/schema/context exceeds profile or workspace context budget')
+        started,attempt_start = time.perf_counter(),execution.attempts
+        usage,raw,validated,metadata = {},'',None,{}
+        outcome,reason,retryable = 'validated','',False
+
+        def before_attempt(active_profile):
+            execution.check()
+            source = store.file(unit.file_id)
+            settings = {k:store.setting(workspace,k,v) for k,v in ParsingSettings().model_dump().items()}
+            if source['workspace_id'] != workspace or source['content_hash'] != unit.content_hash or source_job(source,settings) != unit.job_id:
+                raise ValueError('Source identity changed before provider attempt')
+            if source['raw_content'][unit.start_offset:unit.end_offset] != unit.code:
+                raise ValueError('Unit code differs from the immutable original')
+            current_routes = dict(analysis_routes(store,workspace,task))
+            if pid not in current_routes or current_routes[pid] != active_profile:
+                raise ValueError('Provider route changed before provider attempt')
+            if execution.settings and any(execution.settings.get(k) != v for k,v in settings.items()):
+                raise ValueError('Analysis settings changed before provider attempt')
+            for fid,digest in execution.source_hashes.items():
+                context_source = store.file(fid)
+                if context_source['workspace_id'] != workspace or context_source['content_hash'] != digest:
+                    raise ValueError('Declaration context changed before provider attempt')
+            if not is_local(active_profile.base_url):
+                if not store.setting(workspace,'external_llm',False):
+                    raise ValueError('External LLM requests are disabled')
+                if not store.setting(workspace,'allow_full_source',False):
+                    raise ValueError('Complete source transmission is disabled')
+            return execution.before_attempt(active_profile)
+
+        try:
+            resources = LLMResourceSettings.model_validate({k:store.setting(workspace,k,v)
+                for k,v in LLMResourceSettings().model_dump().items()})
+            with connection_scope(manager), request_slot(store.home,workspace,resources.llm_concurrency), Adapter(
+                    profile,execution.transport,cancelled=execution.cancelled,before_attempt=before_attempt,check=execution.check) as adapter:
+                send_user = manager.redact(user) if store.setting(workspace,'redact_secrets',True) else user
+                raw,usage = adapter.complete(system,send_user)
+                metadata = adapter.completion_metadata
+                if execution.attempt_log:
+                    execution.attempt_log[-1].update(outcome='response_received',usage_known=metadata.get('usage_known',False))
+                if execution.attempts - invocation_start > 1:
+                    metadata = {**metadata,'usage_known':False}
+                execution.check()
+                if metadata.get('truncated'):
+                    raise ValueError('Provider output truncated')
+                if len(raw) > 1024*1024:
+                    raise ValueError('Model content exceeds response budget')
+                validated = PROJECT_SCHEMAS[task].model_validate(response_object(raw))
+                if task == 'project_lineage':
+                    validated.assert_unit(unit)
+                else:
+                    validated.assert_candidates({c['candidate_id'] for c in execution.review_candidates})
+                    for decision in validated.decisions:
+                        for citation in decision.evidence:
+                            citation.assert_unit(unit)
+        except (ValueError,ProviderError) as exc:
+            outcome,reason,retryable = 'quarantined',str(exc)[:500],isinstance(exc,ProviderError) and exc.retryable
+        record_id = uuid.uuid4().hex
+        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':'1',
+                   'reason':reason,'attempts':execution.attempts-attempt_start,'requested_model':profile.model,
+                   'resolved_model':metadata.get('resolved_model'),'finish_reason':metadata.get('finish_reason'),
+                   'usage_known':metadata.get('usage_known',False),'result':None,
+                   'physical_attempts':execution.attempt_log[attempt_start:]}
+        # Minimal evidence belongs to staged claims; full provider bodies are privacy-opt-in.
+        if store.setting(workspace,'llm_history',False):
+            details.update(context=user,response=raw)
+        safe_details,safe_usage = manager.sanitize(details),manager.sanitize(usage)
+        with store.transaction():
+            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,'1'])
+            store.execute('INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [record_id,workspace,pid,task,unit.file_id,unit.first,prompt_hash,profile.provider,profile.model,
+                 outcome,time.perf_counter()-started,json.dumps(safe_usage),json.dumps(safe_details)])
+        result = UnitAttemptResult(unit_id=unit.unit_id,task=task,result=validated if outcome == 'validated' else None,
+            record_id=record_id,outcome=outcome,reason=manager.redact(reason),usage=safe_usage,usage_known=metadata.get('usage_known',False),
+            attempts=execution.attempts-invocation_start,requested_model=profile.model,resolved_model=metadata.get('resolved_model'),
+            finish_reason=metadata.get('finish_reason'),prompt_hash=prompt_hash)
+        expire_ai_history(store, workspace)
+        if not retryable:
             return result
     return result

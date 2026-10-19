@@ -85,3 +85,9 @@ stays in the local UI. CLI write permission, workspace policy and agent-access s
 apply. MCP `inspect_cleanup` and `preview_cleanup` are read-only; no destructive MCP tool
 is registered even with startup write permission. Stop other owners before using standalone
 CLI against an active UI/MCP data home; DuckDB supports one owning process per home.
+
+## Project AI facts and active runs
+
+Project AI analysis stages candidates before replacing active facts. A cancelled/failed/stale run keeps the previous graph. Minimal accepted source/decision/provenance data supports compatible offline rebuilds; opt-in full provider bodies remain subject to history privacy/retention. Selected-source analysis must preserve compatible unselected accepted contributions. An incompatible context requires reanalysis rather than silently downgrading saved facts.
+
+Project run/unit/claim/support tables participate in the shared storage lifecycle. Active publishing analysis blocks conflicting maintenance, including gaps between provider requests. Cleanup uses the existing category dependencies, previews and confirmations; removing supporting AI/source facts can invalidate dependent lineage/columns. Backups restore to a new home and preserve evidence. See [AI project analysis](AI_ANALYSIS.md) and [data model](DATA_MODEL.md).

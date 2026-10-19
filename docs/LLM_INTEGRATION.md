@@ -152,3 +152,9 @@ without raw output or credentials.
 That dated attempt left the full live gate open.
 
 Current bounded acceptance on 2026-10-17 passed discovery (915 models), connection, synthetic SQL and SAS exact-quote validation, inferred merge, graph refresh and owner reopen in 33.8 seconds. It used `http://localhost:20128/v1`, `auto/best-reasoning` and the existing read-only `OMNIROUTE_API_KEY` launch reference. No fixed route or validation change was used. See [provider verification guidance](TESTING.md); earlier failures remain historical evidence, and this result does not promise continuing provider availability.
+
+## Project analysis
+
+[AI project analysis](AI_ANALYSIS.md) adds explicit `hybrid` and experimental `ai` builds through Analysis, CLI and MCP. Parser mode stays offline by default. Project tasks `project_lineage` and `lineage_review` route independently of the five manual tasks and use strict v1 full-unit contracts. Each physical HTTP retry/fallback rechecks current source/privacy/authorization and reserves output tokens. Truncated output is quarantined even if its JSON appears valid and empty; absent usage remains unknown.
+
+Remote project builds require complete-source permission for cumulative chunk disclosure. Preview counts the entire system/JSON/catalog/schema envelope against profile and workspace context limits; the complete envelope can exceed defaults. Compact transmitted schemas retain all validation rules; larger source/catalog combinations may still need deliberate limit changes. Normal preview, settings reads, browsing and export send zero requests. Source-backed candidates still need deterministic semantic acceptance; reviewer agreement cannot promote unsupported claims. These project-build checks have mock transport evidence, not a qualified live precision result.

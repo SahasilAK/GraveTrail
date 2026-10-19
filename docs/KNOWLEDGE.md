@@ -5,7 +5,7 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 `TRANSFORMATION_LINEAGE.md` — dedicated page workflow, tested SQL/SAS subset, dependency
 roles, bounded exports/queries and parser11/migration5 upgrade/recovery boundaries. Published
 through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CLI/MCP
-references now enumerate100 executable routes and80 tools; UI has eleven destinations.
+references now enumerate103 executable routes and83 tools; UI has eleven destinations.
 
 ## Subfolders
 - `overrides/` — [overrides/KNOWLEDGE.md](overrides/KNOWLEDGE.md): inject shared theme CSS into Material without app dependencies.
@@ -55,7 +55,7 @@ the dependent workspace graph; full runtime reset preserves backups/unrecognized
 Backups restore only to a new home. Source and installed/frozen launcher default homes differ;
 pass explicit homes and respect one DuckDB owner. Platform/build evidence lives in status.
 
-- `CLI_MCP_CAPABILITIES.md` — Actual routes/tools for all46 IDs,36 implemented/10 policy-restricted, independent authority, source/artifact/retry/cleanup boundaries and acceptance links.
+- `CLI_MCP_CAPABILITIES.md` — Actual routes/tools for all48 IDs,38 implemented/10 policy-restricted, independent authority, source/artifact/retry/cleanup boundaries and acceptance links.
 
 Public docs link to tracked contribution/testing/build guides. All KNOWLEDGE.md context maps are tracked for repository navigation; agent instructions and implementation records remain optional local context.
 
@@ -65,10 +65,12 @@ Product prose and command examples use GraveTrail; BUILD_AND_RELEASE documents p
 
 Rebrand rescan aligns reset/restore phrases and sample installation paths, explicitly documents retained compatibility identifiers, and uses gravetrail-prefixed screenshot filenames.
 
-CLI/MCP references enumerate all100 executable routes/29groups, root and command flags/positional arguments,80 tools with required/optional inputs,2 concrete resources/4templates including legacy aliases and1prompt. Documentation tests compare exact registrations/inputs, independently of the46-ID UI capability catalog. Launcher/build sibling flags and the UI exception to non-Streamlit CLI behavior are explicit.
+CLI/MCP references enumerate all103 executable routes/29groups, root and command flags/positional arguments,83 tools with required/optional inputs,2 concrete resources/4templates including legacy aliases and1prompt. Documentation tests compare exact registrations/inputs, independently of the48-ID UI capability catalog. Launcher/build sibling flags and the UI exception to non-Streamlit CLI behavior are explicit.
 
 The delivered eleven-destination UI and before/after action map are documented in USER_GUIDE.md. Sources imports, Analysis runs/diagnostics/history, Lineage switches Graph/Tree, Transformation lineage follows Columns, and four administration routes replace the old long Settings selector. All public onboarding/provider/cleanup guides use delivered labels. Homepage/styles share system typography, adaptive surfaces and immediate/reduced feedback with the app; three real fixture screenshots are refreshed.
 
 Pages now offers exactly four named themes through a native header select: Porcelain, Celadon, Ink and Aubergine. Material retains preference persistence and first-paint behavior; the allowlisted themes.js enhances its native radios. Surface/action colors match the four new app presets (eighteen app choices total). CLI/MCP counts and the UI reference reflect eighteen presets.
 
 Graph image workflow/limits/privacy: USER_GUIDE.md; registered CLI flags and exclusive --output: CLI_GUIDE.md; export_graph SVG/PNG and chunk/capability contracts: MCP_INTEGRATION.md. BUILD_AND_RELEASE.md records source/wheel/Windows smoke evidence and unavailable platforms.
+
+- `AI_ANALYSIS.md` — Explicit AI/hybrid project workflow, native Mermaid architecture, complete-source/context/run budgets, semantic acceptance, staged publication/reuse and unqualified live accuracy targets.

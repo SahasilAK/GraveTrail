@@ -67,6 +67,14 @@ class Operation:
     usages: list[Usage] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     derivations: list[dict] = field(default_factory=list)
+    evidence_key: str = ''
+    table_pairs: list[tuple[int, int]] | None = None
+
+
+def operation_ids(workspace: str, metadata: dict, index: int, operation: Operation) -> tuple[str, str]:
+    """Share canonical host evidence identity across table and column materializers."""
+    sid = stable_id(workspace, metadata['file_id'], operation.evidence_key or str(index), metadata['content_hash'])
+    return sid, stable_id(sid, operation.kind)
 
 
 @dataclass

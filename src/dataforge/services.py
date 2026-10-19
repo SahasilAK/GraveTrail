@@ -11,13 +11,13 @@ from datetime import datetime, timezone
 from dataforge.asset_identity import AssetResolver, asset_label, source_job
 from dataforge.configuration import ParsingSettings
 from dataforge.graph_image_service import export_graph_image as export_graph_image
-from dataforge.models import AssetRef, ParseResult, stable_id
+from dataforge.models import AssetRef, ParseResult, operation_ids, stable_id
 from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 
-PARSER_VERSION = "11"
+PARSER_VERSION = "12"
 log = logging.getLogger(__name__)
 
 
@@ -104,13 +104,19 @@ def export_lineage_excel(store, workspace, asset, *, direction='upstream', max_p
         for step in path['steps']:
             for evidence in step['evidence']:
                 versions.setdefault(evidence['file_id'], set()).add(evidence['source_hash'])
+    for evidence in report.get('boundaries', []):
+        if evidence.get('file_id') and evidence.get('source_hash'):
+            versions.setdefault(evidence['file_id'], set()).add(evidence['source_hash'])
     metadata['source_versions'] = {fid: sorted(hashes) for fid, hashes in versions.items()}
     return data, metadata
 
 
 def analyze(store, workspace: str, file_ids: list[str] | None = None, force: bool = False,
             progress=None, cancelled=None) -> dict:
+    from dataforge.ai_analysis_store import active_project_runs
     with store.analysis_lock:
+        if active_project_runs(store, workspace):
+            raise ValueError('An active AI analysis blocks parser publication')
         return _analyze(store, workspace, file_ids, force, progress, cancelled)
 
 
@@ -170,6 +176,58 @@ def source_dialect(metadata, config):
     return dialect
 
 
+def prepare_analysis_results(store, workspace, file_ids=None, force=False, progress=None, cancelled=None):
+    """Collect parser results offline without publishing or restoring selected AI facts.
+
+    The orchestrator snapshots/CAS-checks inputs. Unselected accepted representations
+    remain intact, while selected extraction always starts with a parser-only cache.
+    """
+    from dataforge.ai_analysis_store import accepted_file_ids, load_accepted_file_results
+
+    started = time.perf_counter()
+    config = ParsingSettings.model_validate({k: store.setting(workspace, k, default)
+        for k, default in ParsingSettings().model_dump().items()}).model_dump()
+    accepted = load_accepted_file_results(store, workspace, config)
+    saved_scope = accepted_file_ids(store, workspace)
+    if file_ids is not None:
+        incompatible = (saved_scope - set(file_ids)) & {m['file_id'] for m in store.files(workspace)} - set(accepted)
+        if incompatible:
+            raise ValueError('Saved AI facts for unselected files are incompatible; include affected files for reanalysis')
+    results, jobs = [], []
+    with ThreadPoolExecutor(max_workers=min(8, max(1, int(store.setting(workspace, 'parse_workers', 1))))) as pool:
+        for metadata in store.files(workspace):
+            fid = metadata['file_id']
+            selected = file_ids is None or fid in file_ids
+            if not selected and fid in accepted:
+                results.append(accepted[fid])
+                continue
+            key = stable_id(PARSER_VERSION, metadata['content_hash'], metadata['relative_path'], json.dumps(config, sort_keys=True))
+            cached = store.rows('SELECT result FROM parse_cache WHERE cache_key=?', [key])
+            if cached and (not force or not selected):
+                jobs.append((metadata, key, ParseResult.from_dict(json.loads(cached[0]['result'])), None))
+            elif selected or metadata['parsing_status'] != 'pending':
+                jobs.append((metadata, key, None, pool.submit(_parse_inventory, store, metadata, config)))
+        _collect_jobs(store, jobs, results, progress, cancelled)
+    return results, config, {'analyzed': sum(j[3] is not None for j in jobs),
+        'cached': len(results) - sum(j[3] is not None for j in jobs), 'started': started}
+
+
+def publish_analysis_results(store, workspace, results, config, counts, *, run_id=None,
+                             progress=None, cancelled=None):
+    """Publish prepared normalized facts; caller owns coordination/CAS transaction."""
+    if cancelled and cancelled():
+        raise InterruptedError('Analysis cancelled; previous lineage retained')
+    run_id = run_id or uuid.uuid4().hex
+    store.execute('INSERT INTO analysis_runs(run_id,workspace_id,status,configuration) VALUES (?,?,?,?)',
+                  [run_id, workspace, 'running', json.dumps(config)])
+    snapshot = _materialize(store, workspace, run_id, results, config)
+    duration = time.perf_counter() - counts.get('started', time.perf_counter())
+    store.execute("UPDATE analysis_runs SET status='completed',analyzed=?,cached=?,duration=?,snapshot=? WHERE run_id=?",
+        [counts.get('analyzed', 0), counts.get('cached', 0), duration, json.dumps(snapshot), run_id])
+    return {'run_id': run_id, 'analyzed': counts.get('analyzed', 0), 'cached': counts.get('cached', 0),
+            'duration': duration, 'assets': len(snapshot['assets']), 'edges': len(snapshot['edges'])}
+
+
 def _parse_inventory(store, metadata, config):
     content = store.snapshot_content(metadata)
     ext = metadata["extension"]
@@ -215,22 +273,27 @@ def _materialize(store, workspace, run_id, results, config):
             registry[aid][6] = json.dumps({**{k: v for k, v in parsed.metadata.items() if k != "job_id"},
                                          **json.loads(registry[aid][6])})
         for i, op in enumerate(parsed.operations):
-            sid = stable_id(workspace, fid, str(i), metadata["content_hash"])
-            oid = stable_id(sid, op.kind)
+            sid, oid = operation_ids(workspace, metadata, i, op)
             rows["statements"].append([sid, workspace, fid, op.start, op.end, op.code, metadata["content_hash"]])
-            rows["operations"].append([oid, workspace, sid, op.kind, op.method, op.confidence, json.dumps(op.warnings)])
+            rows["operations"].append([oid, workspace, sid, op.kind, op.method,
+                min(op.confidence, .8) if op.method == 'ai-project' else op.confidence, json.dumps(op.warnings)])
             inputs = [resolve(s, metadata, parsed, "input") for s in op.sources]
             outputs = [resolve(t, metadata, parsed, "output" if op.method != "llm" else "reference") for t in op.targets]
             for role, refs in [("input", inputs), ("output", outputs)]:
                 for aid, _ in set(refs):
                     rows["operation_assets"].append([workspace, oid, aid, role])
-            for source, source_inferred in inputs:
-                for target, target_inferred in outputs:
-                    inferred = source_inferred or target_inferred or op.method == "llm"
-                    eid = stable_id(oid, source, target)
-                    rows["edges"].append([eid, workspace, source, target, oid, sid, fid, op.kind,
-                                          op.method, min(op.confidence, .85) if inferred else op.confidence,
-                                          "unresolved" if registry[source][4] == "unresolved" else "inferred" if inferred else "verified", run_id])
+            pairs = op.table_pairs if op.table_pairs is not None else [(s, t) for s in range(len(inputs)) for t in range(len(outputs))]
+            for pair in pairs:
+                if (len(pair) != 2 or any(type(index) is not int for index in pair)
+                        or not 0 <= pair[0] < len(inputs) or not 0 <= pair[1] < len(outputs)):
+                    raise ValueError('Invalid accepted table pair')
+                source, source_inferred = inputs[pair[0]]
+                target, target_inferred = outputs[pair[1]]
+                inferred = source_inferred or target_inferred or op.method in {'llm', 'ai-project'}
+                eid = stable_id(oid, source, target)
+                rows["edges"].append([eid, workspace, source, target, oid, sid, fid, op.kind,
+                    op.method, min(op.confidence, .8 if op.method in {'llm', 'ai-project'} else .85) if inferred else op.confidence,
+                    "unresolved" if any(registry[a][4] == "unresolved" for a in (source, target)) else "inferred" if inferred else "verified", run_id])
             for j, u in enumerate(op.usages):
                 aid, inferred = resolve(AssetRef(u.table), metadata, parsed)
                 schema = schemas.get(aid, {})
@@ -240,7 +303,7 @@ def _materialize(store, workspace, run_id, results, config):
                 for column in columns:
                     rows["column_usages"].append([stable_id(oid, str(j), column), workspace, aid, column,
                         u.context + " (schema expansion)" if expanded else u.context, u.alias, u.expression,
-                        "unresolved" if registry[aid][4] == "unresolved" else "inferred" if inferred or expanded else u.status, sid, fid, oid])
+                        "unresolved" if registry[aid][4] == "unresolved" or (u.status == 'unresolved' and not expanded) else "inferred" if inferred or expanded or op.method == 'ai-project' else u.status, sid, fid, oid])
         for i, d in enumerate(parsed.diagnostics):
             rows["diagnostics"].append([stable_id(fid, str(i)), workspace, fid, d.line, d.severity, d.message, d.symbol])
         errors = any(d.severity == "error" for d in parsed.diagnostics)
@@ -260,6 +323,8 @@ def _materialize(store, workspace, run_id, results, config):
             store.db.executemany(f"INSERT INTO {table} VALUES ({','.join('?' for _ in values[0])})", values)
     if statuses:
         store.db.executemany("UPDATE source_files SET parsing_status=?,metadata=?,error_details=? WHERE file_id=? AND content_hash=?", statuses)
+    from dataforge.ai_analysis_store import refresh_published_support
+    refresh_published_support(store, workspace, results)
     return {"assets": [{"name": a[3], "kind": a[4], "job_id": json.loads(a[6]).get("job_id")} for a in registry.values()],
             "edges": sorted({(e[2], e[3]) for e in rows["edges"]}),
             "files": {m["relative_path"]: m["content_hash"] for m, _ in results}}
@@ -300,6 +365,17 @@ def compare_runs(first: dict, second: dict) -> dict:
 
 
 def _restore_ai_results(store, workspace, results, config):
+    from dataforge.ai_analysis_store import load_accepted_file_results
+
+    accepted = load_accepted_file_results(store, workspace, config)
+    for index, (metadata, parsed) in enumerate(results):
+        if metadata['file_id'] in accepted:
+            results[index] = accepted[metadata['file_id']]
+    restore_manual_ai_results(store, workspace, results, config)
+
+
+def restore_manual_ai_results(store, workspace, results, config):
+    """Reapply explicit legacy merges without replacing selected project operations."""
     from dataforge.llm import GroundedResponse, validate_response
     from dataforge.models import Operation
 
@@ -323,5 +399,7 @@ def _restore_ai_results(store, workspace, results, config):
         except ValueError:
             continue
         for c in response.claims:
-            parsed.operations.append(Operation(c.operation, [AssetRef(c.source)], [AssetRef(c.target)],
-                c.quote, c.start_line, c.end_line, "llm", min(c.confidence, .8), warnings=[c.explanation]))
+            op = Operation(c.operation, [AssetRef(c.source)], [AssetRef(c.target)],
+                c.quote, c.start_line, c.end_line, "llm", min(c.confidence, .8), warnings=[c.explanation])
+            if not any(existing == op for existing in parsed.operations):
+                parsed.operations.append(op)

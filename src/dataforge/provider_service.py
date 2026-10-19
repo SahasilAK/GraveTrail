@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from dataforge.agent.contracts import AgentError
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import RuntimeConnections, connection_scope
-from dataforge.llm import TASKS, Adapter, Profile, ProviderError, is_local, response_object
+from dataforge.llm import ROUTABLE_TASKS as TASKS
+from dataforge.llm import Adapter, Profile, ProviderError, is_local, response_object
 from dataforge.llm_resources import request_slot
 from dataforge.settings_service import check_revision, revision
 
@@ -57,7 +58,7 @@ def save_routing(store, policy, workspace, values, expected_revision):
     check_revision(store, workspace, expected_revision)
     routing = Routing.model_validate(values)
     if set(routing.task_models) - set(TASKS):
-        raise AgentError('validation_failed', 'Routing supports exactly the five documented AI tasks')
+        raise AgentError('validation_failed', 'Routing supports documented manual and project AI tasks')
     ids = {p['profile_id'] for p in store.rows('SELECT profile_id FROM llm_profiles WHERE workspace_id=?', [workspace])}
     refs = {routing.default_profile, *routing.task_models.values(), *routing.fallback_profiles} - {''}
     if refs - ids or len(routing.fallback_profiles) != len(set(routing.fallback_profiles)):

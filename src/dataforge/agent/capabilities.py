@@ -545,6 +545,21 @@ INVENTORY = [{'capability_id': 'P01',
   'slice': 5}]
 
 
+INVENTORY.extend([
+    {'capability_id': 'A06', 'description': 'Explicit staged project AI/hybrid analysis with offline disclosure preview, semantic validation and paged reports',
+     'cli': [['lineage', 'build'], ['lineage', 'preview'], ['lineage', 'analysis-report']],
+     'mcp': ['start_lineage_analysis', 'preview_project_analysis', 'get_project_analysis_report'],
+     'scope': 'workspace', 'effects': ['read', 'local_write', 'network'],
+     'required_permissions': ['allow_write_for_build', 'allow_llm_for_ai', 'source_permission_for_preview_and_ai',
+                              'allowed_llm_origin', 'allowed_credential_ref_when_required'],
+     'availability': 'implemented', 'restriction': '', 'slice': 9},
+    {'capability_id': 'A07', 'description': 'Workspace-scoped cooperative analysis cancellation; dispatched calls may already be billed',
+     'cli': [['jobs', 'cancel']], 'mcp': ['cancel_job'], 'scope': 'workspace',
+     'effects': ['read', 'local_write'], 'required_permissions': ['allow_write'],
+     'availability': 'implemented', 'restriction': '', 'slice': 9},
+])
+
+
 def capability_catalog(service, workspace_id=None):
     if workspace_id:
         service._workspace(workspace_id)

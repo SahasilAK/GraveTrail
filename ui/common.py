@@ -21,7 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @st.cache_resource
 def get_store(home: str) -> Store:
-    return Store(home)
+    from dataforge.ai_analysis_store import recover_interrupted_runs
+    store = Store(home)
+    recover_interrupted_runs(store)
+    return store
 
 
 def context():

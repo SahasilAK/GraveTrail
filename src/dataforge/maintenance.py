@@ -57,7 +57,8 @@ def history_plan(store, workspace, keep_runs=20, keep_imports=20, batch_size=25)
         AND run_id NOT IN (SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed'
             ORDER BY created_at DESC,run_id DESC LIMIT 1)
         AND run_id NOT IN (SELECT run_id FROM column_analysis WHERE workspace_id=?)
-        ORDER BY ordinal DESC LIMIT ?""", [workspace, keep_runs, workspace, workspace, workspace, batch_size])
+        AND run_id NOT IN (SELECT analysis_run_id FROM ai_analysis_runs WHERE workspace_id=? AND analysis_run_id IS NOT NULL)
+        ORDER BY ordinal DESC LIMIT ?""", [workspace, keep_runs, workspace, workspace, workspace, workspace, batch_size])
     imports = store.rows("""SELECT ingestion_id FROM (
         SELECT ingestion_id,row_number() OVER (ORDER BY created_at DESC,ingestion_id DESC) AS ordinal
         FROM ingestion_runs WHERE workspace_id=?) r WHERE ordinal>? AND NOT EXISTS (

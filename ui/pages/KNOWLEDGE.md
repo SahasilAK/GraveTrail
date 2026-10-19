@@ -1,5 +1,8 @@
 # ui/pages/
 
+Analysis Run delegates explicit AI controls, worker progress and validation reporting to
+ui/analysis_ai.py; parser stays the unchecked default. History includes durable project runs.
+
 Eleven focused direct scripts registered by app.py using native st.Page/st.navigation.
 Existing /builder, /explorer, /columns, /tools and /settings routes remain supported.
 

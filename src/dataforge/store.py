@@ -14,6 +14,7 @@ import duckdb
 from dataforge.configuration import WorkspaceIdentity
 
 COLUMN_TABLES = ('column_dependencies', 'column_derivations', 'column_references', 'column_analysis')
+AI_ANALYSIS_TABLES = ('analysis_fact_support', 'ai_analysis_claims', 'ai_analysis_units', 'ai_analysis_runs')
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT current_timestamp);
@@ -85,6 +86,30 @@ class Store:
                     CREATE TABLE column_analysis(workspace_id VARCHAR PRIMARY KEY, run_id VARCHAR,
                         parser_version VARCHAR);
                     INSERT INTO schema_migrations(version) VALUES (5);
+                """)
+
+            if (6,) not in versions:
+                self.db.execute("""
+                    CREATE TABLE ai_analysis_runs(run_id VARCHAR PRIMARY KEY, workspace_id VARCHAR,
+                        analysis_run_id VARCHAR, mode VARCHAR, status VARCHAR, manifest VARCHAR,
+                        configuration VARCHAR, summary VARCHAR, accepted_results VARCHAR,
+                        created_at TIMESTAMP DEFAULT current_timestamp, updated_at TIMESTAMP DEFAULT current_timestamp);
+                    CREATE TABLE ai_analysis_units(unit_id VARCHAR, workspace_id VARCHAR, run_id VARCHAR,
+                        file_id VARCHAR, content_hash VARCHAR, start_char INTEGER, end_char INTEGER,
+                        context_hash VARCHAR, status VARCHAR, record_id VARCHAR, result VARCHAR,
+                        PRIMARY KEY(run_id,unit_id));
+                    CREATE TABLE ai_analysis_claims(claim_id VARCHAR, workspace_id VARCHAR, run_id VARCHAR,
+                        unit_id VARCHAR, kind VARCHAR, status VARCHAR, payload VARCHAR, reasons VARCHAR,
+                        PRIMARY KEY(run_id,claim_id));
+                    CREATE TABLE analysis_fact_support(support_id VARCHAR PRIMARY KEY, workspace_id VARCHAR,
+                        run_id VARCHAR, fact_type VARCHAR, fact_id VARCHAR, claim_id VARCHAR,
+                        engine VARCHAR, record_id VARCHAR, payload VARCHAR);
+                    CREATE INDEX ai_runs_workspace ON ai_analysis_runs(workspace_id,status,created_at);
+                    CREATE INDEX ai_units_run ON ai_analysis_units(workspace_id,run_id,status);
+                    CREATE INDEX ai_claims_run ON ai_analysis_claims(workspace_id,run_id,status);
+                    CREATE INDEX ai_support_fact ON analysis_fact_support(workspace_id,fact_type,fact_id);
+                    CREATE INDEX ai_support_record ON analysis_fact_support(record_id);
+                    INSERT INTO schema_migrations(version) VALUES (6);
                 """)
 
     @contextmanager

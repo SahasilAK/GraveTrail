@@ -29,7 +29,8 @@ EVIDENCE_HEADERS = ['Evidence ID', 'Source asset ID', 'Target asset ID', 'Source
 COVERAGE = {'root': 'No further known upstream in analyzed graph',
     'terminal': 'No further known downstream in analyzed graph',
     'depth': 'Depth limit; boundary, not an original source', 'cycle': 'Cycle; finite path only',
-    'relationship_limit': 'Relationship limit; remaining dependencies omitted'}
+    'relationship_limit': 'Relationship limit; remaining dependencies omitted',
+    'unresolved': 'Unresolved evidence; traversal stopped, source or terminal not established'}
 
 
 def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source_text=False):
@@ -58,6 +59,8 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
     warnings = list(scope.get('warnings', []))
     if report['truncated']:
         warnings.append('Dependencies omitted by path, depth, cycle, relationship or graph limits; see Coverage.')
+    if report.get('boundaries'):
+        warnings.append(f"Unresolved evidence: {len(report['boundaries'])} support(s); accepted parallel support may still establish a path.")
     if not include_evidence:
         warnings.append('Evidence sheet excluded; evidence IDs/status are references, not offline citations.')
     warnings.append('Static analysis can have unknown or unsupported coverage; a known boundary is not proof of origin.')
@@ -65,7 +68,9 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
     def label(aid):
         return asset_label(nodes[aid])
 
-    path_rows, step_rows, evidence = [], [], {}
+    path_rows, step_rows, evidence = [], [], {e['edge_id']: e for e in report.get('boundaries', [])}
+    if len(evidence) > MAX_EVIDENCE:
+        raise ValueError('Workbook relationship/evidence limit exceeded; narrow the selection')
     step_width = min(STEP_COLUMNS, max(len(p['node_ids']) for p in report['paths']))
     for path in report['paths']:
         ids = path['node_ids']
@@ -113,7 +118,8 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
         'relationship_count': len(step_rows), 'evidence_count': len(evidence),
         'exported_evidence_count': len(evidence) if include_evidence else 0,
         'revision': scope.get('revision', 'unknown'),
-        'complete': not report['truncated'] and scope.get('analysis_current', True), 'warnings': warnings}
+        'complete': report.get('complete', not report['truncated']) and not report['truncated']
+                    and scope.get('analysis_current', True), 'warnings': warnings}
     headers = ['Path ID', 'Selected asset', 'Coverage',
         'Step 1 - Starting dataset', *[f'Step {i}' for i in range(2, step_width + 1)],
         'Dependency count', 'Full path dependency count', 'Segment', 'Dataset step range', 'Notes']

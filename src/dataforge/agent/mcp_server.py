@@ -78,9 +78,37 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         return await call("ingest", workspace_id, path=path, extensions=extensions)
 
     @server.tool(annotations=write)
-    async def start_lineage_analysis(workspace_id: str, file_ids: list[str] | None = None, force: bool = False) -> CallToolResult:
-        """Start cached local analysis; poll job_id. No source execution or external LLM."""
-        return await call("analyze", workspace_id, file_ids=file_ids, force=force)
+    async def start_lineage_analysis(workspace_id: str, file_ids: list[str] | None = None, force: bool = False,
+                                     mode: Literal['parser', 'hybrid', 'ai'] = 'parser',
+                                     additional_ai_review: bool = False, refresh_ai: bool = False,
+                                     max_provider_attempts: int = 200, max_output_tokens_total: int = 200000,
+                                     max_seconds: int = 1800) -> CallToolResult:
+        """Start explicit parser/AI/hybrid analysis. AI modes require source/network grants. Poll job_id."""
+        return await call("analyze", workspace_id, file_ids=file_ids, force=force, mode=mode,
+            additional_ai_review=additional_ai_review, refresh_ai=refresh_ai,
+            max_provider_attempts=max_provider_attempts, max_output_tokens_total=max_output_tokens_total,
+            max_seconds=max_seconds)
+
+    @server.tool(annotations=read)
+    async def preview_project_analysis(workspace_id: str, mode: Literal['hybrid', 'ai'] = 'hybrid',
+                                       file_ids: list[str] | None = None, additional_ai_review: bool = False,
+                                       max_provider_attempts: int = 200, max_output_tokens_total: int = 200000,
+                                       max_seconds: int = 1800) -> CallToolResult:
+        """Offline source disclosure/context/budget preview; no provider requests. Requires source access."""
+        return await call('analysis_preview', workspace_id, mode=mode, file_ids=file_ids,
+            additional_ai_review=additional_ai_review, max_provider_attempts=max_provider_attempts,
+            max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds)
+
+    @server.tool(annotations=read)
+    async def get_project_analysis_report(workspace_id: str, run_id: str | None = None,
+                                          options: QueryOptions | None = None) -> CallToolResult:
+        """Read paged validation outcomes. Detailed candidate evidence requires source access."""
+        return await call('analysis_report', workspace_id, options, run_id=run_id)
+
+    @server.tool(annotations=write)
+    async def cancel_job(workspace_id: str, job_id: str) -> CallToolResult:
+        """Request cooperative cancellation of a workspace analysis; dispatched work may already bill."""
+        return await call('job_cancel', workspace_id, job_id=job_id)
 
     @server.tool(annotations=read)
     async def get_job_status(workspace_id: str, job_id: str, options: QueryOptions | None = None) -> CallToolResult:
@@ -546,6 +574,8 @@ def serve(home, policy, transport="stdio", host="127.0.0.1", port=8765, public_u
     if transport not in {"stdio", "streamable-http"} or not 1 <= port <= 65535:
         raise AgentError("invalid_argument", "Use stdio or streamable-http and a valid port")
     store = Store(home)
+    from dataforge.ai_analysis_store import recover_interrupted_runs
+    recover_interrupted_runs(store)
     # Initialize DuckDB's lazy Python parameter adapters before stdio reader threads start.
     # Native NumPy/Pandas initialization can otherwise block behind Windows stdin activity.
     store.rows("SELECT ? AS ready", ["ready"])

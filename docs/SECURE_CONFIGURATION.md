@@ -65,3 +65,9 @@ The UI is a local single-user application without authentication; do not expose 
 untrusted network. Browser sessions isolate session overrides; the optional environment action
 shares its value across the process. Shared workspace data
 requires application-level access controls before a multi-user deployment.
+
+## Project AI disclosure and revocation
+
+[Project analysis](AI_ANALYSIS.md) is a run-level opt-in. A selected complete file transmitted through multiple units still counts as complete-source disclosure for remote routes. Enable external and complete-source permission deliberately; loopback gateways may forward data. Relevant declaration context comes only from the selected immutable source scope.
+
+Each physical extraction/review/retry/fallback checks current source, privacy, route/credential authorization, cancellation and run budget. Source, session keys and full request bodies are excluded from job journals. Full prompt/response history remains opt-in; accepted minimal evidence must survive ordinary history expiry. Context preview counts prompt/schema/JSON overhead; increasing both workspace and profile limits is an explicit disclosure decision. No settings import, preview, browse or export starts provider work automatically. A sent/timeout request may already have incurred usage; restart never resumes billing automatically.

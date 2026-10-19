@@ -26,7 +26,7 @@ Do not copy an open database. A single MCP process shares its Store and jobs.
 
 ## Commands
 
-Verified against the registered interface on 2026-10-18: **100 executable command
+Verified against the registered interface on 2026-10-19: **103 executable command
 routes and 29 command groups**. Prefix every route below with `gravetrail`.
 Global options go before the route; command options go after it. An empty
 argument cell means no positional arguments, not that the command has no required
@@ -74,7 +74,7 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `columns usage` | `ASSET` | `--workspace`, `-w` **required**; `--column-query`; `--usage-type`; `--file-id`; `--group-by`; `--help` |
 | `dictionary list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
 | `export download` | `ARTIFACT_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--help` |
-| `export graph` | `ASSET` | `--background`, `--legend`, `--no-legend`, `--output`, `--scale`, `--title`, `--workspace`, `-w` **required**; `--format`; `--direction`; `--help`|
+| `export graph` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--scale`; `--background`; `--title`; `--legend`, `--no-legend`; `--output`; `--help` |
 | `export lineage` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
 | `export paths` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--max-paths`; `--include-evidence`, `--no-include-evidence`; `--include-source-text`, `--no-include-source-text`; `--help` |
 | `export read` | `RESULT_ID` | `--workspace`, `-w` **required**; `--format`; `--binary`, `--no-binary`; `--offset`; `--length`; `--help` |
@@ -89,11 +89,14 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `ingestions get` | `INGESTION_ID` | `--workspace`, `-w` **required**; `--help` |
 | `ingestions list` | — | `--workspace`, `-w` **required**; `--help` |
 | `issues` | — | `--workspace`, `-w` **required**; `--severity`; `--help` |
+| `jobs cancel` | `JOB_ID` | `--workspace`, `-w` **required**; `--help` |
 | `jobs status` | `JOB_ID` | `--workspace`, `-w` **required**; `--wait`, `--no-wait`; `--help` |
-| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--help` |
+| `lineage analysis-report` | — | `--workspace`, `-w` **required**; `--run-id`; `--help` |
+| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--mode`; `--additional-ai-review`, `--no-additional-ai-review`; `--refresh-ai`, `--no-refresh-ai`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--help` |
 | `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
 | `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
+| `lineage preview` | — | `--workspace`, `-w` **required**; `--mode`; `--file-id` (repeatable); `--additional-ai-review`, `--no-additional-ai-review`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--help` |
 | `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
 | `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |
@@ -285,7 +288,7 @@ assets or 100,000 evidence edges. Journals and exports cap at 1,000 each (export
 per workspace); archive completed local files when reached. No distributed worker,
 job cancellation or automatic job retry is introduced.
 
-Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
+Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 48 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
 
 Workspace preferences: `settings schema -w ID [--section parsing]`, `settings get parsing -w ID`, `settings update parsing patch.json -w ID --expected-revision REV`. Use the returned settings_revision; stale patches fail with conflict. `workspace update -w ID --name NAME --description TEXT --expected-revision REV`; `workspace config export -w ID` returns a configuration object; `workspace config import config.json` accepts that object (v1/v2). Mutations require write+config; imports require unrestricted scope. Privacy/access widening requires local --allow-admin. No analysis is triggered.
 
@@ -350,3 +353,9 @@ Image options: `--scale 1|2`, `--background light|dark|transparent`, `--title TE
 collapse and workspace confidence/inferred filters apply. Responses contain MIME,
 filename, revision, graph revision, counts and explicit coverage/truncation.
 See the [user guide](USER_GUIDE.md) for image bounds and metadata privacy.
+
+## Explicit AI project builds
+
+`lineage build` defaults to local parser mode. `--mode hybrid` explicitly requests parser comparison plus validated AI extraction; `--mode ai` selects experimental AI-generated extraction. `lineage preview` is offline and reports disclosure, complete-unit/context failures, routes and worst-case attempt/output reservations. `lineage analysis-report` reads a saved report; `jobs cancel` requests cooperative cancellation. Use each route's `--help` for selected file IDs, refresh/review and bounded run options.
+
+Billable builds require the existing independent write/source/network grants: `--allow-write`, `--allow-llm`, exact `--allowed-llm-origin` and approved `--allowed-credential-ref`, plus workspace privacy. Complete-file disclosure across remote chunks requires complete-source permission. Do not put credential values in command arguments. A failed/cancelled/stale run keeps the old graph; requests already sent may have incurred usage. Preview, parser defaults and report reads send zero provider requests. See [AI project analysis](AI_ANALYSIS.md) for modes, semantic limits, deadlines and the full prompt/schema context budget.

@@ -40,3 +40,9 @@ not duplicated for every path. `root_paths` remains available for existing calle
 `ui.lineage_tree.render_tree` tracks native expander state and renders only open branches
 in the active direction tab. Expand/collapse controls change a widget generation counter;
 only control state, never a rendered tree or source content, lives in session state.
+
+## Explicit AI builds
+
+`analysis_service` stages immutable context, original-unit AI extraction, deterministic validation and operation-based reconciliation before publication. The `parser` path retains `services.analyze`; `hybrid` adds validated AI support to parser facts, while experimental `ai` excludes unmatched parser SQL/SAS facts. CSV metadata remains local. Accepted project operations use explicit sparse table pairs, avoiding an input × output cross-product. Shared original operation evidence keys deduplicate corroboration and preserve distinct statements/writers.
+
+Atomic publication checks the source/context manifest, relevant settings and prior committed revision. Failed, stale, incomplete or cancelled work retains committed facts. Saved accepted project facts can rehydrate offline if hash/config/job identity remains compatible. Unresolved graph/column evidence remains inspectable and stops confident traversal; an independent accepted parallel support may still supply a traversable relationship. See [AI project analysis](AI_ANALYSIS.md).

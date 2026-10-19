@@ -101,13 +101,15 @@ class ArtifactOperations:
         graph = self._graph(w, opts, selected)
         report = graph.path_report(selected, direction, max_paths, opts.max_depth)
         return self._page(w, opts, ['paths', selected, direction, max_paths], report['paths'],
-            analysis_current=self._current(w), boundaries=['path_limit_depth_cycle_or_graph'] if report['truncated'] else [],
+            analysis_current=self._current(w), boundaries=(['path_limit_depth_cycle_or_graph'] if report['truncated'] else [])
+            + (['unresolved'] if report.get('boundaries') else []),
             direction=direction, selected_asset=selected, ordering='logical dependencies; not runtime execution')
 
     def _steps(self, w, opts, asset, direction='upstream'):
         _, graph = self._artifact_graph(w, opts, asset, direction)
         return self._page(w, opts, ['steps', asset, direction], graph.lineage_rows(), analysis_current=self._current(w),
-            boundaries=['graph_limit_or_depth'] if graph.truncated else [], ordering='logical dependencies; not runtime execution')
+            boundaries=(['graph_limit_or_depth'] if graph.truncated else []) +
+            (['unresolved'] if graph.unresolved_edges else []), ordering='logical dependencies; not runtime execution')
 
     def _graph_view(self, w, opts, asset, direction='upstream', view='nodes', node_id='', edge_id=''):
         if view not in {'nodes', 'edges', 'tree'} or direction not in {'upstream', 'downstream', 'combined'}:
@@ -137,7 +139,8 @@ class ArtifactOperations:
                      'neighbors': sorted(traversal.neighbors(n)), 'boundary': 'depth' if level == opts.max_depth else ''}
                     for n, level in sorted(levels.items(), key=lambda x: (x[1], x[0]))]
         return self._page(w, opts, ['graph_view', asset, direction, view, node_id, edge_id], rows,
-            analysis_current=self._current(w), boundaries=['graph_limit_or_depth'] if graph.truncated else [],
+            analysis_current=self._current(w), boundaries=(['graph_limit_or_depth'] if graph.truncated else [])
+            + (['unresolved'] if data.get('boundaries') else []),
             selected_asset=selected, appearance=data['appearance'])
 
     def _artifact_create(self, w, opts, kind, format, selection):
@@ -181,9 +184,10 @@ class ArtifactOperations:
         rows = []
         if kind in {'graph', 'impact'}:
             _, graph = self._artifact_graph(w, opts, selection.asset, selection.direction if kind == 'graph' else 'downstream')
-            complete &= not graph.truncated
+            complete &= not graph.truncated and not graph.unresolved_edges
             rows = graph.lineage_rows()
             versions = {e['file_id']: e.get('source_hash', '') for _, _, a in graph.graph.edges(data=True) for e in a['evidence']}
+            versions.update({e['file_id']: e.get('source_hash', '') for e in graph.unresolved_edges})
             if kind == 'graph':
                 appearance = VisualizationSettings.from_store(self.store, w)
                 data = (graph_html(graph, appearance) if format == 'html' else compact(graph_data(graph, appearance))).encode()
@@ -191,7 +195,10 @@ class ArtifactOperations:
             target = self._asset(w, selection.asset)['asset_id']
             graph = self._graph(w, opts, target)
             report = graph.path_report(target, selection.direction, selection.max_paths, opts.max_depth)
-            complete &= not report['truncated']
+            complete &= report.get('complete', not report['truncated'])
+            versions = {e['file_id']: e.get('source_hash', '') for e in report.get('boundaries', [])}
+            versions.update({e['file_id']: e.get('source_hash', '') for path in report['paths']
+                             for step in path['steps'] for e in step['evidence']})
             rows = path_rows(report)
             if format == 'json':
                 data = compact(report).encode()

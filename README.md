@@ -44,6 +44,7 @@ account, or paid service**. Imported code is never executed.
 | [Trace column transformations](docs/TRANSFORMATION_LINEAGE.md) | Follow SQL/SAS output values through scoped expressions, with separate join/filter roles, source evidence and explicit coverage gaps. |
 | [Keep the evidence](docs/DATA_MODEL.md) | Original file bytes, statement ranges, extraction methods, and versioned analysis history. |
 | [Connect tools and agents](docs/integrations/index.md) | CLI and MCP queries over stored analysis, bounded responses, explicit permissions, and managed exports. |
+| [Build with optional AI](docs/AI_ANALYSIS.md) | Explicit hybrid/project analysis, bounded source disclosure and deterministic evidence checks; experimental AI-generated mode. |
 | [Add optional AI assistance](docs/LLM_INTEGRATION.md) | Configurable provider profiles and task routing; grounded output validation and explicit inferred-result merges. |
 | [Operate locally](docs/DATA_MANAGEMENT.md) | Independent workspaces, previewed cleanup, mandatory backups for general cleanup, and restore into a new data home. |
 

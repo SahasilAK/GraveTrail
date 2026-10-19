@@ -1,7 +1,7 @@
 """Reconcile explicit DDL without assuming runtime order or discovering a database schema."""
 import json
 
-from dataforge.models import AssetRef, Diagnostic, column_key, stable_id
+from dataforge.models import AssetRef, Diagnostic, column_key, operation_ids
 
 
 def collect_schemas(results, workspace, resolver):
@@ -40,10 +40,16 @@ def collect_schemas(results, workspace, resolver):
                 names = [column_key(name, resolver.config['case_sensitive']) for name in identifiers]
                 valid = valid and len(set(names)) == len(names)
                 signatures.add(json.dumps([(name, c['type']) for name, c in zip(names, columns)]))
+            index = record.get('operation_index', -1)
+            operation = parsed.operations[index] if type(index) is int and 0 <= index < len(parsed.operations) else None
+            if operation is None or not any(normalize(ref.name) == normalize(record['table'])
+                                             for ref in [*operation.sources, *operation.targets]):
+                valid = False
+                continue
+            statement_id, _ = operation_ids(workspace, source, index, operation)
             evidence.append({"file_id": source["file_id"], "relative_path": source["relative_path"],
                 "source_hash": source["content_hash"], "start_line": record["start_line"],
-                "end_line": record["end_line"], "statement_id": stable_id(workspace, source["file_id"],
-                    str(record["operation_index"]), source["content_hash"])})
+                "end_line": record["end_line"], "statement_id": statement_id})
         valid = valid and len(signatures) == 1
         schemas[aid] = {"schema_status": "declared" if valid else "unresolved",
             "columns": records[0][2]["columns"] if valid else [], "schema_evidence": evidence,

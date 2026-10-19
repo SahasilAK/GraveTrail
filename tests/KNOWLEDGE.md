@@ -88,3 +88,10 @@ Documentation regressions walk real Typer routes/groups/flags/positional argumen
 Theme regressions preserve Ocean/Ink, exercise eleven atomic saves and apply Rose Circuit through AppTest. `test_site_themes.py` verifies eleven published schemes, original Ink/Celadon and shared app/site/sidebar token parity.
 
 Graph image regressions: test_graph_images.py parses inert XML, shares UI paths, checks Unicode/titles, PNG dimensions/backgrounds, bounds, renderer failures/timeouts and concurrency. test_image_artifacts.py covers service/UI/MCP/CLI parity, permissions, stale/filter coverage, cyclic temporary ordering and failed publication cleanup. test_exports.py JS fixtures include shared bounds.
+
+- `test_ai_analysis_contracts.py`, `test_ai_analysis_context.py`, `test_ai_analysis_transport.py` — Strict project contracts, exact complete-unit planning, declaration conflicts, provider truncation and per-physical-attempt limits. `fixtures/ai_analysis/` contains separate synthetic holdout semantics/abstention labels, not live accuracy evidence.
+- `test_ai_analysis_validation.py`, `test_ai_analysis_reconciliation.py` — Complete-source semantic negatives, SQL DML gaps, dependency roles, sparse accepted pairs, writer identity and parser/AI omissions.
+- `test_ai_analysis_runs.py`, `test_ai_analysis_schema_provenance.py` — Mock HTTP extraction/review through atomic publication, freshness/CAS, retained declaration context, exact schema statement identities, compact review bounds and token accounting.
+- `test_ai_analysis_persistence.py`, `test_ai_analysis_lifecycle_followup.py` — Additive upgrade, accepted offline rebuilds, support rebinding, retention/privacy, backup/cleanup/integrity and unresolved artifact boundaries.
+- `test_ai_analysis_access.py`, `test_ai_analysis_jobs.py`, `test_ai_analysis_ui.py` — Launch/credential/source policy, detached full-grant jobs/cancel markers, unchecked UI defaults, offline preview and terminal report refresh.
+- `test_ai_analysis_evaluation.py` — Role/scope/version-aware offline scoring, explicit live opt-in/limits and isolation across multiple benchmark workspaces; no normal provider use.

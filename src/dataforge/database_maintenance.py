@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 import duckdb
 
 from dataforge.cleanup import WORKSPACE_TABLES, checked_path, maintenance_guard
-from dataforge.store import COLUMN_TABLES
+from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES
 
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 MAX_FILES = 50000
@@ -36,7 +36,8 @@ def inspect_database(store):
 
 def _inspect_database(home, rows):
     versions = [r['version'] for r in rows('SELECT version FROM schema_migrations ORDER BY version')]
-    workspace_tables = tuple(t for t in WORKSPACE_TABLES if 5 in versions or t not in COLUMN_TABLES)
+    workspace_tables = tuple(t for t in WORKSPACE_TABLES
+        if (5 in versions or t not in COLUMN_TABLES) and (6 in versions or t not in AI_ANALYSIS_TABLES))
     tables = {}
     for table in (*workspace_tables, 'parse_cache', 'prompt_versions'):
         tables[table] = rows(f'SELECT count(*) AS n FROM {table}')[0]['n']
@@ -64,10 +65,21 @@ def _inspect_database(home, rows):
             'column_dependency_derivation': 'SELECT count(*) AS n FROM column_dependencies i LEFT JOIN column_derivations d ON i.derivation_id=d.derivation_id AND i.workspace_id=d.workspace_id WHERE d.derivation_id IS NULL',
             'column_analysis_run': 'SELECT count(*) AS n FROM column_analysis c LEFT JOIN analysis_runs r ON c.run_id=r.run_id AND c.workspace_id=r.workspace_id WHERE r.run_id IS NULL',
         })
+    if 6 in versions:
+        checks.update({
+            'ai_unit_run': 'SELECT count(*) AS n FROM ai_analysis_units u LEFT JOIN ai_analysis_runs r ON u.run_id=r.run_id AND u.workspace_id=r.workspace_id WHERE r.run_id IS NULL',
+            'ai_claim_run': 'SELECT count(*) AS n FROM ai_analysis_claims c LEFT JOIN ai_analysis_runs r ON c.run_id=r.run_id AND c.workspace_id=r.workspace_id WHERE r.run_id IS NULL',
+            'ai_support_run': 'SELECT count(*) AS n FROM analysis_fact_support s LEFT JOIN ai_analysis_runs r ON s.run_id=r.run_id AND s.workspace_id=r.workspace_id WHERE r.run_id IS NULL',
+            'ai_support_record': "SELECT count(*) AS n FROM analysis_fact_support s LEFT JOIN llm_records r ON s.record_id=r.record_id AND s.workspace_id=r.workspace_id WHERE s.record_id IS NOT NULL AND s.record_id<>'' AND r.record_id IS NULL",
+        })
     orphaned.update({key: rows(sql)[0]['n'] for key, sql in checks.items()})
     referenced = {r['content_hash'] for r in rows('SELECT content_hash FROM source_files UNION SELECT content_hash FROM statements')}
     for row in rows("SELECT snapshot FROM analysis_runs WHERE snapshot IS NOT NULL AND snapshot<>''"):
         referenced.update(json.loads(row['snapshot']).get('files', {}).values())
+    if 6 in versions:
+        referenced.update(r['content_hash'] for r in rows('SELECT content_hash FROM ai_analysis_units'))
+        for row in rows("SELECT accepted_results FROM ai_analysis_runs WHERE status='committed'"):
+            referenced.update(item['metadata']['content_hash'] for item in json.loads(row['accepted_results']))
     missing = []
     for digest in referenced:
         if not isinstance(digest, str) or not re.fullmatch('[a-f0-9]{64}', digest):
@@ -76,7 +88,7 @@ def _inspect_database(home, rows):
         path = checked_path(home, 'blobs/' + digest)
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             missing.append(digest)
-    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5]),
+    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 6], [1, 2, 3, 4, 5, 6]),
             'schema_versions': versions, 'records': tables, 'orphan_records': orphaned,
             'missing_or_invalid_blobs': missing, 'database_bytes': (home / 'dataforge.duckdb').stat().st_size}
 
@@ -202,10 +214,13 @@ def _restore_backup(archive_path, destination):
         connection = duckdb.connect(str(database), read_only=True, config={'enable_external_access': False})
         try:
             versions = connection.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()
-            if versions not in ([(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)]):
+            if versions not in ([(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)],
+                                [(1,), (2,), (3,), (4,), (6,)], [(1,), (2,), (3,), (4,), (5,), (6,)]):
                 raise ValueError('Unsupported backup schema')
             for table in WORKSPACE_TABLES:
                 if (5,) not in versions and table in COLUMN_TABLES:
+                    continue
+                if (6,) not in versions and table in AI_ANALYSIS_TABLES:
                     continue
                 connection.execute(f'SELECT count(*) FROM {table}').fetchone()
             def rows(sql):

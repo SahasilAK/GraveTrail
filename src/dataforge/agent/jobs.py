@@ -10,8 +10,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 from dataforge.agent.contracts import AgentError, compact
 from dataforge.agent.paging import page
+from dataforge.connections import connection_scope, current_connections
 
-TERMINAL = {"completed", "failed", "interrupted"}
+TERMINAL = {"completed", "failed", "interrupted", "cancelled"}
 
 
 class Jobs:
@@ -78,13 +79,26 @@ class Jobs:
             self.write(record)
             return record
 
-    def start(self, workspace, operation, function, access=None):
+    def start(self, workspace, operation, function, access=None, *, connections=None, cancellable=False):
         record = self.create(workspace, operation, access)
-        self.pool.submit(self.run, record, function)
+        # Context variables are not inherited by ThreadPoolExecutor workers. Bind the
+        # initiating session explicitly; the manager is never serialized to the journal.
+        self.pool.submit(self.run, record, function, connections or current_connections(), cancellable)
         return {"job_id": record["job_id"], "status": "queued"}
 
-    def run(self, record, function):
+    def cancel(self, job_id, workspace):
+        record = self.read(job_id, workspace)
+        if record['status'] not in TERMINAL:
+            # Separate marker cannot be overwritten by a heartbeat or another owner.
+            self.path(job_id).with_suffix('.cancel').touch()
+        return {'job_id': job_id, 'status': record['status'], 'cancel_requested': record['status'] not in TERMINAL}
+
+    def run(self, record, function, connections=None, cancellable=False):
         stop = threading.Event()
+        marker = self.path(record['job_id']).with_suffix('.cancel')
+
+        def cancelled():
+            return marker.exists()
 
         def update(**values):
             with self.lock:
@@ -99,15 +113,25 @@ class Jobs:
         thread = threading.Thread(target=heartbeat, daemon=True)
         thread.start()
         try:
-            result = function(lambda fraction, _: update(progress=round(fraction, 3)))
+            def progress(fraction, stage):
+                update(progress=round(fraction, 3), stage=str(stage)[:100])
+
+            with connection_scope(connections or current_connections()):
+                if cancelled():
+                    raise InterruptedError('Job cancelled before execution')
+                result = function(progress, cancelled) if cancellable else function(progress)
             stop.set()
             thread.join()
-            update(status="completed", progress=1, result=result)
+            outcome = result.get('status') if isinstance(result, dict) else None
+            status = outcome if outcome in {'failed', 'cancelled', 'interrupted'} else 'completed'
+            update(status=status, progress=1, result=result)
         except Exception as exc:
             stop.set()
             thread.join()
             code = exc.code if isinstance(exc, AgentError) else type(exc).__name__
-            update(status="failed", error=code)
+            update(status="cancelled" if isinstance(exc, InterruptedError) else "failed", error=code)
+        finally:
+            marker.unlink(missing_ok=True)
 
     def wait(self, job_id, workspace, timeout=300):
         deadline = time.monotonic() + timeout

@@ -278,3 +278,9 @@ is retained; each preparation snapshots the current committed graph/settings.
 PNG requires the bundled `resvg-py` dependency; if unavailable, SVG remains usable
 and the UI/capability response reports that PNG is unavailable. Exports never
 download software, fonts or external image resources.
+
+## Build lineage with optional AI
+
+On **Analysis**, **Use AI for analysis** is initially unchecked. When enabled, **Compare with parser** is selected by default for a hybrid build; disabling comparison selects experimental AI-generated mode. **Additional AI review** is optional. Inspect the offline disclosure/context/budget preview, then start the explicit AI analysis action. A preview or ordinary page rerun never sends requests.
+
+Use **Connections & AI** to configure the route and deliberate privacy/context settings. Remote processing of a complete file across chunks still requires complete-source permission. The compact schema retains all validation rules. Larger source/catalog/request envelopes can exceed context budgets; adjust both workspace Privacy and profile context limits explicitly when preview identifies that limit. Cancellation/failure/stale checks keep the previous committed graph. Inspect the saved comparison/report for acceptance, rejection and unresolved coverage. See the full [AI project analysis guide](AI_ANALYSIS.md).
