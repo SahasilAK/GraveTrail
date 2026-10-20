@@ -28,6 +28,25 @@ Local storage. No LLM required. Imported code is never executed.
 <figcaption>A real SQL project. Original source behind every established relationship.</figcaption>
 </figure>
 
+## Local analysis first. AI when you choose.
+
+**The local parser is the primary, default option.** Generate table lineage,
+column usage and supported transformations without giving source to an AI provider.
+No model connection, API key or AI token usage is needed. Leave **Use AI for
+analysis** unchecked in **Analysis → Run**.
+
+For large or complex systems where you want additional coverage, optional
+**AI + parser (hybrid)** analysis compares locally established facts with
+source-backed AI proposals. It sends selected source and relevant context to your
+configured provider, subject to your privacy controls. A local gateway may forward
+that source upstream. Large projects can also use local parsing alone.
+
+Both workflows are built in. AI can help investigate gaps; it does not guarantee
+complete or universally correct lineage. Review evidence, omissions and unresolved
+coverage before relying on the results.
+
+[Compare the analysis options](AI_ANALYSIS.md){ .md-button }
+
 ## Begin with the question in front of you
 
 <div class="gt-questions" markdown>
@@ -112,6 +131,6 @@ automation each have a focused destination.
 
 !!! info "Follow the evidence, including its limits"
     GraveTrail performs static analysis. Unsupported syntax, dynamic macros and ambiguous
-    identities remain diagnostic boundaries. AI-assisted relationships remain inferred
-    after validation and explicit merge. Read the [SQL](SQL_PARSING.md) and
+    identities remain diagnostic boundaries. Optional project AI facts remain inferred
+    after local validation and publication; manual assistance uses a separate explicit merge. Read the [SQL](SQL_PARSING.md) and
     [SAS](SAS_PARSING.md) coverage before drawing conclusions from missing edges.

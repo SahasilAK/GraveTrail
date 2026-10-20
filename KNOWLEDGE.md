@@ -64,3 +64,5 @@ share analysis_service/project_analysis; prompts stay in root prompts/. Public b
 flow diagram and qualification limits: docs/AI_ANALYSIS.md. Current parity: 48 capabilities,
 103 CLI routes/29 groups and 83 MCP tools. Two synthetic live SQL smoke cases are development
 evidence only; source/packaging checks and open release gates are dated in docs/TESTING.md.
+
+README and Pages position local parser analysis as the primary default with no source sent to AI; optional AI/hybrid supports additional investigation in complex projects, with explicit disclosure and no completeness guarantee.

@@ -3,6 +3,20 @@
 Create or switch workspaces in the sidebar. Every workspace has its own source inventory,
 analysis, settings and provider profiles. Workspaces reopen automatically after restart.
 
+## Choose how to analyze
+
+**Local parsing is the primary, default option.** Leave **Use AI for analysis**
+unchecked in **Analysis → Run** to build lineage and column information without
+sending source to an AI provider. No model connection, API key or AI token usage is
+needed, including for large projects.
+
+When you want additional coverage in a large or complex system, optionally enable
+AI and keep **Compare with parser** selected. This hybrid workflow validates and
+compares AI proposals with parser results. It sends selected source/context to your
+configured provider under the privacy controls. Review evidence, omissions and
+unresolved cases; AI cannot guarantee complete or universally correct lineage.
+See [AI project analysis](AI_ANALYSIS.md) for both capabilities and their limits.
+
 ## Find your way around
 
 The sidebar keeps your active workspace above three navigation groups. Use **New

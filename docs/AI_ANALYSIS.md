@@ -1,6 +1,22 @@
 # AI project analysis
 
-AI project analysis adds table lineage, direct column usage and column transformations to the main **Analysis** workflow. Local parser analysis remains the default and needs no provider. Use hybrid analysis first; AI-generated analysis is experimental and has no qualified live precision claim.
+**Local parser analysis is the primary, default workflow.** It builds table lineage,
+column usage and supported transformations without sending source to an AI provider.
+No model connection, API key or AI token usage is required. In **Analysis → Run**,
+leave **Use AI for analysis** unchecked. Saving an AI connection alone does not
+start AI extraction.
+
+**Optional AI analysis adds a second capability in the same app.** For large,
+complex systems where you want additional coverage beyond supported parser
+patterns, enable AI and keep **Compare with parser** selected for hybrid analysis.
+It compares local facts with independently extracted AI proposals, validates their
+original evidence and semantics, and reports omissions and unresolved coverage.
+Selected source and relevant context are sent to the configured provider, subject
+to your privacy controls; a local gateway may forward them upstream.
+
+Large projects can still use the local parser alone. AI can help investigate
+coverage gaps but cannot guarantee that every dependency is discovered or correct.
+AI-generated mode is experimental and has no qualified live precision claim.
 
 ## Choose a build
 

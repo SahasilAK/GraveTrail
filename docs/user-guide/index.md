@@ -9,6 +9,17 @@ it, or where is this column used? GraveTrail connects the answer to original sou
 evidence and keeps unresolved cases visible. The [detailed user reference](../USER_GUIDE.md)
 documents individual controls and settings.
 
+## Start locally; add AI when useful
+
+**The primary workflow uses the local parser and sends no source to an AI provider.**
+Leave **Use AI for analysis** unchecked in **Analysis → Run**. No connection, API key
+or AI token usage is required, and large projects can use this workflow too.
+
+For additional coverage in complex systems, optional [hybrid analysis](../AI_ANALYSIS.md)
+compares parser output with locally validated AI proposals. It sends selected
+source/context to your configured provider. Both capabilities are built in; AI
+cannot guarantee complete lineage, so inspect omissions and unresolved evidence.
+
 ## Build a trustworthy workspace
 
 ??? example "View the sample workspace dashboard"

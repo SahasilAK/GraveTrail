@@ -34,6 +34,25 @@ Built for data engineers, analysts, architects, and developers working through u
 pipelines, migrations, and change reviews. Deterministic analysis needs **no LLM, cloud
 account, or paid service**. Imported code is never executed.
 
+## Choose local analysis or optional AI
+
+**Local parser analysis is the primary, default workflow.** Build table lineage,
+column usage and supported column transformations without sending source to an AI
+provider. No model connection, API key or AI token usage is required. In
+**Analysis → Run**, leave **Use AI for analysis** unchecked. Configuring a provider
+alone does not turn ordinary analysis into an AI request.
+
+For large, complex systems where you want additional coverage beyond supported
+parser patterns, optionally enable **Use AI for analysis** and keep **Compare with
+parser** selected. Hybrid analysis compares local results with AI-proposed facts,
+validates original evidence and semantics, and reports omissions and unresolved
+cases. Selected source and relevant context are sent to the configured provider;
+a local gateway may forward them upstream. Project size alone does not require AI.
+
+Both capabilities are available in the same app. AI can help investigate coverage
+gaps; it cannot guarantee that every dependency is discovered or correct.
+[Choose a build and review its limits](docs/AI_ANALYSIS.md).
+
 ## From scattered scripts to source evidence
 
 | Investigate | What you get |

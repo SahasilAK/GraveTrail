@@ -6,7 +6,14 @@ which downstream assets a change could affect. CSV imports add source metadata;
 their values are never interpreted as code.
 
 The deterministic workflow needs no API key, model, cloud account or database
-connection. GraveTrail analyzes source text without executing the imported scripts.
+connection. It is the primary, default workflow and sends no source to an AI
+provider. GraveTrail analyzes source text without executing the imported scripts.
+
+Both local and optional [AI/hybrid analysis](../AI_ANALYSIS.md) are built in. Use
+local parsing alone when you want to keep source away from AI, even for a large
+project. When you want additional coverage in a complex system, you can explicitly
+enable AI comparison under your privacy controls. AI can help investigate gaps;
+it does not guarantee complete or universally correct lineage.
 
 ## Choose your installation
 

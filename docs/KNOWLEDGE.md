@@ -78,3 +78,5 @@ Graph image workflow/limits/privacy: USER_GUIDE.md; registered CLI flags and exc
 AI guides document selected capability provenance, combined/separate estimates, Automatic/Custom/Reset, explicit context remedy and continuation. Data model/management cover migration7 compact per-file/operation snapshots with v6 fallback. CLI/MCP exact references include nullable execution limits, resume and explicit unknown retry. AI_ANALYSIS includes the updated staging/publication Mermaid flow and primary design evidence.
 
 AI_ANALYSIS/PROMPT_ENGINEERING document exact projection paging, conservative dialect limits, static PROC SQL, response cardinality, conditional root focus prompt hashes and lossless per-batch review continuation. CLI/MCP previews share the service; DATA_MODEL covers unit_spec/review progress in existing tables. Mermaid includes review checkpoints; TESTING distinguishes mock proof from live precision.
+
+Homepage, onboarding, user and AI/provider guides make the default local/no-AI workflow prominent alongside optional hybrid coverage for complex projects. Project size alone does not require AI; validation and unresolved coverage remain explicit.

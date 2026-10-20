@@ -1,5 +1,16 @@
 # LLM integration
 
+**AI is optional. Local parser analysis is the primary, default workflow** for
+lineage, column usage and supported transformations. Leave **Use AI for analysis**
+unchecked to send no source to an AI provider and incur no AI token usage. A saved
+provider connection does not automatically enable AI extraction.
+
+For additional coverage in large or complex systems, optional
+[AI + parser (hybrid) analysis](AI_ANALYSIS.md) compares local facts with validated
+AI proposals. Selected source/context is sent to the configured provider; a local
+gateway may forward it upstream. Both capabilities are built in. AI cannot ensure
+that every dependency is populated correctly; inspect evidence and unresolved coverage.
+
 Analysis → Diagnostics → Unresolved review queue derives at most 100 current SQL/SAS warning/error items.
 It excludes pending/reimported sources, informational and CSV diagnostics. Suggested context
 uses a containing deterministic statement or at most 40 nearby lines; users can adjust the
