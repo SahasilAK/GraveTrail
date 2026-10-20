@@ -97,3 +97,5 @@ Graph image regressions: test_graph_images.py parses inert XML, shares UI paths,
 - `test_ai_analysis_evaluation.py` — Role/scope/version-aware offline scoring, explicit live opt-in/limits and isolation across multiple benchmark workspaces; no normal provider use.
 
 Automatic AI tests: `test_model_capabilities.py` validates metadata/identity/freshness; `test_ai_wire.py` covers strict compact refs and canonical expansion >16MB; `test_ai_budget.py` covers full envelopes and 1000-unit bounds; `test_ai_analysis_continuation.py` covers partial outcomes/reopen/deadline between extraction-review, unknown attempts and zero-work avoidance. UI tests cover edit/reset/context action and rejected provider inputs never enter default history. Access suite uses the real MCP HTTP SDK for auto+resume.
+
+Navigation uses a non-minimum custom budget to detect widget cleanup; Continue preserves saved API/CLI limits. Constrained fallback transport must send only to the fitting primary. Wide claim tests bound repeated host detail; final durable claims reference original source instead of duplicating quotes.

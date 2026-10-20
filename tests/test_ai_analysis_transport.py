@@ -219,3 +219,37 @@ def test_rejected_wire_input_never_leaks_into_default_history(tmp_path):
     assert result.status == 'failed'
     assert marker not in str(store.rows('SELECT details FROM llm_records'))
     store.close()
+
+
+def test_small_fallback_is_excluded_and_never_receives_an_oversized_request(tmp_path):
+    from dataforge.ai_context import plan_ai_units, prepare_analysis
+    from dataforge.analysis_service import preview_analysis
+    from dataforge.ingestion import Importer
+    from dataforge.llm import invoke_analysis_unit
+    from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
+    from dataforge.store import Store
+    store = Store(tmp_path)
+    w = store.create_workspace('Constrained fallback')
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    primary = Profile(provider='OpenAI compatible', base_url='http://localhost:1234', model='primary',
+        retries=0, context_chars=100000)
+    fallback = primary.model_copy(update={'model': 'fallback'})
+    fallback.model_capabilities = bind_capabilities(ModelCapabilities(context_tokens=4000), fallback)
+    for pid, profile in [('p', primary), ('f', fallback)]:
+        store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', [pid, w, pid, profile.model_dump_json()])
+    store.set_setting(w, 'default_profile', 'p')
+    store.set_setting(w, 'fallback_profiles', ['f'])
+    store.set_setting(w, 'max_context_chars', 100000)
+    request = AnalysisRequest(mode='hybrid')
+    preview = preview_analysis(store, w, request)
+    assert preview['valid'] and preview['max_provider_attempts'] == 1
+    assert preview['excluded_routes'][0]['profile_id'] == 'f'
+    unit = plan_ai_units(prepare_analysis(store, w, request)).units[0]
+    sent = []
+    def respond(r):
+        sent.append(json.loads(r.content)['model'])
+        return httpx.Response(503)
+    result = invoke_analysis_unit(store, w, unit, 'project_lineage',
+        AIExecutionContext(request, transport=httpx.MockTransport(respond)))
+    assert result.outcome == 'quarantined' and sent == ['primary']
+    store.close()

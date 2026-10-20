@@ -72,14 +72,15 @@ def render_resources(store, w):
         max_files = st.number_input("Maximum files per import", 1, 100000, int(store.setting(w, "max_files", 10000)))
         workers = st.number_input("Parsing workers", 1, 8, int(store.setting(w, "parse_workers", 1)))
         llm_workers = st.number_input("Maximum concurrent AI requests per workspace", 1, 4, int(store.setting(w, "llm_concurrency", 1)))
-        chunk_chars = st.number_input("AI context chunk size (characters)", 500, 100000, int(store.setting(w, "llm_chunk_chars", 4000)), step=500)
+        chunk_chars = st.number_input("AI context chunk size (characters)", 500, 100000, int(store.setting(w, "llm_chunk_chars", 4000)), step=500,
+            help="Manual assistance only. Project AI analysis preserves complete units and calculates its full request budget automatically.")
         if st.form_submit_button("Save resource limits"):
             save_ui_settings(store, w, 'resources', {'max_file_mb': max_file, 'max_files': max_files,
                 'parse_workers': workers, 'llm_concurrency': llm_workers, 'llm_chunk_chars': chunk_chars})
             st.session_state["settings_notice_" + w] = "Resource limits saved"
             st.rerun()
     st.caption("Imports also enforce 100 MB compressed / 200 MB total and a 200:1 ZIP expansion ratio. Analysis reuses content hashes on every refresh.")
-    st.caption("AI requests are also capped at eight across this app process. Busy requests are refused immediately. Chunking is an offline preview; each selected chunk requires its own explicit request. Provider budgets still apply.")
+    st.caption("AI requests are also capped at eight across this app process. Busy requests are refused immediately. Manual assistance previews chunks offline; each selected chunk needs an explicit request. Project AI builds calculate complete-unit budgets automatically. Provider budgets still apply.")
     st.caption('Clear the shared parser cache with a preview and confirmation in Data management → Cleanup & recovery.')
 
 

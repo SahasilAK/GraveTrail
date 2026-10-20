@@ -71,9 +71,14 @@ def test_budget_defaults_are_automatic_editable_and_resettable(tmp_path, monkeyp
     assert not view.exception
     attempts = next(n for n in view.number_input if n.label == 'Maximum provider attempts')
     assert attempts.value == 2
-    attempts.set_value(1).run()
+    attempts.set_value(7).run()
     next(c for c in view.checkbox if c.label == 'Additional AI review').check().run()
-    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 1
+    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 7
+    view.switch_page('ui/pages/dashboard.py').run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 7
+    next(c for c in view.checkbox if c.label == 'Additional AI review').check().run()
     next(b for b in view.button if b.label == 'Reset AI budgets to automatic').click().run()
     assert not view.exception
     assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 4
@@ -103,5 +108,25 @@ def test_calculated_context_action_updates_only_context_allowances(tmp_path, mon
     assert saved['context_chars'] > 500 and saved['max_tokens'] == profile.max_tokens
     for key in ('external_llm', 'allow_full_source', 'llm_history'):
         assert store.setting(w, key, False) is False
+    import streamlit as st
+    st.cache_resource.clear()
+
+
+def test_continue_keeps_saved_custom_limits_until_explicit_reset(tmp_path, monkeypatch):
+    from dataforge.ai_analysis_models import AnalysisRequest
+    from dataforge.ai_analysis_store import save_run
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Continue custom budget')
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    saved = AnalysisRequest(mode='hybrid', max_provider_attempts=7)
+    save_run(store, w, 'pending', mode='hybrid', status='awaiting_continuation', summary={'request': saved.model_dump()})
+    seen = []
+    monkeypatch.setattr('ui.analysis_ai.start', lambda s,w,request: seen.append(request))
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(b for b in view.button if b.label == 'Continue AI analysis').click().run()
+    assert not view.exception
+    assert seen[0].max_provider_attempts == 7
     import streamlit as st
     st.cache_resource.clear()

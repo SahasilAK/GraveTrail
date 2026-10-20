@@ -43,3 +43,5 @@ GraveTrail presentation: app page/sidebar title and agent examples use the new n
 Asset/query/direction/depth/collapse and analysis file selections persist via native session state. A shared workspace-scoped asset bridges Lineage, Columns and Impact. Source control keys include evidence scope to avoid stale browser labels; file content/AI responses never enter navigation state. Graph source ZIPs and original downloads generate on click. Tree direction has a durable non-widget copy while its tabs are hidden. Provider protocol keys include the selected profile.
 
 `analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, explicit calculated context allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
+
+Budget values have non-widget session storage so navigation cannot discard Custom ceilings; Continue inherits saved numeric limits unless Reset explicitly releases them. Manual chunk-size help distinguishes the automatic project planner.

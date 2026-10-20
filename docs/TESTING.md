@@ -174,3 +174,8 @@ It scores the parser baseline against separate `evaluation_gold.json` operation/
 ## Automatic capacity and continuation qualification
 
 Focused tests cover allowlisted/unknown model metadata, combined/separate context, UTF-8 estimates, full-envelope limits, legacy Custom origins, UI edit/reset, compact evidence references, 16 MB canonical expansion, per-file aggregate snapshots, staged partial outcomes, reopen/resume, changed configuration and unknown in-flight retry. A deadline between extraction and review must repeat no extraction. Run `uv run --locked python scripts/benchmark_ai_analysis.py --scale-units 1000 --output /path/to/report.json` for synthetic mock-transport execution, durable reopen, exact request coverage, atomic publication, peak Python memory and maximum unit-record size. It never uses a live provider. These are lifecycle/storage checks, not live-model precision measurements.
+
+Budget UI regressions also cover page navigation retaining a nondefault Custom value,
+and Continue retaining a saved API/CLI Custom ceiling until an explicit reset.
+A constrained fallback is excluded in offline planning and receives no source even
+when the primary has a transient failure.

@@ -100,3 +100,11 @@ The live qualification targets remain unestablished: at least 99% accepted table
 ## Design evidence
 
 The design follows [context engineering guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents): keep complete, relevant source and retrieve context when needed. Long-window support alone does not establish effective task performance ([RULER](https://arxiv.org/abs/2404.06654)). Provider metadata can expose distinct limits ([Google model resource](https://ai.google.dev/api/models), [OpenRouter model properties](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties)); unknown window semantics are handled conservatively. Prompt caching can reduce repeated-input cost but does not remove context or output reservations.
+
+Automatic-budget qualification processed 1,000 synthetic units across ten explicit
+executions with exactly 1,000 unique requests and one final publication. A separate
+browser fixture processed three units in three executions, accepting nine locally
+validated claims. The real MCP HTTP SDK and a clean installed wheel also exercised
+continuation. These mock-transport checks do not establish live-model accuracy.
+A fresh OmniRoute attempt for this extension could not complete (provider error);
+no new live precision result is claimed. See [performance measurements](PERFORMANCE.md#automatic-ai-continuation-qualification-2026-10-20).

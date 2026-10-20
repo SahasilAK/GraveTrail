@@ -34,6 +34,8 @@ def controls(store, workspace, file_ids):
         def reset():
             for suffix in ('attempts', 'output', 'seconds'):
                 st.session_state.pop('ai_custom_' + suffix + '_' + workspace, None)
+                st.session_state.pop('ai_custom_value_' + suffix + '_' + workspace, None)
+            st.session_state['ai_budget_reset_' + workspace] = True
         st.button('Reset AI budgets to automatic', on_click=reset)
         fields = [('attempts', 'max_provider_attempts', 'Maximum provider attempts', 1, 2000, 1),
                   ('output', 'max_output_tokens_total', 'Maximum reserved output tokens', 1000, 2000000, 1000),
@@ -41,11 +43,15 @@ def controls(store, workspace, file_ids):
         for suffix, field, label, low, high, step in fields:
             key = 'ai_' + suffix + '_' + workspace
             custom_key = 'ai_custom_' + suffix + '_' + workspace
+            value_key = 'ai_custom_value_' + suffix + '_' + workspace
             custom = st.session_state.get(custom_key, False)
-            if not custom:
+            if custom:
+                st.session_state[key] = st.session_state.get(value_key, st.session_state.get(key, low))
+            else:
                 st.session_state[key] = automatic['recommended'][field]
-            def edited(custom_key=custom_key):
+            def edited(custom_key=custom_key, value_key=value_key, key=key):
                 st.session_state[custom_key] = True
+                st.session_state[value_key] = st.session_state[key]
             value = st.number_input(label, low, high, step=step, key=key, on_change=edited)
             overrides[field] = value if custom else None
             st.caption(label + ': ' + ('Custom' if custom else 'Automatic'))
@@ -60,6 +66,13 @@ def controls(store, workspace, file_ids):
                           for task, profiles in preview['routes'].items() for p in profiles],
                          hide_index=True, alt='Configured AI routes for this build')
         st.caption('Selected SQL/SAS source and relevant declarations are sent to these routes. A local gateway such as OmniRoute may forward requests. AI additions remain inferred.')
+        if preview.get('excluded_routes'):
+            names = {p['profile_id']: p['name'] for p in store.rows(
+                'SELECT profile_id,name FROM llm_profiles WHERE workspace_id=?', [workspace])}
+            excluded = sorted({(names.get(p['profile_id'], p['profile_id']), p['reason'].replace('_', ' '))
+                               for p in preview['excluded_routes']})
+            st.caption('Skipped fallback profiles: ' + '; '.join(name + ': ' + reason for name, reason in excluded))
+
         if preview.get('remaining_units'):
             st.info(f"This execution covers {preview['selected_new_units']} units needing AI work; {preview['remaining_units']} continue later. The current graph remains until all units finish.")
         st.caption('Input estimates use conservative UTF-8 bytes plus framing and capacity headroom; reported usage is shown after execution.')
@@ -146,11 +159,19 @@ def report(store, workspace):
     if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
         unknown = bool(result['summary'].get('inflight'))
         retry = st.checkbox('Retry the unknown in-flight request (may incur a duplicate charge)', key='ai_retry_' + selected) if unknown else False
+        limits = {}
+        for suffix, field in [('attempts', 'max_provider_attempts'), ('output', 'max_output_tokens_total'), ('seconds', 'max_seconds')]:
+            if st.session_state.get('ai_custom_' + suffix + '_' + workspace):
+                limits[field] = st.session_state.get('ai_custom_value_' + suffix + '_' + workspace,
+                    summary['request'].get(field))
+            elif st.session_state.get('ai_budget_reset_' + workspace):
+                limits[field] = None
+            else:
+                limits[field] = summary['request'].get(field)
+        st.caption('Continue preserves saved Custom ceilings. Edit the AI request budget or Reset to automatic to change them.')
         if st.button('Continue AI analysis', disabled=unknown and not retry):
-            request = AnalysisRequest.model_validate({**result['summary']['request'], 'resume_run_id': selected,
-                'retry_unknown': retry, **{field: st.session_state.get('ai_' + suffix + '_' + workspace)
-                    if st.session_state.get('ai_custom_' + suffix + '_' + workspace) else None
-                    for suffix, field in [('attempts', 'max_provider_attempts'), ('output', 'max_output_tokens_total'), ('seconds', 'max_seconds')]}})
+            request = AnalysisRequest.model_validate({**summary['request'], 'resume_run_id': selected,
+                                                     'retry_unknown': retry, **limits})
             start(store, workspace, request)
             st.rerun()
 
