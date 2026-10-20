@@ -74,3 +74,5 @@ Pages now offers exactly four named themes through a native header select: Porce
 Graph image workflow/limits/privacy: USER_GUIDE.md; registered CLI flags and exclusive --output: CLI_GUIDE.md; export_graph SVG/PNG and chunk/capability contracts: MCP_INTEGRATION.md. BUILD_AND_RELEASE.md records source/wheel/Windows smoke evidence and unavailable platforms.
 
 - `AI_ANALYSIS.md` — Explicit AI/hybrid project workflow, native Mermaid architecture, complete-source/context/run budgets, semantic acceptance, staged publication/reuse and unqualified live accuracy targets.
+
+AI guides document selected capability provenance, combined/separate estimates, Automatic/Custom/Reset, explicit context remedy and continuation. Data model/management cover migration7 compact per-file/operation snapshots with v6 fallback. CLI/MCP exact references include nullable execution limits, resume and explicit unknown retry. AI_ANALYSIS includes the updated staging/publication Mermaid flow and primary design evidence.

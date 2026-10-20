@@ -211,3 +211,14 @@ def test_empty_response_cannot_claim_complete_semantic_coverage_of_real_operatio
     report = validate_project_response(data, ctx)
     assert report.coverage.status == "partial"
     assert "no_supported_claims" in report.coverage.unsupported
+
+
+def test_wide_operation_claims_do_not_duplicate_the_whole_operation_fact_set():
+    import json
+    code = 'CREATE TABLE b AS SELECT ' + ','.join(f'a.x AS x{i}' for i in range(100)) + ' FROM a;'
+    ctx = context(code)
+    claims = [{'target_table': 'b', 'target_column': f'x{i}', 'expression': f'a.x AS x{i}',
+        'category': 'direct', 'ordinal': i, 'inputs': [{'table': 'a', 'column': 'x'}]} for i in range(100)]
+    validated = validate_project_response(response(ctx, derivations=claims), ctx)
+    assert len(validated.accepted) == 100
+    assert sum(len(json.dumps(f.detail)) for f in validated.accepted) < 1000000

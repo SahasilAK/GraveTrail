@@ -170,3 +170,7 @@ uv run --locked python scripts/benchmark_ai_analysis.py --project-gold --output 
 ```
 
 It scores the parser baseline against separate `evaluation_gold.json` operation/scope/version/role labels and optionally both synthetic archive manifests. `--predictions saved.json` scores explicit saved predictions; this remains unqualified saved evidence. Live evaluation requires `--live`, explicit `--cases`, `DATAFORGE_AI_BENCHMARK_LIVE=1`, an existing named credential reference and bounded attempt/time options. The synthetic live route is fixed to loopback OmniRoute `auto/best-reasoning`. No live qualification follows from offline or mock scores. Gold/expected files are scorer inputs and never model context.
+
+## Automatic capacity and continuation qualification
+
+Focused tests cover allowlisted/unknown model metadata, combined/separate context, UTF-8 estimates, full-envelope limits, legacy Custom origins, UI edit/reset, compact evidence references, 16 MB canonical expansion, per-file aggregate snapshots, staged partial outcomes, reopen/resume, changed configuration and unknown in-flight retry. A deadline between extraction and review must repeat no extraction. Run `uv run --locked python scripts/benchmark_ai_analysis.py --scale-units 1000 --output /path/to/report.json` for synthetic mock-transport execution, durable reopen, exact request coverage, atomic publication, peak Python memory and maximum unit-record size. It never uses a live provider. These are lifecycle/storage checks, not live-model precision measurements.

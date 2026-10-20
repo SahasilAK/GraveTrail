@@ -224,7 +224,7 @@ def test_v5_upgrade_preserves_parser_manual_facts_and_originals(tmp_path):
                   ['manual', w, file['file_id'], 'sql_lineage', 'merged', '{}'])
     for table in AI_ANALYSIS_TABLES:
         store.execute(f'DROP TABLE {table}')
-    store.execute('DELETE FROM schema_migrations WHERE version=6')
+    store.execute('DELETE FROM schema_migrations WHERE version>=6')
     store.close()
     upgraded = Store(tmp_path / 'home')
     assert upgraded.edges(w) == edges
@@ -232,3 +232,43 @@ def test_v5_upgrade_preserves_parser_manual_facts_and_originals(tmp_path):
     assert upgraded.rows("SELECT outcome FROM llm_records WHERE record_id='manual'") == [{'outcome': 'merged'}]
     assert all(upgraded.rows(f'SELECT count(*) AS n FROM {table}')[0]['n'] == 0 for table in AI_ANALYSIS_TABLES)
     upgraded.close()
+
+
+def test_v7_file_snapshots_remove_aggregate_limit_and_preserve_legacy_read(tmp_path):
+    from dataforge.ai_analysis_store import MAX_JSON_BYTES, load_accepted_file_results, save_run
+    from dataforge.database_maintenance import inspect_database
+    from dataforge.models import ParseResult
+    store = Store(tmp_path)
+    w = store.create_workspace('large accepted snapshot')
+    Importer(store, w).files([(f'{i}.sql', b'select 1;') for i in range(3)], {'.sql'})
+    results = [(m, ParseResult(metadata={'padding': 'x' * (6 * 1024 * 1024)})) for m in store.files(w)]
+    with store.transaction():
+        save_run(store, w, 'large', mode='hybrid', status='committed', configuration={}, accepted_results=results)
+    rows = store.rows('SELECT payload FROM ai_analysis_snapshots')
+    assert sum(len(row['payload']) for row in rows) > MAX_JSON_BYTES
+    assert max(len(row['payload']) for row in rows) < MAX_JSON_BYTES
+    assert len(load_accepted_file_results(store, w, {})) == 3
+    assert inspect_database(store)['ok']
+    assert store.rows("SELECT accepted_results FROM ai_analysis_runs WHERE run_id='large'")[0]['accepted_results'] == '[]'
+    store.close()
+
+
+def test_durable_final_claims_reference_source_instead_of_repeating_quotes(tmp_path):
+    from dataforge.ai_analysis_models import AnalysisRequest, EvidenceCitation
+    from dataforge.ai_analysis_store import load_analysis_report, save_claim_decisions, save_run
+    from dataforge.ai_context import plan_ai_units, prepare_analysis
+    store = Store(tmp_path)
+    w = store.create_workspace('compact final claims')
+    code = 'select 1 /*' + 'x' * 50000 + '*/;'
+    Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
+    unit = plan_ai_units(prepare_analysis(store, w, AnalysisRequest(mode='hybrid'))).units[0]
+    save_run(store, w, 'r', mode='hybrid')
+    payload = {'evidence': EvidenceCitation.from_unit(unit).model_dump(), 'kind': 'table_edge', 'source': 'a'}
+    save_claim_decisions(store, w, 'r', [{'claim_id': str(i), 'unit_id': unit.unit_id,
+        'kind': 'table_edge', 'status': 'accepted', 'payload': payload} for i in range(100)])
+    stored = store.rows('SELECT payload FROM ai_analysis_claims')
+    assert max(len(row['payload']) for row in stored) < 1000
+    report = load_analysis_report(store, w, 'r')
+    assert all(c['payload']['evidence']['quote'] == code for c in report['claims'])
+    assert payload['evidence']['quote'] == code
+    store.close()

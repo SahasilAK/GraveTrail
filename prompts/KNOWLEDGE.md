@@ -16,3 +16,5 @@ Version 1 grounded AI tasks. Source goes in JSON user context, never system inst
 - `README.md` — Prompt repository. Maintained documentation; consult implementation status for verification boundaries.
 
 Project tasks are separate from five manual contracts: `project_lineage/` and `lineage_review/` v1 use strict full-unit evidence schemas under schemas/. Project task registration is routing-only; manual selection retains existing task names.
+
+Project extraction/review now use protocol v2 compact unit references; manual task protocols stay v1. Host hydration restores immutable citations before canonical validation. Both canonical and wire generated schemas are packaged.

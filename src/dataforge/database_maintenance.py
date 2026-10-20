@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 import duckdb
 
 from dataforge.cleanup import WORKSPACE_TABLES, checked_path, maintenance_guard
-from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES
+from dataforge.store import AI_ANALYSIS_TABLES, AI_SNAPSHOT_TABLES, COLUMN_TABLES
 
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 MAX_FILES = 50000
@@ -37,7 +37,7 @@ def inspect_database(store):
 def _inspect_database(home, rows):
     versions = [r['version'] for r in rows('SELECT version FROM schema_migrations ORDER BY version')]
     workspace_tables = tuple(t for t in WORKSPACE_TABLES
-        if (5 in versions or t not in COLUMN_TABLES) and (6 in versions or t not in AI_ANALYSIS_TABLES))
+        if (7 in versions or t not in AI_SNAPSHOT_TABLES) and (5 in versions or t not in COLUMN_TABLES) and (6 in versions or t not in AI_ANALYSIS_TABLES))
     tables = {}
     for table in (*workspace_tables, 'parse_cache', 'prompt_versions'):
         tables[table] = rows(f'SELECT count(*) AS n FROM {table}')[0]['n']
@@ -76,6 +76,9 @@ def _inspect_database(home, rows):
     referenced = {r['content_hash'] for r in rows('SELECT content_hash FROM source_files UNION SELECT content_hash FROM statements')}
     for row in rows("SELECT snapshot FROM analysis_runs WHERE snapshot IS NOT NULL AND snapshot<>''"):
         referenced.update(json.loads(row['snapshot']).get('files', {}).values())
+    if 7 in versions:
+        orphaned['ai_snapshot_run'] = rows('SELECT count(*) AS n FROM ai_analysis_snapshots s LEFT JOIN ai_analysis_runs r ON s.run_id=r.run_id AND s.workspace_id=r.workspace_id WHERE r.run_id IS NULL')[0]['n']
+        referenced.update(r['content_hash'] for r in rows('SELECT content_hash FROM ai_analysis_snapshots'))
     if 6 in versions:
         referenced.update(r['content_hash'] for r in rows('SELECT content_hash FROM ai_analysis_units'))
         for row in rows("SELECT accepted_results FROM ai_analysis_runs WHERE status='committed'"):
@@ -88,7 +91,7 @@ def _inspect_database(home, rows):
         path = checked_path(home, 'blobs/' + digest)
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             missing.append(digest)
-    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 6], [1, 2, 3, 4, 5, 6]),
+    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 6], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 6, 7]),
             'schema_versions': versions, 'records': tables, 'orphan_records': orphaned,
             'missing_or_invalid_blobs': missing, 'database_bytes': (home / 'dataforge.duckdb').stat().st_size}
 
@@ -215,9 +218,12 @@ def _restore_backup(archive_path, destination):
         try:
             versions = connection.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()
             if versions not in ([(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)],
-                                [(1,), (2,), (3,), (4,), (6,)], [(1,), (2,), (3,), (4,), (5,), (6,)]):
+                                [(1,), (2,), (3,), (4,), (6,)], [(1,), (2,), (3,), (4,), (5,), (6,)],
+                                [(1,), (2,), (3,), (4,), (5,), (6,), (7,)], [(1,), (2,), (3,), (4,), (6,), (7,)]):
                 raise ValueError('Unsupported backup schema')
             for table in WORKSPACE_TABLES:
+                if (7,) not in versions and table in AI_SNAPSHOT_TABLES:
+                    continue
                 if (5,) not in versions and table in COLUMN_TABLES:
                     continue
                 if (6,) not in versions and table in AI_ANALYSIS_TABLES:

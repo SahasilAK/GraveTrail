@@ -158,7 +158,8 @@ def test_transmitted_schema_is_compact_but_preserves_validation_contract():
     assert 'default' not in schema['properties']['relationships']
     assert schema['additionalProperties'] is False
     assert schema['properties']['relationships']['maxItems']==100
-    assert schema['$defs']['EvidenceCitation']['properties']['quote']['maxLength']==200000
+    assert schema['$defs']['EvidenceReference']['properties']['unit_id']['maxLength']==500
+    assert 'quote' not in schema['$defs']['EvidenceReference']['properties']
     assert schema['$defs']['Coverage']['properties']['status']['enum']==['complete','partial','unsupported','no_operations']
     assert schema['required']==PROJECT_SCHEMAS['project_lineage'].model_json_schema()['required']
     assert json.dumps(context,ensure_ascii=False,separators=(',',':')) in user
@@ -194,3 +195,27 @@ def test_schema_compaction_keeps_literal_values_and_dependency_property_names():
         'enum':[{'description':'literal'}],'dependentRequired':{'default':['title']}}
     assert _transmitted_schema(schema)=={'const':{'title':'literal','default':5},
         'enum':[{'description':'literal'}],'dependentRequired':{'default':['title']}}
+
+
+def test_rejected_wire_input_never_leaks_into_default_history(tmp_path):
+    from dataforge.analysis_service import run_analysis
+    from dataforge.ingestion import Importer
+    from dataforge.store import Store
+    store = Store(tmp_path)
+    w = store.create_workspace('rejected-body privacy')
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', context_chars=100000, retries=0)
+    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', p.model_dump_json()])
+    store.set_setting(w, 'default_profile', 'p')
+    store.set_setting(w, 'max_context_chars', 100000)
+    marker = 'REJECTED_MODEL_TEXT_DO_NOT_RETAIN'
+    def respond(request):
+        text = json.loads(request.content)['messages'][-1]['content']
+        context = json.loads(text[text.index('{'):])
+        payload = {'unit_id': context['unit']['unit_id'], 'relationships': [{'source': 'a', 'target': 'b',
+            'operation': 'CREATE', 'evidence': {'unit_id': context['unit']['unit_id'], 'quote': marker}}]}
+        return httpx.Response(200, json={'message': {'content': json.dumps(payload)}})
+    result = run_analysis(store, w, AnalysisRequest(mode='hybrid'), transport=httpx.MockTransport(respond))
+    assert result.status == 'failed'
+    assert marker not in str(store.rows('SELECT details FROM llm_records'))
+    store.close()

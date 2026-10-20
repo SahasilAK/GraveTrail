@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, fields
 
 import sqlglot
 from pydantic import ValidationError
@@ -86,7 +86,13 @@ def operation_contexts(context, parsed=None):
 
 
 def _detail(operation, start, stop, context):
-    return {"operation": asdict(operation), "operation_span": [start, stop],
+    # Each normalized claim carries its own usage/derivation below. Copying the
+    # entire operation's fact arrays per claim makes wide projections quadratic.
+    host = {field.name: getattr(operation, field.name) for field in fields(operation)
+            if field.name not in {'sources', 'targets', 'usages', 'derivations'}}
+    host['sources'] = [asdict(ref) for ref in operation.sources]
+    host['targets'] = [asdict(ref) for ref in operation.targets]
+    return {"operation": host, "operation_span": [start, stop],
             "workspace_id": context.workspace_id, "job_id": context.unit.job_id,
             "validator_version": VALIDATOR_VERSION}
 

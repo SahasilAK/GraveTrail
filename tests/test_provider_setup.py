@@ -30,7 +30,7 @@ def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(
     def handler(request):
         calls.append((request.method, str(request.url)))
         assert request.headers['Authorization'] == 'Bearer test-key'
-        return httpx.Response(200, json={'data': [{'id': 'auto/best-reasoning'}, {'id': 'other-model'}]})
+        return httpx.Response(200, json={'data': [{'id': 'auto/best-reasoning', 'context_length': 128000}, {'id': 'other-model'}]})
 
     monkeypatch.setattr('ui.provider_settings.Adapter', partial(Adapter, transport=httpx.MockTransport(handler)))
     fields = [getattr(node, 'label', '') for node in view.main]
@@ -53,6 +53,8 @@ def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(
     config = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
     assert config['model'] == 'auto/best-reasoning'
     assert config['key_env'] == 'DATAFORGE_OMNIROUTE_API_KEY'
+    assert config['model_capabilities']['context_tokens'] == 128000
+    assert config['model_capabilities']['dynamic'] is True
     assert 'test-key' not in str(view.session_state.to_dict())
 
 
@@ -100,3 +102,12 @@ def test_fetched_model_choices_ignore_non_identifier_values(setup_app, monkeypat
     next(b for b in view.button if b.label == 'Test connection').click().run()
     assert not view.exception and not view.error
     assert next(s for s in view.selectbox if s.label == 'Fetched models').options == ['model']
+
+
+def test_invalid_draft_fields_keep_connection_page_editable(setup_app):
+    view, _ = setup_app
+    next(f for f in view.text_input if f.label == 'API base URL').set_value('localhost:20128').run()
+    assert not view.exception
+    assert next(b for b in view.button if b.label == 'Inspect selected model limits').disabled
+    next(f for f in view.text_input if f.label == 'API base URL').set_value('http://localhost:20128/v1').run()
+    assert not view.exception

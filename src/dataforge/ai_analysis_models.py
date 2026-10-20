@@ -21,9 +21,12 @@ class AnalysisRequest(StrictModel):
     force_parser: bool = False
     refresh_ai: bool = False
     additional_ai_review: bool = False
-    max_provider_attempts: int = Field(default=200, ge=1, le=2000)
-    max_output_tokens_total: int = Field(default=200000, ge=1000, le=2000000)
-    max_seconds: int = Field(default=1800, ge=30, le=14400)
+    max_provider_attempts: int | None = Field(default=None, ge=1, le=2000)
+    max_output_tokens_total: int | None = Field(default=None, ge=1000, le=2000000)
+    max_seconds: int | None = Field(default=None, ge=30, le=14400)
+
+    resume_run_id: str = Field(default='', max_length=100)
+    retry_unknown: bool = False
 
     @model_validator(mode='after')
     def unique_files(self):

@@ -114,11 +114,76 @@ def test_profile_specific_credentials_never_cross_extraction_and_review(tmp_path
             manager = RuntimeConnections()
             manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)
             service.runtime_connections[w, pid] = manager
-            service.runtime_profiles[w, pid] = profile.model_dump_json()
+            from dataforge.model_capabilities import runtime_profile
+            service.runtime_profiles[w, pid] = runtime_profile(profile)
         store.set_setting(w, 'task_models', {'project_lineage': 'extract', 'lineage_review': 'review'})
         for pid, profile, secret in zip(('extract', 'review'), profiles, ('synthetic-A', 'synthetic-B')):
             with connection_scope(_BoundConnections(service, w).for_profile(pid, profile)), Adapter(profile) as adapter:
                 assert adapter._headers()['Authorization'] == 'Bearer ' + secret
+    finally:
+        service.close()
+        store.close()
+
+
+def test_actual_mcp_http_sdk_auto_budget_and_continuation(tmp_path, monkeypatch):
+    import json
+    from datetime import timedelta
+
+    import httpx
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamable_http_client
+
+    from dataforge.agent.mcp_server import http_app
+    from dataforge.llm import Profile
+    store = Store(tmp_path)
+    w = store.create_workspace('SDK continuation')
+    Importer(store, w).files([('q.sql', b'select 1; select 2;')], {'.sql'})
+    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock', retries=0, context_chars=100000)
+    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'mock', p.model_dump_json()])
+    store.set_setting(w, 'default_profile', 'p')
+    store.set_setting(w, 'max_context_chars', 100000)
+    service = AgentService(store, AccessPolicy(workspaces=(w,), allow_write=True, allow_llm=True,
+        allowed_llm_origins=('http://localhost:11434',)))
+    calls = []
+    def respond(request):
+        text = json.loads(request.content)['messages'][-1]['content']
+        unit = json.loads(text[text.index('{'):])['unit']
+        calls.append(unit['unit_id'])
+        return httpx.Response(200, json={'message': {'content': json.dumps({'unit_id': unit['unit_id'],
+            'coverage': {'status': 'no_operations'}})}, 'done_reason': 'stop'})
+    service.provider_transport = httpx.MockTransport(respond)
+    monkeypatch.setenv('DATAFORGE_MCP_TOKEN', 'synthetic-sdk-token-' + 'x' * 40)
+    server = create_server(service)
+    application = http_app(server, service.policy)
+    async def check():
+        async with server.session_manager.run():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),
+                    headers={'Authorization': 'Bearer ' + 'synthetic-sdk-token-' + 'x' * 40}) as client:
+                async with streamable_http_client('http://127.0.0.1:8765/mcp', http_client=client) as (read, write, _):
+                    async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=20)) as session:
+                        await session.initialize()
+                        preview = await session.call_tool('preview_project_analysis', {'workspace_id': w,
+                            'max_provider_attempts': None, 'max_output_tokens_total': None, 'max_seconds': None})
+                        assert not preview.isError
+                        assert preview.structuredContent['recommended']['max_provider_attempts'] == 2
+                        assert not calls
+                        run_id = ''
+                        for expected in ('awaiting_continuation', 'committed'):
+                            job = await session.call_tool('start_lineage_analysis', {'workspace_id': w,
+                                'mode': 'hybrid', 'max_provider_attempts': 1, 'resume_run_id': run_id})
+                            assert not job.isError, job
+                            for _ in range(100):
+                                status = await session.call_tool('get_job_status', {'workspace_id': w,
+                                    'job_id': job.structuredContent['job_id']})
+                                if status.structuredContent['status'] in {'completed', 'failed'}:
+                                    break
+                                await asyncio.sleep(.02)
+                            result = status.structuredContent['result']
+                            assert result['status'] == expected, result
+                            run_id = result['run_id']
+        assert len(calls) == len(set(calls)) == 2
+    try:
+        asyncio.run(check())
     finally:
         service.close()
         store.close()

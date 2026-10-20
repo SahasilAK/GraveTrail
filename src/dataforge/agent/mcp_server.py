@@ -81,23 +81,23 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
     async def start_lineage_analysis(workspace_id: str, file_ids: list[str] | None = None, force: bool = False,
                                      mode: Literal['parser', 'hybrid', 'ai'] = 'parser',
                                      additional_ai_review: bool = False, refresh_ai: bool = False,
-                                     max_provider_attempts: int = 200, max_output_tokens_total: int = 200000,
-                                     max_seconds: int = 1800) -> CallToolResult:
+                                     max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None,
+                                     max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> CallToolResult:
         """Start explicit parser/AI/hybrid analysis. AI modes require source/network grants. Poll job_id."""
         return await call("analyze", workspace_id, file_ids=file_ids, force=force, mode=mode,
             additional_ai_review=additional_ai_review, refresh_ai=refresh_ai,
             max_provider_attempts=max_provider_attempts, max_output_tokens_total=max_output_tokens_total,
-            max_seconds=max_seconds)
+            max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
 
     @server.tool(annotations=read)
     async def preview_project_analysis(workspace_id: str, mode: Literal['hybrid', 'ai'] = 'hybrid',
                                        file_ids: list[str] | None = None, additional_ai_review: bool = False,
-                                       max_provider_attempts: int = 200, max_output_tokens_total: int = 200000,
-                                       max_seconds: int = 1800) -> CallToolResult:
+                                       max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None,
+                                       max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> CallToolResult:
         """Offline source disclosure/context/budget preview; no provider requests. Requires source access."""
         return await call('analysis_preview', workspace_id, mode=mode, file_ids=file_ids,
             additional_ai_review=additional_ai_review, max_provider_attempts=max_provider_attempts,
-            max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds)
+            max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
 
     @server.tool(annotations=read)
     async def get_project_analysis_report(workspace_id: str, run_id: str | None = None,

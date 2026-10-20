@@ -165,7 +165,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` |
 | `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
 | `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
-| `preview_project_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode` |
+| `preview_project_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `resume_run_id`, `retry_unknown` |
 | `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
 | `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` |
@@ -173,7 +173,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
-| `start_lineage_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `force`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `refresh_ai` |
+| `start_lineage_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `force`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `refresh_ai`, `resume_run_id`, `retry_unknown` |
 | `test_local_agent_access` | `workspace_id` | `options` |
 | `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
 | `update_application_logging` | `level` | `options` |
@@ -288,3 +288,7 @@ support yields a clear renderer error. See the [image limits](USER_GUIDE.md).
 `start_lineage_analysis` keeps parser mode as its default. Its explicit hybrid/AI modes share the same bounded request and run service as the UI/CLI. `preview_project_analysis` plans offline disclosure/context/budgets; `get_project_analysis_report` reads saved acceptance/rejection/unresolved results; `cancel_job` requests workspace-scoped cooperative cancellation. Source-bearing report details require source authority; a metadata read does not authorize a provider request.
 
 AI extraction/review requires explicit network/source/write permission, approved exact origins and credential references, and workspace privacy, rechecked at physical dispatch. Remote complete-source permission also covers a file transmitted through several chunks. No automatic connection test or request occurs on preview, ordinary graph queries or settings reads. Cancellation/deadline may return after a blocked read and already sent attempts may have incurred usage. See [AI project analysis](AI_ANALYSIS.md) for experimental generated-mode limits and current unqualified live accuracy targets.
+
+## Automatic project budgets and continuation
+
+`start_lineage_analysis` and `preview_project_analysis` accept nullable `max_provider_attempts`, `max_output_tokens_total`, `max_seconds`, plus `resume_run_id` and `retry_unknown`. Omitted/null budgets use shared automatic recommendations; explicit numbers remain ceilings. A paused run returns `awaiting_continuation`; start again with its run ID to execute the next bounded portion. Resume uses the original source/mode/review options and rechecks source/network grants and recipients. `retry_unknown=true` explicitly authorizes potentially duplicate in-flight work. Preview stays offline.

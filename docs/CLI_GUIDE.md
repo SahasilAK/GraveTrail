@@ -92,11 +92,11 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `jobs cancel` | `JOB_ID` | `--workspace`, `-w` **required**; `--help` |
 | `jobs status` | `JOB_ID` | `--workspace`, `-w` **required**; `--wait`, `--no-wait`; `--help` |
 | `lineage analysis-report` | — | `--workspace`, `-w` **required**; `--run-id`; `--help` |
-| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--mode`; `--additional-ai-review`, `--no-additional-ai-review`; `--refresh-ai`, `--no-refresh-ai`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--help` |
+| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--mode`; `--additional-ai-review`, `--no-additional-ai-review`; `--refresh-ai`, `--no-refresh-ai`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
 | `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
 | `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
-| `lineage preview` | — | `--workspace`, `-w` **required**; `--mode`; `--file-id` (repeatable); `--additional-ai-review`, `--no-additional-ai-review`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--help` |
+| `lineage preview` | — | `--workspace`, `-w` **required**; `--mode`; `--file-id` (repeatable); `--additional-ai-review`, `--no-additional-ai-review`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
 | `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
 | `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |
@@ -359,3 +359,7 @@ See the [user guide](USER_GUIDE.md) for image bounds and metadata privacy.
 `lineage build` defaults to local parser mode. `--mode hybrid` explicitly requests parser comparison plus validated AI extraction; `--mode ai` selects experimental AI-generated extraction. `lineage preview` is offline and reports disclosure, complete-unit/context failures, routes and worst-case attempt/output reservations. `lineage analysis-report` reads a saved report; `jobs cancel` requests cooperative cancellation. Use each route's `--help` for selected file IDs, refresh/review and bounded run options.
 
 Billable builds require the existing independent write/source/network grants: `--allow-write`, `--allow-llm`, exact `--allowed-llm-origin` and approved `--allowed-credential-ref`, plus workspace privacy. Complete-file disclosure across remote chunks requires complete-source permission. Do not put credential values in command arguments. A failed/cancelled/stale run keeps the old graph; requests already sent may have incurred usage. Preview, parser defaults and report reads send zero provider requests. See [AI project analysis](AI_ANALYSIS.md) for modes, semantic limits, deadlines and the full prompt/schema context budget.
+
+## Automatic project budgets and continuation
+
+For `lineage build` and `lineage preview`, omitted `--max-provider-attempts`, `--max-output-tokens-total` and `--max-seconds` calculate a bounded execution automatically. Explicit numeric values are ceilings. Use `--resume-run-id RUN_ID` to continue a paused AI build; its source selection/mode/options remain pinned. `--retry-unknown` explicitly permits retrying a lost in-flight request and may incur duplicate usage. Inspect `lineage analysis-report` first. Offline preview makes no network requests.

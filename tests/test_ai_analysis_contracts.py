@@ -16,7 +16,7 @@ def unit():
 
 
 def test_request_strict_and_bounded():
-    assert AnalysisRequest(mode='hybrid').max_provider_attempts == 200
+    assert AnalysisRequest(mode='hybrid').max_provider_attempts is None
     for values in ({'mode':'other'}, {'max_seconds':1}, {'max_provider_attempts':True}, {'surprise':1}):
         with pytest.raises(ValidationError):
             AnalysisRequest(**values)

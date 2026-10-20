@@ -1,13 +1,16 @@
 """Provider profiles and task routing. Secrets remain environment references."""
 import json
+import time
 
 import streamlit as st
 
 from dataforge.agent.contracts import AccessPolicy, AgentError
+from dataforge.ai_budget import profile_recommendations
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import DEFAULT_KEY_ENV, current_connections, set_credential_environment
 from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
 from dataforge.llm_resources import request_slot
+from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
 from dataforge.provider_service import save_profile, save_routing
 from dataforge.settings_service import revision
 
@@ -78,19 +81,43 @@ def render(store, workspace):
             st.warning(notice)
         st.caption("Session credentials stay in this browser session's memory until cleared. They do not change the environment.")
 
+    draft_model = st.session_state.get(model_key, config.get('model', 'connection-check'))
+    draft_caps = st.session_state.get(models_key, {}).get('capabilities', {}).get(draft_model)
+    if draft_caps is None and config.get('model') == draft_model and config.get('base_url') == url:
+        draft_caps = config.get('model_capabilities')
+    recommended = profile_recommendations(ModelCapabilities.model_validate(draft_caps) if draft_caps else None)
     with st.expander("Advanced request options"):
+        def reset_profile_budget():
+            st.session_state[prefix + '_context_mode'] = 'automatic'
+            st.session_state[prefix + '_output_mode'] = 'automatic'
+        st.button('Reset profile limits to automatic', on_click=reset_profile_budget)
+        context_mode = st.session_state.get(prefix + '_context_mode', config.get('context_mode', 'custom' if existing else 'automatic'))
+        output_mode = st.session_state.get(prefix + '_output_mode', config.get('output_mode', 'custom' if existing else 'automatic'))
+        if context_mode == 'automatic':
+            st.session_state[prefix + '_context'] = recommended['context_chars']
+        if output_mode == 'automatic':
+            st.session_state[prefix + '_max_tokens'] = recommended['max_tokens']
+        def customize_context():
+            st.session_state[prefix + '_context_mode'] = 'custom'
+        def customize_output():
+            st.session_state[prefix + '_output_mode'] = 'custom'
+
+        st.session_state.setdefault(prefix + '_max_tokens', int(config.get('max_tokens', 2048)))
+        st.session_state.setdefault(prefix + '_context', int(config.get('context_chars', 16000)))
+        st.caption(f'Output limit: {output_mode.capitalize()} · Source context limit: {context_mode.capitalize()}. Edit a number to make it Custom.')
         auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")), key=prefix + '_auth')
         timeout = st.number_input("Request timeout (seconds)", 1, 180, int(config.get("timeout", 30)), key=prefix + '_timeout')
         retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)), key=prefix + '_retries')
-        max_tokens = st.number_input("Maximum output tokens", 64, 32000, int(config.get("max_tokens", 2048)), key=prefix + '_max_tokens')
-        context = st.number_input("Profile source context character limit", 500, 200000, int(config.get("context_chars", 16000)), key=prefix + '_context')
+        max_tokens = st.number_input("Maximum output tokens", 64, 32000, key=prefix + '_max_tokens', on_change=customize_output)
+        context = st.number_input("Profile source context character limit", 500, 200000, key=prefix + '_context', on_change=customize_context)
         temperature_enabled = st.checkbox("Send temperature parameter", value=config.get("temperature") is not None, key=prefix + '_send_temperature')
         temperature = st.number_input("Temperature", 0., 2., float(config.get("temperature") or 0.), step=.1, key=prefix + '_temperature')
         structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True), key=prefix + '_structured')
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
     values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
+                  context_mode=context_mode, output_mode=output_mode,
                   temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version)
     signature = (url, key_env, auth, api_version)
     discovery = st.session_state.get(models_key, {})
@@ -105,13 +132,15 @@ def render(store, workspace):
         try:
             profile = Profile(model=model, **values)
             if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
-                raise ValueError("Enable external requests in Connections & AI → Privacy first")
+                raise ValueError("Enable external requests in Connections & AI / Privacy first")
             resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
                 for k, v in LLMResourceSettings().model_dump().items()})
             with request_slot(store.home, workspace, resources.llm_concurrency), Adapter(profile) as adapter:
                 if discover:
-                    models = list(dict.fromkeys(value for value in adapter.models() if isinstance(value, str) and value))
-                    st.session_state[models_key] = {'signature': signature, 'models': models}
+                    catalog = adapter.model_catalog()
+                    models = [item.id for item in catalog]
+                    st.session_state[models_key] = {'signature': signature, 'models': models,
+                        'capabilities': {item.id: item.capabilities.model_dump() for item in catalog}}
                     st.success("Connection validated. Models fetched." if models else "Connection validated. No models listed; enter an identifier below.")
                 else:
                     response, usage = adapter.complete('Return a JSON object with key "status".', 'Return {"status":"connected"}.')
@@ -145,12 +174,37 @@ def render(store, workspace):
                      placeholder="Select a fetched model", on_change=select_model)
     model = st.text_input("Model or deployment identifier", config.get("model", ""), key=model_key,
                           help="Select a fetched model above or type an identifier available to your account.")
+    try:
+        profile = Profile(model=model or 'connection-check', **values)
+    except ValueError:
+        profile = None
+        st.caption('Complete a valid HTTP(S) endpoint and credential reference before inspecting model limits.')
+    discovered = st.session_state.get(models_key, {}).get('capabilities', {}).get(model)
+    capabilities = bind_capabilities(ModelCapabilities.model_validate(discovered), profile) if discovered and profile else None
+    if profile and capabilities is None and config.get('model_capabilities'):
+        capabilities = Profile.model_validate({**config, **values, 'model': model or 'connection-check'}).model_capabilities
+    if st.button('Inspect selected model limits', disabled=not model or profile is None):
+        try:
+            if not is_local(url) and not store.setting(workspace, 'external_llm', False):
+                raise ValueError('External requests are disabled')
+            with Adapter(profile) as adapter:
+                descriptor = adapter.model_details(model)
+            saved_catalog = st.session_state.setdefault(models_key, {'signature': signature, 'models': []})
+            saved_catalog.setdefault('capabilities', {})[model] = descriptor.capabilities.model_dump()
+            st.rerun()
+        except Exception:
+            st.error('Model limits could not be inspected. Existing saved limits remain available.')
+    if capabilities:
+        st.caption(f"Advertised capacity: context {capabilities.context_tokens or 'unknown'} tokens; "
+                   f"input {capabilities.input_tokens or 'unknown'}; output {capabilities.output_tokens or 'unknown'}. "
+                   f"Source: {capabilities.source}; observed {max(0, int(time.time() - capabilities.observed_at)) // 60} minutes ago. "
+                   + ('Stale: configured limits apply until refreshed. ' if not capabilities.current_for(profile) else '') + ('Dynamic routing: upstream limits may differ.' if capabilities.dynamic else ''))
     if st.button("Test model connection", disabled=not model):
         check_connection(model, False)
     name = st.text_input("Profile name", config.get("name", provider), key=prefix + '_name')
     if st.button("Save provider profile", type="primary"):
         try:
-            profile = Profile(name=name, model=model, **values)
+            profile = Profile(name=name, model=model, model_capabilities=capabilities, **values)
             policy = AccessPolicy(allow_write=True, allow_config_write=True, allowed_credential_refs=(key_env,) if key_env else ())
             with store.lock:
                 save_profile(store, policy, workspace, profile.model_dump(), revision(store, workspace), selection if existing else '')

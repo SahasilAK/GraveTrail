@@ -673,7 +673,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
     def run_operation(self, w, operation, arguments, progress=None, cancelled=None):
         self._workspace(w, write=True)
         if operation == "analyze":
-            if arguments.get('mode', 'parser') != 'parser':
+            if arguments.get('mode', 'parser') != 'parser' or arguments.get('resume_run_id'):
                 from dataforge.ai_analysis_models import AnalysisRequest
                 options = dict(arguments)
                 options['force_parser'] = options.pop('force', False)
@@ -716,7 +716,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
     def _analyze(self, w, opts, file_ids=None, force=False, mode='parser', **arguments):
         from dataforge.ai_analysis_models import AnalysisRequest
         request = AnalysisRequest(mode=mode, file_ids=file_ids, force_parser=force, **arguments)
-        if request.mode != 'parser':
+        if request.mode != 'parser' or request.resume_run_id:
             return self._start_project_analysis(w, request)
         return self.jobs.start(w, "analyze", lambda p, c: self.run_operation(w, "analyze", {
             "file_ids": file_ids, "force": force}, p, cancelled=c),

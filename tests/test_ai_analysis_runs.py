@@ -10,6 +10,7 @@ from dataforge.ai_analysis_models import (
     TableRelationship,
     UnitAttemptResult,
 )
+from dataforge.ai_wire import encode_project_result
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
 from dataforge.store import Store
@@ -175,7 +176,7 @@ def test_real_adapter_pipeline_counts_extraction_and_additional_review(project):
         sent.append(context)
         if 'candidates' in context:
             payload = {'decisions': [{'candidate_id': candidate['candidate_id'], 'decision': 'supported',
-                'evidence': [evidence.model_dump()]} for candidate in context['candidates']]}
+                'evidence': [{'unit_id': unit.unit_id}]} for candidate in context['candidates']]}
             usage = (20, 10)
         else:
             at = unit.start_offset + unit.code.index('a.x')
@@ -184,7 +185,8 @@ def test_real_adapter_pipeline_counts_extraction_and_additional_review(project):
                     category='direct', inputs=[DerivationInput(table='raw.a', column='x'),
                         DerivationInput(table='mart.b', column='id', role='row_filter'),
                         DerivationInput(table='raw.a', column='id', role='row_filter')], evidence=evidence,
-                    expression_start_offset=at, expression_end_offset=at + 3)]).model_dump()
+                    expression_start_offset=at, expression_end_offset=at + 3)])
+            payload = encode_project_result(payload)
             usage = (10, 5)
         return httpx.Response(200, json={'message': {'content': json.dumps(payload)},
             'done_reason': 'stop', 'prompt_eval_count': usage[0], 'eval_count': usage[1]})
@@ -244,13 +246,14 @@ def test_eight_assignment_review_fits_default_context(project):
         sent.append(ctx)
         if 'candidates' in ctx:
             payload = {'decisions': [{'candidate_id': c['candidate_id'], 'decision': 'supported',
-                'evidence': [evidence.model_dump()]} for c in ctx['candidates']]}
+                'evidence': [{'unit_id': unit.unit_id}]} for c in ctx['candidates']]}
         else:
             payload = ProjectLineageResponse(unit_id=unit.unit_id, coverage=Coverage(status='complete'),
                 derivations=[DerivationCandidate(target_table='mart.b', target_column=f'c{i}',
                     expression=f'a.x{i}', category='direct', ordinal=i, inputs=[DerivationInput(table='raw.a', column=f'x{i}')],
                     evidence=evidence, expression_start_offset=unit.code.index(f'a.x{i}'),
-                    expression_end_offset=unit.code.index(f'a.x{i}') + 4) for i in range(8)]).model_dump()
+                    expression_end_offset=unit.code.index(f'a.x{i}') + 4) for i in range(8)])
+            payload = encode_project_result(payload)
         return httpx.Response(200, json={'message': {'content': json.dumps(payload)}, 'done_reason': 'stop'})
 
     result = run_analysis(store, w, AnalysisRequest(mode='hybrid', additional_ai_review=True),

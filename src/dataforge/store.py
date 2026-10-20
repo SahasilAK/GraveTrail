@@ -14,7 +14,8 @@ import duckdb
 from dataforge.configuration import WorkspaceIdentity
 
 COLUMN_TABLES = ('column_dependencies', 'column_derivations', 'column_references', 'column_analysis')
-AI_ANALYSIS_TABLES = ('analysis_fact_support', 'ai_analysis_claims', 'ai_analysis_units', 'ai_analysis_runs')
+AI_SNAPSHOT_TABLES = ('ai_analysis_snapshots',)
+AI_ANALYSIS_TABLES = (*AI_SNAPSHOT_TABLES, 'analysis_fact_support', 'ai_analysis_claims', 'ai_analysis_units', 'ai_analysis_runs')
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT current_timestamp);
@@ -110,6 +111,15 @@ class Store:
                     CREATE INDEX ai_support_fact ON analysis_fact_support(workspace_id,fact_type,fact_id);
                     CREATE INDEX ai_support_record ON analysis_fact_support(record_id);
                     INSERT INTO schema_migrations(version) VALUES (6);
+                """)
+
+            if (7,) not in versions:
+                self.db.execute("""
+                    CREATE TABLE ai_analysis_snapshots(run_id VARCHAR, workspace_id VARCHAR,
+                        file_id VARCHAR, part INTEGER, content_hash VARCHAR, payload VARCHAR,
+                        PRIMARY KEY(run_id,file_id,part));
+                    CREATE INDEX ai_snapshots_workspace ON ai_analysis_snapshots(workspace_id,run_id,file_id);
+                    INSERT INTO schema_migrations(version) VALUES (7);
                 """)
 
     @contextmanager

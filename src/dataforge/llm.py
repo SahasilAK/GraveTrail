@@ -8,19 +8,30 @@ import re
 import time
 import uuid
 from contextlib import ExitStack
+from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, urlparse
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from dataforge.ai_analysis_models import LineageReviewResponse, ProjectLineageResponse, UnitAttemptResult
+from dataforge.ai_budget import project_profile, request_allowance
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
 from dataforge.connections import connection_scope, current_connections
 from dataforge.llm_resources import request_slot
+from dataforge.model_capabilities import (
+    ModelCapabilities,
+    ModelDescriptor,
+    bind_capabilities,
+    capability_identity,
+    execution_profile,
+    merge_descriptors,
+    normalize_model,
+)
 from dataforge.models import canonical, stable_id, statements
 from dataforge.parsers.sas import parse_sas, strip_comments
 
@@ -64,6 +75,15 @@ class Profile(BaseModel):
     temperature: float | None = Field(default=None, ge=0, le=2)
     structured: bool = True
     api_version: str = "2024-10-21"
+    model_capabilities: ModelCapabilities | None = None
+    context_mode: Literal['automatic', 'custom'] = 'custom'
+    output_mode: Literal['automatic', 'custom'] = 'custom'
+
+    @model_validator(mode='after')
+    def bound_capabilities(self):
+        if self.model_capabilities and self.model_capabilities.identity != capability_identity(self):
+            self.model_capabilities = None
+        return self
 
     @field_validator("provider")
     @classmethod
@@ -278,12 +298,39 @@ class Adapter:
             raise ProviderError("Provider returned an unsupported response shape") from None
 
     def models(self) -> list[str]:
+        return [model.id for model in self.model_catalog()]
+
+    def model_catalog(self) -> list[ModelDescriptor]:
         if self.profile.provider == "Azure OpenAI":
             raise ValueError("Enter an Azure deployment name manually; model listing requires a separate management API")
         path = "/api/tags" if self.profile.provider == "Ollama" else "/api/2.0/serving-endpoints" if self.profile.provider == "Databricks" else "/models"
         data = self._request("GET", path)
         items = data.get("models", data.get("data", data.get("endpoints", [])))
-        return [x.get("id", x.get("name", "")) for x in items if x.get("id") or x.get("name")]
+        if not isinstance(items, list) or len(items) > 20000:
+            raise ValueError('Provider model catalog is invalid or exceeds 20,000 models')
+        return merge_descriptors(normalize_model(item, self.profile.provider) for item in items)
+
+    def model_details(self, model: str) -> ModelDescriptor:
+        """Explicit metadata inspection only; never loads a model or submits source."""
+        if self.profile.provider == 'Ollama':
+            data = self._request('POST', '/api/show', {'model': model})
+            descriptor = normalize_model({**data, 'id': model}, 'Ollama')
+            # Native trained capacity can exceed the currently loaded allocation.
+            try:
+                running = self._request('GET', '/api/ps').get('models', [])
+            except ProviderError:
+                running = []
+            allocated = [normalize_model({**item, 'id': model}, 'Ollama') for item in running
+                         if isinstance(item, dict) and item.get('name', item.get('model')) == model]
+            descriptor = merge_descriptors([descriptor, *allocated])[0]
+            if allocated:
+                descriptor = descriptor.model_copy(update={'capabilities': descriptor.capabilities.model_copy(update={'source': 'runtime'})})
+        else:
+            descriptor = next((item for item in self.model_catalog() if item.id == model), None)
+            if descriptor is None:
+                raise ValueError('Selected model is absent from the provider catalog')
+        profile = self.profile.model_copy(update={'model': model})
+        return descriptor.model_copy(update={'capabilities': bind_capabilities(descriptor.capabilities, profile)})
 
 
 def validate_response(response: GroundedResponse, code: str, known: set[str], first: int, last: int):
@@ -551,12 +598,12 @@ def analysis_prompt(unit, task, execution, *, reserve_review=False):
         raise ValueError('Unknown project task')
     system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
     template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
-    schema = _transmitted_schema(PROJECT_SCHEMAS[task].model_json_schema())
+    from dataforge.ai_wire import wire_schema
+    schema = _transmitted_schema(wire_schema(task))
     digest = hashlib.sha256((system+template+json.dumps(schema,sort_keys=True,separators=(',',':'))).encode()).hexdigest()
     context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
-               'schema':schema,'schema_version':'1'}
-    from dataforge.ai_analysis_models import EvidenceCitation
-    context['evidence_template'] = EvidenceCitation.from_unit(unit).model_dump()
+               'schema':schema,'schema_version':'2'}
+    context['evidence_reference'] = {'unit_id': unit.unit_id}
     if task == 'lineage_review':
         context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review else execution.review_candidates
     user = template.replace('{{context}}',json.dumps(context,ensure_ascii=False,separators=(',',':')))
@@ -564,39 +611,52 @@ def analysis_prompt(unit, task, execution, *, reserve_review=False):
 
 
 def preview_analysis_routes(store, workspace, units, execution):
-    """Offline route, envelope and cumulative full-source permission checks."""
-    blocked,routes = [],{}
+    """Offline route, full-envelope capacity and disclosure checks."""
+    blocked, routes, excluded, allowances = [], {}, [], []
     tasks = ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
     for task in tasks:
         try:
-            selected = analysis_routes(store,workspace,task)
+            selected = analysis_routes(store, workspace, task)
         except ValueError as exc:
-            blocked.append({'task':task,'reason':str(exc)})
+            blocked.append({'task': task, 'reason': str(exc)})
             continue
-        routes[task] = [{'profile_id':pid,'provider':p.provider,'model':p.model,'base_url':p.base_url,
-                         'max_tokens':p.max_tokens,'attempts_per_unit':p.retries+1} for pid,p in selected]
-        for pid,profile in selected:
+        routes[task] = []
+        for index, (pid, profile) in enumerate(selected):
+            configured_profile = profile
+            if len(units) == 1:
+                profile = project_profile(profile, units[0])
             manager = execution.connections or current_connections()
             if hasattr(manager, 'for_profile'):
-                manager = manager.for_profile(pid, profile)
+                manager = manager.for_profile(pid, configured_profile)
             if profile.key_env and not manager.resolve(profile.key_env):
-                blocked.append({'task':task,'profile_id':pid,'reason':'credential_unavailable'})
-            if not is_local(profile.base_url) and not store.setting(workspace,'external_llm',False):
-                blocked.append({'task':task,'profile_id':pid,'reason':'external_requests_disabled'})
-            if not is_local(profile.base_url) and not store.setting(workspace,'allow_full_source',False):
-                blocked.append({'task':task,'profile_id':pid,'reason':'complete_source_permission_required'})
+                blocked.append({'task': task, 'profile_id': pid, 'reason': 'credential_unavailable'})
+            if not is_local(profile.base_url) and not store.setting(workspace, 'external_llm', False):
+                blocked.append({'task': task, 'profile_id': pid, 'reason': 'external_requests_disabled'})
+            if not is_local(profile.base_url) and not store.setting(workspace, 'allow_full_source', False):
+                blocked.append({'task': task, 'profile_id': pid, 'reason': 'complete_source_permission_required'})
+            incompatible = []
             for unit in units:
-                system,user,_ = analysis_prompt(unit,task,execution,reserve_review=task == 'lineage_review')
-                if len(system)+len(user) > min(profile.context_chars,store.setting(workspace,'max_context_chars',8000)):
-                    blocked.append({'task':task,'unit_id':unit.unit_id,'profile_id':pid,'reason':'complete_prompt_exceeds_context_budget'})
-    ceiling = sum(sum(p['attempts_per_unit'] for p in rr) for rr in routes.values()) * len(units)
-    tokens = sum(sum(p['max_tokens']*p['attempts_per_unit'] for p in rr) for rr in routes.values()) * len(units)
+                system, user, _ = analysis_prompt(unit, task, execution, reserve_review=task == 'lineage_review')
+                allowance = request_allowance(profile, system, user,
+                    privacy_chars=store.setting(workspace, 'max_context_chars', 8000))
+                allowances.append({'task': task, 'unit_id': unit.unit_id, 'path': unit.path, 'profile_id': pid, **asdict(allowance)})
+                incompatible.extend({'task': task, 'unit_id': unit.unit_id, 'profile_id': pid,
+                    'reason': reason, 'required_characters': allowance.required_characters} for reason in allowance.reasons)
+            if incompatible and index:
+                excluded.extend(incompatible)
+                continue
+            blocked.extend(incompatible)
+            routes[task].append({'profile_id': pid, 'provider': profile.provider, 'model': profile.model,
+                'base_url': profile.base_url, 'max_tokens': profile.max_tokens,
+                'timeout': profile.timeout, 'attempts_per_unit': profile.retries + 1})
+    ceiling = sum(p['attempts_per_unit'] for rr in routes.values() for p in rr) * len(units)
+    tokens = sum(p['max_tokens'] * p['attempts_per_unit'] for rr in routes.values() for p in rr) * len(units)
     if ceiling > execution.request.max_provider_attempts:
-        blocked.append({'reason':'worst_case_provider_attempt_budget'})
+        blocked.append({'reason': 'worst_case_provider_attempt_budget'})
     if tokens > execution.request.max_output_tokens_total:
-        blocked.append({'reason':'worst_case_output_reservation_budget'})
-    return {'routes':routes,'blocked':blocked,'valid':not blocked,'max_provider_attempts':ceiling,
-            'max_output_tokens_reserved':tokens}
+        blocked.append({'reason': 'worst_case_output_reservation_budget'})
+    return {'routes': routes, 'blocked': blocked, 'excluded_routes': excluded, 'allowances': allowances,
+            'valid': not blocked, 'max_provider_attempts': ceiling, 'max_output_tokens_reserved': tokens}
 
 
 def invoke_analysis_unit(store, workspace, unit, task, execution):
@@ -608,12 +668,17 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
     result = None
     invocation_start = execution.attempts
     for pid,profile in routes:
+        configured_profile = profile
+        profile = project_profile(profile, unit)
         manager = execution.connections or current_connections()
         if hasattr(manager, 'for_profile'):
-            manager = manager.for_profile(pid, profile)
+            manager = manager.for_profile(pid, configured_profile)
         execution.check()
-        if len(system)+len(user) > min(profile.context_chars,store.setting(workspace,'max_context_chars',8000)):
-            raise ValueError('Complete prompt/schema/context exceeds profile or workspace context budget')
+        allowance = request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000))
+        if not allowance.valid:
+            if pid != routes[0][0]:
+                continue
+            raise ValueError(', '.join(allowance.reasons))
         started,attempt_start = time.perf_counter(),execution.attempts
         usage,raw,validated,metadata = {},'',None,{}
         outcome,reason,retryable = 'validated','',False
@@ -627,7 +692,7 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
             if source['raw_content'][unit.start_offset:unit.end_offset] != unit.code:
                 raise ValueError('Unit code differs from the immutable original')
             current_routes = dict(analysis_routes(store,workspace,task))
-            if pid not in current_routes or current_routes[pid] != active_profile:
+            if pid not in current_routes or execution_profile(project_profile(current_routes[pid], unit)) != execution_profile(active_profile):
                 raise ValueError('Provider route changed before provider attempt')
             if execution.settings and any(execution.settings.get(k) != v for k,v in settings.items()):
                 raise ValueError('Analysis settings changed before provider attempt')
@@ -659,7 +724,8 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
                     raise ValueError('Provider output truncated')
                 if len(raw) > 1024*1024:
                     raise ValueError('Model content exceeds response budget')
-                validated = PROJECT_SCHEMAS[task].model_validate(response_object(raw))
+                from dataforge.ai_wire import decode_project_result
+                validated = decode_project_result(task, response_object(raw), unit)
                 if task == 'project_lineage':
                     validated.assert_unit(unit)
                 else:
@@ -668,9 +734,12 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
                         for citation in decision.evidence:
                             citation.assert_unit(unit)
         except (ValueError,ProviderError) as exc:
-            outcome,reason,retryable = 'quarantined',str(exc)[:500],isinstance(exc,ProviderError) and exc.retryable
+            # Pydantic errors include rejected input values; retain only host error codes.
+            outcome = 'quarantined'
+            reason = str(exc)[:500] if isinstance(exc, ProviderError) else 'project_response_contract_invalid'
+            retryable = isinstance(exc, ProviderError) and exc.retryable
         record_id = uuid.uuid4().hex
-        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':'1',
+        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':'2',
                    'reason':reason,'attempts':execution.attempts-attempt_start,'requested_model':profile.model,
                    'resolved_model':metadata.get('resolved_model'),'finish_reason':metadata.get('finish_reason'),
                    'usage_known':metadata.get('usage_known',False),'result':None,
@@ -680,7 +749,7 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
             details.update(context=user,response=raw)
         safe_details,safe_usage = manager.sanitize(details),manager.sanitize(usage)
         with store.transaction():
-            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,'1'])
+            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,'2'])
             store.execute('INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                 [record_id,workspace,pid,task,unit.file_id,unit.first,prompt_hash,profile.provider,profile.model,
                  outcome,time.perf_counter()-started,json.dumps(safe_usage),json.dumps(safe_details)])

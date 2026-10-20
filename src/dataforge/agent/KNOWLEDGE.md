@@ -49,3 +49,5 @@ preview_project_analysis/get_project_analysis_report/cancel_job share policy che
 preserve complete launch grants in detached workers, journal source-free stages and use
 cooperative cancellation markers without opening DuckDB in polling processes. No automatic
 billable resume after owner restart. Exact profile bindings isolate shared credential refs.
+
+Project preview/start accept nullable automatic execution limits, pinned `resume_run_id` and explicit `retry_unknown`. Actual HTTP SDK regression covers bounded start, poll and continuation; resumed parser-default entry routes to the original AI mode with source/network checks.

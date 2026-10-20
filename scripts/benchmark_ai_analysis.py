@@ -320,9 +320,78 @@ def evaluate_projects():
     return report
 
 
+
+def evaluate_scale(units=1000):
+    """Real transport/storage lifecycle, synthetic units only; no provider/network dependency."""
+    import tracemalloc
+
+    import httpx
+
+    from dataforge.analysis_service import preview_analysis, run_analysis
+    from dataforge.ingestion import Importer
+    from dataforge.llm import Profile
+    from dataforge.store import Store
+    if not 1000 <= units <= 5000:
+        raise ValueError('Scale qualification requires 1,000â€“5,000 synthetic units')
+    seen = []
+    def respond(request):
+        body = json.loads(request.content)
+        text = body['messages'][-1]['content']
+        context = json.loads(text[text.index('{'):])
+        seen.append(context['unit']['unit_id'])
+        return httpx.Response(200, json={'message': {'content': json.dumps({
+            'unit_id': context['unit']['unit_id'], 'coverage': {'status': 'no_operations'}})},
+            'done_reason': 'stop', 'prompt_eval_count': 1, 'eval_count': 1})
+    started = time.perf_counter()
+    tracemalloc.start()
+    executions = 0
+    with tempfile.TemporaryDirectory(prefix='gravetrail-ai-scale-') as directory:
+        store = Store(directory)
+        try:
+            workspace = store.create_workspace('Synthetic continuation qualification')
+            Importer(store, workspace).files([('scale.sql', ''.join(f'select {i};\n' for i in range(units)).encode())], {'.sql'})
+            profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock', retries=0, context_chars=100000)
+            store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', workspace, 'mock', profile.model_dump_json()])
+            store.set_setting(workspace, 'default_profile', 'p')
+            store.set_setting(workspace, 'max_context_chars', 100000)
+            request = AnalysisRequest(mode='hybrid', max_provider_attempts=100)
+            preview = preview_analysis(store, workspace, request)
+            while True:
+                report = run_analysis(store, workspace, request, transport=httpx.MockTransport(respond))
+                executions += 1
+                print(json.dumps({'scale_execution': executions, 'processed': report.counts.get('processed', 0),
+                    'requests': len(seen), 'status': report.status}), file=sys.stderr, flush=True)
+                if report.status == 'committed':
+                    break
+                if report.status != 'awaiting_continuation' or executions > (units // 100) + 1:
+                    raise ValueError('Scale continuation did not finish')
+                if store.rows('SELECT * FROM analysis_runs'):
+                    raise ValueError('Partial graph published before completion')
+                # Reopen the actual durable store between bounded executions.
+                store.close()
+                store = Store(directory)
+                request = AnalysisRequest(mode='hybrid', max_provider_attempts=100, resume_run_id=report.run_id)
+            _, peak = tracemalloc.get_traced_memory()
+            max_record = store.rows('SELECT max(octet_length(encode(result))) AS n FROM ai_analysis_units')[0]['n']
+            if not (len(seen) == len(set(seen)) == units == report.counts['processed']):
+                raise ValueError('Scale unit coverage mismatch or repeated request')
+            if peak > 512 * 1024 * 1024 or max_record > 16 * 1024 * 1024:
+                raise ValueError('Scale qualification exceeded its measured memory or record bound')
+            return {'synthetic_units': units, 'executions': executions, 'requests': len(seen),
+                'unique_requested_units': len(set(seen)), 'processed': report.counts['processed'],
+                'initial_selected_units': preview['selected_units'], 'final_status': report.status,
+                'publication_count': len(store.rows('SELECT * FROM analysis_runs')),
+                'max_unit_record_bytes': max_record, 'python_peak_bytes': peak,
+                'elapsed_seconds': round(time.perf_counter() - started, 3), 'live_provider_calls': 0,
+                'exact_coverage': len(seen) == len(set(seen)) == units == report.counts['processed']}
+        finally:
+            store.close()
+            tracemalloc.stop()
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
+    parser.add_argument('--scale-units', type=int, help='Exercise 1,000â€“5,000 synthetic units through mock transport and durable continuation')
     parser.add_argument('--cases', nargs='+', help='Explicit checked-in fixture IDs; required with --live')
     parser.add_argument('--predictions', type=Path)
     parser.add_argument('--key-env', default='DATAFORGE_OMNIROUTE_API_KEY')
@@ -334,6 +403,10 @@ def main(argv=None):
     try:
         report = evaluate(predictions=args.predictions, live=args.live, key_env=args.key_env,
                           max_attempts=args.max_attempts, max_seconds=args.max_seconds, case_ids=args.cases)
+        if args.scale_units:
+            if args.live:
+                raise ValueError('Scale qualification never uses live providers')
+            report['scale'] = evaluate_scale(args.scale_units)
         if args.project_gold:
             report['offline_project_gold'] = evaluate_projects()
     except (ValueError, OSError, KeyError) as exc:

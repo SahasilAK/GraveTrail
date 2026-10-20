@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "EvidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "unit_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Unit Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit_id"
+      ],
+      "title": "EvidenceReference",
+      "type": "object"
+    },
+    "ReviewDecisionWire": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "supported",
+            "contradicted",
+            "insufficient_evidence"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceReference"
+          },
+          "maxItems": 20,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "reason": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "decision"
+      ],
+      "title": "ReviewDecisionWire",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/ReviewDecisionWire"
+      },
+      "maxItems": 100,
+      "title": "Decisions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "decisions"
+  ],
+  "title": "LineageReviewResponseWire",
+  "type": "object"
+}

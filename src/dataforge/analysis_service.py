@@ -22,11 +22,14 @@ from dataforge.ai_analysis_store import (
     attach_published_support,
     inherited_context_sources,
     load_analysis_report,
+    load_validation_checkpoint,
     save_claim_decisions,
     save_run,
-    save_unit_result,
+    save_validation_checkpoint,
 )
+from dataforge.ai_budget import execution_budget
 from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_analysis
+from dataforge.ai_wire import decode_project_result, encode_project_result
 from dataforge.connections import current_connections
 from dataforge.llm import (
     analysis_prompt,
@@ -66,33 +69,51 @@ def _usage(counts, result):
 
 def _prepare(store, workspace, request, connections=None, cancelled=None, transport=None, authorize=None):
     prepared = prepare_analysis(store, workspace, request)
-    plan = plan_ai_units(prepared, max_chars=min(store.setting(workspace, 'llm_chunk_chars', 4000),
-                                               store.setting(workspace, 'max_context_chars', 8000)))
+    plan = plan_ai_units(prepared, max_chars=200000)
     execution = AIExecutionContext(request, connections=connections or current_connections(),
         cancelled=cancelled, transport=transport, settings=prepared.settings, authorize=authorize,
         source_hashes={s.file_id: s.content_hash for s in prepared.sources})
-    blocked, routes, attempts, tokens = list(plan.blocked), {}, 0, 0
+    blocked, routes, bundles, allowances, excluded = list(plan.blocked), {}, [], [], []
+    reusable = 0
+    expected = _state_revision(store, workspace)
     for unit in plan.units:
         execution.catalog = plan.context_for(unit)
         preview = preview_analysis_routes(store, workspace, [unit], execution)
-        blocked.extend(preview['blocked'])
+        blocked.extend(b for b in preview['blocked'] if not b['reason'].startswith('worst_case_'))
         routes.update(preview['routes'])
-        attempts += preview['max_provider_attempts']
-        tokens += preview['max_output_tokens_reserved']
-    if attempts > request.max_provider_attempts:
-        blocked.append({'reason': 'worst_case_provider_attempt_budget'})
-    if tokens > request.max_output_tokens_total:
-        blocked.append({'reason': 'worst_case_output_reservation_budget'})
+        allowances.extend(preview['allowances'])
+        excluded.extend(preview['excluded_routes'])
+        seconds = sum(p['timeout'] * p['attempts_per_unit'] for rr in preview['routes'].values() for p in rr)
+        context_hash = _unit_context_hash(prepared, plan, execution, unit, expected)
+        checkpoint = load_validation_checkpoint(store, workspace, request.resume_run_id, unit, context_hash) if request.resume_run_id else None
+        cached = None if request.refresh_ai else _cached(store, workspace, unit, context_hash)
+        if checkpoint or cached is not None:
+            remaining = ['lineage_review'] if request.additional_ai_review and not (checkpoint and checkpoint[1]) else []
+            eligible = [p for task in remaining for p in preview['routes'].get(task, [])]
+            bundles.append((sum(p['attempts_per_unit'] for p in eligible),
+                sum(p['max_tokens'] * p['attempts_per_unit'] for p in eligible),
+                sum(p['timeout'] * p['attempts_per_unit'] for p in eligible)))
+            reusable += 1
+        else:
+            bundles.append((preview['max_provider_attempts'], preview['max_output_tokens_reserved'], seconds))
+    budget = execution_budget(bundles, **{k: getattr(request, k) for k in
+        ('max_provider_attempts', 'max_output_tokens_total', 'max_seconds')})
+    execution.request = request.model_copy(update=budget['effective'])
+    execution.unit_limit = budget['selected_units']
+    if plan.units and (not execution.unit_limit or (execution.unit_limit < len(bundles)
+            and not any(any(bundle) for bundle in bundles[:execution.unit_limit]))):
+        blocked.append({'reason': 'single_unit_exceeds_execution_budget'})
     return prepared, plan, execution, {'valid': not blocked, 'mode': request.mode,
         'files': len(prepared.sources), 'units': len(plan.units), 'empty_files': len(plan.empty_files),
         'blocked': blocked, 'routes': routes, 'disclosure': list(plan.disclosure),
-        'estimated_characters': plan.estimated_characters, 'max_provider_attempts': attempts,
-        'max_output_tokens_reserved': tokens, 'manifest_hash': prepared.manifest_hash}
+        'allowances': allowances, 'excluded_routes': excluded, 'reusable_units': reusable, **budget,
+        'estimated_characters': plan.estimated_characters, 'max_provider_attempts': budget['total_attempts'],
+        'max_output_tokens_reserved': budget['total_output_tokens'], 'manifest_hash': prepared.manifest_hash}
 
 
 def preview_analysis(store, workspace, request, *, connections=None):
     """Offline disclosure/context/budget preview; no connection tests or requests."""
-    request = AnalysisRequest.model_validate(request)
+    request = _resume_request(store, workspace, AnalysisRequest.model_validate(request))
     if request.mode == 'parser':
         return {'valid': True, 'mode': 'parser', 'files': len(store.files(workspace)),
                 'units': 0, 'blocked': [], 'routes': {}, 'max_provider_attempts': 0}
@@ -106,15 +127,46 @@ def _current(store, workspace, prepared, expected_revision):
         raise ValueError('source_or_configuration_changed')
 
 
+def _unit_context_hash(prepared, plan, execution, unit, expected_revision):
+    _, _, prompt_hash = analysis_prompt(unit, 'project_lineage', execution)
+    return _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
+        'prompt': prompt_hash, 'settings_revision': expected_revision,
+        'validator': VALIDATOR_VERSION, 'mode': prepared.request.mode})
+
+
+def _resume_request(store, workspace, request):
+    if not request.resume_run_id:
+        return request
+    rows = store.rows('SELECT mode,status,summary FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?',
+        [workspace, request.resume_run_id])
+    if not rows or rows[0]['status'] not in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'}:
+        raise ValueError('Run is not available for continuation')
+    summary = json.loads(rows[0]['summary'])
+    if 'request' not in summary:
+        raise ValueError('This legacy run has no resumable checkpoint')
+    saved = summary['request']
+    if request.file_ids is not None and request.file_ids != saved['file_ids']:
+        raise ValueError('Continuation source selection is pinned')
+    if request.mode not in {'parser', saved['mode']}:
+        raise ValueError('Continuation analysis mode is pinned')
+    return AnalysisRequest.model_validate({**saved, **{k: getattr(request, k) for k in
+        ('max_provider_attempts', 'max_output_tokens_total', 'max_seconds', 'resume_run_id', 'retry_unknown')}})
+
+
 def _cached(store, workspace, unit, context_hash):
     rows = store.rows('''SELECT u.result FROM ai_analysis_units u
         JOIN ai_analysis_runs r ON u.run_id=r.run_id AND u.workspace_id=r.workspace_id
-        WHERE u.workspace_id=? AND u.unit_id=? AND u.context_hash=? AND u.status='validated'
+        WHERE u.workspace_id=? AND u.unit_id=? AND u.context_hash=? AND u.status IN ('validated','staged')
         ORDER BY r.created_at DESC LIMIT 1''', [workspace, unit.unit_id, context_hash])
     if not rows:
         return None
     try:
-        result = ProjectLineageResponse.model_validate_json(rows[0]['result'])
+        saved = json.loads(rows[0]['result'])
+        if saved.get('checkpoint_version') == 2:
+            saved = saved.get('cache')
+            if not saved:
+                return None
+        result = decode_project_result('project_lineage', saved['payload'], unit) if saved.get('wire_version') == 2 else ProjectLineageResponse.model_validate(saved)
         result.assert_unit(unit)
         return result
     except ValueError:
@@ -126,12 +178,16 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
     """Run only under an explicit user action; failures retain the prior graph."""
     request = AnalysisRequest.model_validate(request)
     manager = connections or current_connections()
+    try:
+        request = _resume_request(store, workspace, request)
+    except ValueError as exc:
+        return AnalysisReport(mode=request.mode, status='blocked', reasons=[str(exc)])
     if request.mode == 'parser':
         result = analyze(store, workspace, request.file_ids, request.force_parser,
                          progress=progress, cancelled=cancelled)
         return AnalysisReport(run_id=result['run_id'], mode='parser', status='committed', complete=True,
             counts={k: result[k] for k in ('analyzed', 'cached', 'assets', 'edges')})
-    run_id = uuid.uuid4().hex
+    run_id = request.resume_run_id or uuid.uuid4().hex
     counts = Counter(units=0, processed=0, cache_hits=0, requests=0, accepted=0, rejected=0,
                      unresolved=0, conflicts=0, input_tokens=0, output_tokens=0)
     usage_known, execution, registered = True, None, False
@@ -150,6 +206,23 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             prepared, plan, execution, preview = _prepare(store, workspace, request, manager,
                 cancelled=cancelled, transport=transport)
             expected_revision = _state_revision(store, workspace)
+            prior_summary = {}
+            if request.resume_run_id:
+                prior = store.rows('SELECT * FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?', [workspace, run_id])[0]
+                prior_summary = json.loads(prior['summary'])
+                pin = prior_summary.get('pin', {})
+                if pin != {'manifest': prepared.manifest_hash, 'revision': expected_revision,
+                           'prior': prepared.prior_revision, 'protocol': _protocol_hash()}:
+                    raise ValueError('source_or_configuration_changed')
+                if prior_summary.get('inflight') and not request.retry_unknown:
+                    return AnalysisReport(run_id=run_id, mode=request.mode, status='awaiting_continuation',
+                        reasons=['unknown_inflight_request_requires_explicit_retry'])
+            execution.prior_requests = prior_summary.get('counts', {}).get('requests', 0)
+            execution.prior_reserved = prior_summary.get('counts', {}).get('reserved_output_tokens', 0)
+            counts['input_tokens'] = prior_summary.get('counts', {}).get('input_tokens', 0)
+            counts['output_tokens'] = prior_summary.get('counts', {}).get('output_tokens', 0)
+            usage_known = not prior_summary.get('inflight') and prior_summary.get('usage_known', True)
+
 
             def authorize_attempt(profile):
                 _current(store, workspace, prepared, expected_revision)
@@ -168,7 +241,12 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             manifest = {'inventory': prepared.manifest,
                         'sources': list(context_sources.values())}
             save_run(store, workspace, run_id, mode=request.mode, manifest=manifest,
-                     configuration=prepared.settings, summary={'preview': preview})
+                     configuration=prepared.settings, summary={'preview': {k: v for k, v in preview.items()
+                         if k not in {'allowances', 'disclosure', 'routes', 'excluded_routes'}}, 'request': request.model_dump(),
+                         'pin': {'manifest': prepared.manifest_hash, 'revision': expected_revision,
+                                 'prior': prepared.prior_revision, 'protocol': _protocol_hash()},
+                         'counts': {**dict(counts), 'requests': execution.prior_requests,
+                                    'reserved_output_tokens': execution.prior_reserved}, 'inflight': False})
             registered = True
             local_results, config, local_counts = prepare_analysis_results(store, workspace,
                 request.file_ids, request.force_parser, cancelled=cancelled)
@@ -191,21 +269,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             execution.check()
             _current(store, workspace, prepared, expected_revision)
             execution.catalog = plan.context_for(unit)
-            _, _, prompt_hash = analysis_prompt(unit, 'project_lineage', execution)
-            context_hash = _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
-                'prompt': prompt_hash, 'settings_revision': expected_revision,
-                'validator': VALIDATOR_VERSION, 'mode': request.mode})
-            response = None if request.refresh_ai else _cached(store, workspace, unit, context_hash)
-            record_id = None
-            if response is not None:
-                counts['cache_hits'] += 1
-            else:
-                result = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
-                if result is None or result.outcome != 'validated' or result.result is None:
-                    raise ValueError('incomplete_ai_response')
-                response, record_id = result.result, result.record_id or None
-                usage_known &= result.usage_known
-                _usage(counts, result)
+            context_hash = _unit_context_hash(prepared, plan, execution, unit, expected_revision)
             settings = dict(config)
             from dataforge.services import source_dialect
             metadata = next(m for m, _ in local_results if m['file_id'] == unit.file_id)
@@ -213,26 +277,46 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             context = ValidationContext(unit=unit, workspace_id=workspace,
                 source_text=sources[unit.file_id].code, settings=settings, catalog=execution.catalog,
                 parser_result=parser[unit.file_id])
-            validated = validate_project_response(response, context)
+            checkpoint = load_validation_checkpoint(store, workspace, run_id, unit, context_hash)
+            record_id, reviewed, cache = None, False, None
+            if checkpoint:
+                validated, reviewed, record_id, cache = checkpoint
+            else:
+                if index >= execution.unit_limit:
+                    return _pause(store, workspace, run_id, request, execution, counts, usage_known)
+                response = None if request.refresh_ai else _cached(store, workspace, unit, context_hash)
+                if response is not None:
+                    counts['cache_hits'] += 1
+                else:
+                    _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'project_lineage')
+                    result = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
+                    if result is None or result.outcome != 'validated' or result.result is None:
+                        raise ValueError('incomplete_ai_response')
+                    response, record_id = result.result, result.record_id or None
+                    usage_known &= result.usage_known
+                    _usage(counts, result)
+                validated = validate_project_response(response, context)
+                cacheable = (not validated.rejected and not validated.unresolved
+                             and validated.coverage.status in {'complete', 'no_operations'})
+                cache = {'wire_version': 2, 'payload': encode_project_result(response)} if cacheable else None
+                reviewed = not request.additional_ai_review
+                save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated,
+                    reviewed=reviewed, record_id=record_id, cache=cache)
+                _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
             parser_indexes = {id(op): i for i, op in enumerate(parser[unit.file_id].operations)}
             original_indexes[unit.file_id].update({key: parser_indexes[id(op)]
                 for op, _, _, key in operation_contexts(context, parser[unit.file_id])})
-            cacheable = (not validated.rejected and not validated.unresolved
-                         and validated.coverage.status in {'complete', 'no_operations'})
-            # Rejected/unsupported model bodies are not an implicit history store.
-            # Complete validated responses contain only minimal source-backed claims.
-            save_unit_result(store, workspace, run_id, unit.unit_id, file_id=unit.file_id,
-                content_hash=unit.content_hash, start_char=unit.start_offset, end_char=unit.end_offset,
-                context_hash=context_hash, status='validated' if cacheable else 'partial', record_id=record_id,
-                result=response.model_dump() if cacheable else {})
             reconciled = reconcile_candidates(parser[unit.file_id], validated, request.mode, context=context)
             candidates = [f for f in reconciled.facts if f.origin == 'ai']
-            if request.additional_ai_review and candidates:
+            if request.additional_ai_review and candidates and not reviewed:
+                if index >= execution.unit_limit:
+                    return _pause(store, workspace, run_id, request, execution, counts, usage_known)
                 stage = 'reviewing'
                 execution.review_candidates, rejected_ids = review_payload(candidates)
                 validated.unresolved.extend(ClaimDecision(candidate_id=cid,
                     reason='additional_ai_review_context_limit', status='unresolved') for cid in sorted(rejected_ids))
                 if execution.review_candidates:
+                    _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'lineage_review')
                     review = invoke_analysis_unit(store, workspace, unit, 'lineage_review', execution)
                     if review is None or review.outcome != 'validated' or review.result is None:
                         raise ValueError('incomplete_ai_review')
@@ -246,6 +330,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                 reason='additional_ai_review_insufficient', status='unresolved'))
                 validated.accepted = [f for f in validated.accepted if f.candidate_id not in rejected_ids]
                 reconciled = reconcile_candidates(parser[unit.file_id], validated, request.mode, context=context)
+            if not reviewed:
+                save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated,
+                    reviewed=True, record_id=record_id, cache=cache)
+                _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
             output = rebuilt[unit.file_id]
             output.operations.extend(reconciled.operations)
             output.assets.extend(reconciled.assets)
@@ -263,11 +351,11 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 fact = final_candidates.get(fact.candidate_id, fact)
                 claims.append({'claim_id': fact.candidate_id, 'unit_id': unit.unit_id, 'kind': fact.kind,
                     'status': 'unresolved' if fact.status == 'unresolved' else 'accepted',
-                    'payload': fact.model_dump(), 'record_id': record_id, 'reasons': []})
+                    'payload': fact.model_dump(exclude={'detail'}), 'record_id': record_id, 'reasons': []})
             for ordinal, fact in enumerate(reconciled.parser_only):
                 claims.append({'claim_id': stable_id(unit.unit_id, 'parser', str(ordinal)),
                     'unit_id': unit.unit_id, 'kind': fact.kind,
-                    'status': 'parser_only', 'payload': fact.model_dump(), 'reasons': ['ai_omission']})
+                    'status': 'parser_only', 'payload': fact.model_dump(exclude={'detail'}), 'reasons': ['ai_omission']})
             for decision in [*validated.rejected, *validated.unresolved]:
                 claims.append({'claim_id': decision.candidate_id or stable_id(unit.unit_id, decision.reason),
                     'unit_id': unit.unit_id, 'kind': 'decision', 'status': decision.status,
@@ -289,9 +377,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         restore_manual_ai_results(store, workspace, results, config)
         stage = 'ready'
         execution.check()
-        counts['requests'] = execution.attempts
-        counts['reserved_output_tokens'] = execution.reserved_output_tokens
-        if not execution.attempts:
+        counts['requests'] = execution.prior_requests + execution.attempts
+        counts['reserved_output_tokens'] = execution.prior_reserved + execution.reserved_output_tokens
+        if not counts['requests']:
             usage_known = False
         report = AnalysisReport(run_id=run_id, mode=request.mode, status='committed',
             complete=not counts['coverage_gaps'], counts=dict(counts), usage_known=usage_known,
@@ -313,12 +401,20 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         reason = 'cancelled' if isinstance(exc, InterruptedError) else (
             'deadline_exceeded' if isinstance(exc, TimeoutError) else str(exc))
         reason = manager.redact(reason)[:500]
-        status = 'cancelled' if isinstance(exc, InterruptedError) else (
+        status = 'awaiting_continuation' if isinstance(exc, TimeoutError) and registered else 'cancelled' if isinstance(exc, InterruptedError) else (
             'stale' if reason == 'source_or_configuration_changed' else 'blocked' if not registered else 'failed')
         if execution:
-            counts['requests'] = execution.attempts
+            counts['requests'] = getattr(execution, 'prior_requests', 0) + execution.attempts
+            counts['reserved_output_tokens'] = getattr(execution, 'prior_reserved', 0) + execution.reserved_output_tokens
         report = AnalysisReport(run_id=run_id, mode=request.mode, status=status, counts=dict(counts),
             usage_known=False, reasons=[reason])
+        if request.resume_run_id and not registered:
+            # A busy/blocked probe must never mutate another execution's active run.
+            if status != 'stale':
+                return report
+            prior = store.rows('SELECT summary FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?', [workspace, run_id])
+            if prior:
+                report.counts = json.loads(prior[0]['summary']).get('counts', {})
         save_run(store, workspace, run_id, mode=request.mode, status=status,
                  summary={**report.model_dump(), 'stage': stage})
         return report
@@ -331,7 +427,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
 
 def analysis_report(store, workspace, run_id=None, *, include_source=False):
     """Bounded callers paginate claims; source permission controls candidate details."""
-    report = load_analysis_report(store, workspace, run_id)
+    report = load_analysis_report(store, workspace, run_id, include_source=include_source)
     if report is None:
         raise ValueError('Analysis report not found')
     report.pop('configuration', None)
@@ -339,3 +435,63 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
         if not include_source:
             claim.pop('payload', None)
     return report
+
+
+def _protocol_hash():
+    from dataforge.ai_wire import wire_schema
+    from dataforge.llm import PROMPTS
+    return _hash({task: {'system': (PROMPTS/task/'system.md').read_text(encoding='utf-8'),
+        'template': (PROMPTS/task/'user_template.md').read_text(encoding='utf-8'), 'schema': wire_schema(task)}
+        for task in ('project_lineage', 'lineage_review')})
+
+
+def _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known):
+    snapshot = dict(counts)
+    snapshot['requests'] = execution.prior_requests + execution.attempts
+    snapshot['reserved_output_tokens'] = execution.prior_reserved + execution.reserved_output_tokens
+    save_run(store, workspace, run_id, mode=request.mode, status='extracting',
+        summary={'counts': snapshot, 'usage_known': usage_known, 'inflight': False})
+
+
+def _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, task):
+    def journal():
+        snapshot = dict(counts)
+        snapshot['requests'] = execution.prior_requests + execution.attempts
+        snapshot['reserved_output_tokens'] = execution.prior_reserved + execution.reserved_output_tokens
+        save_run(store, workspace, run_id, mode=request.mode, status='extracting',
+            summary={'counts': snapshot, 'inflight': {'unit_id': unit.unit_id, 'task': task}})
+    execution.journal_attempt = journal
+
+
+def _pause(store, workspace, run_id, request, execution, counts, usage_known):
+    counts['requests'] = execution.prior_requests + execution.attempts
+    counts['reserved_output_tokens'] = execution.prior_reserved + execution.reserved_output_tokens
+    counts['remaining'] = counts['units'] - counts['processed']
+    report = AnalysisReport(run_id=run_id, mode=request.mode, status='awaiting_continuation',
+        counts=dict(counts), usage_known=usage_known, reasons=['execution_budget_reached'])
+    save_run(store, workspace, run_id, mode=request.mode, status=report.status, summary=report.model_dump())
+    return report
+
+
+def apply_context_allowance(store, workspace, request, required, expected_revision):
+    """Explicit local action: raise only calculated disclosure/context caps, under CAS."""
+    from dataforge.llm import Profile
+    from dataforge.settings_service import check_revision
+    request = AnalysisRequest.model_validate(request)
+    with store.analysis_lock, store.transaction():
+        check_revision(store, workspace, expected_revision)
+        preview = preview_analysis(store, workspace, request)
+        actual = max((a['required_characters'] for a in preview.get('allowances', []) if not a['valid']), default=0)
+        if type(required) is not int or required != actual or not 500 <= required <= 100000:
+            raise ValueError('Calculated context allowance changed or exceeds the application limit')
+        store.set_setting(workspace, 'max_context_chars', max(required, store.setting(workspace, 'max_context_chars', 8000)))
+        profile_ids = {a['profile_id'] for a in preview['allowances']
+                       if 'complete_prompt_exceeds_context_budget' in a['reasons']}
+        for pid in profile_ids:
+            row = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [workspace, pid])[0]
+            profile = Profile.model_validate_json(row['config'])
+            profile.context_chars = max(required, profile.context_chars)
+            profile.context_mode = 'custom'
+            store.execute('UPDATE llm_profiles SET config=? WHERE workspace_id=? AND profile_id=?',
+                [profile.model_dump_json(), workspace, pid])
+    return preview_analysis(store, workspace, request)

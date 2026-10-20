@@ -183,8 +183,6 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
     catalog = sorted(catalog,key=lambda x:(x['name'].casefold(),x['job_id'],x['unit_id']))
     context_hash = hashlib.sha256(json.dumps({'catalog':catalog,'settings':prepared.settings,'disclosure':disclosure},sort_keys=True).encode()).hexdigest()
     ceiling = len(units) * (2 if prepared.request.additional_ai_review else 1)
-    if ceiling > prepared.request.max_provider_attempts:
-        blocked.append({'reason':'required_units_exceed_attempt_budget'})
     return AIPlan(tuple(units),tuple(blocked),tuple(empty),tuple(catalog),tuple(disclosure),context_hash,
                   sum(len(u.code) for u in units),ceiling)
 
@@ -194,7 +192,9 @@ class AIExecutionContext:
     def __init__(self, request, *, connections=None, authorize=None, cancelled=None, transport=None,
                  clock=None, catalog=None, settings=None, review_candidates=None, source_hashes=None):
         import time
-        self.request = AnalysisRequest.model_validate(request)
+        validated = AnalysisRequest.model_validate(request)
+        self.request = validated.model_copy(update={k: getattr(validated, k) or v for k, v in
+            {'max_provider_attempts': 200, 'max_output_tokens_total': 200000, 'max_seconds': 1800}.items()})
         self.connections = connections
         self.authorize = authorize
         self.cancelled = cancelled
@@ -232,4 +232,6 @@ class AIExecutionContext:
         self.reserved_output_tokens += profile.max_tokens
         self.attempt_log.append({'attempt':self.attempts,'model':profile.model,'provider':profile.provider,
                                  'reserved_output_tokens':profile.max_tokens,'outcome':'unknown'})
+        if getattr(self, 'journal_attempt', None):
+            self.journal_attempt()
         return min(profile.timeout,self.remaining_seconds)

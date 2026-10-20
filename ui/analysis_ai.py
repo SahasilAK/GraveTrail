@@ -21,17 +21,36 @@ def controls(store, workspace, file_ids):
     review = st.checkbox('Additional AI review', key='ai_review_' + workspace)
     if not compare:
         st.warning('AI-generated mode is experimental. Unsupported claims remain unresolved; parser-only relationships are omitted.')
+    refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
+    base = dict(mode='hybrid' if compare else 'ai', file_ids=file_ids,
+                additional_ai_review=review, refresh_ai=refresh)
+    try:
+        automatic = preview_analysis(store, workspace, AnalysisRequest(**base), connections=current_connections())
+    except ValueError as exc:
+        st.warning(str(exc))
+        return AnalysisRequest(**base), False
+    overrides = {}
     with st.expander('AI request budget'):
-        attempts = st.number_input('Maximum provider attempts', 1, 2000, 200, key='ai_attempts_' + workspace)
-        tokens = st.number_input('Maximum reserved output tokens', 1000, 2000000, 200000, step=1000,
-                                key='ai_output_' + workspace)
-        seconds = st.number_input('Execution time budget (seconds)', 30, 14400, 1800,
-                                  key='ai_seconds_' + workspace)
-        refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
-        st.caption('Retries, fallback requests and optional review count toward the budget. Cancellation and deadlines are cooperative; an in-flight request may already be billed.')
-    request = AnalysisRequest(mode='hybrid' if compare else 'ai', file_ids=file_ids,
-        additional_ai_review=review, max_provider_attempts=attempts,
-        max_output_tokens_total=tokens, max_seconds=seconds, refresh_ai=refresh)
+        def reset():
+            for suffix in ('attempts', 'output', 'seconds'):
+                st.session_state.pop('ai_custom_' + suffix + '_' + workspace, None)
+        st.button('Reset AI budgets to automatic', on_click=reset)
+        fields = [('attempts', 'max_provider_attempts', 'Maximum provider attempts', 1, 2000, 1),
+                  ('output', 'max_output_tokens_total', 'Maximum reserved output tokens', 1000, 2000000, 1000),
+                  ('seconds', 'max_seconds', 'Execution time budget (seconds)', 30, 14400, 1)]
+        for suffix, field, label, low, high, step in fields:
+            key = 'ai_' + suffix + '_' + workspace
+            custom_key = 'ai_custom_' + suffix + '_' + workspace
+            custom = st.session_state.get(custom_key, False)
+            if not custom:
+                st.session_state[key] = automatic['recommended'][field]
+            def edited(custom_key=custom_key):
+                st.session_state[custom_key] = True
+            value = st.number_input(label, low, high, step=step, key=key, on_change=edited)
+            overrides[field] = value if custom else None
+            st.caption(label + ': ' + ('Custom' if custom else 'Automatic'))
+        st.caption('Automatic values include retries, fallback and optional review. Each execution stays within application limits; larger projects continue explicitly. In-flight requests may already be billed.')
+    request = AnalysisRequest(**base, **overrides)
     try:
         preview = preview_analysis(store, workspace, request, connections=current_connections())
         st.caption(f"{preview['files']} selected files · {preview['units']} complete source units · "
@@ -41,10 +60,24 @@ def controls(store, workspace, file_ids):
                           for task, profiles in preview['routes'].items() for p in profiles],
                          hide_index=True, alt='Configured AI routes for this build')
         st.caption('Selected SQL/SAS source and relevant declarations are sent to these routes. A local gateway such as OmniRoute may forward requests. AI additions remain inferred.')
+        if preview.get('remaining_units'):
+            st.info(f"This execution covers {preview['selected_new_units']} units needing AI work; {preview['remaining_units']} continue later. The current graph remains until all units finish.")
+        st.caption('Input estimates use conservative UTF-8 bytes plus framing and capacity headroom; reported usage is shown after execution.')
         if preview['blocked']:
             reasons = sorted({b['reason'] for b in preview['blocked']})
-            st.warning('AI build needs attention: ' + '; '.join(reasons))
-            st.caption('For context limits, adjust both Connections & AI → Privacy → context budget and the provider profile context size. Complete remote files require the full-source permission. Large indivisible units also need a larger chunk size in Workspace settings.')
+            st.warning('AI build needs attention: ' + '; '.join(r.replace('_', ' ') for r in reasons))
+            st.caption('Whole SQL/SAS blocks are preserved. Model capacity, source disclosure allowance and execution limits are checked separately.')
+            affected = {b.get('unit_id') for b in preview['blocked'] if b.get('unit_id')}
+            if affected:
+                paths = {a['path'] for a in preview.get('allowances', []) if a['unit_id'] in affected}
+                st.caption('Affected source selection: ' + ', '.join(sorted(paths)))
+            required = max((a['required_characters'] for a in preview.get('allowances', []) if not a['valid']), default=0)
+            if 'complete_prompt_exceeds_context_budget' in reasons and 0 < required <= 100000:
+                if st.button(f'Apply calculated context allowance ({required:,} characters)'):
+                    from dataforge.analysis_service import apply_context_allowance
+                    from dataforge.settings_service import revision
+                    apply_context_allowance(store, workspace, request, required, revision(store, workspace))
+                    st.rerun()
         with st.expander('Source disclosure preview', on_change='rerun', key='ai_disclosure_' + workspace) as panel:
             if panel.open:
                 st.dataframe(preview['disclosure'], hide_index=True, alt='Selected source files and immutable hashes to be disclosed')
@@ -78,6 +111,8 @@ def progress(store, workspace):
     result = record.get('result', {})
     if result.get('status') == 'committed':
         st.success('AI analysis committed. Open lineage or inspect the validation report below.')
+    elif result.get('status') == 'awaiting_continuation':
+        st.info('Analysis paused with saved progress. Continue below; the current graph remains available.')
     else:
         st.warning('AI analysis did not publish a new graph: ' + ', '.join(result.get('reasons', [record['status']])))
     if result.get('run_id'):
@@ -108,6 +143,17 @@ def report(store, workspace):
                             format_func=choices.get, key='ai_report_choice_' + workspace)
     result = analysis_report(store, workspace, selected, include_source=True)
     summary = result['summary']
+    if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
+        unknown = bool(result['summary'].get('inflight'))
+        retry = st.checkbox('Retry the unknown in-flight request (may incur a duplicate charge)', key='ai_retry_' + selected) if unknown else False
+        if st.button('Continue AI analysis', disabled=unknown and not retry):
+            request = AnalysisRequest.model_validate({**result['summary']['request'], 'resume_run_id': selected,
+                'retry_unknown': retry, **{field: st.session_state.get('ai_' + suffix + '_' + workspace)
+                    if st.session_state.get('ai_custom_' + suffix + '_' + workspace) else None
+                    for suffix, field in [('attempts', 'max_provider_attempts'), ('output', 'max_output_tokens_total'), ('seconds', 'max_seconds')]}})
+            start(store, workspace, request)
+            st.rerun()
+
     counts = summary.get('counts', {})
     st.write(f"Requests: {counts.get('requests', 0)} · cached units: {counts.get('cache_hits', 0)} · "
              f"accepted: {counts.get('accepted', 0)} · rejected: {counts.get('rejected', 0)} · "

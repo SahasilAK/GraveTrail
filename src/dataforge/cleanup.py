@@ -118,6 +118,7 @@ def _files(store, workspace, category):
         for row in store.rows("SELECT snapshot FROM analysis_runs WHERE snapshot IS NOT NULL AND snapshot<>''"):
             referenced.update(json.loads(row['snapshot']).get('files', {}).values())
         referenced.update(r['content_hash'] for r in store.rows('SELECT content_hash FROM ai_analysis_units'))
+        referenced.update(r['content_hash'] for r in store.rows('SELECT content_hash FROM ai_analysis_snapshots'))
         for row in store.rows("SELECT accepted_results FROM ai_analysis_runs WHERE status='committed'"):
             referenced.update(item['metadata']['content_hash'] for item in json.loads(row['accepted_results']))
         # Recovery archives can retain references to older source versions. Preserve conservatively.

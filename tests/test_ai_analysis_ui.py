@@ -54,3 +54,54 @@ def test_completed_worker_refreshes_the_whole_report_once(tmp_path, monkeypatch)
     assert any('Requests: 1' in text.value and 'accepted: 3' in text.value for text in view.markdown)
     import streamlit as st
     st.cache_resource.clear()
+
+
+def test_budget_defaults_are_automatic_editable_and_resettable(tmp_path, monkeypatch):
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Automatic UI')
+    Importer(store, w).files([('q.sql', b'select 1; select 2;')], {'.sql'})
+    from dataforge.llm import Profile
+    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', retries=0)
+    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', profile.model_dump_json()])
+    store.set_setting(w, 'default_profile', 'p')
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    assert not view.exception
+    attempts = next(n for n in view.number_input if n.label == 'Maximum provider attempts')
+    assert attempts.value == 2
+    attempts.set_value(1).run()
+    next(c for c in view.checkbox if c.label == 'Additional AI review').check().run()
+    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 1
+    next(b for b in view.button if b.label == 'Reset AI budgets to automatic').click().run()
+    assert not view.exception
+    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 4
+    import streamlit as st
+    st.cache_resource.clear()
+
+
+def test_calculated_context_action_updates_only_context_allowances(tmp_path, monkeypatch):
+    import json
+
+    from dataforge.llm import Profile
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Calculated context')
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', context_chars=500)
+    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', profile.model_dump_json()])
+    store.set_setting(w, 'default_profile', 'p')
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    assert next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
+    next(b for b in view.button if b.label.startswith('Apply calculated context allowance')).click().run()
+    assert not view.exception
+    assert not next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
+    saved = json.loads(store.rows("SELECT config FROM llm_profiles WHERE profile_id='p'")[0]['config'])
+    assert saved['context_chars'] > 500 and saved['max_tokens'] == profile.max_tokens
+    for key in ('external_llm', 'allow_full_source', 'llm_history'):
+        assert store.setting(w, key, False) is False
+    import streamlit as st
+    st.cache_resource.clear()

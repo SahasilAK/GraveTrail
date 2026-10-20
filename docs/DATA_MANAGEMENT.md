@@ -91,3 +91,7 @@ CLI against an active UI/MCP data home; DuckDB supports one owning process per h
 Project AI analysis stages candidates before replacing active facts. A cancelled/failed/stale run keeps the previous graph. Minimal accepted source/decision/provenance data supports compatible offline rebuilds; opt-in full provider bodies remain subject to history privacy/retention. Selected-source analysis must preserve compatible unselected accepted contributions. An incompatible context requires reanalysis rather than silently downgrading saved facts.
 
 Project run/unit/claim/support tables participate in the shared storage lifecycle. Active publishing analysis blocks conflicting maintenance, including gaps between provider requests. Cleanup uses the existing category dependencies, previews and confirmations; removing supporting AI/source facts can invalidate dependent lineage/columns. Backups restore to a new home and preserve evidence. See [AI project analysis](AI_ANALYSIS.md) and [data model](DATA_MODEL.md).
+
+## Continued AI analysis
+
+Migration 7 adds bounded per-file/operation accepted snapshots with immutable source references. Backups, restores, workspace cleanup and integrity checks include the snapshot table and referenced blobs; v6 accepted JSON remains readable. Awaiting continuation is idle and never automatically resumes provider work. Source/configuration changes reject continuation; lost in-flight requests require an explicit potentially duplicate retry. Keep the home and its blobs together.

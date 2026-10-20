@@ -94,3 +94,7 @@ direct/column tables. Operation evidence_key/table_pairs retain one original wri
 explicit accepted edges. Graph/column/artifact queries preserve unresolved boundaries and
 original source-version scope. Full AI bodies remain history opt-in; retention removes them
 from surviving referenced records while keeping minimal accepted provenance.
+
+Automatic AI planning: `model_capabilities.py` allowlists selected-model capacity and binds recipient/model identity; `ai_budget.py` estimates complete envelopes and selects bounded executions; `ai_wire.py` hydrates strict v2 unit references before canonical validation. `analysis_service.py` pins resumable work, journals physical attempts, stages extraction/review separately and publishes once. `ai_analysis_store.py` keeps compact host checkpoints/per-claim rows and migration7 per-file/operation snapshots with legacy fallback. Observation timestamps/provenance do not change execution revision; capacity values do.
+
+Accepted claim quotes are compact source refs on disk and hydrate only for source-authorized reports; metadata reads do not read blobs. Wide-operation host detail excludes repeated usage/derivation arrays. Continued completed units remain read-only checkpoints.
