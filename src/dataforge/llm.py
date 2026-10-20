@@ -9,6 +9,7 @@ import time
 import uuid
 from contextlib import ExitStack
 from dataclasses import asdict
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote, urlparse
@@ -592,15 +593,27 @@ def review_payload(facts):
     return candidates, omitted
 
 
+@lru_cache(maxsize=2)
+def _analysis_schema_text(task):
+    from dataforge.ai_wire import wire_schema
+    return json.dumps(_transmitted_schema(wire_schema(task)), sort_keys=True, separators=(',', ':'))
+
+
+def analysis_prompt_hash(task):
+    system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
+    template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
+    return hashlib.sha256((system + template + _analysis_schema_text(task)).encode()).hexdigest()
+
+
 def analysis_prompt(unit, task, execution, *, reserve_review=False):
     """One JSON user context; prompt/schema/source overhead all count toward the limit."""
     if task not in PROJECT_SCHEMAS:
         raise ValueError('Unknown project task')
     system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
     template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
-    from dataforge.ai_wire import wire_schema
-    schema = _transmitted_schema(wire_schema(task))
-    digest = hashlib.sha256((system+template+json.dumps(schema,sort_keys=True,separators=(',',':'))).encode()).hexdigest()
+    schema_text = _analysis_schema_text(task)
+    schema = json.loads(schema_text)
+    digest = hashlib.sha256((system + template + schema_text).encode()).hexdigest()
     context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
                'schema':schema,'schema_version':'2'}
     context['evidence_reference'] = {'unit_id': unit.unit_id}

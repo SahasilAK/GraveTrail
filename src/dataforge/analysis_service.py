@@ -32,7 +32,7 @@ from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_anal
 from dataforge.ai_wire import decode_project_result, encode_project_result
 from dataforge.connections import current_connections
 from dataforge.llm import (
-    analysis_prompt,
+    analysis_prompt_hash,
     invoke_analysis_unit,
     preview_analysis_routes,
     review_payload,
@@ -128,7 +128,7 @@ def _current(store, workspace, prepared, expected_revision):
 
 
 def _unit_context_hash(prepared, plan, execution, unit, expected_revision):
-    _, _, prompt_hash = analysis_prompt(unit, 'project_lineage', execution)
+    prompt_hash = analysis_prompt_hash('project_lineage')
     return _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
         'prompt': prompt_hash, 'settings_revision': expected_revision,
         'validator': VALIDATOR_VERSION, 'mode': prepared.request.mode})
