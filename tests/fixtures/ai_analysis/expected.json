@@ -1,0 +1,327 @@
+{
+  "version": 1,
+  "split": "holdout",
+  "label_scope": "Small reviewed static semantic expectations; exclusions and unresolved constructs explicit. Not live precision evidence. No expected files are model context.",
+  "cases": [
+    {
+      "id": "constant",
+      "source": "constant.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "out"
+          ]
+        ],
+        "derivations": [
+          {
+            "target": "out.flag",
+            "expression": "1",
+            "value_inputs": [],
+            "context_roles": [
+              "rowset"
+            ]
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "join_alias",
+      "source": "join_alias.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "out"
+          ],
+          [
+            "raw.b",
+            "out"
+          ]
+        ],
+        "derivations": [
+          {
+            "target": "out.id",
+            "expression": "a.id",
+            "value_inputs": [
+              "raw.a.id"
+            ],
+            "context_roles": [
+              "join",
+              "row_filter"
+            ]
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "unused_cte",
+      "source": "unused_cte.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "out"
+          ]
+        ],
+        "forbidden_edges": [
+          [
+            "secret.x",
+            "out"
+          ]
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "union",
+      "source": "union.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "out"
+          ],
+          [
+            "raw.b",
+            "out"
+          ]
+        ],
+        "derivations": [
+          {
+            "target": "out.id",
+            "value_inputs": [
+              "raw.a.id",
+              "raw.b.other_id"
+            ],
+            "branches": [
+              0,
+              1
+            ]
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "update",
+      "source": "update.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "source",
+            "target"
+          ]
+        ],
+        "derivations": [
+          {
+            "target": "target.amount",
+            "expression": "src.amount + 1",
+            "value_inputs": [
+              "source.amount"
+            ],
+            "context_roles": [
+              "row_filter"
+            ]
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "merge",
+      "source": "merge.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "source",
+            "target"
+          ]
+        ],
+        "derivations": [
+          {
+            "target": "target.amount",
+            "expression": "s.amount",
+            "value_inputs": [
+              "source.amount"
+            ],
+            "context_roles": [
+              "join"
+            ]
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "ambiguous",
+      "source": "ambiguous.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "abstentions": [
+          "unqualified id has ambiguous ownership"
+        ],
+        "forbidden_value_inputs": [
+          "raw.a.id",
+          "raw.b.id"
+        ]
+      }
+    },
+    {
+      "id": "wildcard",
+      "source": "wildcard.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "unknown_schema",
+            "out"
+          ]
+        ],
+        "abstentions": [
+          "unknown wildcard cardinality and output names"
+        ]
+      }
+    },
+    {
+      "id": "unknown_udf",
+      "source": "unknown_udf.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "out"
+          ]
+        ],
+        "abstentions": [
+          "unknown UDF semantics"
+        ]
+      }
+    },
+    {
+      "id": "same_line",
+      "source": "same_line.sql",
+      "language": "sql",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "x",
+            "a"
+          ],
+          [
+            "y",
+            "b"
+          ]
+        ],
+        "forbidden_edges": [
+          [
+            "x",
+            "b"
+          ],
+          [
+            "y",
+            "a"
+          ]
+        ],
+        "operation_count": 2,
+        "abstentions": []
+      }
+    },
+    {
+      "id": "assignments",
+      "source": "assignments.sas",
+      "language": "sas",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "out"
+          ]
+        ],
+        "derivations": [
+          {
+            "target": "out.amount",
+            "versions": [
+              "1",
+              "2"
+            ],
+            "expressions": [
+              "amount+1",
+              "amount*2"
+            ]
+          }
+        ],
+        "abstentions": []
+      }
+    },
+    {
+      "id": "proc",
+      "source": "proc.sas",
+      "language": "sas",
+      "split": "holdout",
+      "expected": {
+        "table_edges": [
+          [
+            "raw.a",
+            "work.sorted"
+          ]
+        ],
+        "abstentions": [
+          "unsupported column mapping remains unresolved if no structural verifier"
+        ]
+      }
+    },
+    {
+      "id": "runtime_macro",
+      "source": "runtime_macro.sas",
+      "language": "sas",
+      "split": "holdout",
+      "expected": {
+        "abstentions": [
+          "runtime macro source cannot be resolved"
+        ]
+      }
+    },
+    {
+      "id": "temporary_jobs",
+      "source": "temporary_jobs.sas",
+      "language": "sas",
+      "split": "holdout",
+      "expected": {
+        "jobs": [
+          "one",
+          "two"
+        ],
+        "table_edges": [
+          [
+            "raw.a",
+            "work.stage"
+          ]
+        ],
+        "abstentions": [
+          "WORK identity cannot cross jobs"
+        ]
+      }
+    }
+  ]
+}

@@ -611,6 +611,6 @@ Review dependency licenses when redistributing a bundled application.
 
 ## CLI and MCP UI coverage
 
-The [46-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `gravetrail capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source verification commands are in the [testing guide](TESTING.md).
+The [48-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `gravetrail capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source verification commands are in the [testing guide](TESTING.md).
 
 See [GraveTrail rebrand compatibility](BUILD_AND_RELEASE.md#gravetrail-rebrand-compatibility) before upgrading an existing installation.

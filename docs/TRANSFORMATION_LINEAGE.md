@@ -89,3 +89,9 @@ column records. Columns cleanup clears transformation coverage as well as direct
 analyze again to rebuild it. Whole-home backup/restore and integrity checks include the new
 records. Version-4 backups can be restored and upgraded when opened. To downgrade, restore
 a complete pre-upgrade home with the matching prior application version.
+
+## Optional project AI extraction
+
+The [AI project analysis](AI_ANALYSIS.md) workflow can propose direct usage and scoped transformations, then validates them against complete original units. It uses a new accepted project path; legacy advisory/manual LLM operations do not gain transformation merge rights. AI additions remain inferred, preserving exact expressions, branch/version, ordinal and value versus row-context roles.
+
+The initial extra structural verification is limited to fixture-backed static SQL UPDATE/MERGE assignments. Unsupported variants stay unresolved. Additional AI review cannot fill missing semantic proof. Unresolved derivations stop upstream/downstream chaining; unknown writer order remains a boundary even when one possible writer is accepted. Hybrid is the default AI comparison option; AI-generated mode is experimental and has no measured live accuracy claim.

@@ -14,3 +14,5 @@ Assets listed in explanations must participate in the complete cited operation. 
 advisory task can merge table relationships, including legacy records during refresh.
 
 Change prompt version, generated schemas and regression tests together.
+
+Project analysis uses `project_lineage` and `lineage_review` version 1, separately from manual assistance. Full immutable units, declarations and JSON schema form user context. Model output cannot set publication status; deterministic source/semantic validation remains authoritative. Review must decide the exact host candidate set and cannot add facts.

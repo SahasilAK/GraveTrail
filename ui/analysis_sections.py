@@ -62,6 +62,8 @@ def render_diagnostics(store, w):
 
 
 def render_history(store, w):
+    from ui.analysis_ai import report
+    report(store, w)
     st.subheader("Analysis history", icon=":material/history:")
     st.dataframe([{k: r[k] for k in ["created_at", "status", "analyzed", "cached", "duration"]} for r in store.runs(w)[:50]],
                  hide_index=True, column_config={"created_at": "Started", "analyzed": "Parsed files", "cached": "Reused files", "duration": st.column_config.NumberColumn("Seconds", format="%.2f")},

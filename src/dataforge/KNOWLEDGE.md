@@ -80,3 +80,24 @@ Whole-home restore staging uses a gravetrail-restore- temporary prefix; persiste
 Graph presentation in exports.py uses theme-aware surfaces, rounded node materials, visible focus and immediate press feedback; Enter/Space selects evidence and pointer cancellation releases panning. Live and offline graph still share the same rendering code and escaped evidence.
 
 Graph images: graph_images.py serializes inert SVG from exports.graph_data paths/bounds and rasterizes with at most two timeout-bound resvg workers. image_worker.py is the private source/frozen entry. graph_image_service.py snapshots filtered facts in UI name order, bounds contraction evidence and returns revision, counts, coverage and safe filename; exposed by services.py. artifacts.py registers SVG/PNG with source authorization and cleans incomplete publications. Graph.focus marks depth boundaries.
+
+- `ai_analysis_models.py` — Strict bounded v1 project extraction/review contracts, full-unit immutable citation identity and shared run/validation facts.
+- `ai_context.py` — Offline immutable source/settings snapshots, complete statement/SAS block project plans without the manual 50-chunk guard; selected-source declaration catalog and memory-only physical-attempt budgets/cancellation/deadline.
+- `ai_validation.py` — Exact full-source operation/citation and role checks; bounded static UPDATE/MERGE verification, semantic rejection/abstention and normalized claims. Never executes source.
+- `ai_reconciliation.py` — Operation-scoped parser/AI comparison, sparse accepted table pairs and shared writers; hybrid preserves parser-only facts, AI mode omits them.
+- `ai_analysis_store.py` — Migration6 runs/units/claims/support checkpoints, inherited declaration freshness, accepted per-file offline snapshots, support rebinding, interrupted-run recovery and bounded reports.
+- `analysis_service.py` — Offline preview, physical-attempt budgeting, cache revalidation, optional bounded review and atomic freshness-checked publication. Failures preserve the previous graph.
+- `project_analysis.py` — AgentService mixin for policy-gated project preview/build/report and job cancellation; exact profile-bound session credentials.
+
+Current parser cache is12; migration6 adds project provenance without replacing legacy
+direct/column tables. Operation evidence_key/table_pairs retain one original writer and
+explicit accepted edges. Graph/column/artifact queries preserve unresolved boundaries and
+original source-version scope. Full AI bodies remain history opt-in; retention removes them
+from surviving referenced records while keeping minimal accepted provenance.
+
+Automatic AI planning: `model_capabilities.py` allowlists selected-model capacity and binds recipient/model identity; `ai_budget.py` estimates complete envelopes and selects bounded executions; `ai_wire.py` hydrates strict v2 unit references before canonical validation. `analysis_service.py` pins resumable work, journals physical attempts, stages extraction/review separately and publishes once. `ai_analysis_store.py` keeps compact host checkpoints/per-claim rows and migration7 per-file/operation snapshots with legacy fallback. Observation timestamps/provenance do not change execution revision; capacity values do.
+
+Accepted claim quotes are compact source refs on disk and hydrate only for source-authorized reports; metadata reads do not read blobs. Wide-operation host detail excludes repeated usage/derivation arrays. Continued completed units remain read-only checkpoints.
+
+- `ai_semantic.py` — Exact-source SELECT projection partitions, allowlisted query clauses and AST/token span verification, scoped parser expressions, static PROC SQL spans and one-writer publication merging.
+Semantic continuation persists unit_spec in planned/staged rows and reviewed candidate IDs after each bounded review batch. Saved source/config/protocol pins are checked before hydration. Preview budgets paid stages and labels unknown review sizing provisional; eligible requests above 100 projections split for response cardinality. Root conditional focus instructions are hashed with the actual transmitted variant.

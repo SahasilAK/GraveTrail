@@ -8,7 +8,7 @@ from collections import deque
 from networkx import DiGraph, strongly_connected_components
 
 from dataforge.configuration import ParsingSettings
-from dataforge.models import AssetRef, column_key, stable_id
+from dataforge.models import AssetRef, column_key, operation_ids, stable_id
 
 ROW_ROLES = {'row_filter', 'join'}
 STATUSES = {'all', 'verified', 'inferred', 'unresolved'}
@@ -24,8 +24,7 @@ def materialize_columns(workspace, run_id, results, resolver, schemas, config):
         for op_index, op in enumerate(parsed.operations):
             if op.method == 'llm':
                 continue
-            sid = stable_id(workspace, fid, str(op_index), metadata['content_hash'])
-            oid = stable_id(sid, op.kind)
+            sid, oid = operation_ids(workspace, metadata, op_index, op)
             outputs = {resolver.norm(t.name): resolver.resolve(t, metadata, parsed, 'output')[0]
                        for t in op.targets}
 
@@ -105,7 +104,7 @@ def materialize_columns(workspace, run_id, results, resolver, schemas, config):
                                              d.get('target_version', ''), output=True)
                 did = stable_id(oid, str(index), target, str(d.get('branch', 0)))
                 status = d.get('status', 'unresolved')
-                if inferred and status == 'verified':
+                if (inferred or op.method == 'ai-project') and status == 'verified':
                     status = 'inferred'
                 dependencies = []
                 for ordinal, item in enumerate(d.get('inputs', [])):
@@ -332,7 +331,7 @@ def _trace(store, w, aid, column, direction, depth, limit, status, include_sourc
             else:
                 boundary('path_limit')
                 result['truncated'] = True
-            if not multiple_writers:
+            if not multiple_writers and step['status'] != 'unresolved':
                 if direction == 'upstream':
                     following = [(i['column_id'], level + 1,
                         'row_selection' if effect == 'row_selection' or i['role'] in ROW_ROLES else 'value',

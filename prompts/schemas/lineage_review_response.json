@@ -1,0 +1,121 @@
+{
+  "$defs": {
+    "EvidenceCitation": {
+      "additionalProperties": false,
+      "properties": {
+        "unit_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Unit Id",
+          "type": "string"
+        },
+        "file_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "File Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "start_offset": {
+          "minimum": 0,
+          "title": "Start Offset",
+          "type": "integer"
+        },
+        "end_offset": {
+          "minimum": 1,
+          "title": "End Offset",
+          "type": "integer"
+        },
+        "quote": {
+          "maxLength": 200000,
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit_id",
+        "file_id",
+        "content_hash",
+        "start_line",
+        "end_line",
+        "start_offset",
+        "end_offset",
+        "quote"
+      ],
+      "title": "EvidenceCitation",
+      "type": "object"
+    },
+    "ReviewDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "supported",
+            "contradicted",
+            "insufficient_evidence"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceCitation"
+          },
+          "maxItems": 20,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "reason": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "decision"
+      ],
+      "title": "ReviewDecision",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/ReviewDecision"
+      },
+      "maxItems": 100,
+      "title": "Decisions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "decisions"
+  ],
+  "title": "LineageReviewResponse",
+  "type": "object"
+}

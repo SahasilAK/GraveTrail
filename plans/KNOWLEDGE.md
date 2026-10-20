@@ -57,3 +57,5 @@ and direct offline-file browser interaction retain explicit unexecuted gates.
 
 - `COLUMN_TRANSFORMATION_LINEAGE.md` — User-brief implementation checklist: additive parser/storage,
   scoped query service, SQL/SAS tests, separate UI/CLI/MCP, recovery/docs and PR verification.
+
+- `SCALABLE_AI_OPERATIONS.md` — Local-only enhancement 4 design, plan, review rulings and qualification for source-bound projection/PROC SQL tasks and durable review batches. Public behavior/limits remain in AI_ANALYSIS and TESTING.

@@ -24,6 +24,9 @@ class LineageGraph:
                 self.unresolved_edges.append(e)
                 self.truncated = True
                 continue
+            if e.get('status') == 'unresolved':
+                self.unresolved_edges.append(e)
+                continue
             if self.graph.has_edge(s, t):
                 self.graph[s][t]["evidence"].append(e)
             else:
@@ -78,7 +81,12 @@ class LineageGraph:
             if neighbors - seen:
                 truncated = True
                 break
-        return self._from_graph(self.graph.subgraph(seen).copy(), truncated)
+        graph = self.graph.subgraph(seen).copy()
+        graph.graph['unresolved_edges'] = [edge for edge in self.unresolved_edges
+            if edge.get('source_id') not in self.graph or edge.get('target_id') not in self.graph
+            or (direction in {'upstream', 'combined'} and edge.get('target_id') in seen)
+            or (direction in {'downstream', 'combined'} and edge.get('source_id') in seen)]
+        return self._from_graph(graph, truncated)
 
     def cycles(self) -> list[list[str]]:
         return [sorted(c) for c in nx.strongly_connected_components(self.graph)
@@ -91,6 +99,9 @@ class LineageGraph:
         graph = self.graph.copy()
         for node, attrs in list(graph.nodes(data=True)):
             if not attrs.get("temporary") or node in keep:
+                continue
+            if any(node in (e['source_id'], e['target_id']) for e in self.unresolved_edges):
+                # Retain the exact location of uncertainty even with parallel accepted support.
                 continue
             inputs, outputs = list(graph.predecessors(node)), list(graph.successors(node))
             if not inputs or not outputs or graph.has_edge(node, node):
@@ -137,6 +148,17 @@ class LineageGraph:
                     "method": evidence.get("method", ""), "status": evidence.get("status", ""),
                     "intermediates": ", ".join(attrs.get("intermediates", [])),
                     "file_id": evidence.get("file_id", ""), "statement_id": evidence.get("statement_id", "")})
+        for evidence in self.unresolved_edges:
+            source, target = evidence['source_id'], evidence['target_id']
+            if source not in self.nodes or target not in self.nodes:
+                continue
+            rows.append({'source': self.nodes[source]['name'], 'target': self.nodes[target]['name'],
+                'source_job': asset_job(self.nodes[source]) or '', 'target_job': asset_job(self.nodes[target]) or '',
+                'logical_step': generations[mapping[target]], 'operation': evidence.get('kind', ''),
+                'file': evidence.get('relative_path', ''), 'start_line': evidence.get('start_line', 1),
+                'end_line': evidence.get('end_line', 1), 'confidence': evidence.get('confidence', 1),
+                'method': evidence.get('method', ''), 'status': 'unresolved', 'intermediates': '',
+                'file_id': evidence.get('file_id', ''), 'statement_id': evidence.get('statement_id', '')})
         return sorted(rows, key=lambda r: (r["logical_step"], r["source"], r["file"]))
 
     def root_paths(self, target, limit=50, depth=15):
@@ -162,7 +184,8 @@ class LineageGraph:
                for value in [max_relationships, max_evidence]):
             raise ValueError('Path relationship/evidence limits must be positive integers')
         report = {"selected_asset": asset, "direction": direction, "max_paths": limit,
-                  "max_depth": depth, "truncated": self.truncated, "paths": []}
+                  "max_depth": depth, "truncated": self.truncated, "paths": [],
+                  'complete': not self.truncated, 'boundaries': []}
         if asset not in self.graph:
             return report
         pending = deque([([asset], None)])
@@ -176,12 +199,25 @@ class LineageGraph:
             node = path[0] if direction == "upstream" else path[-1]
             neighbors = sorted(self.graph.predecessors(node) if direction == "upstream"
                                else self.graph.successors(node))
+            uncertain = [e for e in self.unresolved_edges if
+                         e.get('target_id' if direction == 'upstream' else 'source_id') == node]
+            if uncertain:
+                report['complete'] = False
+                for evidence in uncertain:
+                    citation = {k: v for k, v in evidence.items() if k in fields}
+                    if citation not in report['boundaries']:
+                        report['boundaries'].append(citation)
+                        if max_evidence is not None and evidence_count + len(report['boundaries']) > max_evidence:
+                            raise ValueError('Path evidence limit exceeded; narrow the selection')
+            blocked = [e for e in uncertain if not self.graph.has_edge(e['source_id'], e['target_id'])]
             if boundary is None:
                 if not neighbors:
-                    boundary = "root" if direction == "upstream" else "terminal"
+                    boundary = 'unresolved' if blocked else "root" if direction == "upstream" else "terminal"
                 elif len(path) - 1 >= depth:
                     boundary = "depth"
                     report["truncated"] = True
+                elif blocked and len(report['paths']) + len(pending) < limit:
+                    pending.append((path, 'unresolved'))
             if boundary is not None:
                 if boundary == 'cycle':
                     report['truncated'] = True
@@ -198,7 +234,7 @@ class LineageGraph:
                 for source, target in zip(path, path[1:]):
                     edge = self.graph[source][target]
                     evidence_count += len(edge['evidence'])
-                    if max_evidence is not None and evidence_count > max_evidence:
+                    if max_evidence is not None and evidence_count + len(report['boundaries']) > max_evidence:
                         raise ValueError('Path evidence limit exceeded; narrow the selection')
                     relationship_count += 1
                     steps.append({"source": self.nodes[source]["name"], "target": self.nodes[target]["name"],
@@ -213,4 +249,5 @@ class LineageGraph:
                         break
                     candidate = [neighbor, *path] if direction == "upstream" else [*path, neighbor]
                     pending.append((candidate, "cycle" if neighbor in path else None))
+        report['complete'] = report['complete'] and not report['truncated']
         return report

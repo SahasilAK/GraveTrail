@@ -23,3 +23,7 @@ explicit home supports browser review; no private source/provider data used.
 Windows staging consumes an explicit single artifact directory and requires checksummed installer/lifecycle evidence. Other-platform staging retains named-directory/archive contracts.
 
 Benchmark/live-check temporary directories use gravetrail prefixes; supplied fixture archive names remain original.
+
+- `benchmark_ai_analysis.py` — Offline operation/scope/version/role gold scorer and optional synthetic ZIP acceptance; explicit doubly opted-in bounded live OmniRoute evaluation. Aggregate sanitized metrics distinguish absent precision/sample-size insufficiency from pass.
+
+`benchmark_ai_analysis.py --scale-units 1000` adds mock-transport durable continuation, exact request/unit coverage, reopen, one final publication, elapsed time, peak Python allocations and maximum unit record bytes. Scale mode never makes live provider calls.

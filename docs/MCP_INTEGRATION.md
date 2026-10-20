@@ -85,7 +85,7 @@ exception internals. HTTP access logging is disabled to keep source/credentials 
 
 ## Discovery and tools
 
-The complete registered interface has **80 tools**, verified on 2026-10-18.
+The complete registered interface has **83 tools**, verified on 2026-10-19.
 The table lists every tool and every top-level input. `options` is the shared bounded
 query object described below. Required inputs are separate from optional inputs;
 optional defaults and enum values are available through MCP tool discovery or
@@ -96,88 +96,91 @@ A listed tool may be unavailable to the current launch. This reference is checke
 against actual SDK registrations by `tests/test_documentation.py`.
 
 <!-- mcp-tools:start -->
-| Tool | Required inputs | Optional inputs | Annotation |
-| --- | --- | --- | --- |
-| `analyze_impact` | `asset`, `workspace_id` | `options` | Read |
-| `apply_application_theme` | `name` | `options` | Mutation |
-| `clear_runtime_connection` | `profile_id`, `workspace_id` | `options` | Mutation |
-| `compare_analysis_runs` | `after`, `before`, `workspace_id` | `options` | Read |
-| `connect_runtime_reference` | `profile_id`, `workspace_id` | `options` | Mutation |
-| `create_workspace` | `name` | `description` | Mutation |
-| `discover_provider_models` | `profile_id`, `workspace_id` | `options` | Mutation / outbound network |
-| `export_ai_result` | `record_id`, `workspace_id` | `options` | Mutation |
-| `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `max_paths`, `options`, `include_evidence`, `include_source_text` | Mutation |
-| `export_graph` | `asset`, `workspace_id` | `background`, `legend`, `scale`, `title`, `direction`, `format`, `options`| Mutation |
-| `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` | Mutation |
-| `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` | Mutation |
-| `export_results` | `asset`, `workspace_id` | `direction`, `format`, `options` | Mutation |
-| `export_source_bundle` | `selection`, `workspace_id` | `options` | Mutation |
-| `export_workspace_configuration` | `workspace_id` | — | Read |
-| `get_agent_setup` | `workspace_id` | `client`, `options`, `tool_name`, `transport` | Read |
-| `get_ai_activity` | `workspace_id` | `options` | Read |
-| `get_ai_result` | `record_id`, `workspace_id` | `options` | Read |
-| `get_analysis_issues` | `workspace_id` | `options`, `severity` | Read |
-| `get_analysis_run` | `run_id`, `workspace_id` | `options` | Read |
-| `get_application_logging` | — | `options` | Read |
-| `get_application_theme` | — | `options` | Read |
-| `get_asset_schema` | `asset`, `workspace_id` | `options` | Read |
-| `get_capabilities` | — | `options`, `workspace_id` | Read |
-| `get_column_lineage` | `asset`, `column`, `workspace_id` | `direction`, `options`, `status` | Read |
-| `get_column_usage` | `asset`, `workspace_id` | `column_query`, `file_id`, `group_by`, `options`, `usage_type` | Read |
-| `get_data_dictionary` | `workspace_id` | `options`, `query` | Read |
-| `get_dependency_paths` | `asset`, `workspace_id` | `direction`, `max_paths`, `options` | Read |
-| `get_export` | `workspace_id` | `artifact_id`, `format`, `length`, `offset`, `options`, `result_id` | Read |
-| `get_graph_data` | `asset`, `workspace_id` | `direction`, `edge_id`, `node_id`, `options`, `view` | Read |
-| `get_ingestion_run` | `ingestion_id`, `workspace_id` | `options` | Read |
-| `get_job_status` | `job_id`, `workspace_id` | `options` | Read |
-| `get_lineage` | `asset`, `workspace_id` | `direction`, `options` | Read |
-| `get_lineage_batch` | `assets`, `workspace_id` | `direction`, `options` | Read |
-| `get_lineage_steps` | `asset`, `workspace_id` | `direction`, `options` | Read |
-| `get_model_routing` | `workspace_id` | `options` | Read |
-| `get_provider_profile` | `profile_id`, `workspace_id` | `options` | Read |
-| `get_runtime_connection_status` | `profile_id`, `workspace_id` | `options` | Read |
-| `get_runtime_info` | — | `options`, `workspace_id` | Read |
-| `get_settings_schema` | `workspace_id` | `section` | Read |
-| `get_source_evidence` | `workspace_id` | `end_line`, `file_id`, `full`, `operation_id`, `options`, `start_line`, `statement_id` | Read |
-| `get_source_metadata` | `file_id`, `workspace_id` | `options` | Read |
-| `get_workspace_health` | `workspace_id` | `options` | Read |
-| `get_workspace_settings` | `section`, `workspace_id` | — | Read |
-| `get_transformation_columns` | `asset`, `workspace_id` | `options` | Read |
-| `get_workspace_summary` | `workspace_id` | — | Read |
-| `import_workspace_configuration` | `configuration` | — | Mutation |
-| `ingest_sources` | `extensions`, `path`, `workspace_id` | — | Mutation |
-| `inspect_cleanup` | `workspace_id` | — | Read |
-| `inspect_database_maintenance` | — | `options` | Read |
-| `list_ai_results` | `workspace_id` | `options` | Read |
-| `list_analysis_runs` | `workspace_id` | `options` | Read |
-| `list_history_archives` | `workspace_id` | `options` | Read |
-| `list_ingestion_runs` | `workspace_id` | `options` | Read |
-| `list_provider_profiles` | `workspace_id` | `options` | Read |
-| `list_review_candidates` | `workspace_id` | `options` | Read |
-| `list_runtime_backups` | — | `options` | Read |
-| `list_staging_recoveries` | `workspace_id` | `options` | Read |
-| `list_theme_presets` | — | `options` | Read |
-| `list_workspaces` | — | `options`, `query` | Read |
-| `merge_ai_claims` | `record_id`, `workspace_id` | `options`, `refresh` | Mutation |
-| `preview_ai_chunks` | `file_id`, `first`, `last`, `task`, `workspace_id` | `options` | Read |
-| `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` | Read |
-| `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` | Read |
-| `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` | Read |
-| `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` | Read |
-| `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` | Mutation |
-| `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` | Mutation / outbound network |
-| `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options` | Mutation / outbound network |
-| `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` | Mutation |
-| `search_assets` | `workspace_id` | `options`, `query` | Read |
-| `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` | Read |
-| `start_lineage_analysis` | `workspace_id` | `file_ids`, `force` | Mutation |
-| `test_local_agent_access` | `workspace_id` | `options` | Read |
-| `test_provider_connection` | `profile_id`, `workspace_id` | `options` | Mutation / outbound network |
-| `update_application_logging` | `level` | `options` | Mutation |
-| `update_model_routing` | `expected_revision`, `values`, `workspace_id` | `options` | Mutation |
-| `update_workspace` | `description`, `expected_revision`, `name`, `workspace_id` | — | Mutation |
-| `update_workspace_settings` | `expected_revision`, `section`, `values`, `workspace_id` | — | Mutation |
-| `validate_stored_lineage` | `workspace_id` | `options` | Read |
+| Tool | Required inputs | Optional inputs |
+| --- | --- | --- |
+| `analyze_impact` | `asset`, `workspace_id` | `options` |
+| `apply_application_theme` | `name` | `options` |
+| `cancel_job` | `job_id`, `workspace_id` | — |
+| `clear_runtime_connection` | `profile_id`, `workspace_id` | `options` |
+| `compare_analysis_runs` | `after`, `before`, `workspace_id` | `options` |
+| `connect_runtime_reference` | `profile_id`, `workspace_id` | `options` |
+| `create_workspace` | `name` | `description` |
+| `discover_provider_models` | `profile_id`, `workspace_id` | `options` |
+| `export_ai_result` | `record_id`, `workspace_id` | `options` |
+| `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `include_evidence`, `include_source_text`, `max_paths`, `options` |
+| `export_graph` | `asset`, `workspace_id` | `background`, `direction`, `format`, `legend`, `options`, `scale`, `title` |
+| `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` |
+| `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` |
+| `export_results` | `asset`, `workspace_id` | `direction`, `format`, `options` |
+| `export_source_bundle` | `selection`, `workspace_id` | `options` |
+| `export_workspace_configuration` | `workspace_id` | — |
+| `get_agent_setup` | `workspace_id` | `client`, `options`, `tool_name`, `transport` |
+| `get_ai_activity` | `workspace_id` | `options` |
+| `get_ai_result` | `record_id`, `workspace_id` | `options` |
+| `get_analysis_issues` | `workspace_id` | `options`, `severity` |
+| `get_analysis_run` | `run_id`, `workspace_id` | `options` |
+| `get_application_logging` | — | `options` |
+| `get_application_theme` | — | `options` |
+| `get_asset_schema` | `asset`, `workspace_id` | `options` |
+| `get_capabilities` | — | `options`, `workspace_id` |
+| `get_column_lineage` | `asset`, `column`, `workspace_id` | `direction`, `options`, `status` |
+| `get_column_usage` | `asset`, `workspace_id` | `column_query`, `file_id`, `group_by`, `options`, `usage_type` |
+| `get_data_dictionary` | `workspace_id` | `options`, `query` |
+| `get_dependency_paths` | `asset`, `workspace_id` | `direction`, `max_paths`, `options` |
+| `get_export` | `workspace_id` | `artifact_id`, `format`, `length`, `offset`, `options`, `result_id` |
+| `get_graph_data` | `asset`, `workspace_id` | `direction`, `edge_id`, `node_id`, `options`, `view` |
+| `get_ingestion_run` | `ingestion_id`, `workspace_id` | `options` |
+| `get_job_status` | `job_id`, `workspace_id` | `options` |
+| `get_lineage` | `asset`, `workspace_id` | `direction`, `options` |
+| `get_lineage_batch` | `assets`, `workspace_id` | `direction`, `options` |
+| `get_lineage_steps` | `asset`, `workspace_id` | `direction`, `options` |
+| `get_model_routing` | `workspace_id` | `options` |
+| `get_project_analysis_report` | `workspace_id` | `options`, `run_id` |
+| `get_provider_profile` | `profile_id`, `workspace_id` | `options` |
+| `get_runtime_connection_status` | `profile_id`, `workspace_id` | `options` |
+| `get_runtime_info` | — | `options`, `workspace_id` |
+| `get_settings_schema` | `workspace_id` | `section` |
+| `get_source_evidence` | `workspace_id` | `end_line`, `file_id`, `full`, `operation_id`, `options`, `start_line`, `statement_id` |
+| `get_source_metadata` | `file_id`, `workspace_id` | `options` |
+| `get_transformation_columns` | `asset`, `workspace_id` | `options` |
+| `get_workspace_health` | `workspace_id` | `options` |
+| `get_workspace_settings` | `section`, `workspace_id` | — |
+| `get_workspace_summary` | `workspace_id` | — |
+| `import_workspace_configuration` | `configuration` | — |
+| `ingest_sources` | `extensions`, `path`, `workspace_id` | — |
+| `inspect_cleanup` | `workspace_id` | — |
+| `inspect_database_maintenance` | — | `options` |
+| `list_ai_results` | `workspace_id` | `options` |
+| `list_analysis_runs` | `workspace_id` | `options` |
+| `list_history_archives` | `workspace_id` | `options` |
+| `list_ingestion_runs` | `workspace_id` | `options` |
+| `list_provider_profiles` | `workspace_id` | `options` |
+| `list_review_candidates` | `workspace_id` | `options` |
+| `list_runtime_backups` | — | `options` |
+| `list_staging_recoveries` | `workspace_id` | `options` |
+| `list_theme_presets` | — | `options` |
+| `list_workspaces` | — | `options`, `query` |
+| `merge_ai_claims` | `record_id`, `workspace_id` | `options`, `refresh` |
+| `preview_ai_chunks` | `file_id`, `first`, `last`, `task`, `workspace_id` | `options` |
+| `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` |
+| `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
+| `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
+| `preview_project_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `resume_run_id`, `retry_unknown` |
+| `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
+| `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
+| `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` |
+| `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options` |
+| `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
+| `search_assets` | `workspace_id` | `options`, `query` |
+| `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
+| `start_lineage_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `force`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `refresh_ai`, `resume_run_id`, `retry_unknown` |
+| `test_local_agent_access` | `workspace_id` | `options` |
+| `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
+| `update_application_logging` | `level` | `options` |
+| `update_model_routing` | `expected_revision`, `values`, `workspace_id` | `options` |
+| `update_workspace` | `description`, `expected_revision`, `name`, `workspace_id` | — |
+| `update_workspace_settings` | `expected_revision`, `section`, `values`, `workspace_id` | — |
+| `validate_stored_lineage` | `workspace_id` | `options` |
 <!-- mcp-tools:end -->
 
 `options` accepts `detail_level`, `limit`, `cursor`, `max_depth`, `max_items`,
@@ -225,7 +228,7 @@ for polling while DuckDB is busy. Jobs already running may finish after revocati
 new operations and subsequent status retrieval are denied. Restarted/crashed jobs
 expire to interrupted and require explicit retry. No hidden daemon or shell tool.
 
-Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 46 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
+Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 48 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
 
 Workspace configuration tools: get_settings_schema, get_workspace_settings, update_workspace_settings, update_workspace, export_workspace_configuration, import_workspace_configuration. Typed bounded patches require expected_revision. MCP may tighten privacy/access but cannot enable external/full-source/history, increase disclosure budgets, disable redaction/auditing or enable automatic cleanup.
 
@@ -279,3 +282,15 @@ for bounded binary chunks; large base64 images are never included in creation
 responses. Write/source permissions and read-time revocation match other graph
 artifacts. `get_capabilities` reports `graph_image_formats`; unavailable PNG
 support yields a clear renderer error. See the [image limits](USER_GUIDE.md).
+
+## AI project analysis tools
+
+`start_lineage_analysis` keeps parser mode as its default. Its explicit hybrid/AI modes share the same bounded request and run service as the UI/CLI. `preview_project_analysis` plans offline disclosure/context/budgets; `get_project_analysis_report` reads saved acceptance/rejection/unresolved results; `cancel_job` requests workspace-scoped cooperative cancellation. Source-bearing report details require source authority; a metadata read does not authorize a provider request.
+
+AI extraction/review requires explicit network/source/write permission, approved exact origins and credential references, and workspace privacy, rechecked at physical dispatch. Remote complete-source permission also covers a file transmitted through several chunks. No automatic connection test or request occurs on preview, ordinary graph queries or settings reads. Cancellation/deadline may return after a blocked read and already sent attempts may have incurred usage. See [AI project analysis](AI_ANALYSIS.md) for experimental generated-mode limits and current unqualified live accuracy targets.
+
+## Automatic project budgets and continuation
+
+`start_lineage_analysis` and `preview_project_analysis` accept nullable `max_provider_attempts`, `max_output_tokens_total`, `max_seconds`, plus `resume_run_id` and `retry_unknown`. Omitted/null budgets use shared automatic recommendations; explicit numbers remain ceilings. A paused run returns `awaiting_continuation`; start again with its run ID to execute the next bounded portion. Resume uses the original source/mode/review options and rechecks source/network grants and recipients. `retry_unknown=true` explicitly authorizes potentially duplicate in-flight work. Preview stays offline.
+
+Project-analysis preview reports semantic source tasks and provisional review sizing before extraction. Continuing a saved run preserves source partitions and skips completed review batches through the same service used by UI/CLI. See [oversized operations](AI_ANALYSIS.md#oversized-operations-and-large-review-sets).

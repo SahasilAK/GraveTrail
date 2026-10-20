@@ -31,6 +31,9 @@ from dataforge.asset_identity import asset_label
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
+from dataforge.project_analysis import READS as PROJECT_READS
+from dataforge.project_analysis import WRITES as PROJECT_WRITES
+from dataforge.project_analysis import ProjectAnalysisOperations
 from dataforge.provider_service import READS as PROVIDER_READS
 from dataforge.provider_service import WRITES as PROVIDER_WRITES
 from dataforge.provider_service import ProviderOperations
@@ -43,11 +46,11 @@ WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
 MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', 'staging_recoveries',
                      'database_inspect', 'backups_list'}
 APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
-WRITES |= {'theme_apply', 'logging_update'}
+WRITES |= {'theme_apply', 'logging_update'} | PROJECT_WRITES
 LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge'}
 
 
-class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations):
+class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations, ProjectAnalysisOperations):
     def __init__(self, store, policy: AccessPolicy | None = None):
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
@@ -98,7 +101,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS:
+                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -477,6 +480,11 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         graph = self._graph(w, opts, aid)
         focused = graph.focus(aid, direction, opts.max_depth, opts.max_items + 1)
         boundaries = []
+        stopped = [edge for edge in graph.unresolved_edges
+                   if (direction in {'upstream', 'combined'} and edge.get('target_id') in focused.nodes)
+                   or (direction in {'downstream', 'combined'} and edge.get('source_id') in focused.nodes)]
+        if stopped:
+            boundaries.append('unresolved')
         if focused.truncated:
             boundaries.append("items_or_missing_metadata")
         for node in focused.nodes:
@@ -508,7 +516,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                                               "intermediates": attrs.get("intermediates", []), **evidence})
                 item["relationships"] = relationships
             items.append(item)
-        unresolved = sum(graph.nodes[n].get("kind") == "unresolved" for n in focused.nodes)
+        unresolved = len(stopped) + sum(graph.nodes[n].get("kind") == "unresolved" for n in focused.nodes)
         evidence = [e for _, _, attrs in focused.graph.edges(data=True) for e in attrs["evidence"]]
         return self._page(w, opts, ["lineage", aid, direction], items, asset_id=aid, asset=target["name"],
             direction=direction, analysis_current=self._current(w), boundaries=sorted(set(boundaries)),
@@ -662,16 +670,22 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             WHERE workspace_id=? AND contains(lower(raw_content),lower(?)) ORDER BY relative_path""", [w, query])
         return self._page(w, opts, ["search_code", query], rows)
 
-    def run_operation(self, w, operation, arguments, progress=None):
+    def run_operation(self, w, operation, arguments, progress=None, cancelled=None):
         self._workspace(w, write=True)
         if operation == "analyze":
+            if arguments.get('mode', 'parser') != 'parser' or arguments.get('resume_run_id'):
+                from dataforge.ai_analysis_models import AnalysisRequest
+                options = dict(arguments)
+                options['force_parser'] = options.pop('force', False)
+                return self._run_project_analysis(w, AnalysisRequest.model_validate(options),
+                                                  progress=progress, cancelled=cancelled)
             from dataforge.services import analyze
             ids = arguments.get("file_ids")
             if ids is not None:
                 known = {f["file_id"] for f in self.store.files(w)}
                 if not ids or not set(ids) <= known or len(ids) > 100000:
                     raise AgentError("invalid_argument", "Selected files must belong to the workspace")
-            result = analyze(self.store, w, ids, arguments.get("force", False), progress=progress)
+            result = analyze(self.store, w, ids, arguments.get("force", False), progress=progress, cancelled=cancelled)
         elif operation == "ingest":
             path = self.policy.import_path(arguments["path"])
             extensions = {"." + e.lstrip(".").lower() for e in arguments["extensions"]}
@@ -699,9 +713,14 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return self.jobs.start(w, "ingest", lambda p: self.run_operation(w, "ingest", {
             "path": path, "extensions": extensions}, p), AgentSettings.from_store(self.store, w).model_dump())
 
-    def _analyze(self, w, opts, file_ids=None, force=False):
-        return self.jobs.start(w, "analyze", lambda p: self.run_operation(w, "analyze", {
-            "file_ids": file_ids, "force": force}, p), AgentSettings.from_store(self.store, w).model_dump())
+    def _analyze(self, w, opts, file_ids=None, force=False, mode='parser', **arguments):
+        from dataforge.ai_analysis_models import AnalysisRequest
+        request = AnalysisRequest(mode=mode, file_ids=file_ids, force_parser=force, **arguments)
+        if request.mode != 'parser' or request.resume_run_id:
+            return self._start_project_analysis(w, request)
+        return self.jobs.start(w, "analyze", lambda p, c: self.run_operation(w, "analyze", {
+            "file_ids": file_ids, "force": force}, p, cancelled=c),
+            AgentSettings.from_store(self.store, w).model_dump(), cancellable=True)
 
     def _job(self, w, opts, job_id):
         return self.job_status(w, job_id, opts.model_dump())

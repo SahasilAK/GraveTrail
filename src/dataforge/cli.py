@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
 
@@ -128,7 +129,7 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
         download_to = arguments.pop('download_to', None)
         if download_to is not None and (download_to.exists() or download_to.is_symlink() or not download_to.parent.is_dir()):
             raise AgentError('invalid_path', 'Output must be a new file in an existing directory')
-        if action == "job":
+        if action in {"job", 'job_cancel'}:
             if not config["policy"].permits(workspace_id):
                 raise AgentError("forbidden", "Workspace is not authorized")
             jobs = Jobs(config["home"])
@@ -138,6 +139,14 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 while True:
                     record = jobs.read(job_id, workspace_id, private=True)
                     result = cli_job_status(config, workspace_id, record)
+                    if action == 'job_cancel':
+                        settings = job_settings(config['home'], workspace_id, record)
+                        if not config['policy'].allow_write or not settings.allow_write:
+                            raise AgentError('forbidden', 'Cancellation requires explicit workspace write access')
+                        if record['operation'] not in {'analyze', 'ai_analysis'}:
+                            raise AgentError('invalid_argument', 'This job does not support cancellation')
+                        result = jobs.cancel(job_id, workspace_id)
+                        break
                     if not arguments.get("wait") or result["status"] in TERMINAL:
                         break
                     if time.monotonic() >= deadline:
@@ -147,6 +156,8 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 jobs.close()
         else:
             store = Store(config["home"])
+            from dataforge.ai_analysis_store import recover_interrupted_runs
+            recover_interrupted_runs(store)
             service = AgentService(store, config["policy"])
             if arguments.pop('credential_prompt', False):
                 from dataforge.connections import RuntimeConnections
@@ -163,16 +174,16 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
                 service.runtime_profiles[(workspace_id, profile_id)] = profile.model_dump_json()
             if background:
                 service._workspace(workspace_id, write=True)
+                if action == 'analyze' and arguments.get('mode', 'parser') != 'parser':
+                    service._workspace(workspace_id, write=True, source=True)
+                    service.policy.require('network')
                 QueryOptions.model_validate(config["options"])
                 if action == "ingest":
                     config["policy"].import_path(arguments["path"])
                 record = service.jobs.create(workspace_id, action,
                     AgentSettings.from_store(store, workspace_id).model_dump())
                 # A detached worker opens DuckDB only after this CLI releases its connection.
-                record["request"] = {"arguments": arguments, "policy": {
-                    "allow_write": config["policy"].allow_write,
-                    "workspaces": config["policy"].workspaces,
-                    "import_roots": config["policy"].import_roots}}
+                record["request"] = {"arguments": arguments, "policy": asdict(config['policy'])}
                 service.jobs.write(record)
                 service.audit(workspace_id, action, "queued")
                 service.close()
@@ -266,8 +277,32 @@ def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str
 
 @lineage_app.command("build")
 def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
-          file_id: list[str] = typer.Option(None), background: bool = False):
-    invoke(ctx, "analyze", workspace, background, force=force, file_ids=file_id)
+          file_id: list[str] = typer.Option(None), background: bool = False, mode: str = 'parser',
+          additional_ai_review: bool = False, refresh_ai: bool = False,
+          max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False):
+    invoke(ctx, "analyze", workspace, background, force=force, file_ids=file_id, mode=mode,
+           additional_ai_review=additional_ai_review, refresh_ai=refresh_ai,
+           max_provider_attempts=max_provider_attempts, max_output_tokens_total=max_output_tokens_total,
+           max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+
+
+@lineage_app.command('preview')
+def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'hybrid',
+                  file_id: list[str] = typer.Option(None), additional_ai_review: bool = False,
+                  max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False):
+    invoke(ctx, 'analysis_preview', workspace, mode=mode, file_ids=file_id,
+           additional_ai_review=additional_ai_review, max_provider_attempts=max_provider_attempts,
+           max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+
+
+@lineage_app.command('analysis-report')
+def project_report(ctx: typer.Context, workspace: Workspace, run_id: str = None):
+    invoke(ctx, 'analysis_report', workspace, run_id=run_id)
+
+
+@jobs_app.command('cancel')
+def cancel_analysis_job(ctx: typer.Context, workspace: Workspace, job_id: str):
+    invoke(ctx, 'job_cancel', workspace, job_id=job_id)
 
 
 @lineage_app.command("upstream")

@@ -45,6 +45,8 @@ def export_graph_image(store, workspace, asset='', *, direction='upstream', max_
     warnings = []
     if graph.truncated:
         warnings.append(f'Depth/node boundary (depth {max_depth}, node limit {max_nodes}) or missing metadata; graph is incomplete.')
+    if graph.unresolved_edges:
+        warnings.append('Unresolved evidence is a traversal boundary; this graph is incomplete.')
     if confidence > 0 or not inferred:
         warnings.append('Status/confidence filters limit represented relationships.')
     if collapse:
@@ -61,7 +63,7 @@ def export_graph_image(store, workspace, asset='', *, direction='upstream', max_
     graph_revision = hashlib.sha256(json.dumps([revision, assets, edges, scope, appearance.model_dump()],
                                               default=str, sort_keys=True).encode()).hexdigest()
     return data, {**summary, 'revision': revision, 'graph_revision': graph_revision,
-        'complete': current and not graph.truncated and not diagnostics,
+        'complete': current and not graph.truncated and not graph.unresolved_edges and not diagnostics,
         'coverage': {'scope': 'entire_filtered_graph', 'direction': direction if asset else 'all',
             'max_depth': max_depth, 'max_nodes': max_nodes, 'minimum_confidence': confidence,
             'include_inferred': inferred, 'collapse_temporary': collapse, 'truncated': graph.truncated,

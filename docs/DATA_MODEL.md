@@ -70,3 +70,24 @@ statement content hash remain separate from display explanations. All column tab
 participate in workspace cleanup and full-home recovery; integrity inspection checks their
 asset, statement, input, derivation and analysis references. See
 [transformation lineage](TRANSFORMATION_LINEAGE.md).
+
+## AI project analysis persistence
+
+Migration 6 adds staged project analysis without deleting existing facts:
+
+| Table | Responsibility |
+| --- | --- |
+| `ai_analysis_runs` | Workspace/run/mode, immutable manifest/configuration, stage/status/summary and compatible accepted results |
+| `ai_analysis_units` | Original file/hash/character bounds, context identity, checkpoint status and linked LLM record |
+| `ai_analysis_claims` | Minimal typed candidate payloads and accepted/rejected/unresolved decisions |
+| `analysis_fact_support` | Typed fact provenance/support links |
+
+Project network waits do not hold database transactions. Accepted facts and support publish with graph/column materialization after a freshness check; failure preserves the previous revision. Minimal accepted evidence is separate from opt-in full prompt/response history. Original operation evidence keys and sparse table pairs preserve same-line statements and prevent fabricated cross-pairs. See [AI project analysis](AI_ANALYSIS.md) for modes, validation and reuse boundaries.
+
+## AI continuation snapshots (migration 7)
+
+`ai_analysis_snapshots(run_id,workspace_id,file_id,part,content_hash,payload)` stores one bounded per-file header (`part=0`) plus operation parts. Operations reference exact spans in the immutable source blob. This replaces the aggregate `ai_analysis_runs.accepted_results` write limit; legacy JSON snapshots retain a fallback reader. The 16 MB per-record guard remains. Runs retain pinned request/configuration/protocol/publication identities and cumulative reservations. Unit stage checkpoints use compact host evidence/operation references; validated claims are per-claim rows. `awaiting_continuation` releases the active-run guard and retains the prior published graph.
+
+Accepted claim payloads also retain compact source references with original encoding; detailed reports restore exact immutable quotes. Metadata-only reports omit payloads without reading source blobs. In-memory host operation metadata excludes duplicate fact arrays for wide projections.
+
+AI source tasks also retain a bounded `unit_spec` in planned/staged unit rows. It pins original coordinates and optional projection bounds/ordinals without copying source text. Validated checkpoints retain reviewed candidate IDs after each review batch. Clean continuation reconstructs the same source plan and skips completed batches; partial task publication is not allowed. This uses the existing migration 6/7 tables and needs no additional migration.

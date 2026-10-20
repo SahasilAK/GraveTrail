@@ -25,7 +25,7 @@ AgentService exposes cleanup inspect/preview and policy-gated confirmed apply; r
 workspace policies cannot create whole-home backups. MCP registers inspect/preview only,
 never a destructive cleanup tool. CLI applies fresh saved previews with explicit confirmation and mandatory full-home backup.
 
-- `capabilities.py` — 46-ID UI parity inventory, paginated discovery with implemented equivalents and explicit policy restrictions; launch config/network/application grants are independent.
+- `capabilities.py` — 48-ID UI parity inventory, paginated discovery with implemented equivalents and explicit policy restrictions; launch config/network/application grants are independent.
 
 - `cli_settings.py` — explicit settings/schema and workspace identity/configuration Typer adapters; no arbitrary key execution.
 
@@ -42,3 +42,12 @@ MCP identifies as GraveTrail; gravetrail:// and legacy dataforge:// workspace/su
 Managed job thread names use gravetrail-agent; journals, IDs and worker module paths are unchanged.
 
 Graph images: export graph adds SVG/PNG, scale/background/title/legend and local --output; MCP export_graph shares options and get_export chunks/revocation. capabilities reports graph_image_formats based on renderer importability. CLI refuses existing/invalid destinations before artifact creation.
+
+Project analysis delegates preview/build/report to project_analysis.py and analysis_service.py.
+MCP start_lineage_analysis accepts parser/hybrid/ai plus explicit budgets/review/refresh;
+preview_project_analysis/get_project_analysis_report/cancel_job share policy checks. Jobs
+preserve complete launch grants in detached workers, journal source-free stages and use
+cooperative cancellation markers without opening DuckDB in polling processes. No automatic
+billable resume after owner restart. Exact profile bindings isolate shared credential refs.
+
+Project preview/start accept nullable automatic execution limits, pinned `resume_run_id` and explicit `retry_unknown`. Actual HTTP SDK regression covers bounded start, poll and continuation; resumed parser-default entry routes to the original AI mode with source/network checks.

@@ -11,6 +11,7 @@ from dataforge.configuration import (
     ParsingSettings,
     VisualizationSettings,
 )
+from dataforge.model_capabilities import execution_profile
 
 
 class Resources(LLMResourceSettings):
@@ -49,7 +50,8 @@ LOCAL_ADMIN = AccessPolicy(allow_write=True, allow_config_write=True, allow_admi
 def revision(store, workspace):
     payload = store.rows('SELECT key,value FROM settings WHERE workspace_id=? ORDER BY key', [workspace])
     payload += store.rows('SELECT name,description FROM workspaces WHERE workspace_id=?', [workspace])
-    payload += store.rows('SELECT profile_id,config FROM llm_profiles WHERE workspace_id=? ORDER BY profile_id', [workspace])
+    profiles = store.rows('SELECT profile_id,config FROM llm_profiles WHERE workspace_id=? ORDER BY profile_id', [workspace])
+    payload += [{**p, 'config': execution_profile(json.loads(p['config']))} for p in profiles]
     return hashlib.sha256(compact(payload).encode()).hexdigest()
 
 

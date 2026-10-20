@@ -29,14 +29,17 @@ elif mode == "Run":
     st.caption("Extensions: " + ", ".join(f"{ext}: {count}" for ext, count in sorted(Counter(f["extension"] for f in files).items())))
     with st.container(border=True, key="analysis_run"):
         st.subheader("Build your lineage", icon=":material/play_circle:")
-        st.write("Analyze new or changed files. Original source stays local and is never executed.")
+        st.write("Analyze new or changed files. Source code is never executed.")
         paths = {f["file_id"]: f["relative_path"] for f in files}
         key = "analysis_files_" + w
         if key in st.session_state:
             st.session_state[key] = [fid for fid in st.session_state[key] if fid in paths]
         selected = st.multiselect("Files to analyze (leave empty for all)", list(paths), format_func=paths.get,
                                   key=key, persist_state="session")
-        run = st.button("Analyze selected" if selected else "Analyze all files", type="primary", icon=":material/play_arrow:")
+        from ui.analysis_ai import controls, progress, report, start
+        ai_request, ready = controls(store, w, selected or None)
+        label = ('Analyze with AI + parser' if ai_request.mode == 'hybrid' else 'Analyze with AI') if ai_request else ('Analyze selected' if selected else 'Analyze all files')
+        run = st.button(label, type="primary", icon=":material/play_arrow:", disabled=not ready)
         rebuild, validate = False, False
         with st.expander("Rebuild & validation"):
             st.caption("Rebuild reparses every file. Validation checks the evidence already stored; neither executes source code.")
@@ -45,6 +48,9 @@ elif mode == "Run":
                 validate = st.button("Validate stored lineage", icon=":material/verified:")
         if run or rebuild:
             try:
+                if run and ai_request:
+                    start(store, w, ai_request)
+                    st.rerun()
                 bar = st.progress(0, text="Reading inventory")
                 result = analyze(store, w, (selected or None) if not rebuild else None,
                                  force=rebuild or store.setting(w, "reanalysis_mode", "changed") == "all",
@@ -58,6 +64,8 @@ elif mode == "Run":
             from dataforge.reporting import validate_lineage_evidence
             invalid = validate_lineage_evidence(store, w)["invalid"]
             (st.error if invalid else st.success)(f"Validation: {len(invalid)} invalid evidence records")
+    progress(store, w)
+    report(store, w)
 elif mode == "Diagnostics":
     from ui.analysis_sections import render_diagnostics
     render_diagnostics(store, w)

@@ -41,7 +41,9 @@ def workspace_health(store, workspace, graph=None, limit=50):
             'diagnostics': len(store.diagnostics(workspace)), 'isolated': sum(graph.graph.degree(n) == 0 for n in graph.nodes),
             'temporary': sum(a['temporary'] for _, a in graph.nodes(data=True)), 'cyclic_groups': len(cycles)},
             'parsing_status': dict(Counter(f['parsing_status'] for f in files)), 'hotspots': hotspots[:limit],
-            'cycles': cycles[:limit], 'truncated': graph.truncated or len(hotspots) > limit or len(cycles) > limit}
+            'cycles': cycles[:limit], 'unresolved_support_count': len(graph.unresolved_edges),
+            'complete': not graph.unresolved_edges and not graph.truncated and len(hotspots) <= limit and len(cycles) <= limit,
+            'truncated': graph.truncated or len(hotspots) > limit or len(cycles) > limit}
 
 
 def validate_lineage_evidence(store, workspace):
@@ -84,7 +86,8 @@ class ReportOperations:
     def _health(self, w, opts):
         graph = self._graph(w, opts, '')
         result = workspace_health(self.store, w, graph, min(opts.limit, opts.max_items))
-        return {**result, 'analysis_current': self._current(w), 'complete': self._current(w) and not result['truncated']}
+        return {**result, 'analysis_current': self._current(w),
+                'complete': self._current(w) and result['complete'] and not result['truncated']}
 
     def _asset_schema(self, w, opts, asset):
         selected = self._asset(w, asset)

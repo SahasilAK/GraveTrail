@@ -1,5 +1,16 @@
 # LLM integration
 
+**AI is optional. Local parser analysis is the primary, default workflow** for
+lineage, column usage and supported transformations. Leave **Use AI for analysis**
+unchecked to send no source to an AI provider and incur no AI token usage. A saved
+provider connection does not automatically enable AI extraction.
+
+For additional coverage in large or complex systems, optional
+[AI + parser (hybrid) analysis](AI_ANALYSIS.md) compares local facts with validated
+AI proposals. Selected source/context is sent to the configured provider; a local
+gateway may forward it upstream. Both capabilities are built in. AI cannot ensure
+that every dependency is populated correctly; inspect evidence and unresolved coverage.
+
 Analysis → Diagnostics → Unresolved review queue derives at most 100 current SQL/SAS warning/error items.
 It excludes pending/reimported sources, informational and CSV diagnostics. Suggested context
 uses a containing deterministic statement or at most 40 nearby lines; users can adjust the
@@ -152,3 +163,9 @@ without raw output or credentials.
 That dated attempt left the full live gate open.
 
 Current bounded acceptance on 2026-10-17 passed discovery (915 models), connection, synthetic SQL and SAS exact-quote validation, inferred merge, graph refresh and owner reopen in 33.8 seconds. It used `http://localhost:20128/v1`, `auto/best-reasoning` and the existing read-only `OMNIROUTE_API_KEY` launch reference. No fixed route or validation change was used. See [provider verification guidance](TESTING.md); earlier failures remain historical evidence, and this result does not promise continuing provider availability.
+
+## Project analysis
+
+[AI project analysis](AI_ANALYSIS.md) adds explicit `hybrid` and experimental `ai` builds through Analysis, CLI and MCP. Parser mode stays offline by default. Project tasks `project_lineage` and `lineage_review` route independently of the five manual tasks and use strict canonical contracts with protocol v2 evidence references and version 3 prompts. Each physical HTTP retry/fallback rechecks current source/privacy/authorization and reserves output tokens. Truncated output is quarantined even if its JSON appears valid and empty; absent usage remains unknown.
+
+Remote project builds require complete-source permission for cumulative chunk disclosure. Preview counts the entire system/JSON/catalog/schema envelope against profile and workspace context limits; the complete envelope can exceed configured allowances. Selected-model capability discovery, Automatic/Custom controls and explicit calculated context remedies are described in [AI project analysis](AI_ANALYSIS.md#context-and-run-budgets). Compact transmitted schemas retain all validation rules; large projects stage bounded executions and continue explicitly without repeating completed extraction/review batches. Oversized requests can use validated independent projection groups or static PROC SQL statement boundaries; host validation still uses original source. Review sizing is provisional before extraction and exact for saved pending batches. Larger indivisible source/catalog combinations may still need an explicit allowance change. Normal preview, settings reads, browsing and export send zero requests. Source-backed candidates still need deterministic semantic acceptance; reviewer agreement cannot promote unsupported claims. These project-build checks have mock transport evidence, not a qualified live precision result.

@@ -38,5 +38,12 @@ GraveTrail presentation: app page/sidebar title and agent examples use the new n
 - `style.css` — App-owned key classes and semantic controls; responsive type/spacing, immediate focus/press feedback, reduced motion/transparency and contrast alternatives. Packaged with icon.png by hatch_assets.py. Legacy chrome remains unchanged; new palettes add muted/card roles.
 - `workspace_settings.py` — Extracted render_parsing/render_resources/render_appearance/render_privacy/render_storage forms; validators and service behavior unchanged. Forms include workspace identity; advanced mappings stay secondary.
 - `analysis_sections.py` — Lazy diagnostics with pending-source gates and exact version pinning, optional preview/request/merge panels, recent runs/comparison.
+- `analysis_ai.py` — Unchecked AI build opt-in, hybrid default, experimental AI mode, offline route/disclosure/context/budget preview, background worker progress/cancel and source-backed validation report. Refreshes the whole report once on terminal worker completion.
 
 Asset/query/direction/depth/collapse and analysis file selections persist via native session state. A shared workspace-scoped asset bridges Lineage, Columns and Impact. Source control keys include evidence scope to avoid stale browser labels; file content/AI responses never enter navigation state. Graph source ZIPs and original downloads generate on click. Tree direction has a durable non-widget copy while its tabs are hidden. Provider protocol keys include the selected profile.
+
+`analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, explicit calculated context allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
+
+Budget values have non-widget session storage so navigation cannot discard Custom ceilings; Continue inherits saved numeric limits unless Reset explicitly releases them. Manual chunk-size help distinguishes the automatic project planner.
+
+`analysis_ai.py` preview identifies semantic source tasks, original-context projection paging and provisional review sizing. Existing Custom controls/Continue remain; the shared service owns per-batch checkpoints and final atomic publication.

@@ -9,3 +9,5 @@ Graph guidance covers All/fullscreen/copy/focus/history and direction-scoped fil
 User-guide screenshot links use gravetrail-prefixed filenames synchronized with mkdocs.yml.
 
 Screenshots and navigation reflect the redesigned Overview/Sources/Analysis/Lineage routes. USER_GUIDE.md includes the complete old-action destination map, state/unsaved-form behavior, stable bookmarks, export menus and accessibility feedback.
+
+The hub leads with local parser/no-AI operation and presents hybrid as optional additional coverage, preserving evidence/omission/unresolved limits.

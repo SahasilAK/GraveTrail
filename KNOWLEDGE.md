@@ -33,7 +33,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 Storage selection is per-session and startup-allowlisted (DATAFORGE_STORAGE_LOCATIONS); app.py
 opens the validated home before workspace navigation. Default remains DATAFORGE_HOME.
 
-Documentation: `mkdocs.yml` and separate locked docs group build36 public pages with scripts/docs/build.py. CONTRIBUTING.md and SECURITY.md are root entry points. README is a product introduction with real fixture imagery. Site output is ignored/excluded; canonical uppercase guide sources remain.
+Documentation: `mkdocs.yml` and separate locked docs group build 38 public pages with scripts/docs/build.py. CONTRIBUTING.md and SECURITY.md are root entry points. README is a product introduction with real fixture imagery. Site output is ignored/excluded; canonical uppercase guide sources remain.
 
 Context policy: All project KNOWLEDGE.md maps are tracked so humans and agents can navigate a clean checkout, including maps inside otherwise ignored context folders. AGENTS.md, .kbignore, .codex/ and implementation records remain local-only. New branches use feature/, bugfix/ or another appropriate prefix; never codex/.
 
@@ -56,3 +56,13 @@ catalog and bounded traversal across the new page, CLI and MCP. Coverage/upgrade
 docs/TRANSFORMATION_LINEAGE.md; benchmark: scripts/benchmark_transformations.py.
 
 Static graph images share the browser scene and filtered graph across UI, CLI and MCP. resvg-py wheels provide PNG without Cairo/browser runtimes; Docker includes DejaVu fonts and frozen builds dispatch a private render worker. Limits and packaging evidence: docs/USER_GUIDE.md and docs/BUILD_AND_RELEASE.md.
+
+AI project builds: parser12/migration6 preserve the offline parser default and add explicit
+hybrid/experimental AI modes, complete immutable units, source-backed validation, optional
+bounded review, staged atomic publication and offline accepted-fact reuse. UI, CLI and MCP
+share analysis_service/project_analysis; prompts stay in root prompts/. Public behavior,
+flow diagram and qualification limits: docs/AI_ANALYSIS.md. Current parity: 48 capabilities,
+103 CLI routes/29 groups and 83 MCP tools. Two synthetic live SQL smoke cases are development
+evidence only; source/packaging checks and open release gates are dated in docs/TESTING.md.
+
+README and Pages position local parser analysis as the primary default with no source sent to AI; optional AI/hybrid supports additional investigation in complex projects, with explicit disclosure and no completeness guarantee.

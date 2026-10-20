@@ -1,0 +1,394 @@
+{
+  "$defs": {
+    "AssetCandidateWire": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "default": "table",
+          "enum": [
+            "table",
+            "view",
+            "dataset"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "read",
+            "write",
+            "declaration"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvidenceReference"
+        }
+      },
+      "required": [
+        "name",
+        "role",
+        "evidence"
+      ],
+      "title": "AssetCandidateWire",
+      "type": "object"
+    },
+    "ColumnCandidateWire": {
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Table",
+          "type": "string"
+        },
+        "column": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Column",
+          "type": "string"
+        },
+        "context": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Context",
+          "type": "string"
+        },
+        "alias": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Alias",
+          "type": "string"
+        },
+        "expression": {
+          "default": "",
+          "maxLength": 20000,
+          "title": "Expression",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvidenceReference"
+        }
+      },
+      "required": [
+        "table",
+        "column",
+        "context",
+        "evidence"
+      ],
+      "title": "ColumnCandidateWire",
+      "type": "object"
+    },
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "default": "partial",
+          "enum": [
+            "complete",
+            "partial",
+            "unsupported",
+            "no_operations"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unsupported": {
+          "items": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Unsupported",
+          "type": "array"
+        }
+      },
+      "title": "Coverage",
+      "type": "object"
+    },
+    "DerivationCandidateWire": {
+      "additionalProperties": false,
+      "properties": {
+        "target_table": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Target Table",
+          "type": "string"
+        },
+        "target_column": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Target Column",
+          "type": "string"
+        },
+        "expression": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Expression",
+          "type": "string"
+        },
+        "category": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Category",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Scope",
+          "type": "string"
+        },
+        "branch": {
+          "default": 0,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Branch",
+          "type": "integer"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "",
+          "title": "Version"
+        },
+        "ordinal": {
+          "default": 0,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/DerivationInput"
+          },
+          "maxItems": 100,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvidenceReference"
+        },
+        "expression_start_offset": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression Start Offset"
+        },
+        "expression_end_offset": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression End Offset"
+        }
+      },
+      "required": [
+        "target_table",
+        "target_column",
+        "expression",
+        "category",
+        "evidence"
+      ],
+      "title": "DerivationCandidateWire",
+      "type": "object"
+    },
+    "DerivationInput": {
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Table",
+          "type": "string"
+        },
+        "column": {
+          "maxLength": 500,
+          "title": "Column",
+          "type": "string"
+        },
+        "role": {
+          "default": "value",
+          "enum": [
+            "value",
+            "value_selection",
+            "row_filter",
+            "join",
+            "partition",
+            "order",
+            "rowset"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Scope",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "",
+          "title": "Version"
+        }
+      },
+      "required": [
+        "table",
+        "column"
+      ],
+      "title": "DerivationInput",
+      "type": "object"
+    },
+    "EvidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "unit_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Unit Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit_id"
+      ],
+      "title": "EvidenceReference",
+      "type": "object"
+    },
+    "TableRelationshipWire": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        },
+        "operation": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvidenceReference"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "operation",
+        "evidence"
+      ],
+      "title": "TableRelationshipWire",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "unit_id": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Unit Id",
+      "type": "string"
+    },
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/AssetCandidateWire"
+      },
+      "maxItems": 100,
+      "title": "Assets",
+      "type": "array"
+    },
+    "relationships": {
+      "items": {
+        "$ref": "#/$defs/TableRelationshipWire"
+      },
+      "maxItems": 100,
+      "title": "Relationships",
+      "type": "array"
+    },
+    "columns": {
+      "items": {
+        "$ref": "#/$defs/ColumnCandidateWire"
+      },
+      "maxItems": 100,
+      "title": "Columns",
+      "type": "array"
+    },
+    "derivations": {
+      "items": {
+        "$ref": "#/$defs/DerivationCandidateWire"
+      },
+      "maxItems": 100,
+      "title": "Derivations",
+      "type": "array"
+    },
+    "unresolved_symbols": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 100,
+      "title": "Unresolved Symbols",
+      "type": "array"
+    },
+    "coverage": {
+      "$ref": "#/$defs/Coverage"
+    }
+  },
+  "required": [
+    "unit_id"
+  ],
+  "title": "ProjectLineageResponseWire",
+  "type": "object"
+}

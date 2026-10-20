@@ -17,7 +17,7 @@ def main(home, job_id):
     record = json.loads(journal.path(job_id).read_text(encoding="utf-8"))
     request = record.pop("request")
 
-    def execute(progress):
+    def execute(progress, cancelled):
         deadline = time.monotonic() + 10
         while True:
             try:
@@ -30,13 +30,14 @@ def main(home, job_id):
                 time.sleep(.1)
         service = AgentService(store, AccessPolicy(**request["policy"]))
         try:
-            return service.run_operation(record["workspace_id"], record["operation"], request["arguments"], progress)
+            return service.run_operation(record["workspace_id"], record["operation"], request["arguments"], progress,
+                                         cancelled=cancelled)
         finally:
             service.close()
             store.close()
 
     try:
-        journal.run(record, execute)
+        journal.run(record, execute, cancellable=True)
     finally:
         journal.close()
 

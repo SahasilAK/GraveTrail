@@ -301,7 +301,7 @@ attempt on 2026-10-18 was blocked by daemon availability; it does not erase the 
 At this earlier checkpoint the source added parser 9. Rebuild and smoke wheel/native/container artifacts before
 distributing those rules; older artifact results do not validate changed source. Native
 Linux/macOS executable acceptance remains unrecorded here; the Windows hosted result above
-supersedes this checkpoint's hosted-release gap. See [the current acceptance matrix](TESTING.md#current-acceptance-summary-2026-10-18).
+supersedes this checkpoint's hosted-release gap. See [the current acceptance matrix](TESTING.md#current-acceptance-summary-2026-10-20).
 
 ## Historical verification ledger (2026-10-16)
 

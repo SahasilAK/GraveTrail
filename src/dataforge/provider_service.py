@@ -8,8 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from dataforge.agent.contracts import AgentError
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import RuntimeConnections, connection_scope
-from dataforge.llm import TASKS, Adapter, Profile, ProviderError, is_local, response_object
+from dataforge.llm import ROUTABLE_TASKS as TASKS
+from dataforge.llm import Adapter, Profile, ProviderError, is_local, response_object
 from dataforge.llm_resources import request_slot
+from dataforge.model_capabilities import bind_capabilities, runtime_profile
 from dataforge.settings_service import check_revision, revision
 
 READS = {'providers_list', 'provider_get', 'routing_get', 'runtime_status'}
@@ -57,7 +59,7 @@ def save_routing(store, policy, workspace, values, expected_revision):
     check_revision(store, workspace, expected_revision)
     routing = Routing.model_validate(values)
     if set(routing.task_models) - set(TASKS):
-        raise AgentError('validation_failed', 'Routing supports exactly the five documented AI tasks')
+        raise AgentError('validation_failed', 'Routing supports documented manual and project AI tasks')
     ids = {p['profile_id'] for p in store.rows('SELECT profile_id FROM llm_profiles WHERE workspace_id=?', [workspace])}
     refs = {routing.default_profile, *routing.task_models.values(), *routing.fallback_profiles} - {''}
     if refs - ids or len(routing.fallback_profiles) != len(set(routing.fallback_profiles)):
@@ -82,7 +84,7 @@ class ProviderOperations:
     def _runtime_manager(self, w, profile_id, profile):
         key = (w, profile_id)
         manager = self.runtime_connections.get(key)
-        if manager is not None and self.runtime_profiles.get(key) != profile.model_dump_json():
+        if manager is not None and self.runtime_profiles.get(key) != runtime_profile(profile):
             manager.clear()
             self.runtime_connections.pop(key, None)
             self.runtime_profiles.pop(key, None)
@@ -149,7 +151,7 @@ class ProviderOperations:
         if secret:
             manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)
         self.runtime_connections[(w, profile_id)] = manager
-        self.runtime_profiles[(w, profile_id)] = profile.model_dump_json()
+        self.runtime_profiles[(w, profile_id)] = runtime_profile(profile)
         return self._runtime_status(w, opts, profile_id)
 
     def _runtime_clear(self, w, opts, profile_id):
@@ -163,6 +165,7 @@ class ProviderOperations:
     def _provider_operation(self, w, opts, profile_id, operation):
         profile = get_profile(self.store, w, profile_id)
         authorize_provider(self.store, self.policy, w, profile)
+        recipient_profile = profile
         manager = self._runtime_manager(w, profile_id, profile) or RuntimeConnections()
         if manager.registered('DATAFORGE_RUNTIME_CREDENTIAL'):
             profile = profile.model_copy(update={'key_env': 'DATAFORGE_RUNTIME_CREDENTIAL'})
@@ -173,8 +176,11 @@ class ProviderOperations:
         try:
             with connection_scope(manager), request_slot(self.store.home, w, resources.llm_concurrency), Adapter(profile, self.provider_transport) as adapter:
                 if operation == 'models':
-                    models = adapter.models()
+                    catalog = adapter.model_catalog()
+                    models = [item.id for item in catalog]
                     result = self._page(w, opts, ['models', profile_id], models)
+                    result['selected_model_capabilities'] = next((bind_capabilities(item.capabilities, recipient_profile).model_dump()
+                        for item in catalog if item.id == profile.model), None)
                 else:
                     response, usage = adapter.complete('Return a JSON object with key "status".', 'Return {"status":"connected"}.')
                     if response_object(response).get('status') != 'connected':

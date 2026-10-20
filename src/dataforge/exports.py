@@ -21,7 +21,9 @@ def path_rows(report):
     for path in report["paths"]:
         common = {"path_id": path["path_id"], "path": " -> ".join(path["nodes"]),
                   "direction": report["direction"], "boundary": path["boundary"],
-                  "report_truncated": report["truncated"]}
+                  "report_truncated": report["truncated"],
+                  'report_complete': report.get('complete', not report['truncated']),
+                  'unresolved_support_count': len(report.get('boundaries', []))}
         if not path["steps"]:
             rows.append({**common, "step": 0, "source": path["nodes"][0], "target": ""})
         for i, step in enumerate(path["steps"], 1):
@@ -84,6 +86,7 @@ function mountGraph(root, data, notify, navigate) {
  const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
  const container=root.querySelector('.df-graph'),status=root.querySelector('.status');
  const theme=data.theme;
+ if(data.boundaries?.length)status.textContent='Unresolved evidence: '+data.boundaries.length+' support(s); traversal stops where accepted support is absent.';
  container.toggleAttribute('data-themed',!!theme);
  container.toggleAttribute('data-light',theme?.mode==='light');
  if(theme){
@@ -111,7 +114,7 @@ function mountGraph(root, data, notify, navigate) {
    let related=new Set([n.asset_id]),pending=[n.asset_id];
    while(pending.length){let id=pending.pop();data.edges.forEach(e=>{if(e.target===id&&!related.has(e.source)){related.add(e.source);pending.push(e.source)}})}
    highlight(related);stage.querySelectorAll('[data-edge]').forEach(p=>{let e=data.edges[Number(p.dataset.edge)];if(related.has(e.source)&&related.has(e.target))p.classList.add('chosen')});
-   details.textContent=nodeLabel(n)+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodeLabel(nodes.get(e.source))+' → '+nodeLabel(nodes.get(e.target))+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n');
+   details.textContent=nodeLabel(n)+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodeLabel(nodes.get(e.source))+' → '+nodeLabel(nodes.get(e.target))+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n')+(data.boundaries||[]).filter(e=>e.source_id===n.asset_id||e.target_id===n.asset_id).map(e=>'\nUnresolved evidence: '+(e.relative_path||'')+':'+(e.start_line||'')+' ['+(e.edge_id||'')+']\n'+(e.code||'')).join('\n');
    if(emit&&notify)notify({node:n.asset_id});
  };
  data.edges.forEach((edge,i)=>{
@@ -197,7 +200,9 @@ def graph_data(graph, appearance: VisualizationSettings | None = None, *, theme:
               max([360] + [n['y'] + 180 for n in nodes])]
     from dataforge.theme_configuration import PALETTES
 
-    scene = {"nodes": nodes, "edges": edges, "bounds": bounds, "appearance": appearance.model_dump(include={
+    scene = {"nodes": nodes, "edges": edges, "bounds": bounds,
+        'boundaries': list(graph.unresolved_edges), 'complete': not graph.truncated and not graph.unresolved_edges,
+        "appearance": appearance.model_dump(include={
         "graph_labels", "graph_palette", "graph_edge_width"})}
     if theme in PALETTES:
         scene["theme"] = PALETTES[theme]

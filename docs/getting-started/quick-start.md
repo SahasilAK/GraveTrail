@@ -1,7 +1,11 @@
 # Quick start
 
 Build and inspect a seven-layer lineage graph from the supplied sample project.
-This workflow uses static analysis only; no LLM or credentials are needed.
+This is the primary, default workflow: local parsing sends no source to an AI
+provider and needs no LLM, API key or AI token usage. Both local and optional
+[AI/hybrid analysis](../AI_ANALYSIS.md) are available in the app. Add AI comparison
+when you want additional coverage in complex projects; project size alone does
+not require it, and AI does not guarantee complete lineage.
 
 ## 1. Install and launch
 
@@ -40,7 +44,7 @@ tables across seven ETL layers. The SAS project also has 16 temporary WORK datas
 
 ## 3. Generate and explore lineage
 
-1. Open **Analysis → Run**, then choose **Analyze all files** and review the reported diagnostics.
+1. Open **Analysis → Run**, leave **Use AI for analysis** unchecked, then choose **Analyze all files** and review the reported diagnostics.
 2. Open **Lineage**, search for `pub.all_kpis`, and select that exact asset.
 3. Choose upstream exploration and set **Traversal options → Traversal depth** to **30**. If the visible
    graph or tree is bounded, increase its node limit or inspect the bounded exports.

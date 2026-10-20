@@ -50,3 +50,43 @@ enumerating all possible dependency paths. Per-step inputs cap at the query limi
 source snippets and expression previews cap at 12,000 characters. UI queries cap at
 200 derivations, while shared service/CLI/MCP limits permit up to 20,000 and depth 30.
 Large selected limits can still be slow; agent response budgets apply separately.
+
+## Automatic AI continuation qualification (2026-10-20)
+
+`uv run --locked python scripts/benchmark_ai_analysis.py --scale-units 1000`
+exercises simple synthetic SQL units through real adapter/mock HTTP, bounded
+executions and durable store reopen. This Windows/Python 3.11 run used a Custom
+100-attempt ceiling and automatic output/time allowances:
+
+| Measurement | Observed |
+| --- | ---: |
+| Complete units processed | 1,000 |
+| Explicit executions | 10 |
+| Requests / unique requested units | 1,000 / 1,000 |
+| Final publications | 1 |
+| Largest unit checkpoint | 379 bytes |
+| Peak traced Python allocations | 48,591,394 bytes (46.34 MiB) |
+| Qualification elapsed time | 339.542 seconds |
+| Live provider requests | 0 |
+
+Every required unit was requested exactly once; no intermediate graph was published.
+The harness enforces a 512 MiB traced-Python ceiling and 16 MiB per-record ceiling.
+Tracing excludes DuckDB/native/process memory and adds overhead. Concurrent local
+verification also used this host. These simple-unit lifecycle/storage measurements
+do not qualify wide-query latency or live-model precision. Separate regressions
+cover 100-column claims, compact canonical expansions above16MiB, aggregate file
+snapshots above16MiB, partial outcomes and deadlines between extraction and review.
+Progress journals omit per-unit preview lists and update only changed run fields;
+completed continuation stages remain read-only. Static wire schemas are reused.
+
+The semantic-paging/review-batch follow-up repeated this lifecycle qualification on
+2026-10-20: **1,000 units, 10 executions,
+1,000 unique requests, one final publication**, zero live calls.
+Largest unit checkpoint: **727 bytes** including the
+saved source partition specification. Peak traced Python allocations:
+**53,952,971 bytes**; elapsed **485.127 seconds**
+with tracing and the full test suite running concurrently. This is a bounded
+lifecycle/storage check, not a speed comparison or live-model precision result;
+native DuckDB/process memory is excluded. Separate real-adapter/mock HTTP checks
+cover 36 wide-query outputs in one original writer and all 24 review candidates
+across durable continuation without repeats.

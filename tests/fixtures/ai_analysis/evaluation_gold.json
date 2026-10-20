@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "split": "holdout",
+  "scope": "Manual static labels for checked-in synthetic sources. All five metric lists are exhaustive under the documented direct-usage and dependency-role conventions. Operation numbers are lexical original-unit indexes; the scorer converts them to original offsets. No live release evidence. Plain SELECT row multiplicity is represented by table edges; rowset column inputs are explicit for joins, aggregates and windows.",
+  "tuple_fields": {
+    "table_edges": ["operation", "source", "target"],
+    "direct_usages": ["operation", "table", "column", "context"],
+    "derivations": ["operation", "table", "column", "scope", "version", "branch", "ordinal", "expression", "category"],
+    "dependencies": ["operation", "target_table", "target_column", "target_scope", "target_version", "branch", "ordinal", "input_table", "input_column", "input_scope", "input_version", "role"]
+  },
+  "cases": [
+    {"id":"constant","source":"constant.sql","language":"sql","expected":{
+      "table_edges":[[0,"raw.a","out"]],"direct_usages":[],
+      "derivations":[[0,"out","flag","","",0,0,"1 as flag","constant"]],
+      "value_dependencies":[],"row_dependencies":[],"abstain":false}},
+    {"id":"join_alias","source":"join_alias.sql","language":"sql","expected":{
+      "table_edges":[[0,"raw.a","out"],[0,"raw.b","out"]],
+      "direct_usages":[[0,"raw.a","id","SELECT"],[0,"raw.a","id","JOIN"],[0,"raw.b","id","JOIN"],[0,"raw.b","active","WHERE"]],
+      "derivations":[[0,"out","id","","",0,0,"a.id","direct"]],
+      "value_dependencies":[[0,"out","id","","",0,0,"raw.a","id","","","value"]],
+      "row_dependencies":[[0,"out","id","","",0,0,"raw.a","id","","","join"],[0,"out","id","","",0,0,"raw.b","id","","","join"],[0,"out","id","","",0,0,"raw.b","active","","","row_filter"],[0,"out","id","","",0,0,"raw.a","","","","rowset"],[0,"out","id","","",0,0,"raw.b","","","","rowset"]],"abstain":false}},
+    {"id":"unused_cte","source":"unused_cte.sql","language":"sql","expected":{
+      "table_edges":[[0,"raw.a","out"]],"direct_usages":[[0,"raw.a","id","SELECT"]],
+      "derivations":[[0,"out","id","","",0,0,"id","direct"]],
+      "value_dependencies":[[0,"out","id","","",0,0,"raw.a","id","","","value"]],"row_dependencies":[],"abstain":false}},
+    {"id":"union","source":"union.sql","language":"sql","expected":{
+      "table_edges":[[0,"raw.a","out"],[0,"raw.b","out"]],
+      "direct_usages":[[0,"raw.a","id","SELECT"],[0,"raw.b","other_id","SELECT"]],
+      "derivations":[[0,"out","id","","",0,0,"id","direct"],[0,"out","id","","",1,0,"other_id","direct"]],
+      "value_dependencies":[[0,"out","id","","",0,0,"raw.a","id","","","value"],[0,"out","id","","",1,0,"raw.b","other_id","","","value"]],"row_dependencies":[],"abstain":false}},
+    {"id":"update","source":"update.sql","language":"sql","expected":{
+      "table_edges":[[0,"source","target"]],
+      "direct_usages":[[0,"source","amount","UPDATE"],[0,"target","id","WHERE"],[0,"source","id","WHERE"]],
+      "derivations":[[0,"target","amount","","",0,0,"src.amount + 1","expression"]],
+      "value_dependencies":[[0,"target","amount","","",0,0,"source","amount","","","value"]],
+      "row_dependencies":[[0,"target","amount","","",0,0,"target","id","","","row_filter"],[0,"target","amount","","",0,0,"source","id","","","row_filter"]],"abstain":false}},
+    {"id":"merge","source":"merge.sql","language":"sql","expected":{
+      "table_edges":[[0,"source","target"]],
+      "direct_usages":[[0,"target","id","MERGE"],[0,"source","id","MERGE"],[0,"source","amount","UPDATE"]],
+      "derivations":[[0,"target","amount","","",0,0,"s.amount","direct"]],
+      "value_dependencies":[[0,"target","amount","","",0,0,"source","amount","","","value"]],
+      "row_dependencies":[[0,"target","amount","","",0,0,"target","id","","","join"],[0,"target","amount","","",0,0,"source","id","","","join"]],"abstain":false}},
+    {"id":"ambiguous","source":"ambiguous.sql","language":"sql","expected":{
+      "table_edges":[[0,"raw.a","out"],[0,"raw.b","out"]],
+      "direct_usages":[[0,"raw.a","id","JOIN"],[0,"raw.b","id","JOIN"]],
+      "derivations":[],"value_dependencies":[],"row_dependencies":[],"abstain":true}},
+    {"id":"wildcard","source":"wildcard.sql","language":"sql","expected":{
+      "table_edges":[[0,"unknown_schema","out"]],"direct_usages":[],"derivations":[],"value_dependencies":[],"row_dependencies":[],"abstain":true}},
+    {"id":"unknown_udf","source":"unknown_udf.sql","language":"sql","expected":{
+      "table_edges":[[0,"raw.a","out"]],"direct_usages":[[0,"raw.a","id","SELECT"]],"derivations":[],"value_dependencies":[],"row_dependencies":[],"abstain":true}},
+    {"id":"same_line","source":"same_line.sql","language":"sql","expected":{
+      "table_edges":[[0,"x","a"],[1,"y","b"]],"direct_usages":[[0,"x","id","SELECT"],[1,"y","id","SELECT"]],
+      "derivations":[[0,"a","id","","",0,0,"id","direct"],[1,"b","id","","",0,0,"id","direct"]],
+      "value_dependencies":[[0,"a","id","","",0,0,"x","id","","","value"],[1,"b","id","","",0,0,"y","id","","","value"]],"row_dependencies":[],"abstain":false}},
+    {"id":"assignments","source":"assignments.sas","language":"sas","expected":{
+      "table_edges":[[0,"raw.a","work.out"]],"direct_usages":[],
+      "derivations":[[0,"work.out","amount","data-step","1",0,0,"amount=amount+1;","expression"],[0,"work.out","amount","data-step","2",0,1,"amount=amount*2;","expression"],[0,"work.out","amount","","",0,2,"@source","projection"]],
+      "value_dependencies":[[0,"work.out","amount","data-step","1",0,0,"raw.a","amount","","","value"],[0,"work.out","amount","data-step","2",0,1,"work.out","amount","data-step","1","value"],[0,"work.out","amount","","",0,2,"work.out","amount","data-step","2","value"]],"row_dependencies":[],"abstain":true}},
+    {"id":"proc","source":"proc.sas","language":"sas","expected":{
+      "table_edges":[[0,"raw.a","work.sorted"]],"direct_usages":[[0,"raw.a","id","BY"]],"derivations":[],"value_dependencies":[],"row_dependencies":[],"abstain":true}},
+    {"id":"runtime_macro","source":"runtime_macro.sas","language":"sas","expected":{
+      "table_edges":[],"direct_usages":[],"derivations":[],"value_dependencies":[],"row_dependencies":[],"abstain":true}},
+    {"id":"temporary_jobs","source":"temporary_jobs.sas","language":"sas","jobs":["one","two"],"expected":{
+      "table_edges":[[0,"raw.a","work.stage"]],"direct_usages":[],"derivations":[],"value_dependencies":[],"row_dependencies":[],"abstain":true}}
+  ]
+}
