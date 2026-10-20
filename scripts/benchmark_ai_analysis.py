@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import sys
 import tempfile
 import time
 from collections import defaultdict
@@ -332,7 +333,7 @@ def evaluate_scale(units=1000):
     from dataforge.llm import Profile
     from dataforge.store import Store
     if not 1000 <= units <= 5000:
-        raise ValueError('Scale qualification requires 1,000â€“5,000 synthetic units')
+        raise ValueError('Scale qualification requires 1,000Ã¢â‚¬â€œ5,000 synthetic units')
     seen = []
     def respond(request):
         body = json.loads(request.content)
@@ -391,7 +392,7 @@ def evaluate_scale(units=1000):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
-    parser.add_argument('--scale-units', type=int, help='Exercise 1,000â€“5,000 synthetic units through mock transport and durable continuation')
+    parser.add_argument('--scale-units', type=int, help='Exercise 1,000Ã¢â‚¬â€œ5,000 synthetic units through mock transport and durable continuation')
     parser.add_argument('--cases', nargs='+', help='Explicit checked-in fixture IDs; required with --live')
     parser.add_argument('--predictions', type=Path)
     parser.add_argument('--key-env', default='DATAFORGE_OMNIROUTE_API_KEY')
