@@ -20,7 +20,7 @@ from dataforge.models import canonical, stable_id
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql, table_name, target_table
 
-VALIDATOR_VERSION = "1"
+VALIDATOR_VERSION = "2"
 
 
 def _identity(value, context):

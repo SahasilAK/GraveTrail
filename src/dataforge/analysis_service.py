@@ -32,6 +32,7 @@ from dataforge.ai_analysis_store import (
 )
 from dataforge.ai_budget import execution_budget
 from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_analysis
+from dataforge.ai_validation import VALIDATOR_VERSION
 from dataforge.ai_wire import decode_project_result, encode_project_result
 from dataforge.connections import current_connections
 from dataforge.llm import (
@@ -42,14 +43,13 @@ from dataforge.llm import (
 )
 from dataforge.models import ParseResult, stable_id
 from dataforge.services import (
+    PARSER_VERSION,
     analyze,
     prepare_analysis_results,
     publish_analysis_results,
     restore_manual_ai_results,
 )
 from dataforge.settings_service import revision
-
-VALIDATOR_VERSION = '1'
 
 
 def _hash(value):
@@ -207,7 +207,7 @@ def _unit_context_hash(prepared, plan, execution, unit, expected_revision):
     prompt_hash = analysis_prompt_hash('project_lineage',focused=bool(unit.focus))
     return _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
         'prompt': prompt_hash, 'settings_revision': expected_revision,
-        'validator': VALIDATOR_VERSION, 'mode': prepared.request.mode})
+        'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION, 'mode': prepared.request.mode})
 
 
 def _resume_request(store, workspace, request):
@@ -532,6 +532,7 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
 
 def _protocol_hash():
     return _hash({'semantic_planning': 1, 'review_batching': 1,
+        'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION,
         'prompts':{task:{'complete':analysis_prompt_hash(task),'focused':analysis_prompt_hash(task,focused=True)}
             for task in ('project_lineage','lineage_review')}})
 

@@ -227,6 +227,15 @@ def _parse_sql(content, dialect, depth=0, restricted=False):
             for scope in all_scopes:
                 if scope.parent is None:
                     visit(scope)
+                elif (isinstance(tree, (exp.Update, exp.Delete)) and scope.is_subquery
+                      and scope.parent.expression is tree):
+                    visit(scope)
+            # MERGE's USING query has a synthetic non-query parent outside all_scopes.
+            using = tree.args.get('using') if isinstance(tree, exp.Merge) else None
+            using_scope = next((s for s in all_scopes
+                                if isinstance(using, exp.Subquery) and s.expression is using.this), None)
+            if using_scope is not None:
+                visit(using_scope)
             cte_scopes = {s.expression.parent.alias_or_name.casefold(): s for s in all_scopes
                           if isinstance(s.expression.parent, exp.CTE)}
             if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
@@ -306,9 +315,13 @@ def _parse_sql(content, dialect, depth=0, restricted=False):
                         if isinstance(projection, exp.Star):
                             attribute(projection, mapping, scope)
             if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
-                mapping = {t.alias_or_name.casefold(): t for t in tree.find_all(exp.Table)
+                visible_tables = [t for t in tree.find_all(exp.Table)
+                                  if t.find_ancestor(exp.Select, exp.Subquery, exp.CTE) is None]
+                mapping = {t.alias_or_name.casefold(): t for t in visible_tables
                            if isinstance(t.this, exp.Identifier) and t.name.casefold() not in cte_names and id(t) not in inactive_nodes}
-                for table in tree.find_all(exp.Table):
+                if using_scope is not None and using.alias:
+                    mapping[using.alias.casefold()] = using_scope
+                for table in visible_tables:
                     if table.name.casefold() in cte_scopes and id(table) not in inactive_nodes:
                         mapping[table.alias_or_name.casefold()] = cte_scopes[table.name.casefold()]
                 if target is not None:

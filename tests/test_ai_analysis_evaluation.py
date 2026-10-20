@@ -121,3 +121,21 @@ def test_live_harness_two_cases_have_distinct_profile_identities(monkeypatch):
                           result=ProjectLineageResponse(unit_id=unit.unit_id)))
     report = evaluate(live=True, case_ids=['constant', 'assignments'])
     assert report['case_coverage']['processed'] == 2
+
+
+def test_quarantined_response_keeps_known_metered_usage(monkeypatch):
+    from dataforge.ai_analysis_models import UnitAttemptResult
+    from scripts.benchmark_ai_analysis import _cases, _live_predictions
+
+    monkeypatch.setenv('DATAFORGE_AI_BENCHMARK_LIVE', '1')
+    monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', 'synthetic-test-secret')
+    def truncated(store, workspace, unit, task, execution):
+        execution.attempts += 1
+        return UnitAttemptResult(unit_id=unit.unit_id, task=task, outcome='quarantined', attempts=1,
+                                 usage_known=True, usage={'prompt_tokens': 11, 'completion_tokens': 23},
+                                 finish_reason='length')
+    monkeypatch.setattr('dataforge.llm.invoke_analysis_unit', truncated)
+    _, stats = _live_predictions(list(_cases())[:1], key_env='DATAFORGE_OMNIROUTE_API_KEY', max_attempts=1, max_seconds=60)
+    assert stats['failed_cases'] == 1 and stats['requests'] == 1
+    assert stats['usage_known'] is True
+    assert stats['input_tokens'] == 11 and stats['output_tokens'] == 23

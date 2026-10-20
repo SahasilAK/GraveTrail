@@ -70,8 +70,9 @@ def _context(case):
         content_hash=hashlib.sha256(code.encode()).hexdigest(), extension='.' + case['language'],
         job_id=case['job'], first=1, last=code.count('\n') + 1,
         start_offset=0, end_offset=len(code), code=code)
-    parsed = parse_sas(code) if case['language'] == 'sas' else parse_sql(code)
-    return ValidationContext(unit=unit, workspace_id='synthetic-benchmark', source_text=code, parser_result=parsed)
+    settings = {'dialect': case.get('dialect', '')}
+    parsed = parse_sas(code, sql_dialect=settings['dialect']) if case['language'] == 'sas' else parse_sql(code, settings['dialect'])
+    return ValidationContext(unit=unit, workspace_id='synthetic-benchmark', source_text=code, parser_result=parsed, settings=settings)
 
 
 def prediction_from_facts(facts, *, abstain=False):
@@ -98,7 +99,7 @@ def prediction_from_facts(facts, *, abstain=False):
     return result
 
 
-def _live_predictions(cases, *, key_env, max_attempts, max_seconds):
+def _live_predictions(cases, *, key_env, max_attempts, max_seconds, max_tokens=4096):
     """Fixed synthetic inputs and one fixed loopback route, with the normal runtime policy/budget gates."""
     if os.environ.get('DATAFORGE_AI_BENCHMARK_LIVE') != '1':
         raise ValueError('Set DATAFORGE_AI_BENCHMARK_LIVE=1 and pass --live to authorize synthetic calls')
@@ -117,6 +118,9 @@ def _live_predictions(cases, *, key_env, max_attempts, max_seconds):
     predictions, completed, processed_units, requests, usage_known, failures = {}, 0, 0, 0, True, 0
     input_tokens, output_tokens = 0, 0
     hybrid_predictions = {}
+    failures_by_case = {}
+    resolved_models = set()
+    receipts = []
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='gravetrail-ai-gold-') as directory:
         store = Store(directory)
@@ -125,17 +129,23 @@ def _live_predictions(cases, *, key_env, max_attempts, max_seconds):
                 remaining = max_seconds - (time.monotonic() - started)
                 if requests >= max_attempts or remaining < 30:
                     break
+                from sqlglot import Dialect
+                if case.get('dialect', '') not in Dialect.classes:
+                    failures += 1
+                    failures_by_case[case['id']] = 'unsupported_dialect'
+                    continue
                 workspace = store.create_workspace('Synthetic semantic benchmark')
                 Importer(store, workspace).files([(case['source'], case['code'].encode())], {'.sql', '.sas'})
                 profile = Profile(provider='OmniRoute', base_url='http://localhost:20128/v1',
                     model='auto/best-reasoning', key_env=key_env, retries=0, timeout=min(90, remaining),
-                    max_tokens=4096, context_chars=200000)
+                    max_tokens=max_tokens, context_chars=200000)
                 profile_id = stable_id(workspace, 'benchmark')
                 store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)',
                               [profile_id, workspace, 'Synthetic benchmark', profile.model_dump_json()])
                 for setting, value in [('default_profile', profile_id), ('llm_chunk_chars', 100000),
                                        ('max_context_chars', 100000), ('default_job', case['job'])]:
                     store.set_setting(workspace, setting, value)
+                store.set_setting(workspace, 'dialect', case.get('dialect', ''))
                 request = AnalysisRequest(mode='ai', max_provider_attempts=max_attempts - requests,
                                           max_seconds=max(30, min(14400, int(remaining))))
                 prepared = prepare_analysis(store, workspace, request)
@@ -152,19 +162,19 @@ def _live_predictions(cases, *, key_env, max_attempts, max_seconds):
                             raise TimeoutError('benchmark_deadline')
                         execution.catalog = plan.context_for(unit)
                         attempt = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
+                        if attempt is not None:
+                            receipts.append({'case_id': case['id'], 'unit_id': unit.unit_id,
+                                'outcome': attempt.outcome, 'reason': attempt.reason,
+                                'finish_reason': attempt.finish_reason, 'usage_known': attempt.usage_known,
+                                'usage': attempt.usage, 'attempts': attempt.attempts,
+                                'requested_model': attempt.requested_model, 'resolved_model': attempt.resolved_model,
+                                'prompt_hash': attempt.prompt_hash})
+                            if attempt.resolved_model:
+                                resolved_models.add(attempt.resolved_model)
                         if attempt is None or attempt.outcome != 'validated' or attempt.result is None:
+                            failures_by_case[case['id']] = 'no_route' if attempt is None else attempt.outcome
                             failed = True
                             break
-                        usage_known &= attempt.usage_known
-                        for name, aliases in [('input_tokens', ('input_tokens', 'prompt_tokens', 'promptTokenCount')),
-                                               ('output_tokens', ('output_tokens', 'completion_tokens', 'candidatesTokenCount'))]:
-                            value = next((attempt.usage[k] for k in aliases if isinstance(attempt.usage.get(k), int)), None)
-                            if value is None:
-                                usage_known = False
-                            elif name == 'input_tokens':
-                                input_tokens += value
-                            else:
-                                output_tokens += value
                         context = ValidationContext(unit=unit, workspace_id=workspace,
                             source_text=case['code'], settings=prepared.settings, parser_result=parsed)
                         validated = validate_project_response(attempt.result, context)
@@ -173,7 +183,8 @@ def _live_predictions(cases, *, key_env, max_attempts, max_seconds):
                         processed_units += 1
                         abstain |= bool(validated.unresolved or validated.rejected
                                         or validated.coverage.status in {'partial', 'unsupported'})
-                except (ValueError, OSError, TimeoutError):
+                except (ValueError, OSError, TimeoutError) as exc:
+                    failures_by_case[case['id']] = type(exc).__name__
                     failed = True
                 requests += execution.attempts
                 if failed:
@@ -183,11 +194,30 @@ def _live_predictions(cases, *, key_env, max_attempts, max_seconds):
                 predictions[case['id']] = prediction_from_facts(facts, abstain=abstain)
                 hybrid_predictions[case['id']] = prediction_from_facts(hybrid_facts, abstain=abstain)
                 completed += 1
+                print(json.dumps({'benchmark_completed': completed, 'requests': requests,
+                                  'failed_cases': failures}), file=sys.stderr, flush=True)
         finally:
             store.close()
+    # Quarantine affects quality, not metering. Every physical call needs one known receipt.
+    usage_known = bool(requests) and sum(r['attempts'] for r in receipts) == requests
+    input_tokens, output_tokens = 0, 0
+    for receipt in receipts:
+        usage_known &= receipt['usage_known'] and receipt['attempts'] == 1
+        for name, aliases in [('input_tokens', ('input_tokens', 'prompt_tokens', 'promptTokenCount')),
+                              ('output_tokens', ('output_tokens', 'completion_tokens', 'candidatesTokenCount'))]:
+            value = next((receipt['usage'][k] for k in aliases
+                          if type(receipt['usage'].get(k)) is int and receipt['usage'][k] >= 0), None)
+            if value is None:
+                usage_known = False
+            elif name == 'input_tokens':
+                input_tokens += value
+            else:
+                output_tokens += value
     return predictions, {'processed': completed, 'processed_units': processed_units, 'requests': requests,
                          'usage_known': usage_known and bool(requests), 'failed_cases': failures,
                          'hybrid_predictions': hybrid_predictions,
+                         'failures_by_case': failures_by_case, 'resolved_models': sorted(resolved_models),
+                         'receipts': receipts,
                          'input_tokens': input_tokens if usage_known and requests else None,
                          'output_tokens': output_tokens if usage_known and requests else None}
 
