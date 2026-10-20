@@ -35,6 +35,17 @@ class AnalysisRequest(StrictModel):
         return self
 
 
+class ProjectionFocus(StrictModel):
+    model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
+    parent_id: Name
+    list_start: int = Field(ge=0)
+    list_end: int = Field(ge=1)
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=1)
+    ordinal_start: int = Field(ge=0)
+    ordinal_end: int = Field(ge=1)
+
+
 class AnalysisUnit(StrictModel):
     model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
     unit_id: Name
@@ -48,6 +59,7 @@ class AnalysisUnit(StrictModel):
     start_offset: int = Field(ge=0)
     end_offset: int = Field(ge=1)
     code: str = Field(min_length=1, max_length=200000)
+    focus: ProjectionFocus | None = None
 
     @model_validator(mode='after')
     def ordered(self):
@@ -241,6 +253,7 @@ class ValidationReport(StrictModel):
     rejected: list[ClaimDecision] = Field(default_factory=list)
     unresolved: list[ClaimDecision] = Field(default_factory=list)
     coverage: Coverage = Field(default_factory=Coverage)
+    reviewed_candidates: list[Name] = Field(default_factory=list)
 
 
 class ReconciliationReport(StrictModel):

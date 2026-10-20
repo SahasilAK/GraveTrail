@@ -390,7 +390,8 @@ def save_validation_checkpoint(store, workspace, run_id, unit, context_hash, val
             accepted_ids.append(fact.candidate_id)
             save_claim_decisions(store, workspace, run_id, [{'claim_id': 'stage:' + fact.candidate_id,
                 'unit_id': unit.unit_id, 'kind': 'checkpoint', 'status': 'staged', 'payload': payload}])
-        header.update(accepted_ids=accepted_ids, reviewed=reviewed, cache=cache, checkpoint_version=2)
+        header.update(accepted_ids=accepted_ids, reviewed=reviewed, cache=cache, checkpoint_version=2,
+                      unit_spec=unit.model_dump(exclude={'code'}))
         save_unit_result(store, workspace, run_id, unit.unit_id, file_id=unit.file_id,
             content_hash=unit.content_hash, start_char=unit.start_offset, end_char=unit.end_offset,
             context_hash=context_hash, status='staged', record_id=record_id, result=header)

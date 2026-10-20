@@ -44,7 +44,7 @@ def input_key(items, context):
                         for i in items))
 
 
-def operation_contexts(context, parsed=None):
+def operation_contexts(context, parsed=None, *, scoped=True):
     """Locate parser-owned complete operations in the immutable original, including same-line units."""
     if not isinstance(context, ValidationContext):
         context = ValidationContext.model_validate(context)
@@ -81,6 +81,10 @@ def operation_contexts(context, parsed=None):
             continue
         key = stable_id(context.workspace_id, unit.file_id, unit.content_hash, unit.job_id,
                         str(offset), str(stop), str(ordinal))
+        if scoped and unit.focus:
+            from dataforge.ai_semantic import focused_operation, source_view, unit_dialect
+            source_view(unit, unit_dialect(unit, context.settings))
+            operation = focused_operation(operation, unit, unit_dialect(unit, context.settings))
         located.append((operation, offset, stop, key))
     return located
 
@@ -261,6 +265,9 @@ def validate_project_response(response, context):
     for kind, claim in claims:
         candidate_id = stable_id(context.workspace_id, context.unit.unit_id, kind,
                                  json.dumps(claim.model_dump(), sort_keys=True))
+        if context.unit.focus and context.unit.focus.ordinal_start and kind in {'assets','relationships'}:
+            report.rejected.append(ClaimDecision(candidate_id=candidate_id, reason='outside_projection_focus', status='rejected'))
+            continue
         matches, unresolved = [], not operations
         for operation, start, stop, key in operations:
             if kind == "assets":

@@ -292,3 +292,5 @@ AI extraction/review requires explicit network/source/write permission, approved
 ## Automatic project budgets and continuation
 
 `start_lineage_analysis` and `preview_project_analysis` accept nullable `max_provider_attempts`, `max_output_tokens_total`, `max_seconds`, plus `resume_run_id` and `retry_unknown`. Omitted/null budgets use shared automatic recommendations; explicit numbers remain ceilings. A paused run returns `awaiting_continuation`; start again with its run ID to execute the next bounded portion. Resume uses the original source/mode/review options and rechecks source/network grants and recipients. `retry_unknown=true` explicitly authorizes potentially duplicate in-flight work. Preview stays offline.
+
+Project-analysis preview reports semantic source tasks and provisional review sizing before extraction. Continuing a saved run preserves source partitions and skips completed review batches through the same service used by UI/CLI. See [oversized operations](AI_ANALYSIS.md#oversized-operations-and-large-review-sets).

@@ -59,8 +59,12 @@ def controls(store, workspace, file_ids):
     request = AnalysisRequest(**base, **overrides)
     try:
         preview = preview_analysis(store, workspace, request, connections=current_connections())
-        st.caption(f"{preview['files']} selected files · {preview['units']} complete source units · "
+        st.caption(f"{preview['files']} selected files · {preview['units']} source tasks · "
                    f"at most {preview['max_provider_attempts']} provider attempts including retries and fallback.")
+        if preview.get('semantic_pages'):
+            st.caption(f"{preview['semantic_pages']} projection tasks retain original shared SQL context and validate against the complete source.")
+        if preview.get('review_sizing_provisional'):
+            st.caption('Review sizing is provisional until extraction produces candidates. Additional batches continue within the saved execution limits; completed batches are reused.')
         if preview['routes']:
             st.dataframe([{'Task': task, 'Provider': p['provider'], 'Model': p['model']}
                           for task, profiles in preview['routes'].items() for p in profiles],
@@ -79,7 +83,7 @@ def controls(store, workspace, file_ids):
         if preview['blocked']:
             reasons = sorted({b['reason'] for b in preview['blocked']})
             st.warning('AI build needs attention: ' + '; '.join(r.replace('_', ' ') for r in reasons))
-            st.caption('Whole SQL/SAS blocks are preserved. Model capacity, source disclosure allowance and execution limits are checked separately.')
+            st.caption('Complete statements and validated projection groups preserve their required context. Model capacity, source disclosure allowance and execution limits are checked separately.')
             affected = {b.get('unit_id') for b in preview['blocked'] if b.get('unit_id')}
             if affected:
                 paths = {a['path'] for a in preview.get('allowances', []) if a['unit_id'] in affected}

@@ -200,11 +200,11 @@ def test_real_adapter_pipeline_counts_extraction_and_additional_review(project):
     assert 'relationships' not in sent[0] and 'facts' not in sent[0]
 
 
-def test_review_preview_reserves_compact_candidates_and_overflow_stays_unresolved(project, monkeypatch):
+def test_review_preview_reserves_compact_candidates_and_pages_large_candidates(project, monkeypatch):
     from dataforge.ai_analysis_models import NormalizedFact
     from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_analysis
     from dataforge.analysis_service import preview_analysis
-    from dataforge.llm import REVIEW_CONTEXT_CHARS, analysis_prompt, review_payload
+    from dataforge.llm import REVIEW_CONTEXT_CHARS, analysis_prompt, review_batches
     store, w = project
     store.set_setting(w, 'max_context_chars', 8000)
     request = AnalysisRequest(mode='hybrid', additional_ai_review=True)
@@ -213,16 +213,18 @@ def test_review_preview_reserves_compact_candidates_and_overflow_stays_unresolve
     facts = [NormalizedFact(kind='derivation', unit_id=unit.unit_id, evidence_key='key',
         evidence=EvidenceCitation.from_unit(unit), candidate_id=str(i), table='mart.b', column=f'c{i}',
         expression=f'a.x{i}', inputs=[DerivationInput(table='raw.a', column=f'x{i}')]) for i in range(8)]
-    compact, omitted = review_payload(facts)
-    assert len(compact) == 8 and not omitted
+    batches = review_batches(facts)
+    compact = [candidate for batch in batches for candidate in batch]
+    assert len(compact) == 8
     assert all('evidence' not in item and 'unit_id' not in item for item in compact)
     execution = AIExecutionContext(request)
     system, user, _ = analysis_prompt(unit, 'lineage_review', execution, reserve_review=True)
     assert len(system) + len(user) < 8000
     assert preview_analysis(store, w, request)['valid']
     facts[0].expression = 'x' * (REVIEW_CONTEXT_CHARS + 1)
-    compact, omitted = review_payload(facts)
-    assert '0' in omitted and len(compact) == 7
+    batches = review_batches(facts)
+    assert len([c for batch in batches for c in batch]) == 8
+    assert batches[0][0]['candidate_id'] == '0' and len(batches[0]) == 1
 
 
 def test_eight_assignment_review_fits_default_context(project):

@@ -363,3 +363,5 @@ Billable builds require the existing independent write/source/network grants: `-
 ## Automatic project budgets and continuation
 
 For `lineage build` and `lineage preview`, omitted `--max-provider-attempts`, `--max-output-tokens-total` and `--max-seconds` calculate a bounded execution automatically. Explicit numeric values are ceilings. Use `--resume-run-id RUN_ID` to continue a paused AI build; its source selection/mode/options remain pinned. `--retry-unknown` explicitly permits retrying a lost in-flight request and may incur duplicate usage. Inspect `lineage analysis-report` first. Offline preview makes no network requests.
+
+AI preview also reports semantic projection tasks and whether review sizing is provisional. Source partitions and completed review batches are preserved by the shared Continue implementation; these behaviors require no additional CLI options. See [oversized operations](AI_ANALYSIS.md#oversized-operations-and-large-review-sets).

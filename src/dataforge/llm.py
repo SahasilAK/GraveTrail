@@ -580,17 +580,19 @@ def _transmitted_schema(value):
 REVIEW_CONTEXT_CHARS = 2000
 
 
-def review_payload(facts):
-    """One bounded review request; overflow never receives implicit AI approval."""
-    candidates, omitted = [], set()
+def review_batches(facts):
+    """Deterministic lossless pages; an oversized singleton gets its own fit check."""
+    batches, current = [], []
     for fact in facts:
-        candidate = fact.model_dump(exclude={'detail', 'evidence', 'unit_id', 'evidence_key', 'status', 'origin'}, exclude_defaults=True)
-        proposed = json.dumps([*candidates, candidate], ensure_ascii=False, separators=(',', ':'))
-        if len(proposed) <= REVIEW_CONTEXT_CHARS:
-            candidates.append(candidate)
-        else:
-            omitted.add(fact.candidate_id)
-    return candidates, omitted
+        candidate = fact.model_dump(exclude={'detail','evidence','unit_id','evidence_key','status','origin'}, exclude_defaults=True)
+        proposed = [*current,candidate]
+        if current and (len(proposed)>100 or len(json.dumps(proposed,ensure_ascii=False,separators=(',',':')))>REVIEW_CONTEXT_CHARS):
+            batches.append(current)
+            current=[]
+        current.append(candidate)
+    if current:
+        batches.append(current)
+    return batches
 
 
 @lru_cache(maxsize=2)
@@ -599,9 +601,12 @@ def _analysis_schema_text(task):
     return json.dumps(_transmitted_schema(wire_schema(task)), sort_keys=True, separators=(',', ':'))
 
 
-def analysis_prompt_hash(task):
+def analysis_prompt_hash(task, *, focused=False):
     system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
     template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
+    focus_path = PROMPTS/task/'focus.md'
+    if focused and focus_path.exists():
+        system += '\n' + focus_path.read_text(encoding='utf-8')
     return hashlib.sha256((system + template + _analysis_schema_text(task)).encode()).hexdigest()
 
 
@@ -613,20 +618,26 @@ def analysis_prompt(unit, task, execution, *, reserve_review=False):
     template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
     schema_text = _analysis_schema_text(task)
     schema = json.loads(schema_text)
-    digest = hashlib.sha256((system + template + schema_text).encode()).hexdigest()
+    digest = analysis_prompt_hash(task, focused=bool(unit.focus))
+    if unit.focus and (PROMPTS/task/'focus.md').exists():
+        system += '\n' + (PROMPTS/task/'focus.md').read_text(encoding='utf-8')
     context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
                'schema':schema,'schema_version':'2'}
+    if unit.focus:
+        from dataforge.ai_semantic import source_view, unit_dialect
+        context['unit'].pop('code')
+        context['source_segments'] = source_view(unit, unit_dialect(unit, execution.settings))
     context['evidence_reference'] = {'unit_id': unit.unit_id}
     if task == 'lineage_review':
-        context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review else execution.review_candidates
+        context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review and not execution.review_candidates else execution.review_candidates
     user = template.replace('{{context}}',json.dumps(context,ensure_ascii=False,separators=(',',':')))
     return system,user,digest
 
 
-def preview_analysis_routes(store, workspace, units, execution):
+def preview_analysis_routes(store, workspace, units, execution, *, tasks=None):
     """Offline route, full-envelope capacity and disclosure checks."""
     blocked, routes, excluded, allowances = [], {}, [], []
-    tasks = ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
+    tasks = tasks or ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
     for task in tasks:
         try:
             selected = analysis_routes(store, workspace, task)
@@ -752,7 +763,7 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
             reason = str(exc)[:500] if isinstance(exc, ProviderError) else 'project_response_contract_invalid'
             retryable = isinstance(exc, ProviderError) and exc.retryable
         record_id = uuid.uuid4().hex
-        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':'2',
+        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':'2','prompt_version':'3',
                    'reason':reason,'attempts':execution.attempts-attempt_start,'requested_model':profile.model,
                    'resolved_model':metadata.get('resolved_model'),'finish_reason':metadata.get('finish_reason'),
                    'usage_known':metadata.get('usage_known',False),'result':None,
@@ -762,7 +773,7 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
             details.update(context=user,response=raw)
         safe_details,safe_usage = manager.sanitize(details),manager.sanitize(usage)
         with store.transaction():
-            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,'2'])
+            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,'3'])
             store.execute('INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                 [record_id,workspace,pid,task,unit.file_id,unit.first,prompt_hash,profile.provider,profile.model,
                  outcome,time.perf_counter()-started,json.dumps(safe_usage),json.dumps(safe_details)])

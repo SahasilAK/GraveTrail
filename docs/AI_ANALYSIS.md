@@ -12,7 +12,7 @@ AI project analysis adds table lineage, direct column usage and column transform
 
 CSV continues to supply local schema metadata. **Additional AI review** is optional. Review can withhold a candidate, but cannot make an unsupported claim publishable. AI additions remain **inferred**, with the compatibility confidence ceiling of 0.8. That number is display metadata, not a measured probability.
 
-Review receives compact candidates and the original unit once. Preview reserves 2,000 characters for candidates. Candidates beyond that bound stay unresolved with `additional_ai_review_context_limit`; they never receive implied approval. This keeps the optional review within the previewed request and call budget.
+Review receives every eligible compact candidate in deterministic batches, targeting 2,000 candidate characters and at most 100 decisions per request. A larger single candidate gets its own full-envelope fit check; it is never silently dropped. Preview labels review sizing provisional until extraction produces candidates. Continue uses the actual remaining batches and saves progress after every completed batch. Reviewer approval cannot override local validation.
 
 1. Import SQL/SAS source files and configure a provider under **Connections & AI**.
 2. Open **Analysis**, select files, and enable **Use AI for analysis**. Keep **Compare with parser** selected for a hybrid build.
@@ -29,14 +29,19 @@ flowchart TD
     A[Explicit analysis action] --> B[Snapshot source hashes and settings]
     B --> C[Offline complete-unit and disclosure preview]
     C --> D[Local extraction]
-    C --> E[AI extraction from original units]
+    C --> P[Fit complete statements or independent projection groups]
+    P --> E[AI extraction from exact original source segments]
     D --> F[Deterministic evidence and semantic checks]
     E --> F
     F --> G[Comparison by original operation]
-    G --> H[Optional bounded AI review]
+    G --> H[Optional bounded AI review batch]
     G --> L
     I[Final freshness and authorization checks]
-    H --> L[Durable validated stage checkpoint]
+    H --> R[Save reviewed candidate IDs]
+    R --> S{More review batches?}
+    S -->|Yes, allowance available| H
+    S -->|Yes, execution limit| N
+    S -->|No| L[Durable validated stage checkpoint]
     L --> M{All units processed?}
     M -->|No| N[Await explicit Continue; keep previous graph]
     N --> C
@@ -45,7 +50,7 @@ flowchart TD
     F --> K[Rejected and unresolved report]
 ```
 
-Units retain original character offsets and lines, including multiple statements on one line. SQL statements and SAS DATA/PROC/macro blocks stay whole. Relevant declarations are retrieved by exact symbol names; project coverage does not depend on a top-k search. An oversized indivisible unit blocks the run instead of being truncated. Project planning can exceed 50 units; the existing manual selection limit remains 50 chunks.
+Units retain original character offsets and lines, including multiple statements on one line. Complete SQL statements and SAS blocks are preferred. When the complete request cannot fit, eligible independent SQL projections or static PROC SQL statements become smaller source tasks as described below. Relevant declarations are retrieved by exact symbol names; project coverage does not depend on a top-k search. An unsupported indivisible unit still blocks rather than being truncated. Project planning can exceed 50 tasks; the manual selection limit remains 50 chunks.
 
 Each request receives its original unit, relevant selected-source declarations and safe configured context. Extraction does not receive parser relationship or transformation answers. The declaration catalog includes provenance and marks conflicts unknown. Unselected source is not implicitly sent as extra context. Static schemas and structural parsing are shared inputs, so independent extraction is not independent proof.
 
@@ -67,13 +72,23 @@ If the complete envelope exceeds a character allowance, preview shows an **Apply
 | Reserved output tokens | Sum of every possible attempt's output allocation | 1000–2000000 |
 | Cooperative seconds | Routed per-attempt timeouts, bounded by the application ceiling | 30–14400 |
 
-Values in the existing **AI request budget** menu recalculate with source/model/review selection. Edit an individual value to preserve a Custom ceiling; **Reset AI budgets to automatic** clears those overrides. CLI/MCP omitted or null limits request Automatic; explicit numbers remain Custom. Preview reports total work separately from the largest complete-unit prefix fitting this execution.
+Values in the existing **AI request budget** menu recalculate with source/model/review selection. Edit an individual value to preserve a Custom ceiling; **Reset AI budgets to automatic** clears those overrides. CLI/MCP omitted or null limits request Automatic; explicit numbers remain Custom. Preview reports total work separately from the largest prefix of extraction/review stages fitting this execution. A unit may pause after extraction or between review batches without losing completed work.
 
-Large projects return **awaiting_continuation** at the execution limit. Completed extraction/validation and review stages are durable, including partial semantic outcomes. **Continue AI analysis** rechecks the pinned sources, configuration, original publication, prompts, routes, permissions and budgets. It makes no calls for completed stages. The current graph remains visible until all required units finish and a single final publication succeeds. Process restart never sends requests automatically. A lost in-flight response needs the explicit retry choice, which identifies the possibility of a duplicate charge. Cumulative reservations and unknown usage remain visible across executions.
+Large projects return **awaiting_continuation** at the execution limit. Completed extraction/validation and individual review batches are durable, including partial semantic outcomes. Original source partitions and reviewed candidate IDs are saved so capacity metadata aging cannot silently repartition a continuation. **Continue AI analysis** rechecks the pinned sources, configuration, original publication, prompts, routes, permissions and budgets. It makes no calls for completed stages. The current graph remains visible until all required units finish and a single final publication succeeds. Process restart never sends requests automatically. A lost in-flight response needs the explicit retry choice, which identifies the possibility of a duplicate charge. Cumulative reservations and unknown usage remain visible across executions.
 
 Every extraction/review/retry/fallback attempt reserves its configured maximum output allocation before dispatch and rechecks current authorization, source identity, cancellation and remaining budget. Unknown usage keeps that conservative reservation. Reported token counts remain provider metadata; absent usage is unknown. No monetary estimate is invented.
 
 The deadline starts when work enters execution, excluding queue time. HTTP timeouts are limited by remaining time; checks also run between received chunks, stages and immediately before publication. A blocked socket/parser cannot always be preempted exactly, so cancellation or deadline reporting may return later. An already sent request may have incurred usage.
+
+## Oversized operations and large review sets
+
+For an independent outer SELECT, the planner can recursively divide the projection list until each complete request fits. Eligible requests with more than 100 projections are also divided to respect the response schema ceiling. This applies to a standalone SELECT, CREATE-AS or INSERT-SELECT without positional target column lists. Each task sends exact original header, assigned projection text and shared FROM/JOIN/WHERE suffix, with absolute source coordinates and original projection ordinals. Omitted text consists only of sibling projections. The host validates against the complete immutable original and restricts accepted output claims to the assigned projections. Shared table and contextual usage facts belong to the first task. Publication combines all tasks into one original writer.
+
+Splitting requires unique named outputs and excludes stars, sibling-alias references, nested SELECTs/CTEs, set operations, DISTINCT, aggregates/windows, grouping, HAVING, QUALIFY, ordering, TOP/LIMIT/OFFSET, SELECT AS STRUCT, and a WHERE clause without FROM. Unqualified clause references to output aliases also prevent splitting. Only the SELECT projection, FROM/JOIN and WHERE argument forms are allowlisted; additional dialect clauses or modifiers remain indivisible. Each computed projection span is also parsed and compared with its original AST projection, so a keyword inside a qualified column cannot masquerade as a clause boundary. These restrictions prevent projection meaning from depending on omitted sections. A single large projection or shared context can still exceed capacity. The canonical original-unit limit remains 200,000 characters. Source privacy allowances remain binding.
+
+An option-free static `PROC SQL; ... QUIT;` block can be paged at complete SELECT/CREATE/INSERT/UPDATE/DELETE statement boundaries. Macro references, connection/pass-through/session controls and stateful DATA/macro blocks remain indivisible. SQL/SAS runtime behavior and execution order are never inferred from paging.
+
+Review batches account for every eligible candidate. A singleton that exceeds route capacity blocks explicitly. Contradicted or insufficiently evidenced candidates remain unresolved; a failed, cancelled or incomplete batch never counts as approval. Continue skips completed extraction and reviewed candidate IDs, rechecks sources and authorization, and preserves the prior graph until every required task finishes. Unknown in-flight review responses use the same explicit potentially duplicate retry rule as extraction.
 
 ## Validation, comparison and reuse
 

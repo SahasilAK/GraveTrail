@@ -78,3 +78,15 @@ cover 100-column claims, compact canonical expansions above16MiB, aggregate file
 snapshots above16MiB, partial outcomes and deadlines between extraction and review.
 Progress journals omit per-unit preview lists and update only changed run fields;
 completed continuation stages remain read-only. Static wire schemas are reused.
+
+The semantic-paging/review-batch follow-up repeated this lifecycle qualification on
+2026-10-20: **1,000 units, 10 executions,
+1,000 unique requests, one final publication**, zero live calls.
+Largest unit checkpoint: **727 bytes** including the
+saved source partition specification. Peak traced Python allocations:
+**53,952,971 bytes**; elapsed **485.127 seconds**
+with tracing and the full test suite running concurrently. This is a bounded
+lifecycle/storage check, not a speed comparison or live-model precision result;
+native DuckDB/process memory is excluded. Separate real-adapter/mock HTTP checks
+cover 36 wide-query outputs in one original writer and all 24 review candidates
+across durable continuation without repeats.

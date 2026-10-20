@@ -58,8 +58,13 @@ class AIPlan:
         return not self.blocked
 
     def context_for(self, unit):
-        names = {x.casefold() for x in re.findall(r'[A-Za-z_][\w.]*',unit.code)}
-        return [dict(entry) for entry in self.catalog if entry['unit_id'] != unit.unit_id and entry['name'].casefold() in names and
+        if unit.focus:
+            f = unit.focus
+            visible = unit.code[:f.list_start-unit.start_offset] + unit.code[f.start_offset-unit.start_offset:f.end_offset-unit.start_offset] + unit.code[f.list_end-unit.start_offset:]
+        else:
+            visible = unit.code
+        names = {x.casefold() for x in re.findall(r'[A-Za-z_][\w.]*',visible)}
+        return [dict(entry) for entry in self.catalog if entry['unit_id'] not in {unit.unit_id, unit.focus.parent_id if unit.focus else unit.unit_id} and entry['name'].casefold() in names and
                 (not entry.get('temporary') or entry['job_id'] == unit.job_id)]
 
 
@@ -132,6 +137,10 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
         if source.extension not in {'.sql','.sas'}:
             continue
         spans = list(_unit_spans(source.code,source.extension))
+        from dataforge.ai_semantic import proc_sql_spans
+        spans = [part for a,b in spans for part in (
+            [(a+x,a+y) for x,y in proc_sql_spans(source.code[a:b])]
+            if source.extension == '.sas' and b-a > max_chars and proc_sql_spans(source.code[a:b]) else [(a,b)])]
         if not spans:
             empty.append(source.file_id)
         disclosure.append({'file_id':source.file_id,'path':source.path,'content_hash':source.content_hash,

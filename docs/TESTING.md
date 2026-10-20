@@ -9,7 +9,7 @@ published; this tracked summary is the public acceptance reference.
 
 | Area | Latest evidence | Remaining gate |
 | --- | --- | --- |
-| Source application | Parser cache12/migration6 add explicit hybrid/experimental AI project builds, strict evidence/semantic checks, bounded review, provenance and atomic publication; 738 tests pass with 2 existing Windows skips | No claim of universal SQL/SAS coverage or qualified live-model precision |
+| Source application | Parser cache12/migrations6–7 add explicit hybrid/experimental AI project builds, semantic paging, durable review batches and atomic publication; 801 tests pass with 2 existing Windows skips | No claim of universal SQL/SAS coverage or qualified live-model precision |
 | SQL/SAS sample ZIPs | Each has 85 persistent tables, 128 logical edges, seven layers/all 16 roots; SAS adds 16 WORK assets/144 physical edges | Real client projects and large dense graphs need separate accuracy/performance acceptance |
 | CLI/MCP | Complete documented interfaces and actual SDK transport/permission regressions; fixture parity includes original bytes, evidence and warm caches | One DuckDB process owns each home |
 | OmniRoute | 2026-10-20 project smoke: two synthetic SQL units committed, two requests with known usage, seven accepted claims including one AI-only UPDATE derivation; earlier manual SQL/SAS gate remains historical | Development smoke after prompt tuning is not an independent precision evaluation or SAS project qualification |
@@ -161,7 +161,7 @@ New contract/context/transport/validator/reconciliation/orchestration tests use 
 
 These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-current-limits) records the still-open language-specific live precision, coverage and sample-size targets.
 
-Full source verification on 2026-10-20: **738 passed, 2 existing Windows symlink skips** in 178.66 seconds. The actual browser confirmed unchecked defaults, hybrid opt-in/preview, background publication and accepted table/column claims in the report using synthetic mocked extraction. Follow-up AppTest/browser checks cover automatic terminal report refresh and selection. A clean wheel installed in a separate environment ran outside the checkout, loading packaged project prompts/schemas and publishing one table edge/column derivation with durable support through mock HTTP. Ruff, lock and strict Pages validation are recorded with the PR. The bounded two-case live OmniRoute smoke described above verifies requests/usage and AI gap publication, but its sample is too small and was used in prompt development; do not infer a precision percentage.
+Earlier source verification on 2026-10-20: **738 passed, 2 existing Windows symlink skips** in 178.66 seconds. The actual browser confirmed unchecked defaults, hybrid opt-in/preview, background publication and accepted table/column claims in the report using synthetic mocked extraction. Follow-up AppTest/browser checks cover automatic terminal report refresh and selection. A clean wheel installed in a separate environment ran outside the checkout, loading packaged project prompts/schemas and publishing one table edge/column derivation with durable support through mock HTTP. Ruff, lock and strict Pages validation are recorded with the PR. The bounded two-case live OmniRoute smoke described above verifies requests/usage and AI gap publication, but its sample is too small and was used in prompt development; do not infer a precision percentage.
 
 The offline scorer can be reproduced with:
 
@@ -179,3 +179,9 @@ Budget UI regressions also cover page navigation retaining a nondefault Custom v
 and Continue retaining a saved API/CLI Custom ceiling until an explicit reset.
 A constrained fallback is excluded in offline planning and receives no source even
 when the primary has a transient failure.
+
+## Semantic paging and review batch regressions
+
+`tests/test_ai_analysis_scaling.py` exercises exact original source segments, projection ordinals, retained JOIN/WHERE dependency roles, rejected cross-focus claims, conservative indivisible constructs, static PROC SQL boundaries, oversized singleton review candidates and clean reopen between review batches. A real adapter/mock HTTP round trip processes every projection of a wide query once across explicit executions, publishing one original writer. These checks qualify host orchestration and validation, not live-model accuracy. Native crash durability and live precision remain separate release gates.
+
+Latest source verification after semantic paging/review batches: **801 passed, 2 existing Windows skips** in 439.67 seconds. The final scaling regressions separately passed **28 tests**, including real extraction/review adapter paths with mock HTTP. A fresh installed wheel outside the checkout loads the conditional focus prompt and passes both the 36-output/one-writer and 24-candidate/no-repeat continuation checks. The repeated 1,000-unit lifecycle qualification is recorded in [performance](PERFORMANCE.md#automatic-ai-continuation-qualification-2026-10-20). No live provider precision claim follows from these results.

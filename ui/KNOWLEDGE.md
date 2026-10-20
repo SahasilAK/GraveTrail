@@ -45,3 +45,5 @@ Asset/query/direction/depth/collapse and analysis file selections persist via na
 `analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, explicit calculated context allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
 
 Budget values have non-widget session storage so navigation cannot discard Custom ceilings; Continue inherits saved numeric limits unless Reset explicitly releases them. Manual chunk-size help distinguishes the automatic project planner.
+
+`analysis_ai.py` preview identifies semantic source tasks, original-context projection paging and provisional review sizing. Existing Custom controls/Continue remain; the shared service owns per-batch checkpoints and final atomic publication.

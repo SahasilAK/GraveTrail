@@ -9,10 +9,12 @@ import hashlib
 import json
 import uuid
 from collections import Counter
+from dataclasses import replace
 
 from dataforge.ai_analysis_models import (
     AnalysisReport,
     AnalysisRequest,
+    AnalysisUnit,
     ClaimDecision,
     ProjectLineageResponse,
     ValidationContext,
@@ -25,6 +27,7 @@ from dataforge.ai_analysis_store import (
     load_validation_checkpoint,
     save_claim_decisions,
     save_run,
+    save_unit_result,
     save_validation_checkpoint,
 )
 from dataforge.ai_budget import execution_budget
@@ -35,7 +38,7 @@ from dataforge.llm import (
     analysis_prompt_hash,
     invoke_analysis_unit,
     preview_analysis_routes,
-    review_payload,
+    review_batches,
 )
 from dataforge.models import ParseResult, stable_id
 from dataforge.services import (
@@ -68,47 +71,120 @@ def _usage(counts, result):
 
 
 def _prepare(store, workspace, request, connections=None, cancelled=None, transport=None, authorize=None):
-    prepared = prepare_analysis(store, workspace, request)
+    try:
+        prepared = prepare_analysis(store, workspace, request)
+    except ValueError:
+        if request.resume_run_id:
+            raise ValueError('source_or_configuration_changed') from None
+        raise
+    if request.resume_run_id:
+        prior=store.rows('SELECT summary FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?',
+            [workspace,request.resume_run_id])
+        pin=json.loads(prior[0]['summary']).get('pin',{}) if prior else {}
+        if pin != {'manifest':prepared.manifest_hash,'revision':_state_revision(store,workspace),
+                   'prior':prepared.prior_revision,'protocol':_protocol_hash()}:
+            raise ValueError('source_or_configuration_changed')
     plan = plan_ai_units(prepared, max_chars=200000)
     execution = AIExecutionContext(request, connections=connections or current_connections(),
         cancelled=cancelled, transport=transport, settings=prepared.settings, authorize=authorize,
         source_hashes={s.file_id: s.content_hash for s in prepared.sources})
+    from dataforge.ai_semantic import (
+        projection_count,
+        split_proc_sql_unit,
+        split_projection_unit,
+        unit_dialect,
+    )
+    if request.resume_run_id:
+        rows=store.rows('SELECT result FROM ai_analysis_units WHERE workspace_id=? AND run_id=? ORDER BY file_id,start_char,unit_id',
+            [workspace,request.resume_run_id])
+        specs=[json.loads(row['result']).get('unit_spec') for row in rows]
+        if specs and all(specs):
+            sources={source.file_id:source for source in prepared.sources}
+            restored=[AnalysisUnit.model_validate({**spec,'code':sources[spec['file_id']].code[spec['start_offset']:spec['end_offset']]}) for spec in specs]
+            restored.sort(key=lambda u:(next(i for i,s in enumerate(prepared.sources) if s.file_id==u.file_id),u.start_offset,
+                u.focus.ordinal_start if u.focus else 0))
+            plan=replace(plan,units=tuple(restored),blocked=())
+    else:
+        def fit(unit):
+            execution.catalog=plan.context_for(unit)
+            trial=preview_analysis_routes(store,workspace,[unit],execution)
+            capacity={'complete_prompt_exceeds_context_budget','complete_prompt_exceeds_model_capacity'}
+            if (projection_count(unit,unit_dialect(unit,prepared.settings))>100
+                    or any(b['reason'] in capacity for b in trial['blocked'])):
+                parts=split_projection_unit(unit,unit_dialect(unit,prepared.settings)) or split_proc_sql_unit(unit)
+                if parts:
+                    return [page for part in parts for page in fit(part)]
+            return [unit]
+        plan=replace(plan,units=tuple(page for unit in plan.units for page in fit(unit)))
+    plan=replace(plan,context_hash=_hash({'context':plan.context_hash,
+        'partitions':[(u.unit_id,u.focus.model_dump() if u.focus else None) for u in plan.units]}))
     blocked, routes, bundles, allowances, excluded = list(plan.blocked), {}, [], [], []
-    reusable = 0
+    reusable, ends, review_provisional = 0, [], False
     expected = _state_revision(store, workspace)
     for unit in plan.units:
         execution.catalog = plan.context_for(unit)
-        preview = preview_analysis_routes(store, workspace, [unit], execution)
-        blocked.extend(b for b in preview['blocked'] if not b['reason'].startswith('worst_case_'))
-        routes.update(preview['routes'])
-        allowances.extend(preview['allowances'])
-        excluded.extend(preview['excluded_routes'])
-        seconds = sum(p['timeout'] * p['attempts_per_unit'] for rr in preview['routes'].values() for p in rr)
+        execution.review_candidates = []
         context_hash = _unit_context_hash(prepared, plan, execution, unit, expected)
         checkpoint = load_validation_checkpoint(store, workspace, request.resume_run_id, unit, context_hash) if request.resume_run_id else None
         cached = None if request.refresh_ai else _cached(store, workspace, unit, context_hash)
-        if checkpoint or cached is not None:
-            remaining = ['lineage_review'] if request.additional_ai_review and not (checkpoint and checkpoint[1]) else []
-            eligible = [p for task in remaining for p in preview['routes'].get(task, [])]
-            bundles.append((sum(p['attempts_per_unit'] for p in eligible),
-                sum(p['max_tokens'] * p['attempts_per_unit'] for p in eligible),
-                sum(p['timeout'] * p['attempts_per_unit'] for p in eligible)))
-            reusable += 1
+        tasks=[]
+        if not checkpoint and cached is None:
+            tasks.append(('project_lineage',[]))
         else:
-            bundles.append((preview['max_provider_attempts'], preview['max_output_tokens_reserved'], seconds))
-    budget = execution_budget(bundles, **{k: getattr(request, k) for k in
-        ('max_provider_attempts', 'max_output_tokens_total', 'max_seconds')})
-    execution.request = request.model_copy(update=budget['effective'])
-    execution.unit_limit = budget['selected_units']
-    if plan.units and (not execution.unit_limit or (execution.unit_limit < len(bundles)
-            and not any(any(bundle) for bundle in bundles[:execution.unit_limit]))):
-        blocked.append({'reason': 'single_unit_exceeds_execution_budget'})
-    return prepared, plan, execution, {'valid': not blocked, 'mode': request.mode,
-        'files': len(prepared.sources), 'units': len(plan.units), 'empty_files': len(plan.empty_files),
-        'blocked': blocked, 'routes': routes, 'disclosure': list(plan.disclosure),
-        'allowances': allowances, 'excluded_routes': excluded, 'reusable_units': reusable, **budget,
-        'estimated_characters': plan.estimated_characters, 'max_provider_attempts': budget['total_attempts'],
-        'max_output_tokens_reserved': budget['total_output_tokens'], 'manifest_hash': prepared.manifest_hash}
+            reusable += 1
+        if request.additional_ai_review and not (checkpoint and checkpoint[1]):
+            if checkpoint:
+                from dataforge.ai_analysis_models import ValidationContext
+                from dataforge.ai_reconciliation import reconcile_candidates
+                from dataforge.ai_semantic import unit_dialect
+                from dataforge.parsers.sas import parse_sas
+                from dataforge.parsers.sql import parse_sql
+                source=next(source for source in prepared.sources if source.file_id==unit.file_id)
+                settings={**prepared.settings,'dialect':unit_dialect(unit,prepared.settings)}
+                parsed=(parse_sql(source.code,settings['dialect']) if unit.extension=='.sql' else
+                    parse_sas(source.code,settings.get('library_mappings'),settings.get('macros'),settings['dialect']))
+                context=ValidationContext(unit=unit,workspace_id=workspace,source_text=source.code,
+                    settings=settings,catalog=execution.catalog,parser_result=parsed)
+                facts=[f for f in reconcile_candidates(parsed,checkpoint[0],request.mode,context=context).facts
+                    if f.origin=='ai' and f.candidate_id not in checkpoint[0].reviewed_candidates]
+                tasks.extend(('lineage_review',batch) for batch in review_batches(facts))
+            else:
+                tasks.append(('lineage_review',[]))
+                review_provisional = True
+        if not tasks:
+            bundles.append((0,0,0))
+        for task,candidates in tasks:
+            execution.review_candidates=candidates
+            preview=preview_analysis_routes(store,workspace,[unit],execution,tasks=[task])
+            blocked.extend(b for b in preview['blocked'] if not b['reason'].startswith('worst_case_'))
+            routes.update(preview['routes'])
+            allowances.extend(preview['allowances'])
+            excluded.extend(preview['excluded_routes'])
+            seconds=sum(p['timeout']*p['attempts_per_unit'] for rr in preview['routes'].values() for p in rr)
+            bundles.append((preview['max_provider_attempts'],preview['max_output_tokens_reserved'],seconds))
+        ends.append(len(bundles))
+    execution.review_candidates=[]
+    budget=execution_budget(bundles,**{k:getattr(request,k) for k in
+        ('max_provider_attempts','max_output_tokens_total','max_seconds')})
+    execution.request=request.model_copy(update=budget['effective'])
+    selected_stages=budget['selected_units']
+    if bundles and (not selected_stages or (selected_stages<len(bundles)
+            and not any(any(bundle) for bundle in bundles[:selected_stages]))):
+        blocked.append({'reason':'single_unit_exceeds_execution_budget'})
+    starts=[0,*ends[:-1]]
+    budget.update(selected_stages=selected_stages,
+        selected_new_units=sum(start<selected_stages and any(any(bundle) for bundle in bundles[start:min(end,selected_stages)])
+            for start,end in zip(starts,ends)),
+        selected_units=sum(end<=selected_stages for end in ends),
+        remaining_units=sum(end>selected_stages for end in ends))
+    return prepared,plan,execution,{'valid':not blocked,'mode':request.mode,
+        'files':len(prepared.sources),'units':len(plan.units),'empty_files':len(plan.empty_files),
+        'blocked':blocked,'routes':routes,'disclosure':list(plan.disclosure),
+        'allowances':allowances,'excluded_routes':excluded,'reusable_units':reusable,**budget,
+        'review_sizing_provisional':review_provisional,
+        'semantic_pages':sum(u.focus is not None for u in plan.units),
+        'estimated_characters':plan.estimated_characters,'max_provider_attempts':budget['total_attempts'],
+        'max_output_tokens_reserved':budget['total_output_tokens'],'manifest_hash':prepared.manifest_hash}
 
 
 def preview_analysis(store, workspace, request, *, connections=None):
@@ -128,7 +204,7 @@ def _current(store, workspace, prepared, expected_revision):
 
 
 def _unit_context_hash(prepared, plan, execution, unit, expected_revision):
-    prompt_hash = analysis_prompt_hash('project_lineage')
+    prompt_hash = analysis_prompt_hash('project_lineage',focused=bool(unit.focus))
     return _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
         'prompt': prompt_hash, 'settings_revision': expected_revision,
         'validator': VALIDATOR_VERSION, 'mode': prepared.request.mode})
@@ -221,6 +297,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             execution.prior_reserved = prior_summary.get('counts', {}).get('reserved_output_tokens', 0)
             counts['input_tokens'] = prior_summary.get('counts', {}).get('input_tokens', 0)
             counts['output_tokens'] = prior_summary.get('counts', {}).get('output_tokens', 0)
+            counts['review_batches'] = prior_summary.get('counts', {}).get('review_batches', 0)
             usage_known = not prior_summary.get('inflight') and prior_summary.get('usage_known', True)
 
 
@@ -248,6 +325,13 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                          'counts': {**dict(counts), 'requests': execution.prior_requests,
                                     'reserved_output_tokens': execution.prior_reserved}, 'inflight': False})
             registered = True
+            if not request.resume_run_id:
+                with store.transaction():
+                    for unit in plan.units:
+                        save_unit_result(store,workspace,run_id,unit.unit_id,file_id=unit.file_id,
+                            content_hash=unit.content_hash,start_char=unit.start_offset,end_char=unit.end_offset,
+                            context_hash=_unit_context_hash(prepared,plan,execution,unit,expected_revision),status='planned',
+                            result={'unit_spec':unit.model_dump(exclude={'code'})})
             local_results, config, local_counts = prepare_analysis_results(store, workspace,
                 request.file_ids, request.force_parser, cancelled=cancelled)
         execution.check()
@@ -282,12 +366,12 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             if checkpoint:
                 validated, reviewed, record_id, cache = checkpoint
             else:
-                if index >= execution.unit_limit:
-                    return _pause(store, workspace, run_id, request, execution, counts, usage_known)
                 response = None if request.refresh_ai else _cached(store, workspace, unit, context_hash)
                 if response is not None:
                     counts['cache_hits'] += 1
                 else:
+                    if not _stage_ready(store,workspace,unit,'project_lineage',execution):
+                        return _pause(store,workspace,run_id,request,execution,counts,usage_known)
                     _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'project_lineage')
                     result = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
                     if result is None or result.outcome != 'validated' or result.result is None:
@@ -305,35 +389,41 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
             parser_indexes = {id(op): i for i, op in enumerate(parser[unit.file_id].operations)}
             original_indexes[unit.file_id].update({key: parser_indexes[id(op)]
-                for op, _, _, key in operation_contexts(context, parser[unit.file_id])})
+                for op, _, _, key in operation_contexts(context, parser[unit.file_id], scoped=False)})
             reconciled = reconcile_candidates(parser[unit.file_id], validated, request.mode, context=context)
             candidates = [f for f in reconciled.facts if f.origin == 'ai']
             if request.additional_ai_review and candidates and not reviewed:
-                if index >= execution.unit_limit:
-                    return _pause(store, workspace, run_id, request, execution, counts, usage_known)
-                stage = 'reviewing'
-                execution.review_candidates, rejected_ids = review_payload(candidates)
-                validated.unresolved.extend(ClaimDecision(candidate_id=cid,
-                    reason='additional_ai_review_context_limit', status='unresolved') for cid in sorted(rejected_ids))
-                if execution.review_candidates:
-                    _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'lineage_review')
-                    review = invoke_analysis_unit(store, workspace, unit, 'lineage_review', execution)
-                    if review is None or review.outcome != 'validated' or review.result is None:
+                stage='reviewing'
+                remaining=[f for f in candidates if f.candidate_id not in validated.reviewed_candidates]
+                for batch in review_batches(remaining):
+                    execution.review_candidates=batch
+                    if not _stage_ready(store,workspace,unit,'lineage_review',execution):
+                        return _pause(store,workspace,run_id,request,execution,counts,usage_known)
+                    _set_inflight_callback(store,workspace,run_id,request,execution,counts,unit,'lineage_review')
+                    review=invoke_analysis_unit(store,workspace,unit,'lineage_review',execution)
+                    if review is None or review.outcome!='validated' or review.result is None:
                         raise ValueError('incomplete_ai_review')
                     usage_known &= review.usage_known
-                    _usage(counts, review)
-                    review.result.assert_candidates({c['candidate_id'] for c in execution.review_candidates})
+                    _usage(counts,review)
+                    review.result.assert_candidates({c['candidate_id'] for c in batch})
+                    rejected_ids=set()
                     for decision in review.result.decisions:
-                        if decision.decision != 'supported' or not decision.evidence:
+                        if decision.decision!='supported' or not decision.evidence:
                             rejected_ids.add(decision.candidate_id)
                             validated.unresolved.append(ClaimDecision(candidate_id=decision.candidate_id,
-                                reason='additional_ai_review_insufficient', status='unresolved'))
-                validated.accepted = [f for f in validated.accepted if f.candidate_id not in rejected_ids]
-                reconciled = reconcile_candidates(parser[unit.file_id], validated, request.mode, context=context)
+                                reason='additional_ai_review_insufficient',status='unresolved'))
+                    validated.accepted=[f for f in validated.accepted if f.candidate_id not in rejected_ids]
+                    validated.reviewed_candidates.extend(c['candidate_id'] for c in batch)
+                    counts['review_batches'] += 1
+                    save_validation_checkpoint(store,workspace,run_id,unit,context_hash,validated,
+                        reviewed=False,record_id=record_id,cache=cache)
+                    _clear_inflight(store,workspace,run_id,request,execution,counts,usage_known)
+                execution.review_candidates=[]
+                reconciled=reconcile_candidates(parser[unit.file_id],validated,request.mode,context=context)
             if not reviewed:
-                save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated,
-                    reviewed=True, record_id=record_id, cache=cache)
-                _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
+                save_validation_checkpoint(store,workspace,run_id,unit,context_hash,validated,
+                    reviewed=True,record_id=record_id,cache=cache)
+                _clear_inflight(store,workspace,run_id,request,execution,counts,usage_known)
             output = rebuilt[unit.file_id]
             output.operations.extend(reconciled.operations)
             output.assets.extend(reconciled.assets)
@@ -362,6 +452,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     'payload': {}, 'reasons': [decision.reason]})
             counts['processed'] += 1
             update(.1 + .75 * (index + 1) / max(1, len(plan.units)), 'AI extraction and evidence checks')
+        from dataforge.ai_semantic import merge_publication_operations
+        for output in rebuilt.values():
+            output.operations = merge_publication_operations(output.operations)
         # CSV continues to provide local metadata; unselected files retain their
         # committed representation, including valid accepted AI contributions.
         for fid, output in rebuilt.items():
@@ -438,11 +531,9 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
 
 
 def _protocol_hash():
-    from dataforge.ai_wire import wire_schema
-    from dataforge.llm import PROMPTS
-    return _hash({task: {'system': (PROMPTS/task/'system.md').read_text(encoding='utf-8'),
-        'template': (PROMPTS/task/'user_template.md').read_text(encoding='utf-8'), 'schema': wire_schema(task)}
-        for task in ('project_lineage', 'lineage_review')})
+    return _hash({'semantic_planning': 1, 'review_batching': 1,
+        'prompts':{task:{'complete':analysis_prompt_hash(task),'focused':analysis_prompt_hash(task,focused=True)}
+            for task in ('project_lineage','lineage_review')}})
 
 
 def _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known):
@@ -459,8 +550,23 @@ def _set_inflight_callback(store, workspace, run_id, request, execution, counts,
         snapshot['requests'] = execution.prior_requests + execution.attempts
         snapshot['reserved_output_tokens'] = execution.prior_reserved + execution.reserved_output_tokens
         save_run(store, workspace, run_id, mode=request.mode, status='extracting',
-            summary={'counts': snapshot, 'inflight': {'unit_id': unit.unit_id, 'task': task}})
+            summary={'counts': snapshot, 'inflight': {'unit_id': unit.unit_id, 'task': task,
+                'candidate_ids': [c['candidate_id'] for c in execution.review_candidates] if task=='lineage_review' else []}})
     execution.journal_attempt = journal
+
+
+def _stage_ready(store,workspace,unit,task,execution):
+    preview=preview_analysis_routes(store,workspace,[unit],execution,tasks=[task])
+    blocked=[b['reason'] for b in preview['blocked'] if not b['reason'].startswith('worst_case_')]
+    if blocked:
+        raise ValueError('stage_preflight_blocked: '+', '.join(sorted(set(blocked))))
+    attempts=max(execution.attempts,getattr(execution,'stage_attempts',0))+preview['max_provider_attempts']
+    tokens=max(execution.reserved_output_tokens,getattr(execution,'stage_tokens',0))+preview['max_output_tokens_reserved']
+    execution.check()
+    if attempts>execution.request.max_provider_attempts or tokens>execution.request.max_output_tokens_total:
+        return False
+    execution.stage_attempts,execution.stage_tokens=attempts,tokens
+    return True
 
 
 def _pause(store, workspace, run_id, request, execution, counts, usage_known):
