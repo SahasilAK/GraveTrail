@@ -101,3 +101,5 @@ Accepted claim quotes are compact source refs on disk and hydrate only for sourc
 
 - `ai_semantic.py` — Exact-source SELECT projection partitions, allowlisted query clauses and AST/token span verification, scoped parser expressions, static PROC SQL spans and one-writer publication merging.
 Semantic continuation persists unit_spec in planned/staged rows and reviewed candidate IDs after each bounded review batch. Saved source/config/protocol pins are checked before hydration. Preview budgets paid stages and labels unknown review sizing provisional; eligible requests above 100 projections split for response cardinality. Root conditional focus instructions are hashed with the actual transmitted variant.
+
+Validator2 is owned by ai_validation and imported by analysis_service. Both unit-cache and protocol pins include validator/parser versions (parser13). Upgrade invalidates paused work before another call; committed graphs remain available.

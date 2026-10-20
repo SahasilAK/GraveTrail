@@ -66,3 +66,5 @@ flow diagram and qualification limits: docs/AI_ANALYSIS.md. Current parity: 48 c
 evidence only; source/packaging checks and open release gates are dated in docs/TESTING.md.
 
 README and Pages position local parser analysis as the primary default with no source sent to AI; optional AI/hybrid supports additional investigation in complex projects, with explicit disclosure and no completeness guarantee.
+
+Parser13/validator2: SAS PROC SQL typed constants preserve complete generated usage text; their value derivations remain unresolved. DML follows reachable USING/scalar subqueries with outer-only alias ownership. Semantic versions pin AI caches and continuation. Banking archive scorer masks fixture answers; table-only manifests cannot qualify column precision. Evidence: docs/TESTING.md.

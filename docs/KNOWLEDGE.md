@@ -80,3 +80,5 @@ AI guides document selected capability provenance, combined/separate estimates, 
 AI_ANALYSIS/PROMPT_ENGINEERING document exact projection paging, conservative dialect limits, static PROC SQL, response cardinality, conditional root focus prompt hashes and lossless per-batch review continuation. CLI/MCP previews share the service; DATA_MODEL covers unit_spec/review progress in existing tables. Mermaid includes review checkpoints; TESTING distinguishes mock proof from live precision.
 
 Homepage, onboarding, user and AI/provider guides make the default local/no-AI workflow prominent alongside optional hybrid coverage for complex projects. Project size alone does not require AI; validation and unresolved coverage remain explicit.
+
+TESTING documents supplied banking archive manifest agreement, offline/live commands, scenario grouping and absent independent column gold. SQL/SAS guides cover parser13 typed constants and DML scope boundaries; AI_ANALYSIS records validator2 and parser-version continuation pins. Table agreement never becomes a live column-accuracy claim.

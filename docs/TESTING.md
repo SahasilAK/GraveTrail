@@ -1,6 +1,8 @@
 # Testing
 
-## Current acceptance summary — 2026-10-20
+<span id="current-acceptance-summary-2026-10-20"></span>
+
+## Current acceptance summary — 2026-10-21
 
 This table distinguishes delivered behavior, dated environment evidence and still-open gates.
 Earlier numerical results below are historical; a later source change does not refresh a
@@ -9,7 +11,7 @@ published; this tracked summary is the public acceptance reference.
 
 | Area | Latest evidence | Remaining gate |
 | --- | --- | --- |
-| Source application | Parser cache12/migrations6–7 add explicit hybrid/experimental AI project builds, semantic paging, durable review batches and atomic publication; 801 tests pass with 2 existing Windows skips | No claim of universal SQL/SAS coverage or qualified live-model precision |
+| Source application | Parser cache13/validator2 add bounded SAS constants and reachable DML scopes; semantic-version continuation pins; 830 tests pass with 2 existing Windows skips | No claim of universal SQL/SAS coverage or qualified live-model precision |
 | SQL/SAS sample ZIPs | Each has 85 persistent tables, 128 logical edges, seven layers/all 16 roots; SAS adds 16 WORK assets/144 physical edges | Real client projects and large dense graphs need separate accuracy/performance acceptance |
 | CLI/MCP | Complete documented interfaces and actual SDK transport/permission regressions; fixture parity includes original bytes, evidence and warm caches | One DuckDB process owns each home |
 | OmniRoute | 2026-10-20 project smoke: two synthetic SQL units committed, two requests with known usage, seven accepted claims including one AI-only UPDATE derivation; earlier manual SQL/SAS gate remains historical | Development smoke after prompt tuning is not an independent precision evaluation or SAS project qualification |
@@ -170,6 +172,98 @@ uv run --locked python scripts/benchmark_ai_analysis.py --project-gold --output 
 ```
 
 It scores the parser baseline against separate `evaluation_gold.json` operation/scope/version/role labels and optionally both synthetic archive manifests. `--predictions saved.json` scores explicit saved predictions; this remains unqualified saved evidence. Live evaluation requires `--live`, explicit `--cases`, `DATAFORGE_AI_BENCHMARK_LIVE=1`, an existing named credential reference and bounded attempt/time options. The synthetic live route is fixed to loopback OmniRoute `auto/best-reasoning`. No live qualification follows from offline or mock scores. Gold/expected files are scorer inputs and never model context.
+
+## Supplied banking archive evaluation — 2026-10-21
+
+The new `scripts/benchmark_lineage_archives.py` checks all source checksums before
+evaluation and scores per-script table pairs against the separately supplied manifest.
+It reads ZIP members without executing their bundled Python, SQL or SAS. SQL fixture
+answer comments are masked before model input while preserving character/line positions;
+reports retain original and evaluation-source hashes. Gold files never enter the source
+inventory or declaration catalog. This masking is an evaluation precaution, not a change
+to the application's original-source workflow.
+
+```mermaid
+flowchart LR
+    Z[ZIP] --> V[Inventory and checksum checks]
+    V --> S[Source only with answer headers masked]
+    S --> D[Versioned scenario split]
+    D --> P[Local parser]
+    D --> A[Bounded AI extraction and host validation]
+    P --> C[Per-script comparison]
+    A --> C
+    G[Separate table manifests] --> C
+    C --> R[Agreement and coverage report]
+```
+
+| Corpus | Scripts | Manifest edges | Baseline matched | Parser 13 matched | Remaining omissions | Additional reported pairs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Banking SQL | 2,114 | 4,992 | 4,936 | 4,948 | 44 | 5 |
+| Banking SAS | 2,201 | 5,912 | 5,287 | 5,712 | 200 | 0 |
+
+The SQL extra pairs preserve explicit unqualified `accounts` references in adversarial
+scripts whose manifests expect abstention; they need identity adjudication, not a claim
+that model agreement establishes truth. Remaining SQL omissions include unsupported DB2
+and conditional T-SQL procedure forms. Remaining SAS omissions include runtime macros,
+external paths without macro bindings and HASH lookup datasets. No runtime is executed
+to invent these dependencies. These are table-manifest agreement counts, not measured
+column precision or proof that the fixture executes successfully.
+
+Reproduce the complete offline comparison with the supplied archives in a local folder:
+
+```bash
+uv run --locked python scripts/benchmark_lineage_archives.py --archive /samples/banking_legacy_sql_2114_lineage_stress_test.zip --language sql --split all --output sql-metrics.json
+uv run --locked python scripts/benchmark_lineage_archives.py --archive /samples/banking_legacy_sas_2201_lineage_stress_test.zip --language sas --split all --output sas-metrics.json
+```
+
+Live evaluation additionally requires `DATAFORGE_AI_BENCHMARK_LIVE=1`, `--live`, a named
+`DATAFORGE_...` credential reference, `--split development` or `--split holdout`, and an
+explicit `--limit`. Use `--max-attempts` and `--max-seconds` to bound each invocation.
+The route remains loopback OmniRoute `auto/best-reasoning`; the gateway may forward source
+upstream. Receipts preserve requested and gateway-reported resolved model, prompt hash,
+finish reason, physical attempts and known token usage, including quarantined responses.
+Missing receipts or usage remain unknown. Hybrid reuses the same extraction calls.
+Failed or unattempted scripts count as omissions, rather than disappearing from scores.
+
+The versioned split hashes scenario names, keeping repeated templates together, and
+sample limits round-robin scenarios. Record a frozen selection before the final live run;
+development or interrupted runs never qualify the holdout. Repeated scripts remain
+correlated, and gateway aliases can route different models across calls.
+
+**Both supplied archives lack independent column, dependency-role, operation, scope and
+version labels.** The archive report therefore always marks the full live release gate
+`insufficient_evidence`. Existing small semantic gold fixtures remain a separate check;
+table-manifest agreement cannot qualify the documented column-precision target.
+
+The frozen bounded rerun selected 20 scripts per language and made real OmniRoute calls:
+
+| Language | Requests | Contract-valid scripts | Parser matched / expected pairs | AI matched pairs | Hybrid matched pairs | Reported input / output tokens |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SQL | 20 | 4 / 20 | 41 / 41 | 5 | 7 | 42,780 / 44,557 |
+| SAS | 26 | 9 / 20 | 30 / 34 | 0 | 9 | 55,315 / 30,159 |
+
+The gateway reported `gemini-3-flash` for these final calls; that is gateway metadata,
+not independent confirmation of the upstream deployment. Contract-invalid responses
+were quarantined. A separate development diagnostic localized a failure to canonical
+derivation evidence validation. No evidence checks were relaxed to improve the score.
+Failed required scripts have no usable AI/hybrid prediction in this benchmark; in the
+application a failed required unit retains the previous published graph. The sample
+does not demonstrate reliable AI-only extraction or improved project coverage.
+
+These 46 final requests have complete reported metering, including quarantines. Development
+calls and an interrupted exploratory run are separate; any lost in-flight usage from the
+interruption remains unknown. The first exploratory selection was stopped for code-review
+fixes and excluded from qualification. The final rerun is recorded evidence, not a claim
+of an independent blind qualification. The live gate remains open: resolve model citation
+failures, independently label columns/roles/operation identities, then test a fresh holdout
+with sufficient accepted predictions. No new provider calls occur in ordinary CI.
+
+Source verification: **830 passed, 2 existing Windows skips** in 218.05 seconds.
+Ruff, the lock check, strict Pages validation (38 public pages, 8 assets) and wheel/sdist
+builds pass. A fresh wheel installed outside the checkout verifies exact typed usage,
+outer DML alias ownership and the shared validator version without provider calls.
+Original archive imports retain all 2,114 SQL and 2,201 SAS scripts/hashes; cold analysis
+and warm rebuilds complete with 2,114 and 2,201 cache hits respectively in isolated homes.
 
 ## Automatic capacity and continuation qualification
 

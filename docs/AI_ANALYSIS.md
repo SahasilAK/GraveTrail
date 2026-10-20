@@ -74,6 +74,10 @@ A remote project run can transmit a complete selected file across several chunks
 
 ## Context and run budgets
 
+Parser cache 13 and validator 2 pin semantic versions into AI cache and continuation
+identities. An upgrade makes an older paused run stale before another request; start a
+new run to use the new semantics. The previous published graph remains available.
+
 Connection discovery retains allowlisted model limits when the endpoint reports them. The selected model's metadata is bound to its endpoint, model, authentication, API version and credential reference. **Inspect selected model limits** refreshes it explicitly; Ollama also checks its currently loaded allocation. Discovery and offline preview submit no project source. Unknown/stale metadata uses configured caps. Gateway aliases such as OmniRoute `auto/...` may change upstream: advertised maxima are advisory, and upstream errors remain possible.
 
 New profiles start with **Automatic** context/output values. Existing saved numeric limits remain **Custom**, including values equal to old defaults. Editing a number makes it Custom; **Reset profile limits to automatic** explicitly enables recommendations. Automatic output allocation scales with the complete unit, bounded by the profile/output capacity. Automatic calculation does not widen existing source permissions or the workspace Privacy allowance.
@@ -125,6 +129,12 @@ Extraction, validation and comparison stage before publication. Final source/set
 Synthetic SQL/SAS holdout labels and mock HTTP tests exercise exact evidence, deceptive negatives, roles, abstention, transport and orchestration. They do not measure a live model's precision. There is no claim of universal SQL/SAS coverage, inferred runtime execution order or a complete database schema.
 
 A bounded development smoke on 2026-10-20 used loopback OmniRoute `auto/best-reasoning` on two synthetic SQL units. Both committed with known token usage: seven accepted claims, no rejected/unresolved candidates and one AI-only UPDATE derivation. Earlier development attempts exposed offset/protocol errors and informed prompt changes. This is a functionality check after tuning, not an independent precision evaluation or SAS qualification.
+
+The [banking archive evaluation](TESTING.md#supplied-banking-archive-evaluation-2026-10-21)
+on 2026-10-21 checks all 4,315 source scripts offline and records bounded real-provider
+samples. Low contract-valid coverage and missing independent column gold leave the live
+gate open. Those results support keeping the local parser primary and AI-only experimental;
+they do not establish that hybrid improves coverage for this corpus.
 
 The live qualification targets remain unestablished: at least 99% accepted table-edge precision and 98% accepted value-column dependency precision, reported separately by language with coverage and sample sizes. The intended minimum is 100 accepted table predictions and 200 accepted value-dependency predictions across at least 20 scripts per language. No provider calls or private-project transmission are part of normal CI or documentation builds. See [testing](TESTING.md), [provider integration](LLM_INTEGRATION.md), [CLI](CLI_GUIDE.md) and [MCP](MCP_INTEGRATION.md).
 

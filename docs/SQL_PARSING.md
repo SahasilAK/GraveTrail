@@ -9,6 +9,13 @@ MERGE USING, DELETE USING, SELECT, temporary tables, multiple statements, aliase
 and quoted identifiers, CTEs, subqueries and correlated predicates. SQLGlot supports additional
 dialect syntax, but tests define demonstrated coverage. Imported SQL is never executed.
 
+Table dependencies include reachable `MERGE USING (SELECT ...)` inputs and scalar or
+`EXISTS` subqueries in `UPDATE`/`DELETE`. Unreferenced CTEs remain excluded. Following a
+subquery's table inputs does not establish an outer alias's value-column ownership;
+unsupported DML transformations remain unresolved. Parser cache 13 refreshes the local
+results on the next explicit analysis. Paused AI runs created with older parser or
+validator semantics require a new run, preserving the previous published graph.
+
 ## Literal procedure and dynamic SQL bodies
 
 With the explicit `postgres` dialect, parameterless `CREATE [OR REPLACE] PROCEDURE` definitions
