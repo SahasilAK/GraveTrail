@@ -613,6 +613,9 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
     if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
         raise ValueError("External LLM requests are disabled in Security and privacy")
     source = store.file(file_id)
+    from dataforge.dbt.service import is_dbt
+    if is_dbt(source):
+        raise ValueError('dbt currently requires parser analysis')
     if source["workspace_id"] != workspace:
         raise ValueError("Source does not belong to this workspace")
     if expected_hash is not None and source["content_hash"] != expected_hash:

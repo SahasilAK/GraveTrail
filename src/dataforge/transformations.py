@@ -40,10 +40,10 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
             if op.method == 'llm':
                 continue
             sid, oid = operation_ids(workspace, metadata, op_index, op)
-            outputs = {resolver.norm(t.name): resolver.resolve(t, metadata, parsed, 'output')[0]
+            outputs = {t.identity or resolver.norm(t.name): resolver.resolve(t, metadata, parsed, 'output')[0]
                        for t in op.targets}
 
-            def reference(table, name, scope='', version='', output=False):
+            def reference(table, name, scope='', version='', output=False, identity=''):
                 if scope:
                     # Scope records live under their output asset without polluting table lineage.
                     anchor = next(iter(outputs.values()), None)
@@ -51,9 +51,9 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                         anchor = resolver.resolve(op.sources[0], metadata, parsed)[0]
                     aid, inferred = anchor, False
                 else:
-                    aid = outputs.get(resolver.norm(table)) if output else None
+                    aid = outputs.get(identity or resolver.norm(table)) if output else None
                     if aid is None:
-                        aid, inferred = resolver.resolve(AssetRef(table), metadata, parsed)
+                        aid, inferred = resolver.resolve(AssetRef(table, identity=identity), metadata, parsed)
                     else:
                         inferred = False
                 key = column_key(name, config['case_sensitive'])
@@ -80,7 +80,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                     inputs = [i for i in d['inputs'] if i['role'] == 'value']
                     schema = None
                     if len(inputs) == 1 and not inputs[0].get('scope'):
-                        aid, _ = resolver.resolve(AssetRef(inputs[0]['table']), metadata, parsed)
+                        aid, _ = resolver.resolve(AssetRef(inputs[0]['table'], identity=inputs[0].get('table_identity', '')), metadata, parsed)
                         schema = schemas.get(aid)
                     if schema and schema.get('schema_status') == 'declared':
                         target_names = schema['column_identifiers']
@@ -116,7 +116,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 derivations.append(d)
             for index, d in enumerate(derivations):
                 target, inferred = reference(d['target_table'], d['target_column'], d.get('scope', ''),
-                                             d.get('target_version', ''), output=True)
+                                             d.get('target_version', ''), output=True, identity=d.get('target_identity', ''))
                 did = stable_id(oid, str(index), target, str(d.get('branch', 0)))
                 status = d.get('status', 'unresolved')
                 if (inferred or op.method == 'ai-project') and status == 'verified':
@@ -124,7 +124,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 dependencies = []
                 for ordinal, item in enumerate(d.get('inputs', [])):
                     cid, uncertain = reference(item['table'], item.get('column', ''), item.get('scope', ''),
-                                                item.get('version', ''))
+                                                item.get('version', ''), identity=item.get('table_identity', ''))
                     if uncertain and status == 'verified':
                         status = 'inferred'
                     dependencies.append([stable_id(did, str(ordinal)), workspace, did, cid,

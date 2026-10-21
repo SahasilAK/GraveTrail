@@ -51,12 +51,13 @@ class AssetResolver:
         self.workspace, self.config = workspace, config
         self.norm = (lambda name: name.strip()) if config["case_sensitive"] else canonical
         refs = [(source_job(source, config), ref) for source, parsed in results
-                for ref in [*parsed.assets, *(r for op in parsed.operations for r in [*op.sources, *op.targets])]]
+                for ref in [*parsed.assets, *(r for op in parsed.operations for r in [*op.sources, *op.targets])]
+                if not ref.identity]
         self.temporary = {(job, self.norm(ref.name)) for job, ref in refs
                           if ref.temporary or ref.name.startswith("#")}
         persistent_refs = [(source_job(source, config), ref) for source, parsed in results
                            for op in parsed.operations if op.method != "llm" for ref in op.targets
-                           if not ref.temporary and not ref.name.startswith("#")]
+                           if not ref.identity and not ref.temporary and not ref.name.startswith("#")]
         persistent_targets = {(job, self.norm(ref.name)) for job, ref in persistent_refs}
         self.conflicts = self.temporary & persistent_targets
         self.global_known, self.by_job = {}, {}
@@ -88,6 +89,12 @@ class AssetResolver:
 
     def resolve(self, ref: AssetRef, metadata: dict[str, Any], parsed: ParseResult, role: str = "reference") -> tuple[str, bool]:
         """Resolve one reference and report whether its identity or name was adjusted."""
+        if ref.identity:
+            aid = stable_id(self.workspace, ref.identity)
+            resource = parsed.metadata.get('dbt_asset_metadata', {}).get(ref.identity, {})
+            self.registry.setdefault(aid, [aid, self.workspace, ref.name, ref.identity, ref.kind,
+                ref.temporary, json.dumps({'dbt_identity': ref.identity, **resource})])
+            return aid, False
         job = source_job(metadata, self.config)
         known = {**self.global_known, **self.by_job.get(job, {})}
         name, changed, old = ref.name, False, None

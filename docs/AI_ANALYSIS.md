@@ -1,5 +1,9 @@
 # AI project analysis
 
+dbt projects use parser analysis. Selected dbt sources are rejected before AI context
+disclosure, including manual diagnostic assistance. Select ordinary SQL/SAS files separately
+to use this workflow in a mixed workspace; existing dbt facts are preserved.
+
 **Local parser analysis is the primary, default workflow.** It builds table lineage,
 column usage and supported transformations without sending source to an AI provider.
 No model connection, API key or AI token usage is required. In **Analysis → Run**,

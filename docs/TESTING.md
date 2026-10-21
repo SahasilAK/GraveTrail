@@ -4,6 +4,12 @@
 
 ## Current acceptance summary — 2026-10-21
 
+dbt extension validation: **910 tests passed, 2 skipped** on Windows/Python 3.11.16.
+`tests/test_dbt_*.py` covers safe imports, static templates/resources, manifest v12,
+catalog v1/run-results v6, identities, columns, settings, access, maintenance and UI.
+The reproducible 1,000-model workload and exact scope limits are in [dbt support](DBT_SUPPORT.md).
+This extends the historical SQL/SAS acceptance evidence below.
+
 This table distinguishes delivered behavior, dated environment evidence and still-open gates.
 Earlier numerical results below are historical; a later source change does not refresh a
 previously tested distribution artifact. Optional local `plans/` records are not shipped or

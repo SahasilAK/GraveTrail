@@ -1,0 +1,4 @@
+snapshots:
+  - name: order_history
+    relation: ref('fct_orders')
+    config: {strategy: timestamp, updated_at: updated_at}

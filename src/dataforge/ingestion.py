@@ -24,7 +24,7 @@ UPSERT_SOURCE = """INSERT INTO source_files(file_id,workspace_id,ingestion_id,fi
     raw_content=excluded.raw_content,content_hash=excluded.content_hash,
     storage_path=excluded.storage_path,file_size=excluded.file_size,encoding=excluded.encoding,
     line_count=excluded.line_count,parsing_status='pending',error_details=excluded.error_details,
-    metadata='{}',imported_at=excluded.imported_at"""
+    metadata=excluded.metadata,imported_at=excluded.imported_at"""
 
 
 @dataclass
@@ -113,7 +113,7 @@ class Importer:
         self.limits = limits or Limits()
 
     def zip(self, data: bytes, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
-            cancelled: Callable[[], bool] | None = None) -> ImportReport:
+            cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
         """Import supported files from a ZIP upload.
 
         Args:
@@ -157,10 +157,10 @@ class Importer:
                     return f.read(self.limits.max_file_bytes + 1)
 
             return self._import(((e.filename, lambda e=e: read(e)) for e in entries), extensions,
-                                "ZIP upload", progress, cancelled)
+                                "ZIP upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options)
 
     def directory(self, directory: str | Path, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
-                  cancelled: Callable[[], bool] | None = None) -> ImportReport:
+                  cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
         """Import supported files beneath an authorized directory.
 
         Args:
@@ -218,11 +218,12 @@ class Importer:
 
                     yield p.relative_to(path).as_posix(), read
 
-        return self._import(discover(), extensions, str(path), progress, cancelled)
+        return self._import(discover(), extensions, str(path), progress, cancelled,
+                            source_kind=source_kind, dbt_options=dbt_options)
 
     def files(self, entries: Iterable[tuple[str, bytes]], extensions: set[str],
               progress: Callable[[ImportReport], Any] | None = None,
-              cancelled: Callable[[], bool] | None = None) -> ImportReport:
+              cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
         """Import files supplied as browser upload entries.
 
         Args:
@@ -235,10 +236,11 @@ class Importer:
             Import report for the upload.
         """
         return self._import(((name, lambda data=data: data) for name, data in entries), extensions,
-                            "Browser upload", progress, cancelled)
+                            "Browser upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options)
 
     def _import(self, entries: Iterable[tuple[str, Callable[[], bytes]]], extensions: set[str], source: str,
-                progress: Callable[[ImportReport], Any] | None, cancelled: Callable[[], bool] | None) -> ImportReport:
+                progress: Callable[[ImportReport], Any] | None, cancelled: Callable[[], bool] | None,
+                *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
         """Validate entries and record accepted source files transactionally.
 
         Args:
@@ -256,7 +258,33 @@ class Importer:
         """
         import json
 
-        if not extensions <= {".sql", ".sas", ".csv"} or not extensions:
+        if source_kind not in {'files', 'dbt'}:
+            raise ValueError('Unknown source kind')
+        admission, buffered = None, {}
+        if source_kind == 'dbt':
+            from dataforge.dbt.imports import DbtImportOptions, preview_dbt_import
+            bounded = []
+            for entry in entries:
+                bounded.append(entry)
+                if len(bounded) > self.limits.max_files:
+                    raise ValueError('Import exceeds file count limit')
+            readers = dict(bounded)
+
+            def read_config(path):
+                data = readers[path]()
+                if len(data) > self.limits.max_file_bytes:
+                    raise ValueError('File exceeds size limit')
+                buffered[path] = data
+                if sum(map(len, buffered.values())) > self.limits.max_total_bytes:
+                    raise ValueError('Import exceeds total byte budget')
+                return decode(data)[0]
+
+            options = dbt_options or DbtImportOptions()
+            if isinstance(options, dict):
+                options = DbtImportOptions(**options)
+            admission = preview_dbt_import([name for name, _ in bounded], options, read_config)
+            entries = bounded
+        elif not extensions <= {".sql", ".sas", ".csv"} or not extensions:
             raise ValueError("Select at least one supported extension")
         report = ImportReport()
         ingestion = uuid.uuid4().hex
@@ -267,9 +295,13 @@ class Importer:
         with self.store.transaction():
             for name, reader in entries:
                 if total >= self.limits.max_total_bytes:
+                    if admission is not None:
+                        raise ValueError('dbt import exceeds total byte budget; inventory rolled back')
                     report.diagnostics.append("Total byte budget exhausted; remaining files were not read")
                     break
                 if cancelled and cancelled():
+                    if admission is not None:
+                        raise ValueError('dbt import cancelled; inventory rolled back')
                     report.diagnostics.append("Import cancelled; accepted files retained")
                     break
                 report.discovered += 1
@@ -278,13 +310,13 @@ class Importer:
                 try:
                     relative = safe_relative(name)
                     ext = PurePosixPath(relative).suffix.lower()
-                    if ext not in extensions:
+                    if (admission is not None and relative not in admission.paths) or (admission is None and ext not in extensions):
                         report.skipped += 1
                         continue
                     if relative in paths:
                         raise ValueError("Duplicate path in import; first entry retained")
                     paths.add(relative)
-                    data = reader()
+                    data = buffered[relative] if relative in buffered else reader()
                     if len(data) > self.limits.max_file_bytes:
                         raise ValueError("File exceeds size limit")
                     total += len(data)
@@ -300,11 +332,14 @@ class Importer:
                     fid = stable_id(self.workspace, relative)
                     records.append([fid, self.workspace, ingestion, PurePosixPath(relative).name, ext, relative,
                          source + "/" + relative, "blobs/" + digest, text, digest, len(data), encoding,
-                         len(text.splitlines()), "pending", warning, "{}"])
+                         len(text.splitlines()), "pending", warning,
+                         json.dumps(admission.paths[relative]) if admission is not None else "{}"])
                     report.accepted += 1
                     if warning:
                         report.diagnostics.append(f"{relative}: {warning}")
                 except (ValueError, OSError, RuntimeError, zipfile.BadZipFile) as exc:
+                    if admission is not None:
+                        raise ValueError(f'dbt import failed at {name}: {exc}; inventory rolled back') from exc
                     report.skipped += 1
                     report.diagnostics.append(f"{name}: {exc}")
                 if progress:

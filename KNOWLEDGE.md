@@ -1,6 +1,10 @@
 # GraveTrail/
 
-Local evidence-backed SQL/SAS/CSV engineering workspace. Entry: app.py; Python, Streamlit, DuckDB, SQLGlot and NetworkX.
+Local evidence-backed SQL/SAS/CSV/dbt engineering workspace. Entry: app.py; Python, Streamlit, DuckDB, SQLGlot and NetworkX.
+
+dbt support: src/dataforge/dbt (parser15/schema8) owns safe project/artifact imports,
+multi-root/package/version identity, resource/macro relationships, column adaptation and
+source/generated evidence. UI/CLI/MCP share services. See docs/DBT_SUPPORT.md for limits.
 
 ## Project overview
 Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `uv run pytest -q` and `uv run ruff check .`. Read local AGENTS and plans/IMPLEMENTATION_STATUS when supplied; this map and child maps are tracked repository documentation.

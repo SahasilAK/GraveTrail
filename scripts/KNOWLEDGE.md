@@ -1,5 +1,8 @@
 # scripts/
 
+`benchmark_dbt.py` creates a disposable chain/fanout/YAML/macro workload and reports
+cold/warm/edit counts, time and Python allocation peak.
+
 Operational reproducibility utilities. benchmark.py creates isolated synthetic files, measures real services and persists labeled workload metrics.
 
 `benchmark_transformations.py` — disposable 120-stage/20-column expression chain plus

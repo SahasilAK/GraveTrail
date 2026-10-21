@@ -4,12 +4,14 @@ import streamlit as st
 
 from dataforge.services import analyze
 from ui.common import context, title
+from ui.dbt_sections import render_projects
 from ui.presentation import empty_state, section
 
 title("Analysis", "Turn source code into dependencies you can inspect, verify and trace.")
 store, w = context()
 mode = section("Analysis view", ["Run", "Diagnostics", "History"], "analysis_section_" + w)
 files = store.files(w)
+render_projects(store, w)
 if not files:
     empty_state("Ready when your sources are", "Add SQL, SAS or CSV files to build your first evidence-backed analysis.", ":material/play_circle:")
     st.page_link("ui/pages/builder.py", label="Import sources", icon=":material/upload_file:")

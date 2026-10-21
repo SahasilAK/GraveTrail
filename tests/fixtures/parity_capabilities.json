@@ -1,4 +1,12 @@
 {
+  "DBT01": {
+    "capability_id": "DBT01",
+    "description": "Offline dbt project/resource catalog and typed dependency or macro impact reports",
+    "cli": [["dbt", "projects"], ["dbt", "resources"], ["dbt", "resource"], ["dbt", "dependencies"]],
+    "mcp": ["list_dbt_projects", "list_dbt_resources", "get_dbt_resource", "trace_dbt_dependencies"],
+    "scope": "workspace", "effects": ["read"], "required_permissions": ["source_permission_for_detailed"],
+    "availability": "implemented", "restriction": "", "slice": 10
+  },
   "P01": {
     "capability_id": "P01",
     "description": "List/get/create/edit/remove provider profiles; name/provider/URL/model/reference/auth/timeout/retries/max_tokens/context_chars/temperature/structured/Azure API version",

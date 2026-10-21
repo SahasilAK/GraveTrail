@@ -1,5 +1,7 @@
 # tests/fixtures/
 
+- `dbt/` — Synthetic retail inputs and independent edge gold. See [dbt/KNOWLEDGE.md](dbt/KNOWLEDGE.md).
+
 Deterministic source inputs; parser and workflow tests consume these files.
 
 ## Subfolders

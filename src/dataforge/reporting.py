@@ -92,7 +92,10 @@ def validate_lineage_evidence(store: Store, workspace: str) -> dict[str, Any]:
             valid = False
         if not valid:
             invalid.append({'edge_id': edge['edge_id'], 'file_id': edge['file_id'], 'reason': 'missing_or_invalid_original_evidence'})
-    return {'checked': len(edges), 'invalid_count': len(invalid), 'invalid': invalid,
+    from dataforge.dbt.evidence import validate_dbt_evidence
+    dbt = validate_dbt_evidence(store, workspace)
+    invalid.extend(dbt['invalid'])
+    return {'checked': len(edges) + dbt['checked'], 'invalid_count': len(invalid), 'invalid': invalid,
             'meaning': 'Stored evidence integrity only; no reparsing, repair or runtime correctness claim'}
 
 

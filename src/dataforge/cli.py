@@ -13,6 +13,7 @@ import duckdb
 import typer
 
 from dataforge.agent.cli_ai import register as register_ai
+from dataforge.agent.cli_dbt import register as register_dbt
 from dataforge.agent.cli_reports import register as register_reports
 from dataforge.agent.cli_reports import register_maintenance
 from dataforge.agent.cli_settings import register as register_settings
@@ -355,7 +356,9 @@ def workspace_summary(ctx: typer.Context, workspace: Workspace) -> None:
 
 
 @app.command("ingest")
-def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str = "sql,sas,csv", background: bool = False) -> None:
+def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str = "sql,sas,csv", background: bool = False,
+           source_kind: str = 'files', dbt_mode: str = 'source', artifact_path: list[str] = typer.Option(None),
+           include_packages: bool = False) -> None:
     """Import supported source files from a directory.
 
     Args:
@@ -364,7 +367,9 @@ def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str
         workspace: Workspace targeted by the command.
         extensions: Comma-separated file extensions to include.
         background: Whether to queue work as a background job."""
-    invoke(ctx, "ingest", workspace, background, path=str(path.resolve()), extensions=extensions.split(","))
+    invoke(ctx, "ingest", workspace, background, path=str(path.resolve()), extensions=extensions.split(","),
+        source_kind=source_kind, dbt_options={'mode': dbt_mode, 'artifact_paths': artifact_path or [],
+                                            'include_packages': include_packages} if source_kind == 'dbt' else None)
 
 
 @lineage_app.command("build")
@@ -790,6 +795,7 @@ register_settings(app, workspace_app, invoke, fail)
 register_application(app, invoke)
 register_ai(app, invoke, fail)
 register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
+register_dbt(app, invoke)
 register_maintenance(app, maintenance_app, invoke, fail)
 
 if __name__ == "__main__":

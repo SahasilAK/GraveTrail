@@ -2,10 +2,13 @@
 
 Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries; parser/security/testing guides state verified coverage and limitations.
 
+The public landing page and site description include dbt; the User guide navigation exposes
+DBT_SUPPORT.md. Getting started has a separate dbt retail sample walkthrough and explicit parser-only limits.
+
 `TRANSFORMATION_LINEAGE.md` — dedicated page workflow, tested SQL/SAS subset, dependency
 roles, bounded exports/queries and parser11/migration5 upgrade/recovery boundaries. Published
 through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CLI/MCP
-references now enumerate103 executable routes and83 tools; UI has eleven destinations.
+references now enumerate107 executable routes and87 tools; UI has eleven destinations.
 
 ## Subfolders
 - `overrides/` — [overrides/KNOWLEDGE.md](overrides/KNOWLEDGE.md): inject shared theme CSS into Material without app dependencies.
@@ -20,6 +23,7 @@ references now enumerate103 executable routes and83 tools; UI has eleven destina
 - `prompts/` — [prompts/KNOWLEDGE.md](prompts/KNOWLEDGE.md).
 
 ## Files
+- `DBT_SUPPORT.md` — Modes, resource/column/evidence boundaries, qualified schemas, settings, AI exclusion, recovery and 1,000-model measurements.
 - `index.md` — Branded MkDocs landing page with “Nothing stays buried.” / “Every dependency leaves a trail.” hero; section indexes organize canonical references without duplication. Only mkdocs.yml nav and named assets are published; REVIEW/prompts/plans/knowledge stay excluded.
 - `BUILD_AND_RELEASE.md` — Launcher/build options, Windows per-user installer lifecycle and signing setup/limitations, exact-or-bumped dynamic release versions, branch validation vs default-branch publication, integrity/source/trust gates, Docker behavior and dated platform evidence.
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.

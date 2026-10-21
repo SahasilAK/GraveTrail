@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "gravetrail"
 version = "0.1.0"
-description = "Local, evidence-backed SQL and SAS lineage workspace"
+description = "Local, evidence-backed SQL, SAS and dbt lineage workspace"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -22,6 +22,8 @@ dependencies = [
   "mcp>=1.26,<2",
   "xlsxwriter>=3.2.9,<4",
   "resvg-py>=0.5,<0.6",
+  "pyyaml>=6.0.3,<7",
+  "jinja2>=3.1.6,<4",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +60,7 @@ include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**",
 exclude = ["docs/prompts/**", "docs/plans/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]
+".streamlit/config.toml" = ".streamlit/config.toml"
 "scripts/build/hatch_assets.py" = "scripts/build/hatch_assets.py"
 "scripts/build/frozen_entry.py" = "scripts/build/frozen_entry.py"
 "scripts/build/build_executable.py" = "scripts/build/build_executable.py"

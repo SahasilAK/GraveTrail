@@ -31,7 +31,7 @@ def test_capabilities_cover_inventory(tmp_path: Path) -> None:
         expected = {f'{prefix}{n:02}' for prefix, count in
                     [('P', 5), ('A', 7), ('S', 10), ('W', 5), ('V', 4),
                      ('R', 7), ('E', 3), ('C', 5), ('M', 1), ('I', 1)] for n in range(1, count + 1)}
-        assert set(ids) == expected and len(ids) == 48
+        assert set(ids) == expected | {'DBT01'} and len(ids) == 49
         assert all({'cli', 'mcp', 'effects', 'restriction', 'availability'} <= r.keys() for r in result['items'])
         server = create_server(service)
         actual = asyncio.run(server.call_tool('get_capabilities', {'options': {'max_chars': 100000}}))

@@ -68,6 +68,22 @@ and unexpanded wildcards retain their uncertainty. Export CSV/JSON reports, an
 offline interactive HTML graph or the relevant source ZIP from the available controls.
 Source exports can contain private code, so review them before sharing.
 
+## Try the dbt sample
+
+Use a separate workspace for `tests/sample_data/gravetrail_dbt_lineage_test_project.zip`.
+In **Sources**, choose **Project type → dbt project**, keep **dbt analysis mode → source**,
+and import the ZIP. Keep **Use AI for analysis** unchecked and analyze all files.
+
+In **Lineage**, select `fct_orders` and explore upstream/downstream dependencies. Open
+**dbt resources and macro impact**, select the `money` macro, and inspect its consumers
+and original definition. Models, versions, sources, seeds, snapshots and tests have
+separate resource identities. The sample includes dynamic macro/Python cases, so partial
+coverage diagnostics are expected; the SQL/SAS sample counts above do not apply.
+
+For already-generated manifest/compiled SQL, artifact selection and supported schemas,
+follow [dbt project support](../DBT_SUPPORT.md). No dbt installation or warehouse connection
+is required by GraveTrail.
+
 ## Continue from the CLI
 
 **Stop the UI with Ctrl+C first.** DuckDB permits one owning process per data home;

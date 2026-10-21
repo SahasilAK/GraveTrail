@@ -49,6 +49,7 @@ class AssetRef:
     name: str
     temporary: bool = False
     kind: str = "table"
+    identity: str = ""
 
 
 @dataclass
@@ -62,6 +63,7 @@ class Usage:
     expression: str = ""
     status: str = "verified"
     wildcard_safe: bool = False
+    table_identity: str = ""
 
 
 @dataclass

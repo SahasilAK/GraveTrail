@@ -24,7 +24,7 @@ def test_typed_sections_atomic_conflicts_and_mcp(tmp_path: Path) -> None:
     service = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True))
     try:
         schemas = service.call('settings_schema', w)
-        assert set(schemas['sections']) == {'parsing', 'analysis', 'resources', 'visualization', 'privacy', 'agent_access', 'temporary_cleanup'}
+        assert set(schemas['sections']) == {'parsing', 'analysis', 'resources', 'visualization', 'privacy', 'agent_access', 'temporary_cleanup', 'dbt'}
         before = service.call('settings_get', w, section='resources')
         with pytest.raises(AgentError):
             service.call('settings_update', w, section='resources', values={'parse_workers': 9, 'max_files': 5}, expected_revision=before['settings_revision'])

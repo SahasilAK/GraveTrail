@@ -5,6 +5,11 @@ the repository root with Python 3.11+ and `uv`; Docker additionally needs a runn
 Docker daemon. Executable builds use a separate, locked Python 3.11 environment and
 PyInstaller. They produce a console application with a browser UI.
 
+dbt support adds Jinja/PyYAML readers and the `dataforge.dbt` package; it requires no dbt
+executable or warehouse credentials. A wheel built from the source archive must include
+the tracked `.streamlit/config.toml` and `ui/dbt_sections.py`. Qualify dbt import, resource
+queries and exact evidence using the [dbt fixture and boundaries](DBT_SUPPORT.md).
+
 ```console
 uv sync --locked --extra dev
 uv run gravetrail-build --target python

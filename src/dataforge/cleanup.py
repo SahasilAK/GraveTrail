@@ -11,10 +11,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from dataforge.dbt.persistence import DBT_TABLES
 from dataforge.maintenance import _idle
 from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES, Store
 
-GRAPH = (*COLUMN_TABLES, 'edges', 'column_usages', 'operation_assets', 'operations', 'statements',
+GRAPH = (*DBT_TABLES, *COLUMN_TABLES, 'edges', 'column_usages', 'operation_assets', 'operations', 'statements',
          'asset_aliases', 'assets', 'diagnostics')
 WORKSPACE_TABLES = (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'ingestion_runs', 'source_files',
                     'history_archives', 'temporary_recovery', 'llm_profiles', 'settings', 'workspaces')
@@ -141,6 +142,9 @@ def _files(store: Store, workspace: str, category: str) -> list[dict[str, Any]]:
             referenced.update(json.loads(row['snapshot']).get('files', {}).values())
         referenced.update(r['content_hash'] for r in store.rows('SELECT content_hash FROM ai_analysis_units'))
         referenced.update(r['content_hash'] for r in store.rows('SELECT content_hash FROM ai_analysis_snapshots'))
+        referenced.update(r['content_hash'] for r in store.rows('''SELECT DISTINCT
+            json_extract_string(ref.value,'$.content_hash') AS content_hash FROM dbt_project_snapshots s,
+            json_each(s.payload_json,'$.snapshot.sources') ref'''))
         for row in store.rows("SELECT accepted_results FROM ai_analysis_runs WHERE status='committed'"):
             referenced.update(item['metadata']['content_hash'] for item in json.loads(row['accepted_results']))
         # Recovery archives can retain references to older source versions. Preserve conservatively.
@@ -196,6 +200,8 @@ def _selection(store: Store, workspace: str, category: str, file_ids: list[str] 
                 params.append(workspace)
                 where += ' AND run_id NOT IN (SELECT run_id FROM column_analysis WHERE workspace_id=?)'
                 params.append(workspace)
+                where += ' AND run_id NOT IN (SELECT run_id FROM dbt_projects WHERE workspace_id=?)'
+                params.append(workspace)
                 where += ' AND run_id NOT IN (SELECT analysis_run_id FROM ai_analysis_runs WHERE workspace_id=? AND analysis_run_id IS NOT NULL)'
                 params.append(workspace)
                 if run_id:
@@ -207,6 +213,10 @@ def _selection(store: Store, workspace: str, category: str, file_ids: list[str] 
                 if run_id:
                     where += ' AND FALSE'
         selected[table] = (where, params)
+    if category == 'history':
+        run_where, run_params = selected['analysis_runs']
+        selected = {'dbt_project_snapshots': ('workspace_id=? AND run_id IN (SELECT run_id FROM analysis_runs WHERE '
+            + run_where + ')', [workspace, *run_params]), **selected}
     return selected
 
 
@@ -263,7 +273,11 @@ def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, back
             for table, (where, params) in _selection(store, workspace, category, preview.get('file_ids'), preview.get('run_id')).items():
                 store.execute(f'DELETE FROM {table} WHERE {where}', params)
             if category in {'sources', 'lineage', 'ai', 'reset'}:
-                store.execute("UPDATE source_files SET parsing_status='pending',metadata='{}',error_details='' WHERE workspace_id=?", [workspace])
+                for source in store.files(workspace):
+                    metadata = json.loads(source.get('metadata') or '{}')
+                    imported = {key: metadata[key] for key in ('source_kind', 'dbt_root', 'dbt_role', 'dbt_mode') if key in metadata}
+                    store.execute("UPDATE source_files SET parsing_status='pending',metadata=?,error_details='' WHERE workspace_id=? AND file_id=?",
+                                  [json.dumps(imported), workspace, source['file_id']])
         removed, failed = [], []
         # Database commits first: interruption can leave harmless unreferenced files, never missing evidence.
         for item in current['files']:

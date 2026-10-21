@@ -1,5 +1,9 @@
 # tests/
 
+`test_dbt_*.py` — Safe import/YAML/templates, model/resource/version/package identity,
+artifact selection/generated evidence, columns, AI exclusion, settings, maintenance,
+authorized reports, populated UI and retail ZIP gold; parser15/schema8.
+
 Column transformation regressions: `test_sql_transformations.py` covers projection source
 spans/roles, scoped CTEs, UNION/INSERT and unsupported grammar; `test_sas_transformations.py`
 covers ordered variables, SET options and unresolved runtime functions; `test_transformations.py`

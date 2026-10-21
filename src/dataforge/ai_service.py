@@ -30,6 +30,9 @@ def preview_ai_evidence(
     if task not in TASKS or type(first) is not int or type(last) is not int:
         raise AgentError('validation_failed', 'Select a supported task and integer source bounds')
     source = store.file(file_id)
+    from dataforge.dbt.service import is_dbt
+    if is_dbt(source):
+        raise AgentError('validation_failed', 'dbt currently requires parser analysis')
     if source['workspace_id'] != workspace or source['extension'] not in {'.sql', '.sas'}:
         raise AgentError('not_found', 'Select an SQL/SAS source in this workspace')
     chunks = context_chunks(source['raw_content'], source['extension'], first, last,

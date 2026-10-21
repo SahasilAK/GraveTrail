@@ -1,0 +1,4 @@
+name: retail
+models:
+  retail:
+    +materialized: view

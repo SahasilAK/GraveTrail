@@ -71,8 +71,9 @@ def history_plan(
         AND run_id NOT IN (SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed'
             ORDER BY created_at DESC,run_id DESC LIMIT 1)
         AND run_id NOT IN (SELECT run_id FROM column_analysis WHERE workspace_id=?)
+        AND run_id NOT IN (SELECT run_id FROM dbt_projects WHERE workspace_id=?)
         AND run_id NOT IN (SELECT analysis_run_id FROM ai_analysis_runs WHERE workspace_id=? AND analysis_run_id IS NOT NULL)
-        ORDER BY ordinal DESC LIMIT ?""", [workspace, keep_runs, workspace, workspace, workspace, workspace, batch_size])
+        ORDER BY ordinal DESC LIMIT ?""", [workspace, keep_runs, workspace, workspace, workspace, workspace, workspace, batch_size])
     imports = store.rows("""SELECT ingestion_id FROM (
         SELECT ingestion_id,row_number() OVER (ORDER BY created_at DESC,ingestion_id DESC) AS ordinal
         FROM ingestion_runs WHERE workspace_id=?) r WHERE ordinal>? AND NOT EXISTS (
@@ -111,6 +112,17 @@ def archive_history(
                 raise ValueError("History payload exceeds recovery budget; reduce the batch size")
             records[table] = store.rows(f"SELECT {','.join(TABLES[table])} FROM {table} WHERE workspace_id=? AND {TABLES[table][0]} IN ({placeholders})", [workspace, *ids])
         payload = {"format": "dataforge-history-v1", "workspace_id": workspace, "records": records}
+        dbt_snapshots = []
+        if plan['analysis_runs']:
+            marks = ','.join('?' for _ in plan['analysis_runs'])
+            size = store.rows(f'''SELECT coalesce(sum(length(payload_json)),0) AS n FROM dbt_project_snapshots
+                WHERE workspace_id=? AND run_id IN ({marks})''', [workspace, *plan['analysis_runs']])[0]['n']
+            if size * 6 > MAX_ARCHIVE_BYTES - 4096:
+                raise ValueError('dbt history exceeds recovery budget; reduce batch size')
+            dbt_snapshots = store.rows(f'''SELECT * FROM dbt_project_snapshots WHERE workspace_id=?
+                AND run_id IN ({marks})''', [workspace, *plan['analysis_runs']])
+            if dbt_snapshots:
+                payload['dbt_project_snapshots'] = dbt_snapshots
         body = _canonical({"payload": payload, "sha256": hashlib.sha256(_canonical(payload)).hexdigest()})
         if len(body) > MAX_ARCHIVE_BYTES:
             raise ValueError("History archive exceeds 25 MB; reduce the batch size")
@@ -131,6 +143,8 @@ def archive_history(
                           [archive_id, workspace, gzip.compress(body, compresslevel=6, mtime=0), len(body)])
             for table, ids in plan.items():
                 if ids:
+                    if table == 'analysis_runs':
+                        store.execute(f"DELETE FROM dbt_project_snapshots WHERE workspace_id=? AND run_id IN ({','.join('?' for _ in ids)})", [workspace, *ids])
                     store.execute(f"DELETE FROM {table} WHERE workspace_id=? AND {TABLES[table][0]} IN ({','.join('?' for _ in ids)})", [workspace, *ids])
         return {"archive_id": archive_id, **{table: len(rows) for table, rows in records.items()}}
 
@@ -179,6 +193,17 @@ def restore_history(store: Store, workspace: str, archive_id: str) -> dict[str, 
             if payload["format"] != "dataforge-history-v1" or payload["workspace_id"] != workspace:
                 raise ValueError("History archive does not belong to this workspace")
             records = payload["records"]
+            snapshots = payload.get('dbt_project_snapshots', [])
+            if not isinstance(snapshots, list) or len(snapshots) > 10000:
+                raise ValueError('Invalid dbt snapshot archive')
+            for item in snapshots:
+                if set(item) != {'workspace_id', 'run_id', 'project_id', 'fingerprint', 'payload_json'} or not all(
+                        isinstance(value, str) for value in item.values()) or item['workspace_id'] != workspace:
+                    raise ValueError('Invalid dbt snapshot archive')
+                if item['run_id'] not in {row['run_id'] for row in records.get('analysis_runs', [])}:
+                    raise ValueError('dbt snapshot has no archived run')
+                from dataforge.dbt.models import DbtProjectResult
+                DbtProjectResult.from_dict(json.loads(item['payload_json']))
             if set(records) != set(TABLES):
                 raise ValueError("Unsupported history tables")
             for table, rows in records.items():
@@ -204,4 +229,8 @@ def restore_history(store: Store, workspace: str, archive_id: str) -> dict[str, 
                         store.execute(f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
                                       [row[c] for c in columns])
                         restored[table] += 1
+            for item in snapshots:
+                store.execute('''INSERT INTO dbt_project_snapshots VALUES (?,?,?,?,?)
+                    ON CONFLICT(workspace_id,run_id,project_id) DO NOTHING''',
+                    [item[k] for k in ('workspace_id', 'run_id', 'project_id', 'fingerprint', 'payload_json')])
         return restored

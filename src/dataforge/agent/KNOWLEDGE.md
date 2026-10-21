@@ -1,5 +1,9 @@
 # src/dataforge/agent/
 
+`cli_dbt.py` registers project/resource/detail/dependency commands over DbtOperations.
+Capability DBT01, four MCP dbt reads and explicit ingestion options share existing
+workspace/source/write/root permissions and cursor budgets.
+
 Shared authorized automation layer. CLI and MCP delegate to the existing services,
 Store, Importer, LineageGraph, exports and explicit opt-in grounded AI; imported source is never executed.
 
