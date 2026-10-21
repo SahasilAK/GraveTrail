@@ -6,10 +6,13 @@ import json
 import re
 import stat
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any
 
 from dataforge.maintenance import _idle
-from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES
+from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES, Store
 
 GRAPH = (*COLUMN_TABLES, 'edges', 'column_usages', 'operation_assets', 'operations', 'statements',
          'asset_aliases', 'assets', 'diagnostics')
@@ -19,8 +22,11 @@ CATEGORIES = ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'cache',
               'workspace', 'orphans', 'application')
 
 
-def checked_path(home, relative):
-    """Reject symlinks, hard links, Windows junctions and escaped paths at every component."""
+def checked_path(home: Path, relative: str | Path) -> Path:
+    """Reject symlinks, hard links, Windows junctions and escaped paths at every component.
+
+    Raises:
+        ValueError: If the supplied value violates the operation constraints."""
     path = home / relative
     if not path.resolve().is_relative_to(home) or path == home:
         raise ValueError('Runtime path escapes the data home')
@@ -36,7 +42,11 @@ def checked_path(home, relative):
     return path
 
 
-def _job_files(store):
+def _job_files(store: Store) -> list[Path]:
+    """List bounded, app-owned job journals after validating their directory.
+
+    Raises:
+        ValueError: If the supplied value violates the operation constraints."""
     directory = checked_path(store.home, 'agent/jobs')
     paths = sorted(p for p in directory.glob('*.json') if re.fullmatch(r'[a-f0-9]{32}\.json', p.name)) if directory.exists() else []
     if len(paths) > 1000:
@@ -44,8 +54,11 @@ def _job_files(store):
     return paths
 
 
-def assert_idle(store, workspace=''):
-    """Also catch queued imports and provider requests which do not own analysis_lock."""
+def assert_idle(store: Store, workspace: str='') -> None:
+    """Also catch queued imports and provider requests which do not own analysis_lock.
+
+    Raises:
+        ValueError: If the supplied value violates the operation constraints."""
     from dataforge.ai_analysis_store import active_project_runs
     from dataforge.llm_resources import has_active_requests
 
@@ -67,14 +80,19 @@ def assert_idle(store, workspace=''):
 
 
 @contextmanager
-def maintenance_guard(store, workspace=''):
+def maintenance_guard(store: Store, workspace: str='') -> Iterator[None]:
+    """Hold the maintenance lock after confirming no matching work is active.
+
+    Yields:
+        None: While the maintenance guard is held."""
     with _idle(store):
         assert_idle(store, workspace)
         yield
 
 
-def _revision(store):
+def _revision(store: Store) -> str:
     # Aggregate row hashes avoid disclosing source or secrets in a preview token.
+    """Hash bounded table fingerprints into a storage revision token."""
     fingerprints = []
     for table in (*WORKSPACE_TABLES, 'parse_cache', 'prompt_versions'):
         row = store.rows(f'SELECT count(*) AS n, bit_xor(hash(t)) AS h FROM {table} t')[0]
@@ -82,7 +100,11 @@ def _revision(store):
     return hashlib.sha256(json.dumps(fingerprints).encode()).hexdigest()
 
 
-def _files(store, workspace, category):
+def _files(store: Store, workspace: str, category: str) -> list[dict[str, Any]]:
+    """Select eligible runtime files for a cleanup category without deleting them.
+
+    Raises:
+        ValueError: If the supplied value violates the operation constraints."""
     files = []
     if category in {'jobs', 'workspace', 'application'}:
         for path in _job_files(store):
@@ -135,7 +157,11 @@ def _files(store, workspace, category):
              'modified_ns': p.stat().st_mtime_ns, 'inode': p.stat().st_ino} for p in sorted(set(files))]
 
 
-def _selection(store, workspace, category, file_ids, run_id):
+def _selection(store: Store, workspace: str, category: str, file_ids: list[str] | None, run_id: str | None) -> dict[str, tuple[str, list[str]]]:
+    """Build parameterized table predicates for a validated cleanup selection.
+
+    Raises:
+        ValueError: If the supplied value violates the operation constraints."""
     if category not in CATEGORIES:
         raise ValueError('Unknown cleanup category')
     global_scope = category in {'orphans', 'application', 'cache'}
@@ -184,7 +210,8 @@ def _selection(store, workspace, category, file_ids, run_id):
     return selected
 
 
-def cleanup_plan(store, workspace='', category='lineage', file_ids=None, run_id=None):
+def cleanup_plan(store: Store, workspace: str='', category: str='lineage', file_ids: list[str] | None=None, run_id: str | None=None) -> dict[str, Any]:
+    """Preview affected records and files and return a revision-bound confirmation token."""
     with store.lock:
         selected = _selection(store, workspace, category, file_ids, run_id)
         counts, sizes = {}, {}
@@ -203,7 +230,20 @@ def cleanup_plan(store, workspace='', category='lineage', file_ids=None, run_id=
         return plan
 
 
-def apply_cleanup(store, preview, confirmation, backup_first=True):
+def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, backup_first: bool=True) -> dict[str, Any]:
+    """Apply a current cleanup preview after explicit confirmation and backup.
+
+    Args:
+        store: Workspace store whose database and runtime files are managed.
+        preview: Cleanup plan returned by :func:`cleanup_plan`.
+        confirmation: Exact workspace name or shared-data confirmation phrase.
+        backup_first: Whether to create the required recoverable full-home backup.
+
+    Returns:
+        Deleted record and file details, retained files, backup location, and rebuild status.
+
+    Raises:
+        ValueError: If confirmation, preview revision, idle state, or backup requirements fail."""
     workspace, category = preview['workspace_id'], preview['category']
     with maintenance_guard(store, '' if category in {'application', 'cache', 'orphans'} else workspace):
         expected = store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [workspace]) if workspace else []

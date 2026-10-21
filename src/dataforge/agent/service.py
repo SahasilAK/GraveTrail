@@ -6,8 +6,10 @@ import json
 import time
 import uuid
 from collections import Counter
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -51,7 +53,14 @@ LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_reques
 
 
 class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations, ProjectAnalysisOperations):
-    def __init__(self, store, policy: AccessPolicy | None = None):
+    """Coordinate authorized automation requests over application services."""
+
+    def __init__(self, store: Any, policy: AccessPolicy | None = None) -> None:
+        """Initialize service state, background jobs, and runtime configuration.
+
+        Args:
+            store: Workspace store providing persisted data.
+            policy: Launch access policy."""
         self.store, self.policy = store, policy or AccessPolicy()
         self.jobs = Jobs(store.home)
         self.runtime_connections = {}
@@ -64,14 +73,27 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         self.theme_config_path = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(application_root() / '.streamlit/config.toml')))
         self.configured_storage = os.environ.get('DATAFORGE_STORAGE_LOCATIONS', '')
 
-    def close(self):
+    def close(self) -> None:
+        """Clear runtime connection state and shut down the job executor."""
         for manager in self.runtime_connections.values():
             manager.clear()
         self.runtime_connections.clear()
         self.runtime_profiles.clear()
         self.jobs.close()
 
-    def _workspace(self, workspace, write=False, source=False, administrator=False):
+    def _workspace(self, workspace: str, write: bool=False, source: bool=False, administrator: bool=False) -> AgentSettings:
+        """Validate workspace access and return its agent settings.
+
+        Args:
+            workspace: Workspace identifier.
+            write: Whether write permission is required.
+            source: Whether source permission is required.
+            administrator: Whether local administrator permission is required.
+
+        Returns:
+        Validated workspace agent settings.
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if not self.policy.permits(workspace):
             raise AgentError("forbidden", "Workspace access is not authorized")
         matches = self.store.rows("SELECT workspace_id,name FROM workspaces WHERE workspace_id=?", [workspace])
@@ -84,7 +106,13 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             raise AgentError("forbidden", "Source retrieval is disabled for this workspace")
         return settings
 
-    def audit(self, workspace, action, outcome):
+    def audit(self, workspace: str, action: str, outcome: str) -> None:
+        """Append a sanitized operation outcome to the local audit log.
+
+        Args:
+            workspace: Workspace identifier.
+            action: Operation name.
+            outcome: Sanitized outcome or error code."""
         directory = self.store.home / "agent"
         directory.mkdir(exist_ok=True)
         path = directory / "audit.jsonl"
@@ -94,8 +122,20 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             stream.write(compact({"at": time.time(), "workspace_id": workspace,
                                   "action": action, "outcome": outcome}) + "\n")
 
-    def call(self, action: str, workspace_id: str = "", options=None, **arguments):
-        """Transport-neutral request boundary. No queries parse files or contact an LLM."""
+    def call(self, action: str, workspace_id: str = "", options: dict[str, Any] | None=None, **arguments: Any) -> dict[str, Any]:
+        """Validate, authorize, and dispatch one transport-neutral agent operation.
+
+        Args:
+            action: Registered operation name.
+            workspace_id: Workspace targeted by the operation, if any.
+            options: Optional query options supplied by the transport adapter.
+            **arguments: Operation-specific arguments.
+
+        Returns:
+            The operation's JSON-compatible response.
+
+        Raises:
+            AgentError: If the request is unknown, invalid, or unauthorized."""
         if action not in {"workspaces", "create_workspace", "summary", "assets", "files", "issues",
                           "lineage", "impact", "batch", "columns", "column_catalog", "column_lineage", "source", "search_code",
                           "ingest", "analyze", "job", "export", "result",
@@ -153,11 +193,30 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         except OSError:
             raise AgentError("io_error", "Local file operation failed; check access and available storage") from None
 
-    def _theme_list(self, w, opts):
+    def _theme_list(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """List available theme presets and their base themes.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.theme_configuration import PRESETS
         return self._page('', opts, 'themes', [{'name': name, 'base': p['base']} for name, p in PRESETS.items()])
 
-    def _theme_get(self, w, opts):
+    def _theme_get(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Read configured theme state and report that loaded UI state is unavailable.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            A public-safe summary of the asset.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.theme_configuration import current_preset
         if w or self.policy.workspaces is not None:
             raise AgentError('requires_local_admin', 'Application theme requires unrestricted launch without a workspace argument')
@@ -165,7 +224,19 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return {'configured': configured, 'detected': configured, 'loaded': None,
                 'reload_required': True, 'note': 'Loaded UI appearance is unavailable to a separate CLI/MCP process'}
 
-    def _theme_apply(self, w, opts, name):
+    def _theme_apply(self, w: str, opts: QueryOptions, name: str) -> dict[str, Any]:
+        """Apply a theme preset under application-scope authorization.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            name: Workspace or preset name.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.theme_configuration import apply_preset
         self.policy.require('application')
         if w:
@@ -173,19 +244,47 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         apply_preset(self.theme_config_path, name)
         return self._theme_get(w, opts)
 
-    def _logging_get(self, w, opts):
+    def _logging_get(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Read the persisted application log level.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if w or self.policy.workspaces is not None:
             raise AgentError('requires_local_admin', 'Application logging requires unrestricted launch without a workspace argument')
         return {'level': self.store.setting('__application__', 'log_level', 'INFO'), 'scope': 'application'}
 
-    def _logging_update(self, w, opts, level):
+    def _logging_update(self, w: str, opts: QueryOptions, level: str) -> dict[str, Any]:
+        """Persist an application log-level change and report reload requirements.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            level: Application logging level.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.logging_config import save_application_logging
         self.policy.require('application')
         self._logging_get(w, opts)
         save_application_logging(self.store, level)
         return {**self._logging_get(w, opts), 'reload_required': True}
 
-    def _runtime_info(self, w, opts):
+    def _runtime_info(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Report runtime ownership and authorized storage-home information.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.storage_locations import allowed_homes
         result = {'ownership': 'One DuckDB owning process per home', 'live_switch': False,
                   'switch': 'Relaunch CLI/MCP with an authorized --home; UI changes only its browser session'}
@@ -193,7 +292,21 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             result.update(home=str(self.store.home), allowed_homes=allowed_homes(self.store.home, self.configured_storage))
         return result
 
-    def _agent_setup(self, w, opts, client='codex', transport='stdio', tool_name=''):
+    def _agent_setup(self, w: str, opts: QueryOptions, client: str='codex', transport: str='stdio', tool_name: str='') -> dict[str, Any]:
+        """Build client configuration and available MCP tool schemas.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            client: Client configuration target.
+            transport: MCP transport selection.
+            tool_name: Optional tool whose schema is requested.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         import asyncio
         import sys
 
@@ -217,7 +330,18 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             result = {'tool': matches[0].model_dump(mode='json')}
         return result
 
-    def _agent_self_test(self, w, opts):
+    def _agent_self_test(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Check a local MCP handler in process without opening a client transport.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         import asyncio
 
         from dataforge.agent.mcp_server import create_server
@@ -227,48 +351,131 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return {'passed': True, 'method': 'in_process_mcp_handler', 'summary': result.structuredContent,
                 'note': 'External stdio/HTTP connectivity is a separate client test'}
 
-    def _capabilities(self, w, opts):
+    def _capabilities(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """List agent capabilities with policy-specific authorization state.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.agent.capabilities import capability_catalog
         from dataforge.graph_images import png_available
         return self._page(w, opts, 'capabilities', capability_catalog(self, w), schema_version=1,
             graph_image_formats=['svg', 'png'] if png_available() else ['svg'])
 
-    def _settings_schema(self, w, opts, section=None):
+    def _settings_schema(self, w: str, opts: QueryOptions, section: str | None=None) -> dict[str, Any]:
+        """Return the editable workspace settings schema.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            section: Settings section.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.settings_service import settings_schema
         return settings_schema(section)
 
-    def _settings_get(self, w, opts, section):
+    def _settings_get(self, w: str, opts: QueryOptions, section: str) -> dict[str, Any]:
+        """Read one workspace settings section.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            section: Settings section.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.settings_service import read_settings
         return read_settings(self.store, w, section)
 
-    def _settings_update(self, w, opts, section, values, expected_revision):
+    def _settings_update(self, w: str, opts: QueryOptions, section: str, values: dict[str, Any], expected_revision: str) -> dict[str, Any]:
+        """Update a settings section using the caller’s expected revision.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            section: Settings section.
+            values: Settings values to apply.
+            expected_revision: Revision expected by the caller.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.settings_service import update_settings
         return update_settings(self.store, self.policy, w, section, values, expected_revision)
 
-    def _workspace_update(self, w, opts, name, description, expected_revision):
+    def _workspace_update(self, w: str, opts: QueryOptions, name: str, description: str, expected_revision: str) -> dict[str, Any]:
+        """Rename the workspace and update its description after revision validation.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            name: Workspace or preset name.
+            description: Workspace description.
+            expected_revision: Revision expected by the caller.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.settings_service import check_revision, revision
         self.policy.require('config')
         check_revision(self.store, w, expected_revision)
         self.store.update_workspace(w, name, description)
         return {'workspace_id': w, 'settings_revision': revision(self.store, w)}
 
-    def _config_export(self, w, opts):
+    def _config_export(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Export workspace configuration in JSON-compatible form.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.configuration import export_workspace_configuration
         return {'configuration': json.loads(export_workspace_configuration(self.store, w))}
 
-    def _config_import(self, w, opts, configuration):
+    def _config_import(self, w: str, opts: QueryOptions, configuration: dict[str, Any]) -> dict[str, Any]:
+        """Create a workspace from allowed configuration under config-write policy.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            configuration: Configuration data to import.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.configuration import import_workspace_configuration
         self.policy.require('config')
         if self.policy.workspaces is not None:
             raise AgentError('forbidden', 'Configuration import creates a new workspace; unrestricted launch required')
         return {'workspace_id': import_workspace_configuration(self.store, compact(configuration))}
 
-    def _revision(self, w):
+    def _revision(self, w: str) -> list[list[dict[str, Any]]]:
+        """Collect source hashes and the latest completed run for query cursor identity.
+
+        Args:
+            w: Workspace identifier.
+
+        Returns:
+            Source-file hashes and the latest completed run."""
         files = self.store.rows("SELECT file_id,content_hash,parsing_status FROM source_files WHERE workspace_id=? ORDER BY file_id", [w])
         runs = self.store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [w])
         return [files, runs]
 
-    def _cleanup_inspect(self, w, opts):
+    def _cleanup_inspect(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Summarize cleanup record counts and storage estimates by category.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.cleanup import cleanup_plan
         plans = {category: cleanup_plan(self.store, w, category) for category in
                  ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace')}
@@ -278,7 +485,21 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                 'restricted_categories': {'cache': 'requires_local_ui', 'orphans': 'requires_local_ui',
                                           'application': 'requires_local_ui'}}
 
-    def _cleanup_preview(self, w, opts, category='lineage', file_ids=None, run_id=None):
+    def _cleanup_preview(self, w: str, opts: QueryOptions, category: str='lineage', file_ids: list[str] | None=None, run_id: str | None=None) -> dict[str, Any]:
+        """Build a cleanup preview for workspace or authorized application data.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            category: Cleanup category.
+            file_ids: Optional source file identifiers.
+            run_id: Optional analysis run identifier.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.cleanup import cleanup_plan
         if category in {'application', 'cache', 'orphans'}:
             if self.policy.workspaces is not None or not self.policy.allow_application_config:
@@ -288,7 +509,21 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                     'file_bytes': plan['file_bytes'], 'restriction': 'requires_local_ui', 'notes': plan['notes']}
         return cleanup_plan(self.store, w, category, file_ids, run_id)
 
-    def _cleanup_apply(self, w, opts, preview, confirmation='', backup_first=False):
+    def _cleanup_apply(self, w: str, opts: QueryOptions, preview: dict[str, Any], confirmation: str='', backup_first: bool=False) -> dict[str, Any]:
+        """Apply a cleanup preview only after backup and permission checks.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            preview: Previously generated maintenance preview.
+            confirmation: Exact confirmation text.
+            backup_first: Whether to create a full-home backup first.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.cleanup import apply_cleanup
         if backup_first and self.policy.workspaces is not None:
             raise AgentError('forbidden', 'Whole-home backup requires unrestricted local access')
@@ -298,7 +533,18 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             raise AgentError('validation_failed', 'General cleanup requires a full-home backup; pass the explicit backup option')
         return apply_cleanup(self.store, preview, confirmation, backup_first)
 
-    def _history_preview(self, w, opts, keep_runs=20, keep_imports=20, batch_size=25):
+    def _history_preview(self, w: str, opts: QueryOptions, keep_runs: int=20, keep_imports: int=20, batch_size: int=25) -> dict[str, Any]:
+        """Preview history retention and derive a token for the current plan.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            keep_runs: Number of analysis runs to retain.
+            keep_imports: Number of ingestion reports to retain.
+            batch_size: Records handled per maintenance batch.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.cleanup import checked_path
         from dataforge.maintenance import history_plan
         checked_path(self.store.home, 'history-recovery/' + w)
@@ -307,14 +553,35 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         plan['token'] = hashlib.sha256(compact(plan).encode()).hexdigest()
         return plan
 
-    def _maintenance_confirmation(self, w, confirmation):
+    def _maintenance_confirmation(self, w: str, confirmation: str) -> None:
+        """Validate the exact workspace name and unrestricted local launch.
+
+        Args:
+            w: Workspace identifier.
+            confirmation: Exact confirmation text.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         name = self.store.rows('SELECT name FROM workspaces WHERE workspace_id=?', [w])[0]['name']
         if name != confirmation:
             raise AgentError('validation_failed', 'Type the exact current workspace name to confirm local maintenance')
         if self.policy.workspaces is not None:
             raise AgentError('forbidden', 'Recoverable full-home backup requires an unrestricted local launch')
 
-    def _history_archive(self, w, opts, preview, confirmation):
+    def _history_archive(self, w: str, opts: QueryOptions, preview: dict[str, Any], confirmation: str) -> dict[str, Any]:
+        """Archive eligible history after refreshing the preview and making a backup.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            preview: Previously generated maintenance preview.
+            confirmation: Exact confirmation text.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.database_maintenance import backup
         from dataforge.maintenance import archive_history
         self._maintenance_confirmation(w, confirmation)
@@ -325,26 +592,67 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         result = archive_history(self.store, w, preview['keep_runs'], preview['keep_imports'], preview['batch_size'])
         return {**result, 'backup_id': backup_id}
 
-    def _history_archives(self, w, opts):
+    def _history_archives(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """List recoverable history archives for the workspace.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.cleanup import checked_path
         from dataforge.maintenance import list_archives
         checked_path(self.store.home, 'history-recovery/' + w)
         return self._page(w, opts, 'history_archives', list_archives(self.store, w))
 
-    def _history_restore(self, w, opts, archive_id, confirmation):
+    def _history_restore(self, w: str, opts: QueryOptions, archive_id: str, confirmation: str) -> dict[str, Any]:
+        """Restore a selected history archive after local confirmation.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            archive_id: History archive identifier.
+            confirmation: Exact confirmation text.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.cleanup import checked_path
         from dataforge.maintenance import restore_history
         self._maintenance_confirmation(w, confirmation)
         checked_path(self.store.home, 'history-recovery/' + w)
         return restore_history(self.store, w, archive_id)
 
-    def _staging_preview(self, w, opts, age_hours=24):
+    def _staging_preview(self, w: str, opts: QueryOptions, age_hours: int=24) -> dict[str, Any]:
+        """Preview stale temporary files and derive a plan token.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            age_hours: Minimum age in hours for staging candidates.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.temporary_cleanup import temporary_plan
         plan = {'workspace_id': w, 'age_hours': age_hours, **temporary_plan(self.store, w, age_hours)}
         plan['token'] = hashlib.sha256(compact(plan).encode()).hexdigest()
         return plan
 
-    def _staging_clean(self, w, opts, preview, confirmation, names=None):
+    def _staging_clean(self, w: str, opts: QueryOptions, preview: dict[str, Any], confirmation: str, names: list[str] | None=None) -> dict[str, Any]:
+        """Clean selected temporary files after preview validation and backup.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            preview: Previously generated maintenance preview.
+            confirmation: Exact confirmation text.
+            names: Optional selected staging file names.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.database_maintenance import backup
         from dataforge.temporary_cleanup import cleanup_temporary
         self._maintenance_confirmation(w, confirmation)
@@ -357,25 +665,66 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         backup_id = backup(self.store).stem
         return {**cleanup_temporary(self.store, w, selected, current['age_hours']), 'backup_id': backup_id}
 
-    def _staging_recoveries(self, w, opts):
+    def _staging_recoveries(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """List recoverable temporary-file cleanup records.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.temporary_cleanup import temporary_recoveries
         return self._page(w, opts, 'staging_recoveries', temporary_recoveries(self.store, w))
 
-    def _staging_restore(self, w, opts, recovery_id, confirmation):
+    def _staging_restore(self, w: str, opts: QueryOptions, recovery_id: str, confirmation: str) -> dict[str, Any]:
+        """Restore temporary files from a recovery record after confirmation.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            recovery_id: Staging recovery identifier.
+            confirmation: Exact confirmation text.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.temporary_cleanup import restore_temporary
         self._maintenance_confirmation(w, confirmation)
         return restore_temporary(self.store, w, recovery_id)
 
-    def _global_metadata(self, w):
+    def _global_metadata(self, w: str) -> None:
+        """Require unrestricted application permission for whole-home metadata.
+
+        Args:
+            w: Workspace identifier.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if w or self.policy.workspaces is not None or not self.policy.allow_application_config:
             raise AgentError('requires_local_admin', 'Whole-home metadata requires unrestricted --allow-application-config; no workspace argument')
 
-    def _database_inspect(self, w, opts):
+    def _database_inspect(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Inspect database health and storage metadata.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.database_maintenance import inspect_database
         self._global_metadata(w)
         return inspect_database(self.store)
 
-    def _backups_list(self, w, opts):
+    def _backups_list(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """List bounded local backup metadata for authorized application scope.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         import re
 
         from dataforge.cleanup import checked_path
@@ -389,32 +738,87 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                 items.append({'backup_id': path.stem, 'bytes': path.stat().st_size, 'download': 'local CLI/UI only'})
         return self._page(w, opts, 'backups', items[:1000], boundaries=['backup_limit'] if len(files) > 1000 else [])
 
-    def _current(self, w):
+    def _current(self, w: str) -> bool:
+        """Check whether stored analysis matches current source state.
+
+        Args:
+            w: Workspace identifier.
+
+        Returns:
+            Whether stored analysis is current for the workspace."""
         from dataforge.services import analysis_is_current
         return analysis_is_current(self.store, w)
 
-    def _page(self, w, opts, action, items, **metadata):
+    def _page(self, w: str, opts: QueryOptions, action: str, items: list[dict[str, Any]], **metadata: Any) -> dict[str, Any]:
+        """Build a page whose cursor is bound to its query and data revision.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            action: Operation name.
+            items: Records to page.
+            metadata: Additional response fields.
+
+        Returns:
+            A bounded response page with workspace and continuation metadata."""
         key = [w, action, self._revision(w), opts.model_dump(exclude={"cursor", "limit", "max_chars"}),
                hashlib.sha256(compact(items).encode()).hexdigest()]
         return page(items, opts, key, workspace_id=w, **metadata)
 
-    def _workspaces(self, w, opts, query=""):
+    def _workspaces(self, w: str, opts: QueryOptions, query: str="") -> dict[str, Any]:
+        """List enabled workspaces visible to this policy, optionally filtered by name.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            query: Literal search text.
+
+        Returns:
+            The operation response data for the requested use case."""
         items = [{k: row[k] for k in ("workspace_id", "name", "description")}
                  for row in self.store.workspaces() if self.policy.permits(row["workspace_id"])
                  and AgentSettings.from_store(self.store, row["workspace_id"]).enabled
                  and query.casefold() in row["name"].casefold()]
         return self._page(w, opts, ["workspaces", query], items)
 
-    def _create_workspace(self, w, opts, name, description=""):
+    def _create_workspace(self, w: str, opts: QueryOptions, name: str, description: str="") -> dict[str, Any]:
+        """Create a workspace and return its stable identifier and name.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            name: Workspace or preset name.
+            description: Workspace description.
+
+        Returns:
+            The operation response data for the requested use case."""
         return {"workspace_id": self.store.create_workspace(name, description), "name": name}
 
-    def _summary(self, w, opts):
+    def _summary(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Return workspace record counts and analysis freshness.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+
+        Returns:
+            The operation response data for the requested use case."""
         counts = {}
         for table in ("source_files", "assets", "edges", "diagnostics"):
             counts[table] = self.store.rows(f"SELECT count(*) AS n FROM {table} WHERE workspace_id=?", [w])[0]["n"]
         return {"workspace_id": w, **counts, "analysis_current": self._current(w)}
 
-    def _asset(self, w, value):
+    def _asset(self, w: str, value: str) -> dict[str, Any]:
+        """Resolve an asset identifier or name and reject ambiguous matches.
+
+        Args:
+            w: Workspace identifier.
+            value: Asset ID or name.
+
+        Returns:
+        The matching asset record.
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if not value or len(value) > 1024:
             raise AgentError("invalid_argument", "Specify an asset ID or table name up to 1024 characters")
         assets = self.store.assets(w)
@@ -436,22 +840,62 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return matches[0]
 
     @staticmethod
-    def _asset_summary(a):
+    def _asset_summary(a: dict[str, Any]) -> dict[str, Any]:
+        """Select the public summary fields for an asset.
+
+        Args:
+            a: Asset record.
+
+        Returns:
+            A public-safe summary of the asset."""
         return {"asset_id": a["asset_id"], "name": asset_label(a), "kind": a["kind"],
                 "temporary": a["temporary"]}
 
-    def _assets(self, w, opts, query=""):
+    def _assets(self, w: str, opts: QueryOptions, query: str="") -> dict[str, Any]:
+        """Search asset summaries by name.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            query: Literal search text.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if len(query) > 1024:
             raise AgentError("invalid_argument", "Search query is too long")
         items = [self._asset_summary(a) for a in self.store.assets(w) if query.casefold() in a["name"].casefold()]
         return self._page(w, opts, ["assets", query], items, analysis_current=self._current(w))
 
-    def _files(self, w, opts, query=""):
+    def _files(self, w: str, opts: QueryOptions, query: str="") -> dict[str, Any]:
+        """Search source-file inventory metadata by relative path.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            query: Literal search text.
+
+        Returns:
+            The operation response data for the requested use case."""
         fields = ("file_id", "relative_path", "extension", "parsing_status", "line_count", "content_hash", "file_size", "encoding")
         return self._page(w, opts, ["files", query], [{k: f[k] for k in fields}
             for f in self.store.files(w) if query.casefold() in f["relative_path"].casefold()])
 
-    def _issues(self, w, opts, severity="all"):
+    def _issues(self, w: str, opts: QueryOptions, severity: str="all") -> dict[str, Any]:
+        """List workspace diagnostics filtered by severity.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            severity: Severity value.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if severity not in {"all", "info", "warning", "error"}:
             raise AgentError("invalid_argument", "Use all, info, warning or error severity")
         items = self.store.diagnostics(w)
@@ -459,7 +903,18 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             items = [r for r in items if r["severity"] == severity]
         return self._page(w, opts, ["issues", severity], items, analysis_current=self._current(w))
 
-    def _graph(self, w, opts, keep):
+    def _graph(self, w: str, opts: QueryOptions, keep: str) -> LineageGraph:
+        """Build the configured lineage graph after enforcing size limits.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            keep: Asset ID retained while simplifying the graph.
+
+        Returns:
+        The configured lineage graph.
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         assets = self.store.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY asset_id LIMIT 20001", [w])
         edges = self.store.rows("SELECT edge_id FROM edges WHERE workspace_id=? ORDER BY edge_id LIMIT 100001", [w])
         if len(assets) > 20000 or len(edges) > 100000:
@@ -472,7 +927,20 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             collapse = self.store.setting(w, "collapse_temporary", False)
         return graph.simplified(keep=[keep]) if collapse else graph
 
-    def _lineage(self, w, opts, asset, direction="upstream"):
+    def _lineage(self, w: str, opts: QueryOptions, asset: str, direction: str="upstream") -> dict[str, Any]:
+        """Return bounded lineage around an asset with detail gated by query options.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            asset: Asset ID or name.
+            direction: Lineage traversal direction.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if direction not in {"upstream", "downstream", "combined"}:
             raise AgentError("invalid_argument", "Use upstream, downstream or combined direction")
         target = self._asset(w, asset)
@@ -523,14 +991,39 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             unresolved_count=unresolved, confidence_min=min((e["confidence"] for e in evidence), default=None),
             statuses=dict(Counter(e["status"] for e in evidence)))
 
-    def _impact(self, w, opts, asset):
+    def _impact(self, w: str, opts: QueryOptions, asset: str) -> dict[str, Any]:
+        """Return downstream lineage and counts grouped by asset kind.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            asset: Asset ID or name.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         result = self._lineage(w, opts, asset, "downstream")
         result["groups"] = dict(Counter(i["kind"] for i in result["items"]))
         if len(compact(result)) > opts.max_chars:
             raise AgentError("budget_too_small", "Impact grouping exceeds max_chars")
         return result
 
-    def _batch(self, w, opts, assets, direction="upstream"):
+    def _batch(self, w: str, opts: QueryOptions, assets: list[str], direction: str="upstream") -> dict[str, Any]:
+        """Query multiple asset lineages under shared item and response budgets.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            assets: Asset IDs or names.
+            direction: Lineage traversal direction.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if not 1 <= len(assets) <= 20 or opts.cursor:
             raise AgentError("invalid_argument", "Batch accepts 1–20 assets and no cursor; paginate individual results")
         results = []
@@ -552,7 +1045,23 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         return {"workspace_id": w, "results": results, "processed": len(results), "requested": len(assets),
                 "complete": complete, "remaining_assets": assets[len(results):]}
 
-    def _columns(self, w, opts, asset, column_query='', usage_type='', file_id='', group_by='none'):
+    def _columns(self, w: str, opts: QueryOptions, asset: str, column_query: str='', usage_type: str='', file_id: str='', group_by: str='none') -> dict[str, Any]:
+        """List direct source-column usage with optional filtering and grouping.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            asset: Asset ID or name.
+            column_query: Column-name filter.
+            usage_type: Usage-context filter.
+            file_id: Source file identifier.
+            group_by: Grouping mode for direct usage results.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.services import column_report
         if group_by not in {'none', 'file', 'usage_type'} or any(len(value) > 1024 for value in (column_query, usage_type, file_id)):
             raise AgentError('validation_failed', 'Invalid direct-column filter/grouping')
@@ -575,7 +1084,16 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           asset_id=selected["asset_id"], unique_columns=len({r['column_name'] for r in rows}),
                           group_by=group_by, analysis_current=self._current(w))
 
-    def _column_catalog(self, w, opts, asset):
+    def _column_catalog(self, w: str, opts: QueryOptions, asset: str) -> dict[str, Any]:
+        """Return a bounded catalog of stored column transformations.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            asset: Asset ID or name.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.transformations import column_catalog
         selected = self._asset(w, asset)
         rows = column_catalog(self.store, w, selected["asset_id"], limit=min(opts.max_items + 1, 20000))
@@ -584,7 +1102,22 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           asset_id=selected["asset_id"], boundaries=boundaries,
                           analysis_current=self._current(w))
 
-    def _column_lineage(self, w, opts, asset, column, direction="upstream", status="all"):
+    def _column_lineage(self, w: str, opts: QueryOptions, asset: str, column: str, direction: str="upstream", status: str="all") -> dict[str, Any]:
+        """Trace a column through stored derivations and coverage boundaries.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            asset: Asset ID or name.
+            column: Column name to trace.
+            direction: Lineage traversal direction.
+            status: Derivation status filter.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.transformations import trace_columns
         if (direction not in {"upstream", "downstream"} or
                 status not in {"all", "verified", "inferred", "unresolved"} or
@@ -620,7 +1153,18 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           trace_complete=trace["complete"], run_id=trace.get("run_id"),
                           boundaries=boundaries, analysis_current=self._current(w))
 
-    def _statement(self, w, statement_id):
+    def _statement(self, w: str, statement_id: str) -> dict[str, Any]:
+        """Retrieve original statement evidence and whether its source hash is current.
+
+        Args:
+            w: Workspace identifier.
+            statement_id: Statement identifier.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         rows = self.store.rows("""SELECT s.statement_id,s.file_id,s.start_line,s.end_line,s.code,
             s.content_hash AS source_hash,f.relative_path FROM statements s
             JOIN source_files f ON s.file_id=f.file_id AND s.workspace_id=f.workspace_id
@@ -631,8 +1175,25 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         source = self.store.rows("SELECT content_hash FROM source_files WHERE file_id=? AND workspace_id=?", [row["file_id"], w])[0]
         return {**row, "source_current": source["content_hash"] == row["source_hash"]}
 
-    def _source(self, w, opts, file_id=None, statement_id=None, operation_id=None,
-                start_line=None, end_line=None, full=False):
+    def _source(self, w: str, opts: QueryOptions, file_id: str | None=None, statement_id: str | None=None, operation_id: str | None=None,
+                start_line: int | None=None, end_line: int | None=None, full: bool=False) -> dict[str, Any]:
+        """Return bounded original source lines for one file, statement, or operation.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            file_id: Source file identifier.
+            statement_id: Statement identifier.
+            operation_id: Operation identifier.
+            start_line: First source line number.
+            end_line: Last source line number.
+            full: Whether full source is requested.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if sum(bool(x) for x in (file_id, statement_id, operation_id)) != 1:
             raise AgentError("invalid_argument", "Specify exactly one file_id, statement_id or operation_id")
         if operation_id:
@@ -657,7 +1218,20 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                  for i in range(start - 1, end, 20)]
         return self._page(w, opts, ["source", file_id, start, end], items)
 
-    def _search_code(self, w, opts, query, include_matches=False):
+    def _search_code(self, w: str, opts: QueryOptions, query: str, include_matches: bool=False) -> dict[str, Any]:
+        """Search source metadata or literal code matches when requested.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            query: Literal search text.
+            include_matches: Whether to return literal source-code matches.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if include_matches:
             from dataforge.reporting import code_matches
             self._workspace(w, source=True)
@@ -670,7 +1244,21 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             WHERE workspace_id=? AND contains(lower(raw_content),lower(?)) ORDER BY relative_path""", [w, query])
         return self._page(w, opts, ["search_code", query], rows)
 
-    def run_operation(self, w, operation, arguments, progress=None, cancelled=None):
+    def run_operation(self, w: str, operation: str, arguments: dict[str, Any], progress: Callable[[float, str], None] | None=None, cancelled: Callable[[], bool] | None=None) -> dict[str, Any]:
+        """Execute a queued ingest or analysis operation and record its outcome.
+
+        Args:
+            w: Workspace identifier.
+            operation: Queued operation name.
+            arguments: Operation-specific input values.
+            progress: Optional callback receiving a progress fraction and message.
+            cancelled: Optional callback reporting whether the job was cancelled.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         self._workspace(w, write=True)
         if operation == "analyze":
             if arguments.get('mode', 'parser') != 'parser' or arguments.get('resume_run_id'):
@@ -706,14 +1294,39 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         self.audit(w, operation, "completed")
         return result
 
-    def _ingest(self, w, opts, path, extensions):
+    def _ingest(self, w: str, opts: QueryOptions, path: str, extensions: list[str]) -> dict[str, Any]:
+        """Validate import inputs and enqueue a background ingestion job.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            path: Allowed import path.
+            extensions: Source extensions to include.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         self.policy.import_path(path)
         if not extensions or not {e.lstrip(".").lower() for e in extensions} <= {"sql", "sas", "csv"}:
             raise AgentError("invalid_argument", "Select sql, sas and/or csv extensions")
         return self.jobs.start(w, "ingest", lambda p: self.run_operation(w, "ingest", {
             "path": path, "extensions": extensions}, p), AgentSettings.from_store(self.store, w).model_dump())
 
-    def _analyze(self, w, opts, file_ids=None, force=False, mode='parser', **arguments):
+    def _analyze(self, w: str, opts: QueryOptions, file_ids: list[str] | None=None, force: bool=False, mode: str='parser', **arguments: Any) -> dict[str, Any]:
+        """Enqueue a background analysis job for selected or all workspace files.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            file_ids: Optional source file identifiers.
+            force: Whether to force analysis.
+            mode: Analysis mode to run.
+            **arguments: Additional analysis request options.
+
+        Returns:
+            The operation response data for the requested use case."""
         from dataforge.ai_analysis_models import AnalysisRequest
         request = AnalysisRequest(mode=mode, file_ids=file_ids, force_parser=force, **arguments)
         if request.mode != 'parser' or request.resume_run_id:
@@ -722,10 +1335,31 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             "file_ids": file_ids, "force": force}, p, cancelled=c),
             AgentSettings.from_store(self.store, w).model_dump(), cancellable=True)
 
-    def _job(self, w, opts, job_id):
+    def _job(self, w: str, opts: QueryOptions, job_id: str) -> dict[str, Any]:
+        """Return the status and bounded result for a job identifier.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            job_id: Job identifier.
+
+        Returns:
+            The operation response data for the requested use case."""
         return self.job_status(w, job_id, opts.model_dump())
 
-    def job_status(self, w, job_id, options=None):
+    def job_status(self, w: str, job_id: str, options: dict[str, Any] | None=None) -> dict[str, Any]:
+        """Authorize workspace access and return a sanitized, bounded job status.
+
+        Args:
+            w: Workspace identifier.
+            job_id: Job identifier.
+            options: Validated query options.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if not self.policy.permits(w):
             raise AgentError("forbidden", "Workspace is not authorized")
         record = self.jobs.read(job_id, w, private=True)
@@ -744,7 +1378,21 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         values["max_chars"] = min(values.get("max_chars", settings.max_chars), settings.max_chars)
         return status_result(record, QueryOptions.model_validate(values))
 
-    def _export(self, w, opts, asset, direction="upstream", format="json"):
+    def _export(self, w: str, opts: QueryOptions, asset: str, direction: str="upstream", format: str="json") -> dict[str, Any]:
+        """Save a bounded lineage report locally and return its artifact metadata.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            asset: Asset ID or name.
+            direction: Lineage traversal direction.
+            format: Requested export format.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         from dataforge.exports import report_csv, report_html
         if format not in {"json", "csv", "html"}:
             raise AgentError("invalid_argument", "Use json, csv or html export")
@@ -762,7 +1410,20 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                 "format": format, "bytes": target.stat().st_size, "complete": result["complete"],
                 "next_cursor": result["next_cursor"]}
 
-    def _result(self, w, opts, result_id, format="json"):
+    def _result(self, w: str, opts: QueryOptions, result_id: str, format: str="json") -> dict[str, Any]:
+        """Read an existing local export after validating its ID, format, and response size.
+
+        Args:
+            w: Workspace identifier.
+            opts: Bounded query and response options.
+            result_id: Export result identifier.
+            format: Requested export format.
+
+        Returns:
+            The operation response data for the requested use case.
+
+        Raises:
+            AgentError: If the operation is invalid, unauthorized, or unavailable."""
         import re
         if not re.fullmatch("[a-f0-9]{32}", result_id) or format not in {"json", "csv", "html"}:
             raise AgentError("not_found", "Result does not exist")
