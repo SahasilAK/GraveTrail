@@ -1,7 +1,7 @@
 """Explicit AI build controls, offline preview and persisted worker progress."""
 from datetime import timedelta
 from pathlib import Path
-from time import time
+from time import monotonic, time
 
 import streamlit as st
 
@@ -16,6 +16,36 @@ def analysis_jobs(home):
     return Jobs(Path(home))
 
 
+def _preview_with_status(store, workspace, request, status, activity, started):
+    """Show actual local preparation work; the native timer ticks between callbacks."""
+    stages = {}
+    last_update = 0
+
+    def update(stage, completed, total):
+        nonlocal last_update
+        now = monotonic()
+        changed = stage not in stages
+        stages[stage] = f'{completed:,} / {total:,}'
+        if changed or completed == total or now - last_update >= .1:
+            status.update(label=stage + '…', state='running')
+            activity.markdown('\n'.join(f'- {name} — {count}' for name, count in stages.items()))
+            last_update = now
+
+    status.update(label='Preparing AI analysis…', state='running')
+    try:
+        with st.spinner('Preparing AI analysis…', show_time=True):
+            preview = preview_analysis(store, workspace, request, connections=current_connections(), progress=update)
+    except Exception:
+        status.update(label='Preparation failed · Elapsed: ' + str(timedelta(seconds=int(monotonic() - started))),
+                      state='error', expanded=True)
+        raise
+    blocked = not preview['valid']
+    status.update(label=('Needs attention' if blocked else 'Ready') + ' · Elapsed: ' +
+                  str(timedelta(seconds=int(monotonic() - started))),
+                  state='error' if blocked else 'complete', expanded=blocked)
+    return preview
+
+
 def controls(store, workspace, file_ids):
     if not st.checkbox('Use AI for analysis', key='ai_build_' + workspace):
         return None, True
@@ -26,10 +56,17 @@ def controls(store, workspace, file_ids):
     refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
     base = dict(mode='hybrid' if compare else 'ai', file_ids=file_ids,
                 additional_ai_review=review, refresh_ai=refresh)
+    status = st.status('Preparing AI analysis…', expanded=False)
+    status.caption('Local preparation only. Model requests start when you choose Analyze.')
+    activity = status.empty()
+    started = monotonic()
     try:
-        automatic = preview_analysis(store, workspace, AnalysisRequest(**base), connections=current_connections())
+        automatic = _preview_with_status(store, workspace, AnalysisRequest(**base), status, activity, started)
     except ValueError as exc:
-        st.warning(str(exc))
+        status.warning(str(exc))
+        return AnalysisRequest(**base), False
+    except Exception:
+        status.error('Could not prepare AI analysis. Try again or review your source selection and provider settings.')
         return AnalysisRequest(**base), False
     overrides = {}
     with st.expander('AI request budget'):
@@ -60,7 +97,8 @@ def controls(store, workspace, file_ids):
         st.caption('Automatic values include retries, fallback and optional review. Each execution stays within application limits; larger projects continue explicitly. In-flight requests may already be billed.')
     request = AnalysisRequest(**base, **overrides)
     try:
-        preview = preview_analysis(store, workspace, request, connections=current_connections())
+        preview = (_preview_with_status(store, workspace, request, status, activity, started)
+                   if any(value is not None for value in overrides.values()) else automatic)
         st.caption(f"{preview['files']} selected files · {preview['units']} source tasks · "
                    f"at most {preview['max_provider_attempts']} provider attempts including retries and fallback.")
         if preview.get('semantic_pages'):
@@ -84,6 +122,7 @@ def controls(store, workspace, file_ids):
         st.caption('Input estimates use conservative UTF-8 bytes plus framing and capacity headroom; reported usage is shown after execution.')
         if preview['blocked']:
             reasons = sorted({b['reason'] for b in preview['blocked']})
+            status.warning('; '.join(r.replace('_', ' ') for r in reasons))
             st.warning('AI build needs attention: ' + '; '.join(r.replace('_', ' ') for r in reasons))
             st.caption('Complete statements and validated projection groups preserve their required context. Model capacity, source disclosure allowance and execution limits are checked separately.')
             affected = {b.get('unit_id') for b in preview['blocked'] if b.get('unit_id')}
@@ -102,7 +141,10 @@ def controls(store, workspace, file_ids):
                 st.dataframe(preview['disclosure'], hide_index=True, alt='Selected source files and immutable hashes to be disclosed')
         return request, preview['valid']
     except ValueError as exc:
-        st.warning(str(exc))
+        status.warning(str(exc))
+        return request, False
+    except Exception:
+        status.error('Could not prepare AI analysis. Try again or review your source selection and provider settings.')
         return request, False
 
 

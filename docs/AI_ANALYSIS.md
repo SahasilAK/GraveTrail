@@ -40,6 +40,15 @@ Review receives every eligible compact candidate in deterministic batches, targe
 4. Start the explicit AI analysis action. Inspect the completed comparison/report and original evidence; unresolved and rejected candidates do not become accepted dependencies.
 5. Use the job cancellation control when needed. Cancellation, stale source/settings, exhausted budgets and failed required units retain the previously committed graph.
 
+Enabling AI immediately shows an expandable preparation status below the AI options.
+A live elapsed-time spinner stays visible while the local calculation runs. Expand the
+panel to see actual file/task counts for source reads, statement splitting, shared
+context, task sizing and prompt/credential checks. The panel finishes as **Ready** or
+**Needs attention**, with its duration frozen; blockers and preparation failures expand
+the details. This stage is offline: model requests begin only after you choose Analyze.
+Automatic budgets reuse the same preview rather than calculating it twice; custom
+budget changes are checked again before the analysis action becomes available.
+
 The five existing manual assistance tasks remain available in Diagnostics, including their separate explicit inferred merge workflow. Project extraction/review tasks require host-issued units and candidates and do not appear as manual range tasks.
 
 ## What happens to the source
