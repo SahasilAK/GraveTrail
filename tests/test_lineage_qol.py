@@ -1,5 +1,7 @@
 """Navigation and direction regressions against real imported lineage."""
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -10,7 +12,13 @@ from ui.common import get_store
 
 
 @pytest.fixture
-def lineage(tmp_path, monkeypatch):
+def lineage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """Handle lineage for the test scenario.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     store = get_store(str(tmp_path))
     w = store.create_workspace("QOL")
@@ -28,16 +36,35 @@ def lineage(tmp_path, monkeypatch):
     st.cache_resource.clear()
 
 
-def choose(app, asset):
+def choose(app: Any, asset: Any) -> None:
+    """Handle choose for the test scenario.
+
+    Args:
+        app: App value used by the test case.
+        asset: Asset used by the test.
+    """
     next(s for s in app.selectbox if s.label == "Choose an exact asset").set_value(asset).run()
     assert not app.exception
 
 
-def sources(app):
+def sources(app: Any) -> Any:
+    """Handle sources for the test scenario.
+
+    Args:
+        app: App value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     return next(s for s in app.selectbox if s.label == "Source file").options
 
 
-def test_graph_sources_follow_direction_and_combined_deduplicates(lineage):
+def test_graph_sources_follow_direction_and_combined_deduplicates(lineage: Any) -> None:
+    """Verify that graph sources follow direction and combined deduplicates.
+
+    Args:
+        lineage: Lineage value used by the test case.
+    """
     app, store, w, assets = lineage
     store.set_setting(w, "graph_limit", 150)
     choose(app, assets["mart.middle"])
@@ -49,7 +76,12 @@ def test_graph_sources_follow_direction_and_combined_deduplicates(lineage):
     assert len(sources(app)) == len(set(sources(app)))
 
 
-def test_all_includes_disconnected_graph_beyond_focus_limit(lineage):
+def test_all_includes_disconnected_graph_beyond_focus_limit(lineage: Any) -> None:
+    """Verify that all includes disconnected graph beyond focus limit.
+
+    Args:
+        lineage: Lineage value used by the test case.
+    """
     app, _, _, _ = lineage
     chooser = next(s for s in app.selectbox if s.label == "Choose an exact asset")
     assert "All" in chooser.options
@@ -60,7 +92,12 @@ def test_all_includes_disconnected_graph_beyond_focus_limit(lineage):
     assert next(s for s in app.slider if s.label == "Traversal depth").disabled
 
 
-def test_back_forward_restore_search_controls_and_new_branch(lineage):
+def test_back_forward_restore_search_controls_and_new_branch(lineage: Any) -> None:
+    """Verify that back forward restore search controls and new branch.
+
+    Args:
+        lineage: Lineage value used by the test case.
+    """
     app, _, w, assets = lineage
     app.text_input(key="asset_search_lineage").set_value("middle").run()
     choose(app, assets["mart.middle"])
@@ -78,7 +115,13 @@ def test_back_forward_restore_search_controls_and_new_branch(lineage):
     assert app.session_state["lineage_history_" + w]["entries"]
 
 
-def test_graph_focus_updates_exact_choice_outside_search_and_shared_context(lineage, monkeypatch):
+def test_graph_focus_updates_exact_choice_outside_search_and_shared_context(lineage: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that graph focus updates exact choice outside search and shared context.
+
+    Args:
+        lineage: Lineage value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import streamlit as st
 
     from ui import common
@@ -89,7 +132,16 @@ def test_graph_focus_updates_exact_choice_outside_search_and_shared_context(line
     choose(app, assets["mart.middle"])
     original = common.graph_view
 
-    def graph_with_focus(*args, **kwargs):
+    def graph_with_focus(*args: Any, **kwargs: Any) -> Any:
+        """Handle graph with focus for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         st.button("Focus raw.a", on_click=focus_asset, args=(st.session_state, w, assets["raw.a"], "raw.a"))
         return original(*args, **kwargs)
 
@@ -103,7 +155,13 @@ def test_graph_focus_updates_exact_choice_outside_search_and_shared_context(line
     assert next(s for s in app.selectbox if s.label == "Choose an exact asset").value == assets["raw.a"]
 
 
-def test_shared_graph_focus_survives_first_500_limit(lineage, monkeypatch):
+def test_shared_graph_focus_survives_first_500_limit(lineage: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that shared graph focus survives first 500 limit.
+
+    Args:
+        lineage: Lineage value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge.graph import LineageGraph
     from ui import common
 
@@ -119,7 +177,8 @@ def test_shared_graph_focus_survives_first_500_limit(lineage, monkeypatch):
     assert app.session_state["exploration_asset_" + w] == "a500"
 
 
-def test_history_restores_tree_tab_and_controls():
+def test_history_restores_tree_tab_and_controls() -> None:
+    """Verify that history restores tree tab and controls."""
     from ui.lineage_navigation import move_history, remember_view
 
     state = {}

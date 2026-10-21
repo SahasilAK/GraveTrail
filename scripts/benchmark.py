@@ -16,7 +16,8 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def main():
+def main() -> None:
+    """Run the labeled synthetic SQL-chain benchmark and print its measurements."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files", type=int, default=500)
     parser.add_argument("--output", type=Path)

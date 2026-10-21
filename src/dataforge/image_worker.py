@@ -2,7 +2,8 @@
 import sys
 
 
-def main():
+def main() -> None:
+    """Convert the bounded SVG payload on standard input to PNG bytes."""
     import resvg_py
 
     from dataforge.graph_images import MAX_SVG_BYTES

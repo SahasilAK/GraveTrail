@@ -8,7 +8,12 @@ from dataforge.store import Store
 FIXTURES = Path(__file__).parent / "fixtures" / "scenario"
 
 
-def test_full_persisted_workflow_and_incremental(tmp_path):
+def test_full_persisted_workflow_and_incremental(tmp_path: Path) -> None:
+    """Verify that full persisted workflow and incremental.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace("Delivery")
     report = Importer(store, w, [FIXTURES]).directory(FIXTURES, {".sql", ".sas", ".csv"})
@@ -40,7 +45,12 @@ def test_full_persisted_workflow_and_incremental(tmp_path):
     store.close()
 
 
-def test_changed_source_removes_stale_lineage_and_isolation(tmp_path):
+def test_changed_source_removes_stale_lineage_and_isolation(tmp_path: Path) -> None:
+    """Verify that changed source removes stale lineage and isolation.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     s = Store(tmp_path)
     w, other = s.create_workspace("A"), s.create_workspace("B")
     imp = Importer(s, w)
@@ -54,7 +64,12 @@ def test_changed_source_removes_stale_lineage_and_isolation(tmp_path):
     s.close()
 
 
-def test_csv_name_alone_never_creates_dependency(tmp_path):
+def test_csv_name_alone_never_creates_dependency(tmp_path: Path) -> None:
+    """Verify that csv name alone never creates dependency.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     s = Store(tmp_path)
     w = s.create_workspace("A")
     Importer(s, w).files([("customers.csv", b"id\n1"),

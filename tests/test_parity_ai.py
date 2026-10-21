@@ -1,5 +1,7 @@
 import asyncio
 import json
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -13,7 +15,13 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path, monkeypatch):
+def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that ai offline preview grounded request merge and revoke.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('AI')
     code = 'create table mart.x as select id from raw.a;'
@@ -32,7 +40,15 @@ def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path, monkeypa
         service.provider_transport = httpx.MockTransport(lambda req: httpx.Response(200, json={'message': {'content': json.dumps(payload)}}))
         server = create_server(service)
         from dataforge.ai_service import preview_ai_evidence
-        def reassigned_after_preview(*args):
+        def reassigned_after_preview(*args: Any) -> Any:
+            """Handle reassigned after preview for the test scenario.
+
+            Args:
+                args: Positional arguments forwarded to the operation.
+
+            Returns:
+                Value produced for the test scenario.
+            """
             snapshot = preview_ai_evidence(*args)
             store.set_setting(w, 'default_job', 'reassigned')
             return snapshot
@@ -49,9 +65,19 @@ def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path, monkeypa
         rid = result.structuredContent['record_id']
         assert result.structuredContent['outcome'] == 'validated'
         import threading
-        def refresh_with_concurrent_read(store, workspace):
+        def refresh_with_concurrent_read(store: Any, workspace: Any) -> Any:
+            """Handle refresh with concurrent read for the test scenario.
+
+            Args:
+                store: Store instance exercised by the test.
+                workspace: Workspace used by the test.
+
+            Returns:
+                Value produced for the test scenario.
+            """
             read = threading.Event()
-            def read_store():
+            def read_store() -> None:
+                """Handle read store for the test scenario."""
                 store.files(workspace)
                 read.set()
             thread = threading.Thread(target=read_store, daemon=True)
@@ -75,7 +101,13 @@ def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path, monkeypa
         store.close()
 
 
-def test_fallback_uses_its_own_approved_credential(tmp_path, monkeypatch):
+def test_fallback_uses_its_own_approved_credential(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that fallback uses its own approved credential.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('fallback audience')
     Importer(store, w).files([('a.sql', b'create table mart.x as select id from raw.a;')], {'.sql'})
@@ -91,7 +123,15 @@ def test_fallback_uses_its_own_approved_credential(tmp_path, monkeypatch):
     service = AgentService(store, AccessPolicy(allow_write=True, allow_llm=True,
         allowed_llm_origins=('http://localhost:1234',), allowed_credential_refs=('DATAFORGE_FIRST_KEY', 'DATAFORGE_SECOND_KEY')))
     headers = []
-    def respond(request):
+    def respond(request: pytest.FixtureRequest) -> Any:
+        """Handle respond for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         headers.append(request.headers['Authorization'])
         if len(headers) == 1:
             return httpx.Response(503)
@@ -106,7 +146,13 @@ def test_fallback_uses_its_own_approved_credential(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('task', ['sql_lineage', 'sas_lineage', 'lineage_validation', 'column_usage', 'code_explanation'])
-def test_all_five_tasks_through_actual_mcp_handler(tmp_path, task):
+def test_all_five_tasks_through_actual_mcp_handler(tmp_path: Path, task: str) -> None:
+    """Verify that all five tasks through actual mcp handler.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        task: Task value used by the test case.
+    """
     from typer.testing import CliRunner
 
     from dataforge.cli import app

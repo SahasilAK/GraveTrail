@@ -1,13 +1,19 @@
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 from typer.testing import CliRunner
 
 from dataforge.cli import app
 
 
-def test_cli_standalone_help_workspace_and_errors(tmp_path):
+def test_cli_standalone_help_workspace_and_errors(tmp_path: Path) -> None:
+    """Verify that cli standalone help workspace and errors.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     result = subprocess.run([sys.executable, "-m", "dataforge.cli", "--help"],
                             capture_output=True, text=True, timeout=20)
     assert result.returncode == 0 and "workspace" in result.stdout
@@ -21,7 +27,12 @@ def test_cli_standalone_help_workspace_and_errors(tmp_path):
     assert json.loads(listed.stdout)["items"][0]["name"] == "demo"
 
 
-def test_cli_import_build_background_status_and_export(tmp_path):
+def test_cli_import_build_background_status_and_export(tmp_path: Path) -> None:
+    """Verify that cli import build background status and export.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     inputs = tmp_path / "inputs"
     inputs.mkdir()
     (inputs / "flow.sql").write_text("create table pub.kpi as select id from raw.orders;", encoding="utf-8")
@@ -44,7 +55,12 @@ def test_cli_import_build_background_status_and_export(tmp_path):
     assert json.loads(exported.stdout)["result_id"]
 
 
-def test_cli_jobs_obey_revocation_and_budget(tmp_path):
+def test_cli_jobs_obey_revocation_and_budget(tmp_path: Path) -> None:
+    """Verify that cli jobs obey revocation and budget.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.agent.jobs import Jobs
     from dataforge.store import Store
 

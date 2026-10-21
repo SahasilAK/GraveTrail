@@ -5,12 +5,27 @@ import csv
 import hashlib
 import io
 import json
+from collections.abc import Iterator
 
 from dataforge.models import AssetRef, Diagnostic, ParseResult, file_asset
 
 
-def bounded_records(content, dialect, max_columns=4096, max_record_chars=1_000_000):
-    """Reject excessive width before csv.reader allocates a field list."""
+def bounded_records(content: str, dialect: csv.Dialect, max_columns: int = 4096,
+                    max_record_chars: int = 1_000_000) -> Iterator[str]:
+    """Yield CSV lines while enforcing width and logical-record size limits.
+
+    Args:
+        content: Complete decoded CSV text.
+        dialect: Detected or default CSV dialect.
+        max_columns: Maximum number of fields permitted in one record.
+        max_record_chars: Maximum number of characters in a logical record.
+
+    Yields:
+        Original lines from the CSV text.
+
+    Raises:
+        ValueError: If a logical record exceeds either configured limit.
+    """
     quoted, field_start, fields, chars = False, True, 1, 0
     for line in io.StringIO(content):
         chars += len(line)
@@ -40,6 +55,16 @@ def bounded_records(content, dialect, max_columns=4096, max_record_chars=1_000_0
 
 
 def parse_csv(content: str, path: str, sample_size: int = 25) -> ParseResult:
+    """Extract CSV header, row counts, a bounded preview, and sampled column types.
+
+    Args:
+        content: Decoded CSV text.
+        path: Source-relative path used to identify the file asset.
+        sample_size: Maximum number of data rows used for preview and type sampling.
+
+    Returns:
+        Parse result with file metadata and diagnostics for malformed rows.
+    """
     result = ParseResult(assets=[AssetRef(file_asset(path), kind="file")])
     try:
         dialect = csv.Sniffer().sniff(content[:8192], delimiters=",;\t|")
@@ -65,7 +90,15 @@ def parse_csv(content: str, path: str, sample_size: int = 25) -> ParseResult:
     if inconsistent:
         result.diagnostics.append(Diagnostic(f"{inconsistent} CSV rows differ from header width"))
 
-    def infer(index):
+    def infer(index: int) -> str:
+        """Infer a display type from nonempty values in one sampled column.
+
+        Args:
+            index: Zero-based column position in the header.
+
+        Returns:
+            Sampled integer, number, or text label, or ``unknown`` when empty.
+        """
         values = [r[index] for r in preview if len(r) > index and r[index].strip()]
         if not values:
             return "unknown"

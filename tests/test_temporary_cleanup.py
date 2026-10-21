@@ -1,13 +1,26 @@
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from dataforge.store import Store
 
 
-def orphan(store, workspace, name="a" * 32 + ".tmp", body=b"unfinished recovery copy", age=90000):
+def orphan(store: Any, workspace: Any, name: str="a" * 32 + ".tmp", body: str=b"unfinished recovery copy", age: Any=90000) -> Any:
+    """Handle orphan for the test scenario.
+
+    Args:
+        store: Store instance exercised by the test.
+        workspace: Workspace used by the test.
+        name: Name value used by the test case.
+        body: Body value used by the test case.
+        age: Age value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     directory = store.home / "history-recovery" / workspace
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
@@ -16,7 +29,12 @@ def orphan(store, workspace, name="a" * 32 + ".tmp", body=b"unfinished recovery 
     return path
 
 
-def test_cleanup_is_bounded_workspace_owned_and_recoverable_after_restart(tmp_path):
+def test_cleanup_is_bounded_workspace_owned_and_recoverable_after_restart(tmp_path: Path) -> None:
+    """Verify that cleanup is bounded workspace owned and recoverable after restart.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.temporary_cleanup import cleanup_temporary, restore_temporary, temporary_plan
 
     store = Store(tmp_path)
@@ -47,7 +65,16 @@ def test_cleanup_is_bounded_workspace_owned_and_recoverable_after_restart(tmp_pa
         store.close()
 
 
-def test_changed_preview_and_failed_journal_do_not_remove_files(tmp_path, monkeypatch):
+def test_changed_preview_and_failed_journal_do_not_remove_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that changed preview and failed journal do not remove files.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        RuntimeError: Raised by the test helper.
+    """
     from dataforge.temporary_cleanup import cleanup_temporary, temporary_plan
 
     store = Store(tmp_path)
@@ -61,7 +88,19 @@ def test_changed_preview_and_failed_journal_do_not_remove_files(tmp_path, monkey
     plan = temporary_plan(store, w)
     execute = store.execute
 
-    def fail(sql, params=None):
+    def fail(sql: str, params: Any=None) -> Any:
+        """Raise the injected failure used by the test.
+
+        Args:
+            sql: SQL source text for the test case.
+            params: Params value used by the test case.
+
+        Returns:
+            Value produced for the test scenario.
+
+        Raises:
+            RuntimeError: Raised by the test helper.
+        """
         if sql.startswith("INSERT INTO temporary_recovery"):
             raise RuntimeError("Injected journal failure")
         return execute(sql, params)
@@ -74,7 +113,12 @@ def test_changed_preview_and_failed_journal_do_not_remove_files(tmp_path, monkey
     store.close()
 
 
-def test_cleanup_refuses_active_analysis_and_untrusted_names(tmp_path):
+def test_cleanup_refuses_active_analysis_and_untrusted_names(tmp_path: Path) -> None:
+    """Verify that cleanup refuses active analysis and untrusted names.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.temporary_cleanup import cleanup_temporary, temporary_plan
 
     store = Store(tmp_path)
@@ -91,7 +135,12 @@ def test_cleanup_refuses_active_analysis_and_untrusted_names(tmp_path):
         store.close()
 
 
-def test_preview_bounds(tmp_path):
+def test_preview_bounds(tmp_path: Path) -> None:
+    """Verify that preview bounds.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.temporary_cleanup import temporary_plan
 
     store = Store(tmp_path)
@@ -103,7 +152,12 @@ def test_preview_bounds(tmp_path):
     store.close()
 
 
-def test_symlink_swap_keeps_external_file(tmp_path):
+def test_symlink_swap_keeps_external_file(tmp_path: Path) -> None:
+    """Verify that symlink swap keeps external file.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.temporary_cleanup import cleanup_temporary, temporary_plan
 
     store = Store(tmp_path)
@@ -125,7 +179,12 @@ def test_symlink_swap_keeps_external_file(tmp_path):
     store.close()
 
 
-def test_v3_upgrade_preserves_existing_inventory(tmp_path):
+def test_v3_upgrade_preserves_existing_inventory(tmp_path: Path) -> None:
+    """Verify that v3 upgrade preserves existing inventory.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.ingestion import Importer
 
     store = Store(tmp_path)
@@ -143,7 +202,16 @@ def test_v3_upgrade_preserves_existing_inventory(tmp_path):
         reopened.close()
 
 
-def test_restore_publication_failure_leaves_recovery_and_no_partial_target(tmp_path, monkeypatch):
+def test_restore_publication_failure_leaves_recovery_and_no_partial_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that restore publication failure leaves recovery and no partial target.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        OSError: Raised by the test helper.
+    """
     from dataforge.temporary_cleanup import cleanup_temporary, restore_temporary, temporary_plan
 
     store = Store(tmp_path)
@@ -151,7 +219,16 @@ def test_restore_publication_failure_leaves_recovery_and_no_partial_target(tmp_p
     path = orphan(store, w)
     rid = cleanup_temporary(store, w, temporary_plan(store, w)["files"])["recovery_ids"][0]
 
-    def fail(*args, **kwargs):
+    def fail(*args: Any, **kwargs: Any) -> None:
+        """Raise the injected failure used by the test.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            OSError: Raised by the test helper.
+        """
         raise OSError("Injected publication failure")
 
     monkeypatch.setattr("dataforge.temporary_cleanup.os.link", fail)
@@ -162,14 +239,25 @@ def test_restore_publication_failure_leaves_recovery_and_no_partial_target(tmp_p
     store.close()
 
 
-def test_cleanup_ui_requires_selection_then_can_restore(tmp_path):
+def test_cleanup_ui_requires_selection_then_can_restore(tmp_path: Path) -> None:
+    """Verify that cleanup ui requires selection then can restore.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from streamlit.testing.v1 import AppTest
 
     store = Store(tmp_path)
     w = store.create_workspace("Cleanup UI")
     path = orphan(store, w)
 
-    def page(home, workspace):
+    def page(home: "Any", workspace: "Any") -> None:
+        """Handle page for the test scenario.
+
+        Args:
+            home: Home value used by the test case.
+            workspace: Workspace used by the test.
+        """
         from dataforge.store import Store
         from ui.temporary_cleanup import _controls
 

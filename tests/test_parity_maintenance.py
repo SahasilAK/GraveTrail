@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -9,7 +10,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_maintenance_reads_never_archive_or_cleanup(tmp_path):
+def test_maintenance_reads_never_archive_or_cleanup(tmp_path: Path) -> None:
+    """Verify that maintenance reads never archive or cleanup.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('maintenance')
     for _ in range(3):
@@ -31,7 +37,12 @@ def test_maintenance_reads_never_archive_or_cleanup(tmp_path):
         store.close()
 
 
-def test_local_history_archive_requires_fresh_preview_confirmation_and_backup(tmp_path):
+def test_local_history_archive_requires_fresh_preview_confirmation_and_backup(tmp_path: Path) -> None:
+    """Verify that local history archive requires fresh preview confirmation and backup.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('local maintenance')
     for _ in range(3):
@@ -50,7 +61,12 @@ def test_local_history_archive_requires_fresh_preview_confirmation_and_backup(tm
         store.close()
 
 
-def test_shared_general_cleanup_refuses_backup_opt_out(tmp_path):
+def test_shared_general_cleanup_refuses_backup_opt_out(tmp_path: Path) -> None:
+    """Verify that shared general cleanup refuses backup opt out.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.cleanup import apply_cleanup, cleanup_plan
     store = Store(tmp_path)
     w = store.create_workspace('backed up')

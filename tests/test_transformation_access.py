@@ -3,8 +3,10 @@ import asyncio
 import json
 import os
 import sys
+from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from mcp import ClientSession, StdioServerParameters
@@ -26,7 +28,12 @@ SQL = (b"create table stage.totals as select o.quantity * o.price as gross, 42 a
 
 
 @pytest.fixture
-def engine(tmp_path):
+def engine(tmp_path: Path) -> Iterator[Any]:
+    """Provide the engine fixture used by the tests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path / "home")
     workspace = store.create_workspace("Transformation access")
     Importer(store, workspace).files([("totals.sql", SQL)], {".sql"})
@@ -37,7 +44,12 @@ def engine(tmp_path):
     store.close()
 
 
-def test_catalog_trace_paging_and_source_gate(engine):
+def test_catalog_trace_paging_and_source_gate(engine: Any) -> None:
+    """Verify that catalog trace paging and source gate.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     catalog = service.call("column_catalog", w, asset="mart.totals")
     target = next(c for c in catalog["items"] if c["column_name"] == "total")
@@ -66,7 +78,12 @@ def test_catalog_trace_paging_and_source_gate(engine):
         service.call("column_lineage", w, asset="mart.totals", column="total", options={"detail_level": "detailed"})
 
 
-def test_scope_constants_limits_and_mcp_parity(engine):
+def test_scope_constants_limits_and_mcp_parity(engine: Any) -> None:
+    """Verify that scope constants limits and mcp parity.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     constant = service.call("column_lineage", w, asset="stage.totals", column="fixed")
     assert constant["state"] == "constant"
@@ -87,7 +104,8 @@ def test_scope_constants_limits_and_mcp_parity(engine):
         restricted.close()
     server = create_server(service)
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         tools = {t.name: t for t in await server.list_tools()}
         for name in ("get_column_lineage", "get_transformation_columns"):
             assert tools[name].annotations.readOnlyHint
@@ -100,7 +118,12 @@ def test_scope_constants_limits_and_mcp_parity(engine):
     asyncio.run(check())
 
 
-def test_column_cli_matches_service(tmp_path):
+def test_column_cli_matches_service(tmp_path: Path) -> None:
+    """Verify that column cli matches service.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     home = tmp_path / "cli"
     store = Store(home)
     w = store.create_workspace("CLI transformations")
@@ -118,7 +141,12 @@ def test_column_cli_matches_service(tmp_path):
     assert "total" in {c["column_name"] for c in json.loads(catalog.output)["items"]}
 
 
-def test_column_tools_through_real_stdio_transport(tmp_path):
+def test_column_tools_through_real_stdio_transport(tmp_path: Path) -> None:
+    """Verify that column tools through real stdio transport.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('Wire transformations')
     Importer(store, w).files([('totals.sql', SQL)], {'.sql'})
@@ -128,7 +156,8 @@ def test_column_tools_through_real_stdio_transport(tmp_path):
     service.close()
     store.close()
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         params = StdioServerParameters(command=sys.executable,
             args=['-m', 'dataforge.cli', '--home', str(tmp_path), 'mcp'], env={**os.environ})
         async with stdio_client(params) as (read, write):
@@ -144,7 +173,13 @@ def test_column_tools_through_real_stdio_transport(tmp_path):
     asyncio.run(check())
 
 
-def test_transformation_ui_native_flow_and_workspace_context(tmp_path, monkeypatch):
+def test_transformation_ui_native_flow_and_workspace_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that transformation ui native flow and workspace context.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from ui.common import get_store
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "ui"))
@@ -168,7 +203,16 @@ def test_transformation_ui_native_flow_and_workspace_context(tmp_path, monkeypat
     view.session_state["transformation_step_" + w + "_" + asset] = 999
     from dataforge.transformations import column_catalog
 
-    def changed_column_ids(*args, **kwargs):
+    def changed_column_ids(*args: Any, **kwargs: Any) -> Any:
+        """Handle changed column ids for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         return [{**row, "column_id": "revision-" + row["column_id"]} for row in column_catalog(*args, **kwargs)]
 
     monkeypatch.setattr("dataforge.transformations.column_catalog", changed_column_ids)

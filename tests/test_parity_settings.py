@@ -1,5 +1,7 @@
 import asyncio
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -11,7 +13,12 @@ from dataforge.cli import app
 from dataforge.store import Store
 
 
-def test_typed_sections_atomic_conflicts_and_mcp(tmp_path):
+def test_typed_sections_atomic_conflicts_and_mcp(tmp_path: Path) -> None:
+    """Verify that typed sections atomic conflicts and mcp.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('settings')
     service = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True))
@@ -38,7 +45,14 @@ def test_typed_sections_atomic_conflicts_and_mcp(tmp_path):
 
 
 @pytest.mark.parametrize('section,patch', [('privacy', {'external_llm': True}), ('privacy', {'redact_secrets': False}), ('privacy', {'max_context_chars': 10000}), ('agent_access', {'max_chars': 20000}), ('temporary_cleanup', {'enabled': True})])
-def test_settings_refuse_escalation(tmp_path, section, patch):
+def test_settings_refuse_escalation(tmp_path: Path, section: str, patch: dict[str, Any]) -> None:
+    """Verify that settings refuse escalation.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        section: Section value used by the test case.
+        patch: Patch value used by the test case.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('no escalation')
     service = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True))
@@ -53,7 +67,12 @@ def test_settings_refuse_escalation(tmp_path, section, patch):
         store.close()
 
 
-def test_only_local_admin_can_reenable_disabled_access(tmp_path):
+def test_only_local_admin_can_reenable_disabled_access(tmp_path: Path) -> None:
+    """Verify that only local admin can reenable disabled access.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.agent.contracts import AgentSettings
     store = Store(tmp_path)
     w = store.create_workspace('disabled')
@@ -74,7 +93,12 @@ def test_only_local_admin_can_reenable_disabled_access(tmp_path):
         store.close()
 
 
-def test_settings_schema_pins_ui_fields_ranges_and_read_only_process_cap(tmp_path):
+def test_settings_schema_pins_ui_fields_ranges_and_read_only_process_cap(tmp_path: Path) -> None:
+    """Verify that settings schema pins ui fields ranges and read only process cap.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.settings_service import SECTIONS
     expected_ranges = {'max_file_mb': (1, 100), 'max_files': (1, 100000), 'parse_workers': (1, 8),
         'llm_concurrency': (1, 4), 'llm_chunk_chars': (500, 100000), 'csv_sample_rows': (0, 100),

@@ -3,7 +3,7 @@ from dataclasses import asdict
 
 import streamlit as st
 
-from dataforge.ingestion import Importer, Limits
+from dataforge.ingestion import Importer, ImportReport, Limits
 from ui.common import allowed_roots, context, downloads, source_viewer, title
 from ui.presentation import empty_state, section
 
@@ -33,7 +33,12 @@ if mode == "Import":
                                 max_files=int(store.setting(w, "max_files", 10000)))
                 importer = Importer(store, w, allowed_roots(), limits)
                 status = st.empty()
-                def progress(r):
+                def progress(r: ImportReport) -> None:
+                    """Show current file discovery and import totals.
+
+                    Args:
+                        r: Latest import report snapshot.
+                    """
                     status.caption(f"Discovered {r.discovered}; accepted {r.accepted}; skipped {r.skipped}")
                 if mode == "ZIP archive" and archive:
                     report = importer.zip(archive.getvalue(), extensions, progress)

@@ -3,9 +3,16 @@ import duckdb
 import streamlit as st
 
 from dataforge.maintenance import archive_history, history_plan, list_archives, restore_history
+from dataforge.store import Store
 
 
-def render(store, workspace):
+def render(store: Store, workspace: str) -> None:
+    """Render history archive and restore controls for a workspace.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     panel = st.expander("Archive and restore old history", on_change="rerun", key="history_maintenance")
     if not panel.open:
         return

@@ -1,7 +1,8 @@
 from dataforge.graph import LineageGraph
 
 
-def test_cycle_safe_bounded_search_and_contraction():
+def test_cycle_safe_bounded_search_and_contraction() -> None:
+    """Verify that cycle safe bounded search and contraction."""
     nodes = [{"asset_id": n, "name": n, "temporary": n == "t", "kind": "table"} for n in ["a", "t", "b", "c"]]
     edges = [{"source_id": a, "target_id": b, "edge_id": a + b, "code": "evidence"}
              for a, b in [("a", "t"), ("t", "b"), ("b", "c"), ("c", "a")]]
@@ -14,7 +15,8 @@ def test_cycle_safe_bounded_search_and_contraction():
     assert {e["edge_id"] for e in simple.graph["a"]["b"]["evidence"]} == {"at", "tb"}
 
 
-def test_dependency_paths_keep_step_evidence_and_temporary_transforms():
+def test_dependency_paths_keep_step_evidence_and_temporary_transforms() -> None:
+    """Verify that dependency paths keep step evidence and temporary transforms."""
     nodes = [{"asset_id": n, "name": n, "temporary": n == "temp", "kind": "table"}
              for n in ["raw", "temp", "mart", "report"]]
     edges = [{"source_id": s, "target_id": t, "edge_id": s + t, "statement_id": s,
@@ -34,7 +36,8 @@ def test_dependency_paths_keep_step_evidence_and_temporary_transforms():
     assert downstream["paths"][0]["boundary"] == "terminal"
 
 
-def test_path_limits_and_cycles_are_explicit_boundaries():
+def test_path_limits_and_cycles_are_explicit_boundaries() -> None:
+    """Verify that path limits and cycles are explicit boundaries."""
     nodes = [{"asset_id": n, "name": n} for n in ["a", "b", "c", "d"]]
     edges = [{"source_id": s, "target_id": t, "edge_id": s + t}
              for s, t in [("a", "b"), ("b", "c"), ("c", "b"), ("d", "c")]]
@@ -50,7 +53,8 @@ def test_path_limits_and_cycles_are_explicit_boundaries():
     assert graph.path_report("missing")["paths"] == []
 
 
-def test_missing_edge_endpoints_remain_diagnostics_without_anonymous_nodes():
+def test_missing_edge_endpoints_remain_diagnostics_without_anonymous_nodes() -> None:
+    """Verify that missing edge endpoints remain diagnostics without anonymous nodes."""
     assets = [{"asset_id": n, "name": n, "kind": "table", "temporary": False}
               for n in ["raw", "mart"]]
     edges = [{"source_id": s, "target_id": t, "edge_id": s + t,

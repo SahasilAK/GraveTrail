@@ -1,4 +1,7 @@
 import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -10,7 +13,12 @@ from dataforge.store import Store
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path: Path) -> Iterator[Any]:
+    """Handle project for the test scenario.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     workspace = store.create_workspace("Task contracts")
     code = "create table mart.x as select a.id from raw.a a;"
@@ -20,19 +28,43 @@ def project(tmp_path):
     store.close()
 
 
-def request(project, task, body):
+def request(project: Any, task: Any, body: str) -> Any:
+    """Handle request for the test scenario.
+
+    Args:
+        project: Project value used by the test case.
+        task: Task value used by the test case.
+        body: Body value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     store, workspace, fid, _ = project
     profile = Profile(provider="Ollama", base_url="http://localhost:11434", model="test", context_chars=32000)
     transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": json.dumps(body)}}))
     return assist(store, workspace, profile, fid, 1, 1, task=task, transport=transport)
 
 
-def column(code, **changes):
+def column(code: Any, **changes: Any) -> dict[Any, Any]:
+    """Handle column for the test scenario.
+
+    Args:
+        code: Code value used by the test case.
+        changes: Changes value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     return {"source": "raw.a", "column": "id", "context": "SELECT", "start_line": 1,
             "end_line": 1, "quote": code, "explanation": "Direct projection", "confidence": .9, **changes}
 
 
-def test_column_contract_persists_without_creating_lineage(project):
+def test_column_contract_persists_without_creating_lineage(project: Any) -> None:
+    """Verify that column contract persists without creating lineage.
+
+    Args:
+        project: Project value used by the test case.
+    """
     store, workspace, _, code = project
     before = store.edges(workspace)
     result = request(project, "column_usage", {"columns": [column(code)], "unresolved_symbols": []})
@@ -48,11 +80,22 @@ def test_column_contract_persists_without_creating_lineage(project):
 
 @pytest.mark.parametrize("changes", [{"column": "phantom"}, {"source": "mart.x"},
     {"context": "WHERE"}, {"quote": "select made_up"}, {"end_line": 10}])
-def test_column_contract_quarantines_unsupported_attribution(project, changes):
+def test_column_contract_quarantines_unsupported_attribution(project: Any, changes: dict[str, Any]) -> None:
+    """Verify that column contract quarantines unsupported attribution.
+
+    Args:
+        project: Project value used by the test case.
+        changes: Changes value used by the test case.
+    """
     assert request(project, "column_usage", {"columns": [column(project[3], **changes)]})["outcome"] == "quarantined"
 
 
-def test_explanation_requires_exact_citations_and_known_assets(project):
+def test_explanation_requires_exact_citations_and_known_assets(project: Any) -> None:
+    """Verify that explanation requires exact citations and known assets.
+
+    Args:
+        project: Project value used by the test case.
+    """
     _, _, _, code = project
     item = {"text": "The statement projects id from raw.a.", "assets": ["raw.a", "mart.x"],
             "start_line": 1, "end_line": 1, "quote": code}
@@ -68,7 +111,13 @@ def test_explanation_requires_exact_citations_and_known_assets(project):
 
 
 @pytest.mark.parametrize("task", ["column_usage", "code_explanation"])
-def test_advisory_tasks_cannot_return_or_merge_lineage_even_legacy(project, task):
+def test_advisory_tasks_cannot_return_or_merge_lineage_even_legacy(project: Any, task: str) -> None:
+    """Verify that advisory tasks cannot return or merge lineage even legacy.
+
+    Args:
+        project: Project value used by the test case.
+        task: Task value used by the test case.
+    """
     store, workspace, _, code = project
     body = {"claims": [{"source": "raw.a", "target": "mart.x", "operation": "CREATE", "quote": code,
                        "start_line": 1, "end_line": 1, "confidence": .9, "explanation": "Legacy"}]}
@@ -84,7 +133,12 @@ def test_advisory_tasks_cannot_return_or_merge_lineage_even_legacy(project, task
     assert not [edge for edge in store.edges(workspace) if edge["method"] == "llm"]
 
 
-def test_cannot_attribute_derived_column_to_base_table(project):
+def test_cannot_attribute_derived_column_to_base_table(project: Any) -> None:
+    """Verify that cannot attribute derived column to base table.
+
+    Args:
+        project: Project value used by the test case.
+    """
     store, workspace, fid, _ = project
     code = "with c as (select id from raw.a) select c.id from c;"
     Importer(store, workspace).files([("q.sql", code.encode())], {".sql"})
@@ -94,7 +148,14 @@ def test_cannot_attribute_derived_column_to_base_table(project):
 
 
 @pytest.mark.parametrize("task,field", [("column_usage", "columns"), ("code_explanation", "explanations")])
-def test_advisory_ui_reopens_stored_results_with_citations_and_no_merge(project, task, field):
+def test_advisory_ui_reopens_stored_results_with_citations_and_no_merge(project: Any, task: str, field: str) -> None:
+    """Verify that advisory ui reopens stored results with citations and no merge.
+
+    Args:
+        project: Project value used by the test case.
+        task: Task value used by the test case.
+        field: Field value used by the test case.
+    """
     from streamlit.testing.v1 import AppTest
 
     store, workspace, _, code = project
@@ -103,7 +164,14 @@ def test_advisory_ui_reopens_stored_results_with_citations_and_no_merge(project,
     result = request(project, task, {field: [item]})
     assert result["outcome"] == "validated"
 
-    def page(home, workspace, record):
+    def page(home: "Any", workspace: "Any", record: "Any") -> None:
+        """Handle page for the test scenario.
+
+        Args:
+            home: Home value used by the test case.
+            workspace: Workspace used by the test.
+            record: Record value used by the test case.
+        """
         import streamlit as st
 
         from dataforge.store import Store
@@ -126,7 +194,8 @@ def test_advisory_ui_reopens_stored_results_with_citations_and_no_merge(project,
     assert any("Source changed" in warning.value for warning in app.warning)
 
 
-def test_task_schema_files_match_contracts():
+def test_task_schema_files_match_contracts() -> None:
+    """Verify that task schema files match contracts."""
     from dataforge.ai_results import ColumnResponse, ExplanationResponse
     from dataforge.llm import PROMPTS
 
@@ -138,7 +207,14 @@ def test_task_schema_files_match_contracts():
     ("select id from raw.a join raw.b on raw.a.id=raw.b.id;", "select id from raw.a"),
     ("-- select id from raw.a;\nselect 1;", "select id from raw.a;"),
     ("select 'select id from raw.a;' as example;", "select id from raw.a;")])
-def test_citation_cannot_strip_context_or_promote_comment_string_to_code(project, code, quote):
+def test_citation_cannot_strip_context_or_promote_comment_string_to_code(project: Any, code: str, quote: str) -> None:
+    """Verify that citation cannot strip context or promote comment string to code.
+
+    Args:
+        project: Project value used by the test case.
+        code: Code value used by the test case.
+        quote: Quote value used by the test case.
+    """
     from dataforge.ai_results import ColumnResponse, validate_advisory
 
     response = ColumnResponse.model_validate({"columns": [column(quote)]})
@@ -147,13 +223,24 @@ def test_citation_cannot_strip_context_or_promote_comment_string_to_code(project
         validate_advisory(response, source, {"raw.a", "raw.b"}, 1, len(code.splitlines()), {})
 
 
-def test_saved_results_remain_available_without_provider_profile(project):
+def test_saved_results_remain_available_without_provider_profile(project: Any) -> None:
+    """Verify that saved results remain available without provider profile.
+
+    Args:
+        project: Project value used by the test case.
+    """
     from streamlit.testing.v1 import AppTest
 
     store, workspace, _, code = project
     request(project, "column_usage", {"columns": [column(code)]})
 
-    def page(home, workspace):
+    def page(home: "Any", workspace: "Any") -> None:
+        """Handle page for the test scenario.
+
+        Args:
+            home: Home value used by the test case.
+            workspace: Workspace used by the test.
+        """
         from dataforge.store import Store
         from ui.assistance import render
 
@@ -168,7 +255,12 @@ def test_saved_results_remain_available_without_provider_profile(project):
 
 @pytest.mark.parametrize("code", ["data work.x; set raw.a; keep id; run;",
     "data work.x;\n  set raw.a;\n  keep id;\nrun;"])
-def test_sas_citations_preserve_original_block_formatting(code):
+def test_sas_citations_preserve_original_block_formatting(code: str) -> None:
+    """Verify that sas citations preserve original block formatting.
+
+    Args:
+        code: Code value used by the test case.
+    """
     from dataforge.ai_results import ColumnResponse, validate_advisory
 
     result = ColumnResponse.model_validate({"columns": [column(code, context="KEEP", end_line=len(code.splitlines()))]})

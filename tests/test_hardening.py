@@ -1,6 +1,9 @@
 import io
 import stat
 import zipfile
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -10,14 +13,24 @@ from dataforge.store import Store
 
 
 @pytest.fixture
-def workspace(tmp_path):
+def workspace(tmp_path: Path) -> Iterator[Any]:
+    """Provide the workspace fixture used by the tests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     s = Store(tmp_path)
     w = s.create_workspace("Hardening")
     yield s, w
     s.close()
 
 
-def test_evidence_pins_original_version_after_reimport(workspace):
+def test_evidence_pins_original_version_after_reimport(workspace: Any) -> None:
+    """Verify that evidence pins original version after reimport.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     s, w = workspace
     imp = Importer(s, w)
     old = b"create table mart.x as select id from raw.a;"
@@ -30,7 +43,16 @@ def test_evidence_pins_original_version_after_reimport(workspace):
     assert s.file(edge["file_id"], retained["source_hash"])["raw_content"] == old.decode()
 
 
-def test_failed_materialization_rolls_back(workspace, monkeypatch):
+def test_failed_materialization_rolls_back(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that failed materialization rolls back.
+
+    Args:
+        workspace: Workspace used by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        RuntimeError: Raised by the test helper.
+    """
     import dataforge.services as services
     s, w = workspace
     imp = Importer(s, w)
@@ -40,7 +62,16 @@ def test_failed_materialization_rolls_back(workspace, monkeypatch):
     imp.files([("a.sql", b"create table mart.x as select id from raw.b;")], {".sql"})
     materialize = services._materialize
 
-    def fail_after_writes(*args, **kwargs):
+    def fail_after_writes(*args: Any, **kwargs: Any) -> None:
+        """Handle fail after writes for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            RuntimeError: Raised by the test helper.
+        """
         materialize(*args, **kwargs)
         raise RuntimeError("Injected failure")
     monkeypatch.setattr(services, "_materialize", fail_after_writes)
@@ -50,12 +81,25 @@ def test_failed_materialization_rolls_back(workspace, monkeypatch):
     assert s.runs(w)[0]["status"] == "failed"
 
 
-def test_import_stops_reading_when_byte_budget_is_exhausted(workspace):
+def test_import_stops_reading_when_byte_budget_is_exhausted(workspace: Any) -> None:
+    """Verify that import stops reading when byte budget is exhausted.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     s, w = workspace
     imported = Importer(s, w, limits=Limits(max_file_bytes=10, max_total_bytes=5))
     calls = []
 
-    def read(i):
+    def read(i: Any) -> bytes:
+        """Handle read for the test scenario.
+
+        Args:
+            i: I value used by the test case.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         calls.append(i)
         return b"select 1"
     report = imported._import([(f"{i}.sql", lambda i=i: read(i)) for i in range(100)], {".sql"}, "test", None, None)
@@ -63,7 +107,12 @@ def test_import_stops_reading_when_byte_budget_is_exhausted(workspace):
     assert report.accepted == 0 and report.diagnostics
 
 
-def test_zip_symlink_and_expansion_limit(workspace):
+def test_zip_symlink_and_expansion_limit(workspace: Any) -> None:
+    """Verify that zip symlink and expansion limit.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     s, w = workspace
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
@@ -76,13 +125,24 @@ def test_zip_symlink_and_expansion_limit(workspace):
     assert report.accepted == 0 and report.skipped == 2
 
 
-def test_analysis_snapshot_does_not_mix_concurrent_import_content(workspace):
+def test_analysis_snapshot_does_not_mix_concurrent_import_content(workspace: Any) -> None:
+    """Verify that analysis snapshot does not mix concurrent import content.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     s, w = workspace
     imp = Importer(s, w)
     old = b"create table mart.b as select id from raw.old;"
     imp.files([("a.sql", b"select id from raw.a;"), ("b.sql", old)], {".sql"})
 
-    def change_after_first(progress, path):
+    def change_after_first(progress: Any, path: Any) -> None:
+        """Handle change after first for the test scenario.
+
+        Args:
+            progress: Progress value used by the test case.
+            path: Path value used by the test case.
+        """
         if path == "a.sql":
             imp.files([("b.sql", b"create table mart.b as select id from raw.new;")], {".sql"})
     analyze(s, w, progress=change_after_first)
@@ -92,7 +152,12 @@ def test_analysis_snapshot_does_not_mix_concurrent_import_content(workspace):
     assert next(f for f in s.files(w) if f["relative_path"] == "b.sql")["parsing_status"] == "pending"
 
 
-def test_parallel_parsing_matches_sequential_and_config_validation(workspace):
+def test_parallel_parsing_matches_sequential_and_config_validation(workspace: Any) -> None:
+    """Verify that parallel parsing matches sequential and config validation.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     from pydantic import ValidationError
 
     from dataforge.configuration import ParsingSettings

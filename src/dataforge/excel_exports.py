@@ -5,7 +5,9 @@ import io
 import math
 import tempfile
 import time
+from collections.abc import Iterable
 from datetime import datetime, timezone
+from typing import Any
 
 import xlsxwriter
 
@@ -32,8 +34,29 @@ COVERAGE = {'root': 'No further known upstream in analyzed graph',
     'relationship_limit': 'Relationship limit; remaining dependencies omitted'}
 
 
-def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source_text=False):
-    """Return (workbook bytes, metadata); reject unrepresentable text without clipping it."""
+def lineage_xlsx(
+    report: dict[str, Any],
+    nodes: dict[str, dict[str, Any]],
+    scope: dict[str, Any],
+    *,
+    include_evidence: bool = False,
+    include_source_text: bool = False,
+) -> tuple[bytes, dict[str, Any]]:
+    """Create a bounded XLSX workbook for ordered lineage paths and evidence.
+
+    Args:
+        report: Ordered path report with evidence and truncation boundaries.
+        nodes: Asset attributes keyed by asset ID for display labels.
+        scope: Workspace, revision, filter, and export metadata.
+        include_evidence: Whether to add an offline evidence worksheet.
+        include_source_text: Whether evidence rows also include source excerpts.
+
+    Returns:
+        Workbook bytes and counts, revision, completeness, and warning metadata.
+
+    Raises:
+        ValueError: If path data is inconsistent or workbook size, time, or text limits are exceeded.
+    """
     started = time.monotonic()
     if not report['paths']:
         raise ValueError('Select an existing exact asset to export lineage')
@@ -41,7 +64,8 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
         raise ValueError('Source text requires the Evidence sheet')
     text_bytes = 0
 
-    def bounded_row(values):
+    def bounded_row(values: list[Any]) -> list[Any]:
+        """Check row text and workbook time budgets before returning the row unchanged."""
         nonlocal text_bytes
         if time.monotonic() - started > MAX_SECONDS:
             raise ValueError('Workbook time limit exceeded; narrow the selection and retry')
@@ -62,7 +86,8 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
         warnings.append('Evidence sheet excluded; evidence IDs/status are references, not offline citations.')
     warnings.append('Static analysis can have unknown or unsupported coverage; a known boundary is not proof of origin.')
 
-    def label(aid):
+    def label(aid: str) -> str:
+        """Format an asset ID using its registered asset label."""
         return asset_label(nodes[aid])
 
     path_rows, step_rows, evidence = [], [], {}
@@ -137,7 +162,14 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
             note_format = book.add_format({'text_wrap': True, 'valign': 'top', 'font_name': 'Calibri',
                 'font_color': '#6B3F08', 'bg_color': '#FFF1D6'})
 
-            def write_row(sheet, row, values, fmt, start_col=0):
+            def write_row(
+                sheet: xlsxwriter.worksheet.Worksheet,
+                row: int,
+                values: list[Any],
+                fmt: xlsxwriter.format.Format,
+                start_col: int = 0,
+            ) -> None:
+                """Write a row using literal text and bounded numeric/date cell handling."""
                 nonlocal text_bytes
                 if time.monotonic() - started > MAX_SECONDS:
                     raise ValueError('Workbook time limit exceeded; narrow the selection and retry')
@@ -156,7 +188,13 @@ def lineage_xlsx(report, nodes, scope, *, include_evidence=False, include_source
                             raise ValueError('Workbook text limit exceeded; narrow the selection')
                         sheet.write_string(row, col, value, fmt)
 
-            def sheet_table(name, columns, rows, scope_rows=()):
+            def sheet_table(
+                name: str,
+                columns: list[str],
+                rows: list[list[Any]],
+                scope_rows: Iterable[tuple[str, Any]] = (),
+            ) -> xlsxwriter.worksheet.Worksheet:
+                """Create a formatted, filterable worksheet with optional scope rows."""
                 sheet = book.add_worksheet(name)
                 sheet.hide_gridlines(2)
                 sheet.set_landscape()

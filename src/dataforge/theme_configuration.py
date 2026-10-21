@@ -5,17 +5,28 @@ import threading
 import tomllib
 from collections.abc import MutableMapping
 from pathlib import Path
+from typing import Any
 
 CONFIG_PATH = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(Path(__file__).resolve().parents[2] / '.streamlit' / 'config.toml')))
 _LOCK = threading.Lock()
 
 
-def _colors(primary, background, secondary, text, border, link, chart):
+def _colors(
+    primary: str,
+    background: str,
+    secondary: str,
+    text: str,
+    border: str,
+    link: str,
+    chart: list[str],
+) -> dict[str, Any]:
+    """Build the native Streamlit color settings for a palette."""
     return dict(primaryColor=primary, backgroundColor=background, secondaryBackgroundColor=secondary,
                 textColor=text, borderColor=border, linkColor=link, chartCategoricalColors=chart)
 
 
-def _palette(mode, ui, graph, description):
+def _palette(mode: str, ui: str, graph: str, description: str) -> dict[str, str]:
+    """Map UI and graph color rows to the named palette roles."""
     # Roles stay fixed; future palettes only supply another row of values.
     roles = "bg sidebar surface accent text muted border source intermediate target path edge graph selected".split()
     return dict(zip(roles, (ui + " " + graph).lower().split(), strict=True), mode=mode, description=description)
@@ -52,8 +63,11 @@ PALETTES = {
 }
 
 
-def contrast(first, second):
-    def luminance(color):
+def contrast(first: str, second: str) -> float:
+    """Calculate the WCAG contrast ratio between two hexadecimal colors."""
+
+    def luminance(color: str) -> float:
+        """Convert an sRGB hex color to relative luminance."""
         rgb = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
         return sum((v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4) * w
                    for v, w in zip(rgb, (.2126, .7152, .0722)))
@@ -61,16 +75,19 @@ def contrast(first, second):
     return (high + .05) / (low + .05)
 
 
-def on_accent(color):
+def on_accent(color: str) -> str:
+    """Choose whichever of black and white contrasts better with the accent."""
     return max(("#ffffff", "#000000"), key=lambda text: contrast(text, color))
 
 
-def hover_accent(color):
+def hover_accent(color: str) -> str:
+    """Blend an accent toward its higher-contrast foreground for hover states."""
     tint = 255 if on_accent(color) == "#000000" else 0
     return "#" + "".join(f"{round(int(color[i:i + 2], 16) * .9 + tint * .1):02x}" for i in (1, 3, 5))
 
 
-def readable_accent(palette):
+def readable_accent(palette: dict[str, str]) -> str:
+    """Adjust a palette accent toward its text color until it meets contrast targets."""
     accent, text = ([int(palette[key][i:i + 2], 16) for i in (1, 3, 5)] for key in ("accent", "text"))
     for weight in range(11):
         color = "#" + "".join(f"{round((a * (10 - weight) + t * weight) / 10):02x}" for a, t in zip(accent, text))
@@ -103,7 +120,8 @@ SITE_THEMES = {"celadon": "Celadon light", "slate": "Ink dark",
                **{name.lower().replace(" & ", "-").replace(" ", "-"): name for name in PALETTES}}
 
 
-def site_theme_css():
+def site_theme_css() -> str:
+    """Generate CSS variables for palettes published by the documentation site."""
     blocks = []
     roles = {"paper": "bg", "surface": "surface", "sidebar": "sidebar", "ink": "text",
              "muted": "muted", "line": "border", "accent": "accent", "string": "source"}
@@ -120,20 +138,31 @@ def site_theme_css():
     return "\n".join(blocks)
 
 
-def matches_preset(theme, values):
+def matches_preset(theme: object, values: dict[str, Any]) -> bool:
+    """Check whether a parsed theme mapping contains all requested preset values."""
     if not isinstance(theme, MutableMapping):
         return False
     return all(matches_preset(theme.get(key, {}), value) if isinstance(value, dict)
                else theme.get(key) == value for key, value in values.items())
 
 
-def current_preset(path):
+def current_preset(path: str | Path) -> str | None:
+    """Return the matching native preset name, or ``None`` for a customized theme."""
     theme = tomllib.loads(Path(path).read_text(encoding="utf-8")).get("theme", {})
     return next((name for name, values in PRESETS.items() if matches_preset(theme, values)
         and not theme.get("light") and not theme.get("dark")), None)
 
 
-def apply_preset(path, name):
+def apply_preset(path: str | Path, name: str) -> None:
+    """Apply a native palette while preserving unrelated layout and server settings.
+
+    Args:
+        path: Streamlit TOML configuration file to update.
+        name: Name of a supported theme preset.
+
+    Raises:
+        ValueError: If the preset or existing configuration structure is invalid.
+    """
     import tomlkit
 
     if name not in PRESETS:

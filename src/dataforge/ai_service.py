@@ -1,22 +1,32 @@
 """Offline evidence previews and explicit grounded AI requests over existing contracts."""
 import json
+from typing import Any
 
-from dataforge.agent.contracts import AgentError
+from dataforge.agent.contracts import AgentError, QueryOptions
 from dataforge.asset_identity import source_job
 from dataforge.assistance_queue import diagnostic_context, diagnostic_queue
 from dataforge.configuration import ParsingSettings
 from dataforge.connections import RuntimeConnections, connection_scope
-from dataforge.llm import TASKS, assist_task, merge_claims
+from dataforge.llm import TASKS, Profile, assist_task, merge_claims
 from dataforge.llm_resources import context_chunks
 from dataforge.provider_service import authorize_provider
 from dataforge.services import analyze
+from dataforge.store import Store
 
 READS = {'ai_chunks', 'review_list', 'review_preview', 'ai_results', 'ai_result', 'ai_activity'}
 WRITES = {'ai_request', 'review_request', 'ai_merge'}
 SOURCE = {'ai_chunks', 'review_preview', 'ai_request', 'review_request', 'ai_merge'}
 
 
-def preview_ai_evidence(store, workspace, file_id, first, last, task):
+def preview_ai_evidence(
+    store: Store,
+    workspace: str,
+    file_id: str,
+    first: int,
+    last: int,
+    task: str,
+) -> dict[str, Any]:
+    """Prepare bounded source chunks and parser context for a supported AI task."""
     if task not in TASKS or type(first) is not int or type(last) is not int:
         raise AgentError('validation_failed', 'Select a supported task and integer source bounds')
     source = store.file(file_id)
@@ -30,7 +40,8 @@ def preview_ai_evidence(store, workspace, file_id, first, last, task):
             'max_context_chars': store.setting(workspace, 'max_context_chars', 8000)}
 
 
-def merge_ai_result(store, workspace, record_id, refresh=True):
+def merge_ai_result(store: Store, workspace: str, record_id: str, refresh: bool = True) -> dict[str, Any]:
+    """Merge a validated lineage result and optionally refresh the workspace analysis."""
     with store.lock:
         records = store.rows('SELECT outcome,details,task FROM llm_records WHERE workspace_id=? AND record_id=?', [workspace, record_id])
         if not records:
@@ -54,29 +65,62 @@ def merge_ai_result(store, workspace, record_id, refresh=True):
 
 
 class AIOperations:
-    def _ai_chunks(self, w, opts, file_id, first, last, task):
+    """Implement paginated AI evidence, request, result, and diagnostic review operations."""
+
+    def _ai_chunks(self, w: str, opts: QueryOptions, file_id: str, first: int, last: int, task: str) -> dict[str, Any]:
+        """Return paginated evidence chunks for one source and AI task."""
         self._workspace(w, source=True)
         preview = preview_ai_evidence(self.store, w, file_id, first, last, task)
         chunks = preview.pop('chunks')
         return self._page(w, opts, ['chunks', file_id, first, last, task], chunks, **preview)
 
-    def _review_list(self, w, opts):
+    def _review_list(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Return the paginated queue of current SQL and SAS diagnostics."""
         queue = diagnostic_queue(self.store, w)
         return self._page(w, opts, 'review', queue['items'], boundaries=['queue_limit'] if queue['truncated'] else [])
 
-    def _review_preview(self, w, opts, diagnostic_id, first=None, last=None):
+    def _review_preview(
+        self,
+        w: str,
+        opts: QueryOptions,
+        diagnostic_id: str,
+        first: int | None = None,
+        last: int | None = None,
+    ) -> dict[str, Any]:
+        """Preview bounded source chunks around a current diagnostic."""
         self._workspace(w, source=True)
         item = diagnostic_context(self.store, w, diagnostic_id)
         return self._ai_chunks(w, opts, item['file_id'], item['first'] if first is None else first,
                                item['last'] if last is None else last, item['task'])
 
-    def _review_request(self, w, opts, diagnostic_id, expected_hash, first, last, expected_job='workspace'):
+    def _review_request(
+        self,
+        w: str,
+        opts: QueryOptions,
+        diagnostic_id: str,
+        expected_hash: str,
+        first: int,
+        last: int,
+        expected_job: str = 'workspace',
+    ) -> dict[str, Any]:
+        """Request an AI review for a diagnostic after checking its source version."""
         item = diagnostic_context(self.store, w, diagnostic_id)
         if item['content_hash'] != expected_hash:
             raise AgentError('source_changed', 'Diagnostic source changed; refresh its preview')
         return self._ai_request(w, opts, item['file_id'], first, last, item['task'], expected_hash, expected_job)
 
-    def _ai_request(self, w, opts, file_id, first, last, task, expected_hash, expected_job='workspace'):
+    def _ai_request(
+        self,
+        w: str,
+        opts: QueryOptions,
+        file_id: str,
+        first: int,
+        last: int,
+        task: str,
+        expected_hash: str,
+        expected_job: str = 'workspace',
+    ) -> dict[str, Any]:
+        """Run a provider request after authorization and source/job revalidation."""
         self._workspace(w, write=True, source=True)
         self.policy.require('network')
         preview = preview_ai_evidence(self.store, w, file_id, first, last, task)
@@ -84,7 +128,8 @@ class AIOperations:
             raise AgentError('source_changed', 'Source hash/job changed; refresh the evidence preview')
         manager = RuntimeConnections()
 
-        def authorize(pid, profile):
+        def authorize(pid: str, profile: Profile) -> Profile:
+            """Authorize one provider profile and expose only its approved credential."""
             self._workspace(w, write=True, source=True)
             authorize_provider(self.store, self.policy, w, profile)
             credentials = self._runtime_manager(w, pid, profile)
@@ -109,14 +154,17 @@ class AIOperations:
         finally:
             manager.clear()
 
-    def _ai_results(self, w, opts):
+    def _ai_results(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """List paginated AI result metadata without returning detailed source evidence."""
         rows = self.store.rows('SELECT record_id,task,file_id,start_line,provider,model,outcome,duration,usage,created_at FROM llm_records WHERE workspace_id=? ORDER BY created_at DESC,record_id', [w])
         return self._page(w, opts, 'ai_results', rows, analysis_current=self._current(w))
 
-    def _ai_activity(self, w, opts):
+    def _ai_activity(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Return the AI result activity list using the shared result listing."""
         return self._ai_results(w, opts)
 
-    def _ai_result(self, w, opts, record_id):
+    def _ai_result(self, w: str, opts: QueryOptions, record_id: str) -> dict[str, Any]:
+        """Read one retained AI result and include details only when authorized."""
         rows = self.store.rows('SELECT * FROM llm_records WHERE workspace_id=? AND record_id=?', [w, record_id])
         if not rows:
             raise AgentError('not_found', 'AI result no longer retained in this workspace')
@@ -137,6 +185,7 @@ class AIOperations:
             record['details'] = details
         return record
 
-    def _ai_merge(self, w, opts, record_id, refresh=True):
+    def _ai_merge(self, w: str, opts: QueryOptions, record_id: str, refresh: bool = True) -> dict[str, Any]:
+        """Merge a validated result after requiring source and write access."""
         self._workspace(w, write=True, source=True)
         return merge_ai_result(self.store, w, record_id, refresh)

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from dataforge.ingestion import Importer
@@ -7,7 +8,13 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_identical_asset_labels_have_independent_workspace_widgets(tmp_path, monkeypatch):
+def test_identical_asset_labels_have_independent_workspace_widgets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that identical asset labels have independent workspace widgets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     store = Store(tmp_path)
     ids = [store.create_workspace(name) for name in ('SQL', 'SAS')]

@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -8,7 +10,16 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def populate(tmp_path, sql):
+def populate(tmp_path: Path, sql: str) -> tuple[Any, ...]:
+    """Populate the test inputs required by the scenario.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        sql: SQL source text for the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     store = Store(tmp_path / 'home')
     workspace = store.create_workspace('Columns')
     Importer(store, workspace).files([('a.sql', sql.encode())], {'.sql'})
@@ -16,11 +27,22 @@ def populate(tmp_path, sql):
     return store, workspace
 
 
-def asset_id(store, workspace, name):
+def asset_id(store: Any, workspace: Any, name: str) -> Any:
+    """Return asset id for the test scenario.
+
+    Args:
+        store: Store instance exercised by the test.
+        workspace: Workspace used by the test.
+        name: Name value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     return next(a['asset_id'] for a in store.assets(workspace) if a['name'] == name)
 
 
-def test_derivation_parser_cache_roundtrip():
+def test_derivation_parser_cache_roundtrip() -> None:
+    """Verify that derivation parser cache roundtrip."""
     derivation = {'target_table': 'b', 'target_column': 'id', 'expression': 'id',
                   'inputs': [{'table': 'a', 'column': 'id', 'role': 'value'}]}
     parsed = ParseResult(operations=[Operation('CREATE', [AssetRef('a')], [AssetRef('b')],
@@ -32,7 +54,12 @@ def test_derivation_parser_cache_roundtrip():
     assert ParseResult.from_dict(legacy).operations[0].derivations == []
 
 
-def test_value_context_constant_and_transitive_paths(tmp_path):
+def test_value_context_constant_and_transitive_paths(tmp_path: Path) -> None:
+    """Verify that value context constant and transitive paths.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import column_catalog, trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE stage AS
@@ -59,7 +86,12 @@ def test_value_context_constant_and_transitive_paths(tmp_path):
     store.close()
 
 
-def test_limits_cycles_multiwriter_and_workspace_isolation(tmp_path):
+def test_limits_cycles_multiwriter_and_workspace_isolation(tmp_path: Path) -> None:
+    """Verify that limits cycles multiwriter and workspace isolation.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE b AS SELECT id FROM a;
@@ -75,7 +107,13 @@ def test_limits_cycles_multiwriter_and_workspace_isolation(tmp_path):
     store.close()
 
 
-def test_reanalysis_failed_parse_preserves_committed_derivations(tmp_path, monkeypatch):
+def test_reanalysis_failed_parse_preserves_committed_derivations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that reanalysis failed parse preserves committed derivations.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge import services
     from dataforge.models import Diagnostic
     from dataforge.transformations import trace_columns
@@ -91,7 +129,12 @@ def test_reanalysis_failed_parse_preserves_committed_derivations(tmp_path, monke
     store.close()
 
 
-def test_cleanup_backup_restore_and_additive_migration(tmp_path):
+def test_cleanup_backup_restore_and_additive_migration(tmp_path: Path) -> None:
+    """Verify that cleanup backup restore and additive migration.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.cleanup import apply_cleanup, cleanup_plan
     from dataforge.database_maintenance import backup, inspect_database, restore_backup
     from dataforge.transformations import trace_columns
@@ -114,7 +157,12 @@ def test_cleanup_backup_restore_and_additive_migration(tmp_path):
     store.close()
 
 
-def test_declared_wildcard_and_insert_mapping_keep_uncertainty(tmp_path):
+def test_declared_wildcard_and_insert_mapping_keep_uncertainty(tmp_path: Path) -> None:
+    """Verify that declared wildcard and insert mapping keep uncertainty.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE src (a INT, b INT);
@@ -132,7 +180,12 @@ def test_declared_wildcard_and_insert_mapping_keep_uncertainty(tmp_path):
     store.close()
 
 
-def test_legacy_home_and_backup_upgrade_without_reanalysis(tmp_path):
+def test_legacy_home_and_backup_upgrade_without_reanalysis(tmp_path: Path) -> None:
+    """Verify that legacy home and backup upgrade without reanalysis.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.database_maintenance import backup, restore_backup
     from dataforge.store import COLUMN_TABLES
     from dataforge.transformations import trace_columns
@@ -153,7 +206,12 @@ def test_legacy_home_and_backup_upgrade_without_reanalysis(tmp_path):
     restored.close()
 
 
-def test_multiple_writers_and_source_replacement_do_not_mix_versions(tmp_path):
+def test_multiple_writers_and_source_replacement_do_not_mix_versions(tmp_path: Path) -> None:
+    """Verify that multiple writers and source replacement do not mix versions.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE b AS SELECT id FROM a;
@@ -177,7 +235,12 @@ def test_multiple_writers_and_source_replacement_do_not_mix_versions(tmp_path):
     store.close()
 
 
-def test_known_derivation_does_not_hide_unsupported_writes(tmp_path):
+def test_known_derivation_does_not_hide_unsupported_writes(tmp_path: Path) -> None:
+    """Verify that known derivation does not hide unsupported writes.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE dst AS SELECT a FROM src;
@@ -191,7 +254,12 @@ def test_known_derivation_does_not_hide_unsupported_writes(tmp_path):
     store.close()
 
 
-def test_converging_cycle_is_visible_with_bounded_state_traversal(tmp_path):
+def test_converging_cycle_is_visible_with_bounded_state_traversal(tmp_path: Path) -> None:
+    """Verify that converging cycle is visible with bounded state traversal.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE root AS SELECT a.x+b.x AS x FROM a CROSS JOIN b;
@@ -202,7 +270,12 @@ def test_converging_cycle_is_visible_with_bounded_state_traversal(tmp_path):
     store.close()
 
 
-def test_trace_uses_identity_rules_of_committed_analysis(tmp_path):
+def test_trace_uses_identity_rules_of_committed_analysis(tmp_path: Path) -> None:
+    """Verify that trace uses identity rules of committed analysis.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store = Store(tmp_path)
@@ -219,7 +292,12 @@ def test_trace_uses_identity_rules_of_committed_analysis(tmp_path):
     store.close()
 
 
-def test_path_output_cap_is_explicit_on_convergent_impact(tmp_path):
+def test_path_output_cap_is_explicit_on_convergent_impact(tmp_path: Path) -> None:
+    """Verify that path output cap is explicit on convergent impact.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     code = 'CREATE TABLE st AS SELECT ' + ','.join(f'x AS a{i}' for i in range(6)) + ' FROM raw;'
@@ -240,7 +318,14 @@ def test_path_output_cap_is_explicit_on_convergent_impact(tmp_path):
     'CREATE TABLE dst AS WITH mid AS (SELECT amount AS a FROM raw) SELECT "a" AS result FROM mid;',
     'CREATE TABLE dst AS SELECT "a" AS result FROM (SELECT amount AS a FROM raw) mid;',
 ])
-def test_equivalent_quoted_names_keep_complete_transitive_paths(tmp_path, case_sensitive, sql):
+def test_equivalent_quoted_names_keep_complete_transitive_paths(tmp_path: Path, case_sensitive: bool, sql: str) -> None:
+    """Verify that equivalent quoted names keep complete transitive paths.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        case_sensitive: Case sensitive value used by the test case.
+        sql: SQL source text for the test case.
+    """
     from dataforge.transformations import trace_columns
 
     store = Store(tmp_path)
@@ -257,7 +342,12 @@ def test_equivalent_quoted_names_keep_complete_transitive_paths(tmp_path, case_s
     store.close()
 
 
-def test_quoted_case_is_preserved_through_declared_wildcards(tmp_path):
+def test_quoted_case_is_preserved_through_declared_wildcards(tmp_path: Path) -> None:
+    """Verify that quoted case is preserved through declared wildcards.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE src ("X" INT, "a" INT);
@@ -273,7 +363,13 @@ def test_quoted_case_is_preserved_through_declared_wildcards(tmp_path):
 
 
 @pytest.mark.parametrize('condition', ['WHERE s.flag=1', 'JOIN other o ON s.flag=o.flag'])
-def test_input_limits_do_not_change_downstream_effects(tmp_path, condition):
+def test_input_limits_do_not_change_downstream_effects(tmp_path: Path, condition: str) -> None:
+    """Verify that input limits do not change downstream effects.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        condition: Condition value used by the test case.
+    """
     from dataforge.transformations import trace_columns
 
     store, w = populate(tmp_path, f'CREATE TABLE dst AS SELECT s.x+s.y AS v FROM src s {condition};')
@@ -287,7 +383,12 @@ def test_input_limits_do_not_change_downstream_effects(tmp_path, condition):
     store.close()
 
 
-def test_insert_wildcard_maps_expanded_positions_to_declared_targets(tmp_path):
+def test_insert_wildcard_maps_expanded_positions_to_declared_targets(tmp_path: Path) -> None:
+    """Verify that insert wildcard maps expanded positions to declared targets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.transformations import column_catalog, trace_columns
 
     store, w = populate(tmp_path, '''CREATE TABLE src (a INT, b INT);
@@ -308,7 +409,14 @@ def test_insert_wildcard_maps_expanded_positions_to_declared_targets(tmp_path):
     ('CREATE TABLE dst (x INT);', '*'),
     ('CREATE TABLE dst (x INT, y INT);', 's.*, 99 AS extra'),
 ])
-def test_unmapped_insert_wildcards_do_not_invent_targets(tmp_path, target_ddl, projection):
+def test_unmapped_insert_wildcards_do_not_invent_targets(tmp_path: Path, target_ddl: str, projection: str) -> None:
+    """Verify that unmapped insert wildcards do not invent targets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        target_ddl: Target ddl value used by the test case.
+        projection: Projection value used by the test case.
+    """
     from dataforge.transformations import column_catalog, trace_columns
 
     store, w = populate(tmp_path, f'''CREATE TABLE src (a INT, b INT); {target_ddl}
@@ -325,14 +433,26 @@ def test_unmapped_insert_wildcards_do_not_invent_targets(tmp_path, target_ddl, p
     ('a', 'a'), ('"a"', 'a'), ('`a`', 'a'), ('[a]', 'a'),
     ('A', 'a'), ('"A"', 'A'), ('"a""b"', 'a"b'), ('[a]]b]', 'a]b'),
 ])
-def test_column_identity_unquotes_without_merging_distinct_case(spelling, expected):
+def test_column_identity_unquotes_without_merging_distinct_case(spelling: str, expected: str) -> None:
+    """Verify that column identity unquotes without merging distinct case.
+
+    Args:
+        spelling: Spelling value used by the test case.
+        expected: Expected result for the test case.
+    """
     from dataforge.models import column_key
 
     assert column_key(spelling) == 'column:' + expected
     assert column_key('A', case_sensitive=True) == 'column:A'
 
 
-def test_previous_parser_cache_requires_refresh_and_is_replaced(tmp_path, monkeypatch):
+def test_previous_parser_cache_requires_refresh_and_is_replaced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that previous parser cache requires refresh and is replaced.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge import services
     from dataforge.transformations import trace_columns
 
@@ -348,7 +468,8 @@ def test_previous_parser_cache_requires_refresh_and_is_replaced(tmp_path, monkey
     store.close()
 
 
-def test_quoted_special_names_do_not_share_wildcard_or_rowset_identity():
+def test_quoted_special_names_do_not_share_wildcard_or_rowset_identity() -> None:
+    """Verify that quoted special names do not share wildcard or rowset identity."""
     from dataforge.models import column_key
 
     assert column_key('"*"') != column_key('*')

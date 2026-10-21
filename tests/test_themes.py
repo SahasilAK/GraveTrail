@@ -1,10 +1,12 @@
 import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 
-def test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean():
+def test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean() -> None:
+    """Verify that palette choices preserve ocean and ink and default to ocean."""
     from ui.themes import PRESETS
 
     assert list(PRESETS)[:2] == ["Ocean dark", "Ink dark"]
@@ -21,7 +23,12 @@ def test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean():
     assert current_preset(".streamlit/config.toml") == "Ocean dark"
 
 
-def test_theme_presets_apply_both_modes_and_preserve_other_configuration(tmp_path):
+def test_theme_presets_apply_both_modes_and_preserve_other_configuration(tmp_path: Path) -> None:
+    """Verify that theme presets apply both modes and preserve other configuration.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from ui.themes import PRESETS, apply_preset, current_preset
 
     config = tmp_path / "config.toml"
@@ -44,7 +51,12 @@ def test_theme_presets_apply_both_modes_and_preserve_other_configuration(tmp_pat
     assert config.read_bytes() == before
 
 
-def test_theme_update_preserves_custom_sidebar_and_unrelated_keys(tmp_path):
+def test_theme_update_preserves_custom_sidebar_and_unrelated_keys(tmp_path: Path) -> None:
+    """Verify that theme update preserves custom sidebar and unrelated keys.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from ui.themes import apply_preset, current_preset
 
     config = tmp_path / "config.toml"
@@ -62,13 +74,30 @@ def test_theme_update_preserves_custom_sidebar_and_unrelated_keys(tmp_path):
     assert current_preset(config) == "Arctic Mint"
 
 
-def test_failed_theme_publication_preserves_previous_config(tmp_path, monkeypatch):
+def test_failed_theme_publication_preserves_previous_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that failed theme publication preserves previous config.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        OSError: Raised by the test helper.
+    """
     from ui.themes import apply_preset
 
     config = tmp_path / "config.toml"
     config.write_text('[theme]\nfont = "sans-serif"\n', encoding="utf-8")
     previous = config.read_bytes()
-    def fail(*args):
+    def fail(*args: Any) -> None:
+        """Raise the injected failure used by the test.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+
+        Raises:
+            OSError: Raised by the test helper.
+        """
         raise OSError("Read-only configuration")
     monkeypatch.setattr("ui.themes.os.replace", fail)
     with pytest.raises(OSError):
@@ -78,7 +107,13 @@ def test_failed_theme_publication_preserves_previous_config(tmp_path, monkeypatc
 
 
 @pytest.mark.parametrize("header", ['[theme.light]', '  [theme.light]', '[theme."light"]'])
-def test_theme_update_handles_valid_multiline_and_quoted_toml(tmp_path, header):
+def test_theme_update_handles_valid_multiline_and_quoted_toml(tmp_path: Path, header: str) -> None:
+    """Verify that theme update handles valid multiline and quoted toml.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        header: Header value used by the test case.
+    """
     from ui.themes import apply_preset, current_preset
 
     config = tmp_path / "config.toml"
@@ -90,14 +125,32 @@ def test_theme_update_handles_valid_multiline_and_quoted_toml(tmp_path, header):
     assert "# preserve this" in config.read_text()
 
 
-def test_presets_keep_readable_text_links_and_primary_buttons():
+def test_presets_keep_readable_text_links_and_primary_buttons() -> None:
+    """Verify that presets keep readable text links and primary buttons."""
     from ui.themes import PRESETS
 
-    def luminance(color):
+    def luminance(color: Any) -> Any:
+        """Handle luminance for the test scenario.
+
+        Args:
+            color: Color value used by the test case.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         channels = [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
         linear = [v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4 for v in channels]
         return sum(v * w for v, w in zip(linear, [.2126, .7152, .0722]))
-    def contrast(first, second):
+    def contrast(first: Any, second: Any) -> Any:
+        """Handle contrast for the test scenario.
+
+        Args:
+            first: First value used by the test case.
+            second: Second value used by the test case.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         high, low = sorted([luminance(first), luminance(second)], reverse=True)
         return (high + .05) / (low + .05)
     for name, colors in PRESETS.items():
@@ -109,7 +162,12 @@ def test_presets_keep_readable_text_links_and_primary_buttons():
         assert contrast(on_accent(colors["primaryColor"]), hover_accent(colors["primaryColor"])) >= 4.5, name
 
 
-def test_switching_back_to_legacy_removes_palette_sidebar_colors_only(tmp_path):
+def test_switching_back_to_legacy_removes_palette_sidebar_colors_only(tmp_path: Path) -> None:
+    """Verify that switching back to legacy removes palette sidebar colors only.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from ui.themes import apply_preset, current_preset
 
     config = tmp_path / "config.toml"
@@ -122,7 +180,8 @@ def test_switching_back_to_legacy_removes_palette_sidebar_colors_only(tmp_path):
     assert current_preset(config) == "Ink dark"
 
 
-def test_graph_roles_follow_selected_palette_without_recoloring_legacy_graphs():
+def test_graph_roles_follow_selected_palette_without_recoloring_legacy_graphs() -> None:
+    """Verify that graph roles follow selected palette without recoloring legacy graphs."""
     from dataforge.exports import graph_data
     from dataforge.graph import LineageGraph
 
@@ -138,7 +197,12 @@ def test_graph_roles_follow_selected_palette_without_recoloring_legacy_graphs():
         assert "theme" not in graph_data(graph, theme=name)
 
 
-def test_invalid_sidebar_does_not_crash_detection_or_overwrite_configuration(tmp_path):
+def test_invalid_sidebar_does_not_crash_detection_or_overwrite_configuration(tmp_path: Path) -> None:
+    """Verify that invalid sidebar does not crash detection or overwrite configuration.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import tomlkit
 
     from ui.themes import apply_preset, current_preset
@@ -157,7 +221,13 @@ def test_invalid_sidebar_does_not_crash_detection_or_overwrite_configuration(tmp
 
 
 @pytest.mark.parametrize("accent", [None, "rgb(0,128,255)", "#09f"])
-def test_custom_native_colors_keep_app_chrome_renderable(monkeypatch, accent):
+def test_custom_native_colors_keep_app_chrome_renderable(monkeypatch: pytest.MonkeyPatch, accent: Any) -> None:
+    """Verify that custom native colors keep app chrome renderable.
+
+    Args:
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+        accent: Accent value used by the test case.
+    """
     from ui.presentation import apply_style, brand_title
 
     rendered = []

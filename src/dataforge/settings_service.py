@@ -1,6 +1,8 @@
 """Typed atomic workspace preferences with content revisions and non-escalation."""
 import hashlib
 import json
+from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,21 +13,28 @@ from dataforge.configuration import (
     ParsingSettings,
     VisualizationSettings,
 )
+from dataforge.store import Store
 
 
 class Resources(LLMResourceSettings):
+    """Define bounded file ingestion and parser worker settings."""
+
     max_file_mb: int = Field(default=20, ge=1, le=100)
     max_files: int = Field(default=10000, ge=1, le=100000)
     parse_workers: int = Field(default=1, ge=1, le=8)
 
 
 class Visualization(VisualizationSettings):
+    """Define graph and traversal limits for workspace views."""
+
     graph_limit: int = Field(default=150, ge=10, le=1000)
     traversal_depth: int = Field(default=5, ge=1, le=30)
     tree_expansion_depth: int = Field(default=1, ge=0, le=30)
 
 
 class Privacy(BaseModel):
+    """Define external AI access, source sharing, redaction, and retention controls."""
+
     model_config = ConfigDict(extra='forbid', strict=True)
     external_llm: bool = False
     allow_full_source: bool = False
@@ -36,6 +45,8 @@ class Privacy(BaseModel):
 
 
 class TemporaryPreferences(BaseModel):
+    """Define whether eligible temporary recovery files are cleaned automatically."""
+
     model_config = ConfigDict(extra='forbid', strict=True)
     enabled: bool = False
 
@@ -46,19 +57,22 @@ SECTIONS = {'parsing': ParsingSettings, 'analysis': AnalysisPreferences, 'resour
 LOCAL_ADMIN = AccessPolicy(allow_write=True, allow_config_write=True, allow_admin=True)
 
 
-def revision(store, workspace):
+def revision(store: Store, workspace: str) -> str:
+    """Hash the ordered workspace settings, identity, and provider profiles."""
     payload = store.rows('SELECT key,value FROM settings WHERE workspace_id=? ORDER BY key', [workspace])
     payload += store.rows('SELECT name,description FROM workspaces WHERE workspace_id=?', [workspace])
     payload += store.rows('SELECT profile_id,config FROM llm_profiles WHERE workspace_id=? ORDER BY profile_id', [workspace])
     return hashlib.sha256(compact(payload).encode()).hexdigest()
 
 
-def check_revision(store, workspace, expected):
+def check_revision(store: Store, workspace: str, expected: str) -> None:
+    """Reject a settings update when its expected content revision is stale."""
     if not expected or expected != revision(store, workspace):
         raise AgentError('conflict', 'Configuration changed; read current settings and retry')
 
 
-def settings_schema(section=None):
+def settings_schema(section: str | None = None) -> dict[str, Any]:
+    """Describe all supported settings sections or one section's schema and defaults."""
     if section is None:
         return {'schema_version': 1, 'sections': list(SECTIONS), 'scope': 'workspace', 'llm_process_cap': 8}
     if section not in SECTIONS:
@@ -67,7 +81,8 @@ def settings_schema(section=None):
             'defaults': SECTIONS[section]().model_dump(), 'scope': 'workspace', 'llm_process_cap': 8}
 
 
-def read_settings(store, workspace, section):
+def read_settings(store: Store, workspace: str, section: str) -> dict[str, Any]:
+    """Read a workspace settings section with validated values and its current revision."""
     if section not in SECTIONS:
         raise AgentError('validation_failed', 'Unknown settings section')
     model = SECTIONS[section]
@@ -82,7 +97,30 @@ def read_settings(store, workspace, section):
             'defaults': model().model_dump(), 'settings_revision': revision(store, workspace)}
 
 
-def update_settings(store, policy, workspace, section, values, expected_revision):
+def update_settings(
+    store: Store,
+    policy: AccessPolicy,
+    workspace: str,
+    section: str,
+    values: dict[str, Any],
+    expected_revision: str,
+) -> dict[str, Any]:
+    """Validate and atomically persist settings after enforcing revision and access checks.
+
+    Args:
+        store: Workspace store used for reads and the transactional update.
+        policy: Access policy authorizing configuration and any privilege widening.
+        workspace: Workspace identifier.
+        section: Settings section to update.
+        values: Partial values merged with the current section.
+        expected_revision: Revision previously read by the caller.
+
+    Returns:
+        Changed fields, the new revision, and parsing/reload impact metadata.
+
+    Raises:
+        AgentError: If authorization, revision, section, or value validation fails.
+    """
     policy.require('config')
     with store.lock:
         check_revision(store, workspace, expected_revision)
@@ -117,12 +155,13 @@ def update_settings(store, policy, workspace, section, values, expected_revision
                 'warnings': ['Analyze to apply parsing changes; existing facts retained'] if changed and section == 'parsing' else []}
 
 
-def save_ui_settings(store, workspace, section, values):
-    """Local human settings use the same schema/atomic write path with local authority."""
+def save_ui_settings(store: Store, workspace: str, section: str, values: dict[str, Any]) -> dict[str, Any]:
+    """Save local UI preferences through the same validation and atomic update path."""
     return update_settings(store, LOCAL_ADMIN, workspace, section, values, revision(store, workspace))
 
 
-def read_json_file(path):
+def read_json_file(path: Path) -> dict[str, Any]:
+    """Read a bounded regular UTF-8 JSON file and require a top-level object."""
     if path.is_symlink() or path.stat().st_size > 1024 * 1024:
         raise AgentError('validation_failed', 'Expected a regular UTF-8 JSON file at most 1 MB')
     try:

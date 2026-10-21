@@ -11,6 +11,7 @@ import time
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import Any
 
 from smoke import check_mcp, render_session
 
@@ -18,13 +19,23 @@ from dataforge.build import build_environment
 
 
 def main() -> None:
+    """Verify the Docker image's lineage, UI, volume persistence, and MCP flows."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", default="gravetrail:0.1.0")
     args = parser.parse_args()
     name = "gravetrail-smoke-" + uuid.uuid4().hex[:12]
     env = build_environment()
 
-    def docker(*arguments, capture=True):
+    def docker(*arguments: str, capture: bool = True) -> str:
+        """Run a Docker CLI command using the smoke-test environment.
+
+        Args:
+            *arguments: Docker subcommand and arguments.
+            capture: Whether to capture standard output.
+
+        Returns:
+            Captured standard output, or an empty string when capture is disabled.
+        """
         process = subprocess.run(["docker", *arguments], env=env, check=True, text=True,
                                  stdout=subprocess.PIPE if capture else None, timeout=180)
         return process.stdout.strip() if capture else ""
@@ -37,7 +48,15 @@ def main() -> None:
             runtime = ["run", "--rm", "-v", f"{name}:/data", "-v", f"{inputs}:/imports:ro", args.image]
             assert docker(*runtime, "id", "-u") == "10001"
 
-            def cli(*arguments):
+            def cli(*arguments: str) -> dict[str, Any]:
+                """Run a JSON CLI command inside the test container.
+
+                Args:
+                    *arguments: Application CLI subcommand and arguments.
+
+                Returns:
+                    Decoded JSON response from the command.
+                """
                 return json.loads(docker(*runtime, "gravetrail", "--json", "--allow-write",
                                          "--allowed-root", "/imports", *arguments))
 

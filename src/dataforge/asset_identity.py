@@ -1,11 +1,13 @@
 """Conservative asset identities with explicitly supplied temporary job/session namespaces."""
 import json
 import posixpath
+from typing import Any
 
-from dataforge.models import Diagnostic, canonical, stable_id
+from dataforge.models import AssetRef, Diagnostic, ParseResult, canonical, stable_id
 
 
-def source_job(source, config):
+def source_job(source: dict[str, Any], config: dict[str, Any]) -> str:
+    """Resolve the job namespace assigned to a source by its folder configuration."""
     job = config.get("default_job", "workspace")
     for prefix, override in sorted(config.get("job_by_folder", {}).items(), key=lambda item: len(item[0])):
         if source["relative_path"].startswith(prefix):
@@ -13,24 +15,28 @@ def source_job(source, config):
     return job
 
 
-def asset_job(asset):
+def asset_job(asset: dict[str, Any]) -> str | None:
+    """Read an asset's job namespace from its direct field or serialized metadata."""
     metadata = asset.get("metadata", {})
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
     return asset.get("job_id") or metadata.get("job_id")
 
 
-def asset_label(asset):
+def asset_label(asset: dict[str, Any]) -> str:
+    """Format an asset name with its non-default job namespace, when present."""
     job = asset_job(asset)
     return asset["name"] + (f" [job: {job}]" if job and job != "workspace" else "")
 
 
-def job_assets(assets, job):
+def job_assets(assets: list[dict[str, Any]], job: str) -> list[dict[str, Any]]:
+    """Keep persistent assets and only temporary or unresolved assets in the given job."""
     return [asset for asset in assets if not (asset["temporary"] or asset["kind"] == "unresolved")
             or (asset_job(asset) or "workspace") == job]
 
 
-def unambiguous_job_assets(assets, job):
+def unambiguous_job_assets(assets: list[dict[str, Any]], job: str) -> dict[str, dict[str, Any]]:
+    """Index job-visible assets by canonical name, omitting names with collisions."""
     grouped = {}
     for asset in job_assets(assets, job):
         grouped.setdefault(canonical(asset["name"]), []).append(asset)
@@ -38,7 +44,10 @@ def unambiguous_job_assets(assets, job):
 
 
 class AssetResolver:
-    def __init__(self, workspace, results, config):
+    """Resolve source references using workspace, job, and temporary-asset identity."""
+
+    def __init__(self, workspace: str, results: list[tuple[dict[str, Any], ParseResult]], config: dict[str, Any]) -> None:
+        """Build the lookup indexes and conflict sets from parsed source results."""
         self.workspace, self.config = workspace, config
         self.norm = (lambda name: name.strip()) if config["case_sensitive"] else canonical
         refs = [(source_job(source, config), ref) for source, parsed in results
@@ -61,20 +70,24 @@ class AssetResolver:
         self.registry, self.aliases = {}, set()
 
     @staticmethod
-    def _warn(parsed, text, name):
+    def _warn(parsed: ParseResult, text: str, name: str) -> None:
+        """Append a diagnostic unless the same message is already present."""
         if not any(item.message == text for item in parsed.diagnostics):
             parsed.diagnostics.append(Diagnostic(text, symbol=name))
 
-    def visible_from(self, name, declaration_source, source):
+    def visible_from(self, name: str, declaration_source: dict[str, Any], source: dict[str, Any]) -> bool:
+        """Check whether a temporary declaration is visible from another source's job."""
         job = source_job(declaration_source, self.config)
         return (job, self.norm(name)) not in self.temporary or job == source_job(source, self.config)
 
-    def known_names(self, source):
+    def known_names(self, source: dict[str, Any]) -> set[str]:
+        """Return known asset names visible from the source, excluding conflicts."""
         job = source_job(source, self.config)
         return {ref.name for key, ref in {**self.global_known, **self.by_job.get(job, {})}.items()
                 if (job, key) not in self.conflicts}
 
-    def resolve(self, ref, metadata, parsed, role="reference"):
+    def resolve(self, ref: AssetRef, metadata: dict[str, Any], parsed: ParseResult, role: str = "reference") -> tuple[str, bool]:
+        """Resolve one reference and report whether its identity or name was adjusted."""
         job = source_job(metadata, self.config)
         known = {**self.global_known, **self.by_job.get(job, {})}
         name, changed, old = ref.name, False, None

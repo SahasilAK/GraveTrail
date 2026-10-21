@@ -1,6 +1,7 @@
 """Process-local request admission and offline, original-coordinate context chunks."""
 import re
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -13,7 +14,8 @@ _MAINTENANCE = set()
 
 
 @contextmanager
-def block_requests_for_maintenance(home):
+def block_requests_for_maintenance(home: str | Path) -> Iterator[None]:
+    """Prevent new AI requests for a storage home while maintenance is active."""
     identity = str(Path(home).resolve())
     with _LOCK:
         if any(key[0] == identity and count for key, count in _ACTIVE.items()):
@@ -26,15 +28,25 @@ def block_requests_for_maintenance(home):
             _MAINTENANCE.discard(identity)
 
 
-def has_active_requests(home, workspace=''):
+def has_active_requests(home: str | Path, workspace: str = '') -> bool:
+    """Check whether an AI request is active for a home and optional workspace."""
     with _LOCK:
         return any(count and key[0] == str(Path(home).resolve()) and (not workspace or key[1] == workspace)
                    for key, count in _ACTIVE.items())
 
 
 @contextmanager
-def request_slot(home, workspace, limit):
-    """Fail fast rather than accumulate queued source payloads; always release capacity."""
+def request_slot(home: str | Path, workspace: str, limit: int) -> Iterator[None]:
+    """Reserve bounded request capacity and release it when the context exits.
+
+    Args:
+        home: Storage home associated with the request.
+        workspace: Workspace associated with the request.
+        limit: Maximum concurrent requests permitted for this home and workspace.
+
+    Raises:
+        ValueError: If maintenance is active or the per-workspace/global capacity is full.
+    """
     key = (str(Path(home).resolve()), workspace)
     with _LOCK:
         if key[0] in _MAINTENANCE:
@@ -53,8 +65,23 @@ def request_slot(home, workspace, limit):
                 del _ACTIVE[key]
 
 
-def context_chunks(code, extension, first, last, max_chars):
-    """Never split a statement/SAS block or silently omit an oversized unit."""
+def context_chunks(code: str, extension: str, first: int, last: int, max_chars: int) -> list[dict[str, int | str]]:
+    """Split a selected source range into complete, size-bounded parser units.
+
+    Args:
+        code: Complete source text to divide into chunks.
+        extension: Source extension used to select SQL or SAS boundary handling.
+        first: First selected source line, one-based and inclusive.
+        last: Last selected source line, one-based and inclusive.
+        max_chars: Maximum number of characters in each chunk.
+
+    Returns:
+        Chunk dictionaries containing the first line, last line, and source text.
+
+    Raises:
+        ValueError: If the range is invalid, a unit exceeds the budget, or no complete
+            statements fit within the selection.
+    """
     lines = code.splitlines()
     if not 1 <= first <= last <= len(lines) or not 1 <= max_chars <= 100000:
         raise ValueError("Invalid context range or chunk budget")

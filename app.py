@@ -25,7 +25,8 @@ if not workspaces:
 apply_style()
 
 @st.dialog("Create a workspace", icon=":material/create_new_folder:")
-def new_workspace():
+def new_workspace() -> None:
+    """Collect details and create a workspace from the sidebar dialog."""
     st.caption("Keep related sources, analysis and preferences together.")
     with st.form("new_workspace"):
         name = st.text_input("Workspace name", max_chars=200)

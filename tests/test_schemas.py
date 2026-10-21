@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -8,7 +10,8 @@ from dataforge.services import analyze, column_report
 from dataforge.store import Store
 
 
-def test_sql_declared_schema_and_plain_wildcard_eligibility():
+def test_sql_declared_schema_and_plain_wildcard_eligibility() -> None:
+    """Verify that sql declared schema and plain wildcard eligibility."""
     result = parse_sql('CREATE TABLE raw.a (id INT, name VARCHAR(30), PRIMARY KEY (id)); SELECT a.* FROM raw.a a;')
     declaration = result.metadata["declared_schemas"][0]
     assert declaration["table"] == "raw.a"
@@ -19,7 +22,12 @@ def test_sql_declared_schema_and_plain_wildcard_eligibility():
     assert all(not u.wildcard_safe for u in modified.operations[0].usages)
 
 
-def test_schema_expansion_is_direct_and_preserves_both_sources_of_evidence(tmp_path):
+def test_schema_expansion_is_direct_and_preserves_both_sources_of_evidence(tmp_path: Path) -> None:
+    """Verify that schema expansion is direct and preserves both sources of evidence.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Declared schema")
@@ -48,7 +56,13 @@ def test_schema_expansion_is_direct_and_preserves_both_sources_of_evidence(tmp_p
     b"CREATE OR REPLACE TABLE raw.a AS SELECT id FROM raw.b;",
     b"DROP TABLE raw.a;",
 ])
-def test_conflicting_or_changed_schema_does_not_expand_wildcards(tmp_path, later):
+def test_conflicting_or_changed_schema_does_not_expand_wildcards(tmp_path: Path, later: Any) -> None:
+    """Verify that conflicting or changed schema does not expand wildcards.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        later: Later value used by the test case.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Conflicting schema")
@@ -64,7 +78,12 @@ def test_conflicting_or_changed_schema_does_not_expand_wildcards(tmp_path, later
         store.close()
 
 
-def test_schema_refresh_reuses_query_cache_but_removes_stale_expansion(tmp_path):
+def test_schema_refresh_reuses_query_cache_but_removes_stale_expansion(tmp_path: Path) -> None:
+    """Verify that schema refresh reuses query cache but removes stale expansion.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Refresh")
@@ -85,7 +104,12 @@ def test_schema_refresh_reuses_query_cache_but_removes_stale_expansion(tmp_path)
         store.close()
 
 
-def test_wildcard_modifiers_and_csv_name_matching_never_fabricate_columns(tmp_path):
+def test_wildcard_modifiers_and_csv_name_matching_never_fabricate_columns(tmp_path: Path) -> None:
+    """Verify that wildcard modifiers and csv name matching never fabricate columns.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Conservative schema")
@@ -105,12 +129,22 @@ def test_wildcard_modifiers_and_csv_name_matching_never_fabricate_columns(tmp_pa
     "CREATE TABLE raw.a (id INT, LIKE raw.b INCLUDING ALL);",
     "CREATE TABLE raw.a (id INT) INHERITS(raw.b);",
 ])
-def test_schema_extending_constructs_are_not_treated_as_complete(ddl):
+def test_schema_extending_constructs_are_not_treated_as_complete(ddl: str) -> None:
+    """Verify that schema extending constructs are not treated as complete.
+
+    Args:
+        ddl: Ddl value used by the test case.
+    """
     result = parse_sql(ddl, dialect="postgres")
     assert result.metadata["declared_schemas"][0]["columns"] is None
 
 
-def test_identical_declarations_do_not_conflict_and_join_wildcards_remain_direct(tmp_path):
+def test_identical_declarations_do_not_conflict_and_join_wildcards_remain_direct(tmp_path: Path) -> None:
+    """Verify that identical declarations do not conflict and join wildcards remain direct.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Matching schemas")
@@ -129,7 +163,13 @@ def test_identical_declarations_do_not_conflict_and_join_wildcards_remain_direct
 
 
 @pytest.mark.parametrize("second_schema", [False, True])
-def test_unqualified_schema_changes_invalidate_possible_qualified_assets(tmp_path, second_schema):
+def test_unqualified_schema_changes_invalidate_possible_qualified_assets(tmp_path: Path, second_schema: bool) -> None:
+    """Verify that unqualified schema changes invalidate possible qualified assets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        second_schema: Second schema value used by the test case.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Unqualified change")
@@ -151,7 +191,13 @@ def test_unqualified_schema_changes_invalidate_possible_qualified_assets(tmp_pat
 
 @pytest.mark.parametrize("change", ["ALTER TABLE raw.a SWAP WITH raw.b;",
                                     "ALTER TABLE raw.a RENAME TO raw.b;"])
-def test_two_table_schema_changes_invalidate_both_operands(tmp_path, change):
+def test_two_table_schema_changes_invalidate_both_operands(tmp_path: Path, change: str) -> None:
+    """Verify that two table schema changes invalidate both operands.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        change: Change value used by the test case.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Two-table schema change")

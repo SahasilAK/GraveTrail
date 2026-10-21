@@ -1,5 +1,7 @@
 import json
 import time
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -8,14 +10,28 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def populated(store, name):
+def populated(store: Any, name: str) -> Any:
+    """Handle populated for the test scenario.
+
+    Args:
+        store: Store instance exercised by the test.
+        name: Name value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     w = store.create_workspace(name)
     Importer(store, w).files([('a.sql', b'CREATE TABLE b AS SELECT id FROM a;')], {'.sql'})
     analyze(store, w)
     return w
 
 
-def test_cleanup_preview_dependencies_isolation_and_staleness(tmp_path):
+def test_cleanup_preview_dependencies_isolation_and_staleness(tmp_path: Path) -> None:
+    """Verify that cleanup preview dependencies isolation and staleness.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.cleanup import apply_cleanup, cleanup_plan
 
     store = Store(tmp_path)
@@ -37,7 +53,12 @@ def test_cleanup_preview_dependencies_isolation_and_staleness(tmp_path):
     store.close()
 
 
-def test_lineage_jobs_and_shared_blobs(tmp_path):
+def test_lineage_jobs_and_shared_blobs(tmp_path: Path) -> None:
+    """Verify that lineage jobs and shared blobs.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.cleanup import apply_cleanup, cleanup_plan
 
     store = Store(tmp_path)
@@ -62,7 +83,12 @@ def test_lineage_jobs_and_shared_blobs(tmp_path):
     store.close()
 
 
-def test_backup_restore_checksums_and_paths(tmp_path):
+def test_backup_restore_checksums_and_paths(tmp_path: Path) -> None:
+    """Verify that backup restore checksums and paths.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.database_maintenance import backup, restore_backup
 
     store = Store(tmp_path / 'home')
@@ -80,7 +106,13 @@ def test_backup_restore_checksums_and_paths(tmp_path):
 
 
 @pytest.mark.parametrize('confirmation', ['RESTORE GRAVETRAIL', 'RESTORE DATAFORGE'])
-def test_rebrand_restore_preserves_originals_and_requires_exact_confirmation(tmp_path, confirmation):
+def test_rebrand_restore_preserves_originals_and_requires_exact_confirmation(tmp_path: Path, confirmation: str) -> None:
+    """Verify that rebrand restore preserves originals and requires exact confirmation.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        confirmation: Confirmation value used by the test case.
+    """
     from typer.testing import CliRunner
 
     from dataforge.cli import app
@@ -103,7 +135,12 @@ def test_rebrand_restore_preserves_originals_and_requires_exact_confirmation(tmp
     restored.close()
 
 
-def test_cli_requires_write_permission_saved_preview_and_name(tmp_path):
+def test_cli_requires_write_permission_saved_preview_and_name(tmp_path: Path) -> None:
+    """Verify that cli requires write permission saved preview and name.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from typer.testing import CliRunner
 
     from dataforge.cli import app
@@ -127,7 +164,12 @@ def test_cli_requires_write_permission_saved_preview_and_name(tmp_path):
     store.close()
 
 
-def test_mcp_cleanup_is_read_only_even_with_write_policy(tmp_path):
+def test_mcp_cleanup_is_read_only_even_with_write_policy(tmp_path: Path) -> None:
+    """Verify that mcp cleanup is read only even with write policy.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import asyncio
 
     from dataforge.agent.contracts import AccessPolicy
@@ -139,7 +181,8 @@ def test_mcp_cleanup_is_read_only_even_with_write_policy(tmp_path):
     service = AgentService(store, AccessPolicy(allow_write=True))
     server = create_server(service)
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         tools = {t.name: t for t in await server.list_tools()}
         assert tools['preview_cleanup'].annotations.readOnlyHint
         # Application theme apply is explicitly permitted by its independent launch grant.
@@ -155,7 +198,13 @@ def test_mcp_cleanup_is_read_only_even_with_write_policy(tmp_path):
         store.close()
 
 
-def test_cleanup_ui_preview_confirmation_backup_and_rebuild(tmp_path, monkeypatch):
+def test_cleanup_ui_preview_confirmation_backup_and_rebuild(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that cleanup ui preview confirmation backup and rebuild.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest
@@ -183,7 +232,12 @@ def test_cleanup_ui_preview_confirmation_backup_and_rebuild(tmp_path, monkeypatc
     assert get_store(str(tmp_path)).edges(w)
 
 
-def test_orphans_reject_hardlink_and_restore_rejects_traversal(tmp_path):
+def test_orphans_reject_hardlink_and_restore_rejects_traversal(tmp_path: Path) -> None:
+    """Verify that orphans reject hardlink and restore rejects traversal.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import os
     import zipfile
 
@@ -207,7 +261,12 @@ def test_orphans_reject_hardlink_and_restore_rejects_traversal(tmp_path):
     assert external.read_bytes() == b'keep' and not (tmp_path / 'restored').exists()
 
 
-def test_maintenance_blocks_new_provider_requests_and_protects_active_requests(tmp_path):
+def test_maintenance_blocks_new_provider_requests_and_protects_active_requests(tmp_path: Path) -> None:
+    """Verify that maintenance blocks new provider requests and protects active requests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.cleanup import maintenance_guard
     from dataforge.llm_resources import request_slot
 
@@ -224,7 +283,12 @@ def test_maintenance_blocks_new_provider_requests_and_protects_active_requests(t
     store.close()
 
 
-def test_scoped_agent_cannot_create_whole_home_backup(tmp_path):
+def test_scoped_agent_cannot_create_whole_home_backup(tmp_path: Path) -> None:
+    """Verify that scoped agent cannot create whole home backup.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.agent.contracts import AccessPolicy, AgentError
     from dataforge.agent.service import AgentService
 
@@ -242,7 +306,13 @@ def test_scoped_agent_cannot_create_whole_home_backup(tmp_path):
         store.close()
 
 
-def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path, monkeypatch):
+def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that provider validation cannot recreate deleted workspace data.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import threading
     from concurrent.futures import ThreadPoolExecutor
 
@@ -255,7 +325,12 @@ def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path, mo
     w = populated(store, 'test')
     ready, resume = threading.Event(), threading.Event()
 
-    def validate(*args):
+    def validate(*args: Any) -> None:
+        """Handle validate for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+        """
         ready.set()
         assert resume.wait(10)
     monkeypatch.setattr('dataforge.llm.validate_response', validate)
@@ -274,7 +349,12 @@ def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path, mo
     store.close()
 
 
-def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path):
+def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path: Path) -> None:
+    """Verify that restore refuses manifest valid backup missing referenced blob.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import zipfile
 
     from dataforge.database_maintenance import backup, inspect_database, restore_backup
@@ -302,7 +382,13 @@ def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path)
 
 
 @pytest.mark.parametrize('confirmation', ['RESET DATAFORGE', 'RESET GRAVETRAIL'])
-def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp_path, confirmation):
+def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp_path: Path, confirmation: str) -> None:
+    """Verify that application reset preserves theme assets and unrecognized job files.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        confirmation: Confirmation value used by the test case.
+    """
     from dataforge.cleanup import apply_cleanup, cleanup_plan
 
     store = Store(tmp_path)

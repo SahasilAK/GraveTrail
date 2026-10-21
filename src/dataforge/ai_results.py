@@ -1,4 +1,6 @@
 """Task-specific advisory results, grounded against exact source and parser attribution."""
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from dataforge.models import canonical
@@ -41,8 +43,30 @@ class ExplanationResponse(BaseModel):
 TASK_SCHEMAS = {"column_usage": ColumnResponse, "code_explanation": ExplanationResponse}
 
 
-def validate_advisory(response, source, known, first, last, settings):
-    """A citation proves location; explanatory prose remains advisory, never parser fact."""
+def validate_advisory(
+    response: ColumnResponse | ExplanationResponse,
+    source: dict[str, Any],
+    known: set[str],
+    first: int,
+    last: int,
+    settings: dict[str, Any],
+) -> ColumnResponse | ExplanationResponse:
+    """Validate citations and parser attribution while keeping generated prose advisory.
+
+    Args:
+        response: Structured advisory claims to validate.
+        source: Source record containing raw content and its extension.
+        known: Asset names available to the current operation.
+        first: First source line included in the evidence window.
+        last: Last source line included in the evidence window.
+        settings: Parser options for the source.
+
+    Returns:
+        The same response after its citations and claims pass validation.
+
+    Raises:
+        ValueError: If a citation or claim is outside the supplied evidence or unsupported.
+    """
     lines = source["raw_content"].splitlines()
     identity = (lambda name: name) if settings.get("case_sensitive", False) else canonical
     known = {identity(name) for name in known}

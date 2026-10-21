@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 import sqlglot
 from sqlglot import exp
@@ -20,7 +21,16 @@ ROUTINE_HEADER = re.compile(
 COMMENT_DELIMITER = re.compile(r"/\*|\*/")
 
 
-def _routine_header(code, nested_comments):
+def _routine_header(code: str, nested_comments: bool) -> re.Match[str] | None:
+    """Find a leading procedure or function definition after SQL comments.
+
+    Args:
+        code: SQL statement text.
+        nested_comments: Whether the dialect supports nested block comments.
+
+    Returns:
+        Match for a routine header, or ``None`` when no header is found.
+    """
     # Advance once through the prefix; repeated whitespace/comment regexes can backtrack exponentially.
     position = 0
     while position < len(code):
@@ -49,7 +59,23 @@ def _routine_header(code, nested_comments):
 
 
 def table_name(table: exp.Table) -> str:
-    def component(part):
+    """Render a table's quoted and temporary identifier components.
+
+    Args:
+        table: SQLGlot table node.
+
+    Returns:
+        Table name with global and local temporary prefixes preserved.
+    """
+    def component(part: exp.Identifier) -> str:
+        """Render one identifier component with its temporary prefix.
+
+        Args:
+            part: Table identifier component.
+
+        Returns:
+            Component text with quoting when its name contains a dot.
+        """
         prefix = "##" if part.args.get("global_") else "#" if part.args.get("temporary") else ""
         name = prefix + part.name
         return '"' + name.replace('"', '""') + '"' if "." in name else name
@@ -57,19 +83,43 @@ def table_name(table: exp.Table) -> str:
     return ".".join(component(part) for part in table.parts)
 
 
-def select_into(node):
+def select_into(node: exp.Expression) -> exp.Expression | None:
+    """Return the INTO clause on the left SELECT of a top-level set query.
+
+    Args:
+        node: Parsed SQL expression.
+
+    Returns:
+        The INTO expression, or ``None`` when the statement has none.
+    """
     # INTO belongs to the left SELECT of a top-level set query, never an arbitrary descendant.
     while isinstance(node, (exp.SetOperation, exp.Subquery)):
         node = node.this
     return node.args.get("into") if isinstance(node, exp.Select) else None
 
 
-def temporary_identifier(table):
+def temporary_identifier(table: exp.Expression) -> bool:
+    """Check whether a table node uses a local or global temporary identifier.
+
+    Args:
+        table: Parsed table expression.
+
+    Returns:
+        Whether the table node has a temporary identifier flag.
+    """
     return isinstance(table, exp.Table) and isinstance(table.this, exp.Identifier) and bool(
         table.this.args.get("temporary") or table.this.args.get("global_"))
 
 
-def target_table(node):
+def target_table(node: exp.Expression) -> exp.Table | None:
+    """Resolve the table written by a supported DDL or DML statement.
+
+    Args:
+        node: Parsed SQL statement.
+
+    Returns:
+        Target table node, or ``None`` when no static table target is present.
+    """
     target = node.this if isinstance(node, (exp.Create, exp.Insert, exp.Update, exp.Delete, exp.Merge)) else None
     into = select_into(node)
     if isinstance(into, exp.Into):
@@ -79,7 +129,15 @@ def target_table(node):
     return target if isinstance(target, exp.Table) else None
 
 
-def usage_context(column) -> str:
+def usage_context(column: exp.Column) -> str:
+    """Find the nearest SQL clause containing a column reference.
+
+    Args:
+        column: Parsed column expression.
+
+    Returns:
+        Clause label such as ``WHERE`` or ``GROUP BY``, or ``EXPRESSION``.
+    """
     ancestor = column.parent
     while ancestor is not None:
         for klass, name in [(exp.Join, "JOIN"), (exp.Where, "WHERE"), (exp.Group, "GROUP BY"),
@@ -91,8 +149,19 @@ def usage_context(column) -> str:
     return "EXPRESSION"
 
 
-def declared_schema(tree, start, end, operation_index):
-    """Explicit typed DDL only; schema-changing statements invalidate earlier declarations."""
+def declared_schema(tree: exp.Expression, start: int, end: int,
+                    operation_index: int) -> list[dict[str, Any]]:
+    """Extract explicit table/view schema declarations and invalidations.
+
+    Args:
+        tree: Parsed SQL statement.
+        start: First source line for the statement.
+        end: Last source line for the statement.
+        operation_index: Index of the associated operation in the result.
+
+    Returns:
+        Schema records; unsupported or incomplete declarations carry ``None`` columns.
+    """
     if not isinstance(tree, (exp.Create, exp.Alter, exp.Drop)):
         return []
     if str(tree.args.get("kind", "")).upper() not in {"TABLE", "VIEW"}:
@@ -127,8 +196,22 @@ def declared_schema(tree, start, end, operation_index):
     return records
 
 
-def wrapped_sql(tree, dialect, depth, code, start, end):
-    """Inspect bounded literal bodies, retaining the enclosing original as evidence."""
+def wrapped_sql(tree: exp.Expression, dialect: sqlglot.Dialect, depth: int, code: str,
+                start: int, end: int) -> ParseResult | None:
+    """Inspect supported literal SQL bodies while retaining their enclosing evidence.
+
+    Args:
+        tree: Parsed SQL statement that may contain a wrapper.
+        dialect: SQLGlot dialect used to parse the outer statement.
+        depth: Current nested-wrapper depth.
+        code: Original enclosing SQL statement.
+        start: First source line of the enclosing statement.
+        end: Last source line of the enclosing statement.
+
+    Returns:
+        Parsed wrapper result, diagnostics for an unresolved wrapper, or ``None``
+        when the statement is not a supported wrapper.
+    """
     routine = isinstance(tree, exp.Create) and str(tree.args.get("kind", "")).upper() in {"PROCEDURE", "FUNCTION"}
     immediate = (isinstance(tree, exp.Command) and tree.name.upper() == "EXECUTE"
                  and dialect.__class__.__name__.lower() == "snowflake")
@@ -178,10 +261,31 @@ def wrapped_sql(tree, dialect, depth, code, start, end):
 
 
 def parse_sql(content: str, dialect: str | sqlglot.Dialect = "") -> ParseResult:
+    """Parse SQL text into static operations, usage records, and diagnostics.
+
+    Args:
+        content: SQL source text.
+        dialect: Optional SQLGlot dialect name or dialect instance.
+
+    Returns:
+        Static parse result. Unsupported runtime constructs remain diagnostics.
+    """
     return _parse_sql(content, dialect)
 
 
-def _parse_sql(content, dialect, depth=0, restricted=False):
+def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
+               restricted: bool = False) -> ParseResult:
+    """Parse statements recursively, optionally enforcing static wrapper boundaries.
+
+    Args:
+        content: SQL source text to parse.
+        dialect: SQLGlot dialect name or dialect instance.
+        depth: Current nested-wrapper depth.
+        restricted: Whether only the supported static SQL body grammar is allowed.
+
+    Returns:
+        Operations, metadata, and diagnostics produced from the statements.
+    """
     result = ParseResult()
     for code, start, end in statements(content):
         routine_header = None
@@ -214,7 +318,12 @@ def _parse_sql(content, dialect, depth=0, restricted=False):
             all_scopes = list(traverse_scope(tree) or [])
             active = {}
 
-            def visit(scope):
+            def visit(scope: Scope) -> None:
+                """Mark a scope and its selected nested query scopes as active.
+
+                Args:
+                    scope: Query scope whose nested sources are traversed.
+                """
                 if id(scope) in active:
                     return
                 active[id(scope)] = scope
@@ -258,7 +367,15 @@ def _parse_sql(content, dialect, depth=0, restricted=False):
             usages = []
             handled = set()
 
-            def attribute(column, mapping, scope=None):
+            def attribute(column: exp.Expression, mapping: dict[str, exp.Table | Scope],
+                          scope: Scope | None = None) -> None:
+                """Attribute one column or wildcard to an unambiguous source table.
+
+                Args:
+                    column: Column or wildcard expression to attribute.
+                    mapping: Relation aliases to table or query-scope sources.
+                    scope: Current query scope for correlated source lookup.
+                """
                 handled.add(id(column))
                 alias = column.table if isinstance(column, exp.Column) else ""
                 name = column.name if isinstance(column, exp.Column) else "*"

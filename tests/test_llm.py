@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -10,7 +12,8 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_profile_rejects_credentials_and_insecure_remote_url():
+def test_profile_rejects_credentials_and_insecure_remote_url() -> None:
+    """Verify that profile rejects credentials and insecure remote url."""
     with pytest.raises(ValidationError):
         Profile(provider="OpenAI", base_url="http://remote.example/v1", model="model")
     with pytest.raises(ValidationError):
@@ -22,8 +25,22 @@ def test_profile_rejects_credentials_and_insecure_remote_url():
     ("Gemini", "/v1beta/models/model:generateContent"),
     ("Databricks", "/serving-endpoints/model/invocations"),
     ("Azure OpenAI", "/openai/deployments/model/chat/completions")])
-def test_provider_protocol(provider, path):
-    def handler(request):
+def test_provider_protocol(provider: str, path: str) -> None:
+    """Verify that provider protocol.
+
+    Args:
+        provider: Provider value used by the test case.
+        path: Path value used by the test case.
+    """
+    def handler(request: pytest.FixtureRequest) -> Any:
+        """Handle handler for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         assert request.url.path == path
         payload = json.loads(request.content)
         assert "temperature" not in payload
@@ -44,7 +61,8 @@ def test_provider_protocol(provider, path):
     assert json.loads(response) == {"claims": []}
 
 
-def test_grounding_rejects_hallucinations_and_invalid_lines():
+def test_grounding_rejects_hallucinations_and_invalid_lines() -> None:
+    """Verify that grounding rejects hallucinations and invalid lines."""
     code = "create table mart.x as select id from raw.a;"
     response = GroundedResponse.model_validate({"claims": [{"source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1, "end_line": 1, "quote": code, "explanation": "Explicit source and target", "confidence": .8}]})
     assert validate_response(response, code, {"raw.a", "mart.x"}, 1, 1)
@@ -58,7 +76,13 @@ def test_grounding_rejects_hallucinations_and_invalid_lines():
 
 
 @pytest.mark.parametrize("content", ["not JSON", '{"explanation":' + '[' * 1100 + '0' + ']' * 1100 + '}'])
-def test_privacy_gate_and_malformed_quarantine(tmp_path, content):
+def test_privacy_gate_and_malformed_quarantine(tmp_path: Path, content: Any) -> None:
+    """Verify that privacy gate and malformed quarantine.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        content: Content value used by the test case.
+    """
     store = Store(tmp_path)
     w = store.create_workspace("A")
     Importer(store, w).files([("q.sql", b"create table mart.x as select id from raw.a;")], {".sql"})
@@ -75,7 +99,12 @@ def test_privacy_gate_and_malformed_quarantine(tmp_path, content):
     store.close()
 
 
-def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path):
+def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> None:
+    """Verify that grounded merge stays inferred and survives refresh.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.llm import merge_claims
     store = Store(tmp_path)
     w = store.create_workspace("A")
@@ -103,7 +132,8 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path):
     store.close()
 
 
-def test_versioned_prompt_schema_and_templates():
+def test_versioned_prompt_schema_and_templates() -> None:
+    """Verify that versioned prompt schema and templates."""
     from dataforge.llm import PROMPTS, TASKS
     assert json.loads((PROMPTS / "schemas/grounded_response.json").read_text()) == GroundedResponse.model_json_schema()
     for task in TASKS:
@@ -112,7 +142,8 @@ def test_versioned_prompt_schema_and_templates():
         assert (PROMPTS / task / "user_template.md").read_text().count("{{context}}") == 1
 
 
-def test_llm_cannot_splice_unrelated_statements_into_a_dependency():
+def test_llm_cannot_splice_unrelated_statements_into_a_dependency() -> None:
+    """Verify that llm cannot splice unrelated statements into a dependency."""
     code = "create table mart.a as select id from raw.x;\ncreate table mart.b as select id from raw.y;"
     response = GroundedResponse.model_validate({"claims": [{"source": "raw.x", "target": "mart.b",
         "operation": "CREATE", "start_line": 1, "end_line": 2, "quote": code,
@@ -121,7 +152,8 @@ def test_llm_cannot_splice_unrelated_statements_into_a_dependency():
         validate_response(response, code, {"raw.x", "raw.y", "mart.a", "mart.b"}, 1, 2)
 
 
-def test_single_json_fence_keeps_strict_object_validation():
+def test_single_json_fence_keeps_strict_object_validation() -> None:
+    """Verify that single json fence keeps strict object validation."""
     from dataforge.llm import response_object
 
     assert response_object('```json\n{"status":"connected"}\n```') == {"status": "connected"}
@@ -132,7 +164,12 @@ def test_single_json_fence_keeps_strict_object_validation():
             response_object(raw)
 
 
-def test_fenced_grounded_response_validates_without_accepting_invented_assets(tmp_path):
+def test_fenced_grounded_response_validates_without_accepting_invented_assets(tmp_path: Path) -> None:
+    """Verify that fenced grounded response validates without accepting invented assets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Fenced response")
@@ -144,7 +181,15 @@ def test_fenced_grounded_response_validates_without_accepting_invented_assets(tm
         claim = {"source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1,
                  "end_line": 1, "quote": code, "explanation": "Explicit dependency", "confidence": .9}
 
-        def handler(request):
+        def handler(request: pytest.FixtureRequest) -> Any:
+            """Handle handler for the test scenario.
+
+            Args:
+                request: Pytest fixture describing the active test request.
+
+            Returns:
+                Value produced for the test scenario.
+            """
             payload = json.loads(request.content)
             assert payload["stream"] is False
             return httpx.Response(200, json={"choices": [{"message": {
@@ -162,7 +207,12 @@ def test_fenced_grounded_response_validates_without_accepting_invented_assets(tm
     b'{"data":' + b'[' * 80 + b'0' + b']' * 80 + b'}',
     b'{"data":' + b'[' * 1100 + b'0' + b']' * 1100 + b'}'],
     ids=['invalid-json', 'array', 'null', 'deep', 'extreme-depth'])
-def test_provider_invalid_envelope_raises_controlled_error(body):
+def test_provider_invalid_envelope_raises_controlled_error(body: str) -> None:
+    """Verify that provider invalid envelope raises controlled error.
+
+    Args:
+        body: Body value used by the test case.
+    """
     from dataforge.llm import ProviderError
 
     profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")

@@ -1,7 +1,8 @@
 from streamlit.testing.v1 import AppTest
 
 
-def tree_app():
+def tree_app() -> None:
+    """Handle tree app for the test scenario."""
     from dataforge.graph import LineageGraph
     from ui.lineage_tree import render_tree
 
@@ -12,7 +13,8 @@ def tree_app():
     render_tree(LineageGraph(nodes, edges), "d", "upstream", depth=5, key="test-tree", default_expansion=0)
 
 
-def test_tree_does_not_render_closed_descendants_and_expands_all():
+def test_tree_does_not_render_closed_descendants_and_expands_all() -> None:
+    """Verify that tree does not render closed descendants and expands all."""
     app = AppTest.from_function(tree_app).run()
     assert not app.exception
     assert [e.label.split("**")[1] for e in app.expander] == ["c"]
@@ -25,7 +27,14 @@ def test_tree_does_not_render_closed_descendants_and_expands_all():
     assert [e.label.split("**")[1] for e in app.expander] == ["c"]
 
 
-def bounded_tree_app(direction="downstream", depth=5, limit=150):
+def bounded_tree_app(direction: str="downstream", depth: int=5, limit: int=150) -> None:
+    """Handle bounded tree app for the test scenario.
+
+    Args:
+        direction: Direction value used by the test case.
+        depth: Depth value used by the test case.
+        limit: Limit value used by the test case.
+    """
     from dataforge.graph import LineageGraph
     from ui.lineage_tree import render_tree
 
@@ -37,7 +46,8 @@ def bounded_tree_app(direction="downstream", depth=5, limit=150):
                 key="bounded", default_expansion=5)
 
 
-def test_directions_cycles_and_optional_details():
+def test_directions_cycles_and_optional_details() -> None:
+    """Verify that directions cycles and optional details."""
     for direction, first in [("upstream", "c"), ("downstream", "b")]:
         app = AppTest.from_function(bounded_tree_app, args=(direction,)).run()
         assert not app.exception
@@ -50,7 +60,8 @@ def test_directions_cycles_and_optional_details():
         assert any("inferred" in c.value for c in app.caption)
 
 
-def test_depth_and_entry_limits_remain_explicit():
+def test_depth_and_entry_limits_remain_explicit() -> None:
+    """Verify that depth and entry limits remain explicit."""
     app = AppTest.from_function(bounded_tree_app, args=("downstream", 1, 150)).run()
     assert not app.exception
     assert len(app.expander) == 1

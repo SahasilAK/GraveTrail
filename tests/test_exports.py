@@ -3,6 +3,7 @@ import json
 import shutil
 import subprocess
 import zipfile
+from pathlib import Path
 
 from dataforge.exports import graph_data, graph_html, report_csv, report_html, source_bundle
 from dataforge.graph import LineageGraph
@@ -10,7 +11,8 @@ from dataforge.ingestion import Importer
 from dataforge.store import Store
 
 
-def test_offline_graph_and_reports_escape_source():
+def test_offline_graph_and_reports_escape_source() -> None:
+    """Verify that offline graph and reports escape source."""
     name = '</script><img src=x onerror=alert(1)>'
     g = LineageGraph([{"asset_id": "a", "name": name, "kind": "table", "temporary": False}], [])
     output = graph_html(g)
@@ -23,7 +25,12 @@ def test_offline_graph_and_reports_escape_source():
     assert "'=formula" in report_csv([{"file": "=formula"}])
 
 
-def test_original_bundle(tmp_path):
+def test_original_bundle(tmp_path: Path) -> None:
+    """Verify that original bundle.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace("A")
     original = b"select 1;\r\n"
@@ -34,14 +41,16 @@ def test_original_bundle(tmp_path):
     store.close()
 
 
-def test_graph_javascript_is_valid():
+def test_graph_javascript_is_valid() -> None:
+    """Verify that graph javascript is valid."""
     from dataforge.exports import GRAPH_JS
     if node := shutil.which("node"):
         result = subprocess.run([node, "--check"], input=GRAPH_JS, text=True, encoding="utf-8", capture_output=True)
         assert result.returncode == 0, result.stderr
 
 
-def test_path_csv_rows_keep_order_evidence_and_boundary():
+def test_path_csv_rows_keep_order_evidence_and_boundary() -> None:
+    """Verify that path csv rows keep order evidence and boundary."""
     from dataforge.exports import path_rows
 
     graph = LineageGraph([{"asset_id": n, "name": n} for n in ["a", "b", "c"]], [
@@ -53,7 +62,8 @@ def test_path_csv_rows_keep_order_evidence_and_boundary():
     assert all(r["boundary"] == "root" and r["path"] == "a -> b -> c" for r in rows)
 
 
-def test_graph_appearance_is_shared_with_offline_export_and_keeps_full_identity():
+def test_graph_appearance_is_shared_with_offline_export_and_keeps_full_identity() -> None:
+    """Verify that graph appearance is shared with offline export and keeps full identity."""
     from dataforge.configuration import VisualizationSettings
 
     name = 'catalog.schema.a_very_long_table_name_for_a_real_engineering_job'
@@ -70,7 +80,8 @@ def test_graph_appearance_is_shared_with_offline_export_and_keeps_full_identity(
     assert hidden["nodes"][0]["name"] == name
 
 
-def test_graph_mount_supports_component_document_fragment_without_style():
+def test_graph_mount_supports_component_document_fragment_without_style() -> None:
+    """Verify that graph mount supports component document fragment without style."""
     from dataforge.exports import GRAPH_JS
 
     if node := shutil.which("node"):
@@ -93,7 +104,8 @@ console.log(JSON.stringify({attributes,properties}));
         assert json.loads(result.stdout)["properties"]["--df-selected-edge-width"] == 6
 
 
-def test_graph_double_click_cancels_selection_and_copy_keeps_full_name():
+def test_graph_double_click_cancels_selection_and_copy_keeps_full_name() -> None:
+    """Verify that graph double click cancels selection and copy keeps full name."""
     from dataforge.exports import GRAPH_JS
 
     if not (node := shutil.which("node")):

@@ -1,4 +1,7 @@
 import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -10,7 +13,12 @@ from dataforge.store import Store
 
 
 @pytest.fixture
-def queued(tmp_path):
+def queued(tmp_path: Path) -> Iterator[Any]:
+    """Handle queued for the test scenario.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     workspace = store.create_workspace("Diagnostic review")
     code = "CREATE TABLE mart.x AS SELECT unknown.id FROM raw.a;"
@@ -23,7 +31,12 @@ def queued(tmp_path):
     store.close()
 
 
-def test_review_queue_is_bounded_and_previews_only_relevant_statement(queued):
+def test_review_queue_is_bounded_and_previews_only_relevant_statement(queued: Any) -> None:
+    """Verify that review queue is bounded and previews only relevant statement.
+
+    Args:
+        queued: Queued value used by the test case.
+    """
     from dataforge.assistance_queue import diagnostic_context, diagnostic_queue
 
     store, workspace, code = queued
@@ -48,14 +61,27 @@ def test_review_queue_is_bounded_and_previews_only_relevant_statement(queued):
     assert diagnostic_queue(store, workspace)["items"] == []
 
 
-def test_review_request_routes_grounded_result_then_requires_explicit_merge(queued):
+def test_review_request_routes_grounded_result_then_requires_explicit_merge(queued: Any) -> None:
+    """Verify that review request routes grounded result then requires explicit merge.
+
+    Args:
+        queued: Queued value used by the test case.
+    """
     from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, request_review
 
     store, workspace, code = queued
     item = diagnostic_queue(store, workspace)["items"][0]
     preview = diagnostic_context(store, workspace, item["diagnostic_id"])
     requests = []
-    def respond(request):
+    def respond(request: pytest.FixtureRequest) -> Any:
+        """Handle respond for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         body = json.loads(request.content)
         requests.append(body)
         context = json.loads(body["messages"][1]["content"].split("\n", 1)[-1])
@@ -73,13 +99,29 @@ def test_review_request_routes_grounded_result_then_requires_explicit_merge(queu
     assert diagnostic_queue(store, workspace)["items"]  # A claim does not resolve a column warning.
 
 
-def test_review_rejects_changed_preview_and_preserves_privacy_before_network(queued):
+def test_review_rejects_changed_preview_and_preserves_privacy_before_network(queued: Any) -> None:
+    """Verify that review rejects changed preview and preserves privacy before network.
+
+    Args:
+        queued: Queued value used by the test case.
+
+    Raises:
+        AssertionError: Raised by the test helper.
+    """
     from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, request_review
 
     store, workspace, _ = queued
     item = diagnostic_queue(store, workspace)["items"][0]
     preview = diagnostic_context(store, workspace, item["diagnostic_id"])
-    def forbidden(request):
+    def forbidden(request: pytest.FixtureRequest) -> None:
+        """Handle forbidden for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Raises:
+            AssertionError: Raised by the test helper.
+        """
         raise AssertionError("No request should be sent")
     transport = httpx.MockTransport(forbidden)
     remote = Profile(provider="OpenAI", base_url="https://api.openai.com/v1", model="synthetic")
@@ -91,7 +133,12 @@ def test_review_rejects_changed_preview_and_preserves_privacy_before_network(que
         request_review(store, workspace, item["diagnostic_id"], preview["content_hash"], 1, 1, transport=transport)
 
 
-def test_review_quarantines_invalid_output_without_changing_facts(queued):
+def test_review_quarantines_invalid_output_without_changing_facts(queued: Any) -> None:
+    """Verify that review quarantines invalid output without changing facts.
+
+    Args:
+        queued: Queued value used by the test case.
+    """
     from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, request_review
 
     store, workspace, _ = queued
@@ -104,25 +151,55 @@ def test_review_quarantines_invalid_output_without_changing_facts(queued):
     assert result["outcome"] == "quarantined" and store.edges(workspace) == before
 
 
-def test_review_pins_preview_even_if_import_changes_after_queue_lookup(queued, monkeypatch):
+def test_review_pins_preview_even_if_import_changes_after_queue_lookup(queued: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that review pins preview even if import changes after queue lookup.
+
+    Args:
+        queued: Queued value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        AssertionError: Raised by the test helper.
+    """
     from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, request_review
 
     store, workspace, _ = queued
     item = diagnostic_queue(store, workspace)["items"][0]
     preview = diagnostic_context(store, workspace, item["diagnostic_id"])
     read = store.file
-    def import_before_read(file_id):
+    def import_before_read(file_id: Any) -> Any:
+        """Handle import before read for the test scenario.
+
+        Args:
+            file_id: File id value used by the test case.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         Importer(store, workspace).files([("q.sql", b"SELECT id FROM raw.changed;")], {".sql"})
         return read(file_id)
     monkeypatch.setattr(store, "file", import_before_read)
-    def forbidden(request):
+    def forbidden(request: pytest.FixtureRequest) -> None:
+        """Handle forbidden for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Raises:
+            AssertionError: Raised by the test helper.
+        """
         raise AssertionError("Changed source must not be transmitted")
     with pytest.raises(ValueError, match="changed"):
         request_review(store, workspace, item["diagnostic_id"], preview["content_hash"], 1, 1,
                         transport=httpx.MockTransport(forbidden))
 
 
-def test_review_queue_sas_fallback_ignores_info_and_csv(queued):
+def test_review_queue_sas_fallback_ignores_info_and_csv(queued: Any) -> None:
+    """Verify that review queue sas fallback ignores info and csv.
+
+    Args:
+        queued: Queued value used by the test case.
+    """
     from dataforge.assistance_queue import diagnostic_context, diagnostic_queue
 
     store, workspace, _ = queued

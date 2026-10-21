@@ -1,5 +1,6 @@
 import asyncio
 import sys
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -11,7 +12,13 @@ from dataforge.cli import app
 from dataforge.store import Store
 
 
-def test_application_theme_logging_scope_and_setup(tmp_path, monkeypatch):
+def test_application_theme_logging_scope_and_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that application theme logging scope and setup.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     config = tmp_path / 'config.toml'
     config.write_text('[server]\nport=1234 # preserved\n[theme]\nfont="serif"\n', encoding='utf-8')
     monkeypatch.setenv('DATAFORGE_THEME_CONFIG', str(config))

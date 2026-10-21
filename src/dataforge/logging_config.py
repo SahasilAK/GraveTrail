@@ -7,7 +7,10 @@ from dataforge.connections import current_connections
 
 
 class JsonFormatter(logging.Formatter):
-    def format(self, record):
+    """Format application log records as JSON with credential-safe metadata."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Serialize a record and redact any active connection credentials."""
         event = {"time": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
                  "level": record.levelname, "logger": record.name, "event": record.getMessage()}
         for key in ("run_id", "line", "error_type"):
@@ -18,7 +21,8 @@ class JsonFormatter(logging.Formatter):
         return current_connections().redact(json.dumps(event))
 
 
-def configure_logging(level="INFO"):
+def configure_logging(level: str = "INFO") -> None:
+    """Configure the application's JSON stream logger at a supported level."""
     if level not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
         raise ValueError("Choose DEBUG, INFO, WARNING or ERROR logging")
     logger = logging.getLogger("dataforge")
@@ -30,6 +34,7 @@ def configure_logging(level="INFO"):
     logger.propagate = False
 
 
-def save_application_logging(store, level):
+def save_application_logging(store: object, level: str) -> None:
+    """Apply a logging level and persist it in the application settings scope."""
     configure_logging(level)
     store.set_setting('__application__', 'log_level', level)

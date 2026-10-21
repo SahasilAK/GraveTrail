@@ -4,10 +4,17 @@ import json
 import streamlit as st
 
 from dataforge.services import compare_runs
+from dataforge.store import Store
 from ui.common import source_viewer
 
 
-def render_diagnostics(store, w):
+def render_diagnostics(store: Store, w: str) -> None:
+    """Render parser diagnostics and expandable source-backed review controls.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     diagnostics = store.diagnostics(w)
     visibility = store.setting(w, "diagnostic_visibility", "all")
     if visibility != "all":
@@ -61,7 +68,13 @@ def render_diagnostics(store, w):
             render(store, w)
 
 
-def render_history(store, w):
+def render_history(store: Store, w: str) -> None:
+    """Render recent analysis runs and comparisons between completed runs.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     st.subheader("Analysis history", icon=":material/history:")
     st.dataframe([{k: r[k] for k in ["created_at", "status", "analyzed", "cached", "duration"]} for r in store.runs(w)[:50]],
                  hide_index=True, column_config={"created_at": "Started", "analyzed": "Parsed files", "cached": "Reused files", "duration": st.column_config.NumberColumn("Seconds", format="%.2f")},
@@ -72,7 +85,15 @@ def render_history(store, w):
         st.info("Complete at least two analysis runs to compare workspace changes.")
     else:
         options = {r["run_id"]: r for r in runs}
-        def fmt(k):
+        def fmt(k: str) -> str:
+            """Format an analysis run's timestamp and short identifier.
+
+            Args:
+                k: Analysis run ID.
+
+            Returns:
+                Timestamp and eight-character run identifier for the selector.
+            """
             return f"{options[k]['created_at']} ({k[:8]})"
         before = st.selectbox("Baseline run", list(options), index=1, format_func=fmt)
         after = st.selectbox("Comparison run", list(options), format_func=fmt)

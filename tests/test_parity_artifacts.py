@@ -3,6 +3,7 @@ import base64
 import hashlib
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -16,7 +17,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_original_binary_artifact_roundtrip_authorization_and_paths(tmp_path):
+def test_original_binary_artifact_roundtrip_authorization_and_paths(tmp_path: Path) -> None:
+    """Verify that original binary artifact roundtrip authorization and paths.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('artifacts')
     original = b'\xef\xbb\xbfcreate table mart.x as select id from raw.a;\r\n'
@@ -63,7 +69,12 @@ def test_original_binary_artifact_roundtrip_authorization_and_paths(tmp_path):
         store.close()
 
 
-def test_cli_original_download_never_overwrites(tmp_path):
+def test_cli_original_download_never_overwrites(tmp_path: Path) -> None:
+    """Verify that cli original download never overwrites.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path / 'home')
     w = store.create_workspace('download')
     original = b'select id from raw.a;\r\n'
@@ -80,7 +91,12 @@ def test_cli_original_download_never_overwrites(tmp_path):
     assert second.exit_code != 0 and destination.read_bytes() == original
 
 
-def test_cycle_paths_are_explicitly_incomplete(tmp_path):
+def test_cycle_paths_are_explicitly_incomplete(tmp_path: Path) -> None:
+    """Verify that cycle paths are explicitly incomplete.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('cycle')
     Importer(store, w).files([('a.sql', b'create table a as select id from b; create table b as select id from a;')], {'.sql'})

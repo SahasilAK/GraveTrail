@@ -4,17 +4,20 @@ import hashlib
 import json
 import re
 import uuid
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dataforge.agent.contracts import AgentError, compact
+from dataforge.agent.contracts import AgentError, QueryOptions, compact
 from dataforge.cleanup import checked_path
 from dataforge.configuration import VisualizationSettings
 from dataforge.excel_exports import XLSX_MIME
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, report_html, source_bundle
+from dataforge.graph import LineageGraph
 from dataforge.reporting import code_matches, data_dictionary
 from dataforge.services import column_report
+from dataforge.store import Store
 
 READS = {'artifact_read', 'paths', 'steps', 'graph_view'}
 WRITES = {'artifact_create'}
@@ -27,6 +30,8 @@ MAX_BYTES = 64 * 1024 * 1024
 
 
 class Selection(BaseModel):
+    """Validate and bound the selection fields accepted by artifact creation."""
+
     model_config = ConfigDict(extra='forbid', strict=True)
     asset: str = Field(default='', max_length=1024)
     direction: Literal['upstream', 'downstream', 'combined'] = 'upstream'
@@ -47,13 +52,24 @@ class Selection(BaseModel):
     legend: bool = True
 
 
-def _directory(store, workspace):
+def _directory(store: Store, workspace: str) -> Path:
+    """Return the checked artifact directory for a valid workspace identifier."""
     if not re.fullmatch('[a-f0-9]{32}', workspace):
         raise AgentError('not_found', 'Artifact workspace does not exist')
     return checked_path(store.home, 'agent/artifacts/' + workspace)
 
 
-def write_artifact(store, workspace, kind, format, data, complete, source_versions, source_required):
+def write_artifact(
+    store: Store,
+    workspace: str,
+    kind: str,
+    format: str,
+    data: bytes,
+    complete: bool,
+    source_versions: dict[str, Any],
+    source_required: bool,
+) -> dict[str, Any]:
+    """Write bounded artifact bytes and a metadata manifest into the managed directory."""
     if len(data) > MAX_BYTES:
         raise AgentError('resource_limit', 'Artifact exceeds 64 MB; narrow the selection')
     directory = _directory(store, workspace)
@@ -83,7 +99,10 @@ def write_artifact(store, workspace, kind, format, data, complete, source_versio
 
 
 class ArtifactOperations:
-    def _artifact_graph(self, w, opts, asset, direction):
+    """Build authorized graph, report, source, and AI-result artifacts."""
+
+    def _artifact_graph(self, w: str, opts: QueryOptions, asset: str, direction: str) -> tuple[str, LineageGraph]:
+        """Return an exact selected asset ID and its focused, bounded graph."""
         selected = self._asset(w, asset)['asset_id']
         graph = self._graph(w, opts, selected)
         focused = graph.focus(selected, direction, opts.max_depth, opts.max_items)
@@ -94,7 +113,8 @@ class ArtifactOperations:
         focused.truncated |= depth_boundary
         return selected, focused
 
-    def _paths(self, w, opts, asset, direction='upstream', max_paths=50):
+    def _paths(self, w: str, opts: QueryOptions, asset: str, direction: str = 'upstream', max_paths: int = 50) -> dict[str, Any]:
+        """Return paginated lineage paths with graph and depth boundaries."""
         if direction not in {'upstream', 'downstream'} or type(max_paths) is not int or not 1 <= max_paths <= 500:
             raise AgentError('validation_failed', 'Use upstream/downstream and 1–500 paths')
         selected = self._asset(w, asset)['asset_id']
@@ -104,12 +124,23 @@ class ArtifactOperations:
             analysis_current=self._current(w), boundaries=['path_limit_depth_cycle_or_graph'] if report['truncated'] else [],
             direction=direction, selected_asset=selected, ordering='logical dependencies; not runtime execution')
 
-    def _steps(self, w, opts, asset, direction='upstream'):
+    def _steps(self, w: str, opts: QueryOptions, asset: str, direction: str = 'upstream') -> dict[str, Any]:
+        """Return ordered evidence rows for the focused lineage graph."""
         _, graph = self._artifact_graph(w, opts, asset, direction)
         return self._page(w, opts, ['steps', asset, direction], graph.lineage_rows(), analysis_current=self._current(w),
             boundaries=['graph_limit_or_depth'] if graph.truncated else [], ordering='logical dependencies; not runtime execution')
 
-    def _graph_view(self, w, opts, asset, direction='upstream', view='nodes', node_id='', edge_id=''):
+    def _graph_view(
+        self,
+        w: str,
+        opts: QueryOptions,
+        asset: str,
+        direction: str = 'upstream',
+        view: str = 'nodes',
+        node_id: str = '',
+        edge_id: str = '',
+    ) -> dict[str, Any]:
+        """Return a paginated node, edge, or tree view of an authorized graph."""
         if view not in {'nodes', 'edges', 'tree'} or direction not in {'upstream', 'downstream', 'combined'}:
             raise AgentError('validation_failed', 'Use nodes, edges or tree view and a supported direction')
         selected, graph = self._artifact_graph(w, opts, asset, direction)
@@ -140,7 +171,15 @@ class ArtifactOperations:
             analysis_current=self._current(w), boundaries=['graph_limit_or_depth'] if graph.truncated else [],
             selected_asset=selected, appearance=data['appearance'])
 
-    def _artifact_create(self, w, opts, kind, format, selection):
+    def _artifact_create(
+        self,
+        w: str,
+        opts: QueryOptions,
+        kind: str,
+        format: str,
+        selection: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create a validated, version-bound artifact in managed workspace storage."""
         if kind == 'backup':
             raise AgentError('requires_local_admin', 'Whole-home backup downloads are local CLI/UI only')
         if format not in FORMATS.get(kind, set()):
@@ -240,7 +279,15 @@ class ArtifactOperations:
             data = (compact(rows) if format == 'json' else report_csv(rows) if format == 'csv' else report_html(rows)).encode()
         return write_artifact(self.store, w, kind, format, data, complete, versions, source_required)
 
-    def _artifact_read(self, w, opts, artifact_id, offset=0, length=16384):
+    def _artifact_read(
+        self,
+        w: str,
+        opts: QueryOptions,
+        artifact_id: str,
+        offset: int = 0,
+        length: int = 16384,
+    ) -> dict[str, Any]:
+        """Read an authorized artifact segment after checking its manifest and digest."""
         if not re.fullmatch('[a-f0-9]{32}', artifact_id):
             raise AgentError('not_found', 'Artifact does not exist')
         directory = _directory(self.store, w)

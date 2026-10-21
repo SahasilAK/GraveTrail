@@ -1,13 +1,24 @@
+from typing import Any
+
 import pytest
 
 from dataforge.parsers.sas import parse_sas
 
 
-def physical(operation):
+def physical(operation: Any) -> Any:
+    """Handle physical for the test scenario.
+
+    Args:
+        operation: Operation value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     return {d['target_column']: d for d in operation.derivations if not d['scope'] and d['target_column']}
 
 
-def test_assignments_reference_the_previous_version_and_publish_latest_values():
+def test_assignments_reference_the_previous_version_and_publish_latest_values() -> None:
+    """Verify that assignments reference the previous version and publish latest values."""
     operation = parse_sas('data mart.x; set raw.orders; amount=quantity * price; amount=amount * 2; keep amount; run;').operations[0]
     steps = [d for d in operation.derivations if d['scope'] and d['target_column'] == 'amount']
     assert len(steps) == 2
@@ -23,7 +34,8 @@ def test_assignments_reference_the_previous_version_and_publish_latest_values():
     assert all(d['status'] == 'verified' for d in operation.derivations)
 
 
-def test_literal_assignment_has_zero_inputs_without_an_invented_source():
+def test_literal_assignment_has_zero_inputs_without_an_invented_source() -> None:
+    """Verify that literal assignment has zero inputs without an invented source."""
     operation = parse_sas('data result; answer=42; label="raw.fake"; run;').operations[0]
     steps = [d for d in operation.derivations if d['scope']]
     assert {d['target_column'] for d in steps} == {'answer', 'label'}
@@ -31,7 +43,8 @@ def test_literal_assignment_has_zero_inputs_without_an_invented_source():
     assert set(physical(operation)) == {'answer', 'label'}
 
 
-def test_single_set_keep_rename_and_drop_preserve_physical_source_columns():
+def test_single_set_keep_rename_and_drop_preserve_physical_source_columns() -> None:
+    """Verify that single set keep rename and drop preserve physical source columns."""
     operation = parse_sas('data published; set raw.orders(keep=id amount secret rename=(id=order_id)); '
                           'rename amount=total; drop secret; run;').operations[0]
     output = physical(operation)
@@ -41,7 +54,8 @@ def test_single_set_keep_rename_and_drop_preserve_physical_source_columns():
     assert not any(d['coverage'] for d in operation.derivations)
 
 
-def test_drop_without_a_schema_keeps_unknown_passthrough_coverage_visible():
+def test_drop_without_a_schema_keeps_unknown_passthrough_coverage_visible() -> None:
+    """Verify that drop without a schema keeps unknown passthrough coverage visible."""
     operation = parse_sas('data published; set raw.orders; drop secret; total=amount * 2; run;').operations[0]
     assert set(physical(operation)) == {'total'}
     assert any(d['status'] == 'unresolved' and d['coverage'] for d in operation.derivations)
@@ -49,19 +63,26 @@ def test_drop_without_a_schema_keeps_unknown_passthrough_coverage_visible():
 
 @pytest.mark.parametrize('body', ['merge raw.a raw.b; by id; x=id;', 'set raw.a; array v[2] a b; x=a;',
                                   'set raw.a; do i=1 to 2; x=i; end;', 'set raw.a; retain x; if id then x=1;'])
-def test_procedural_constructs_have_explicit_unresolved_transformations(body):
+def test_procedural_constructs_have_explicit_unresolved_transformations(body: str) -> None:
+    """Verify that procedural constructs have explicit unresolved transformations.
+
+    Args:
+        body: Body value used by the test case.
+    """
     result = parse_sas('data mart.x; ' + body + ' run;')
     assert result.operations[0].derivations
     assert all(d['status'] == 'unresolved' for d in result.operations[0].derivations)
     assert any('transformation' in d.message.lower() for d in result.diagnostics)
 
 
-def test_unknown_variable_without_set_is_unresolved_instead_of_a_constant():
+def test_unknown_variable_without_set_is_unresolved_instead_of_a_constant() -> None:
+    """Verify that unknown variable without set is unresolved instead of a constant."""
     operation = parse_sas('data mart.x; amount=unknown * 2; run;').operations[0]
     assert physical(operation)['amount']['status'] == 'unresolved'
 
 
-def test_proc_sql_remaps_work_and_libraries_for_targets_and_inputs():
+def test_proc_sql_remaps_work_and_libraries_for_targets_and_inputs() -> None:
+    """Verify that proc sql remaps work and libraries for targets and inputs."""
     operation = parse_sas('proc sql; create table result as select id as order_id from src.orders; quit;',
                           library_mappings={'src': 'catalog.raw'}).operations[0]
     derivation = physical(operation)['order_id']
@@ -71,7 +92,8 @@ def test_proc_sql_remaps_work_and_libraries_for_targets_and_inputs():
     assert operation.method == 'sas-proc-sql'
 
 
-def test_macro_expansion_never_substitutes_expression_evidence():
+def test_macro_expansion_never_substitutes_expression_evidence() -> None:
+    """Verify that macro expansion never substitutes expression evidence."""
     result = parse_sas('%let multiplier=2; data mart.x; set raw.a; x=amount * &multiplier.; keep x; run;')
     operation = result.operations[0]
     step = next(d for d in operation.derivations if d['scope'])
@@ -79,18 +101,21 @@ def test_macro_expansion_never_substitutes_expression_evidence():
     assert step['status'] == 'unresolved' and step['coverage']
 
 
-def test_non_sql_procedure_reports_column_transformation_coverage():
+def test_non_sql_procedure_reports_column_transformation_coverage() -> None:
+    """Verify that non sql procedure reports column transformation coverage."""
     result = parse_sas('proc transpose data=raw.a out=mart.b; var amount; run;')
     assert any(d['status'] == 'unresolved' and d['coverage'] for d in result.operations[0].derivations)
 
 
-def test_assignment_before_set_does_not_claim_a_value_read_from_the_next_row():
+def test_assignment_before_set_does_not_claim_a_value_read_from_the_next_row() -> None:
+    """Verify that assignment before set does not claim a value read from the next row."""
     result = parse_sas('data mart.x; x=amount * 2; set raw.orders; keep x; run;')
     assert result.operations[0].derivations
     assert all(d['status'] == 'unresolved' for d in result.operations[0].derivations)
 
 
-def test_input_rename_changes_available_variable_names_before_assignments():
+def test_input_rename_changes_available_variable_names_before_assignments() -> None:
+    """Verify that input rename changes available variable names before assignments."""
     operation = parse_sas('data mart.x; set raw.orders(rename=(id=order_id)); '
                           'old=id; new=order_id; keep old new; run;').operations[0]
     output = physical(operation)
@@ -99,32 +124,45 @@ def test_input_rename_changes_available_variable_names_before_assignments():
     assert new['inputs'] == [{'table': 'raw.orders', 'column': 'id', 'role': 'value', 'scope': '', 'version': ''}]
 
 
-def test_rename_without_keep_records_known_mapping_and_unknown_remaining_columns():
+def test_rename_without_keep_records_known_mapping_and_unknown_remaining_columns() -> None:
+    """Verify that rename without keep records known mapping and unknown remaining columns."""
     operation = parse_sas('data mart.x; set raw.orders; rename id=order_id; run;').operations[0]
     assert physical(operation)['order_id']['inputs'][0]['column'] == 'id'
     assert any(d['target_column'] == '' and d['coverage'] for d in operation.derivations)
 
 
-def test_macro_in_double_quoted_assignment_retains_original_text_and_uncertainty():
+def test_macro_in_double_quoted_assignment_retains_original_text_and_uncertainty() -> None:
+    """Verify that macro in double quoted assignment retains original text and uncertainty."""
     operation = parse_sas('%let val=resolved; data mart.x; label="&val."; run;').operations[0]
     step = next(d for d in operation.derivations if d['scope'])
     assert step['expression'] == 'label="&val.";'
     assert step['status'] == 'unresolved'
 
 
-def test_conflicting_output_rename_does_not_verify_two_values_for_one_column():
+def test_conflicting_output_rename_does_not_verify_two_values_for_one_column() -> None:
+    """Verify that conflicting output rename does not verify two values for one column."""
     operation = parse_sas('data mart.x; set raw.orders(keep=id order_id); rename id=order_id; run;').operations[0]
     assert all(d['status'] == 'unresolved' for d in operation.derivations if not d['scope'])
 
 
 @pytest.mark.parametrize('expression', ['first.id', 'lag3(amount)', 'values{index}', '_n_'])
-def test_runtime_or_qualified_variables_are_not_fabricated_as_input_columns(expression):
+def test_runtime_or_qualified_variables_are_not_fabricated_as_input_columns(expression: str) -> None:
+    """Verify that runtime or qualified variables are not fabricated as input columns.
+
+    Args:
+        expression: Expression value used by the test case.
+    """
     operation = parse_sas(f'data mart.x; set raw.orders; x={expression}; keep x; run;').operations[0]
     assert physical(operation)['x']['status'] == 'unresolved'
 
 
 @pytest.mark.parametrize('argument', ['amount', '1', '"literal"'])
-def test_unknown_sas_function_is_unresolved_and_retains_known_argument_dependencies(argument):
+def test_unknown_sas_function_is_unresolved_and_retains_known_argument_dependencies(argument: str) -> None:
+    """Verify that unknown sas function is unresolved and retains known argument dependencies.
+
+    Args:
+        argument: Argument value used by the test case.
+    """
     operation = parse_sas(f'data mart.x; set raw.orders; x=mystery({argument}); keep x; run;').operations[0]
     step = next(d for d in operation.derivations if d['scope'])
     assert step['status'] == 'unresolved' and step['category'] != 'constant'
@@ -136,12 +174,18 @@ def test_unknown_sas_function_is_unresolved_and_retains_known_argument_dependenc
 
 @pytest.mark.parametrize('expression', ['sum(amount, tax)', 'coalesce(amount, 0)', 'abs(amount)',
                                        'round(amount, 0.01)', 'upcase(label)'])
-def test_bounded_common_sas_function_assignments_preserve_verified_arguments(expression):
+def test_bounded_common_sas_function_assignments_preserve_verified_arguments(expression: str) -> None:
+    """Verify that bounded common sas function assignments preserve verified arguments.
+
+    Args:
+        expression: Expression value used by the test case.
+    """
     operation = parse_sas(f'data mart.x; set raw.orders; x={expression}; keep x; run;').operations[0]
     assert physical(operation)['x']['status'] == 'verified'
 
 
-def test_input_rename_cannot_verify_a_column_removed_by_input_keep():
+def test_input_rename_cannot_verify_a_column_removed_by_input_keep() -> None:
+    """Verify that input rename cannot verify a column removed by input keep."""
     operation = parse_sas('data mart.x; set raw.orders(keep=order_id rename=(id=order_id)); '
                           'keep order_id; run;').operations[0]
     assert operation.derivations

@@ -6,10 +6,18 @@ import streamlit as st
 from dataforge.cleanup import CATEGORIES, apply_cleanup, cleanup_plan
 from dataforge.database_maintenance import backup, checkpoint, inspect_database, restore_backup
 from dataforge.services import analyze
+from dataforge.store import Store
 from dataforge.temporary_cleanup import cleanup_temporary, temporary_plan
 
 
-def render(store, workspace, mode="cleanup"):
+def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
+    """Render cleanup or backup and integrity controls for a workspace.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+        mode: Selects the cleanup or backup/integrity view.
+    """
     st.subheader('Cleanup preview' if mode == 'cleanup' else 'Backups & integrity', icon=':material/shield:')
     st.caption('Preview dependencies before removal. Backups contain private source data; keep a copy outside this runtime home.')
     if mode == 'cleanup':

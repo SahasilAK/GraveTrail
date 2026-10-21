@@ -11,7 +11,12 @@ from dataforge.theme_configuration import current_preset as current_preset
 
 CONFIG_PATH = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(Path(__file__).resolve().parents[1] / '.streamlit/config.toml')))
 
-def _loaded_preset():
+def _loaded_preset() -> str | None:
+    """Return the preset matching Streamlit's current native theme colors.
+
+    Returns:
+        Matching preset name, or ``None`` when the current colors are custom.
+    """
     import streamlit as st
 
     return next((name for name, values in PRESETS.items() if all(
@@ -19,7 +24,8 @@ def _loaded_preset():
         else st.get_option(f"theme.{key}") == value for key, value in values.items())), None)
 
 
-def render_theme_picker():
+def render_theme_picker() -> None:
+    """Render theme selection and wait for saved native colors to load."""
     import streamlit as st
 
     st.subheader("Color theme")
@@ -30,7 +36,8 @@ def render_theme_picker():
         if pending := st.session_state.get("theme_pending"):
             # Config watching is asynchronous; rerun only after native colors have loaded.
             @st.fragment(run_every=.5)
-            def wait_for_theme():
+            def wait_for_theme() -> None:
+                """Wait for the selected theme or flag a page reload on timeout."""
                 if _loaded_preset() == pending[0]:
                     st.session_state.pop("theme_pending", None)
                     st.session_state["theme_notice"] = f"{pending[0]} theme applied"

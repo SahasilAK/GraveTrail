@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -9,7 +10,12 @@ from dataforge.services import analyze, column_report
 from dataforge.store import Store
 
 
-def test_explicit_jobs_isolate_temporary_assets_but_share_persistent_assets(tmp_path):
+def test_explicit_jobs_isolate_temporary_assets_but_share_persistent_assets(tmp_path: Path) -> None:
+    """Verify that explicit jobs isolate temporary assets but share persistent assets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.graph import LineageGraph
 
     store = Store(tmp_path)
@@ -39,7 +45,12 @@ def test_explicit_jobs_isolate_temporary_assets_but_share_persistent_assets(tmp_
         store.close()
 
 
-def test_workspace_default_preserves_legacy_asset_ids_and_job_settings_roundtrip(tmp_path):
+def test_workspace_default_preserves_legacy_asset_ids_and_job_settings_roundtrip(tmp_path: Path) -> None:
+    """Verify that workspace default preserves legacy asset ids and job settings roundtrip.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.configuration import (
         ParsingSettings,
         export_workspace_configuration,
@@ -64,7 +75,12 @@ def test_workspace_default_preserves_legacy_asset_ids_and_job_settings_roundtrip
         store.close()
 
 
-def test_job_changes_remain_visible_in_history_and_exports(tmp_path):
+def test_job_changes_remain_visible_in_history_and_exports(tmp_path: Path) -> None:
+    """Verify that job changes remain visible in history and exports.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.exports import graph_data
     from dataforge.graph import LineageGraph
     from dataforge.services import compare_runs
@@ -89,7 +105,12 @@ def test_job_changes_remain_visible_in_history_and_exports(tmp_path):
         store.close()
 
 
-def test_sql_temporary_schema_is_not_shared_between_jobs(tmp_path):
+def test_sql_temporary_schema_is_not_shared_between_jobs(tmp_path: Path) -> None:
+    """Verify that sql temporary schema is not shared between jobs.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Scoped schemas")
@@ -106,7 +127,12 @@ def test_sql_temporary_schema_is_not_shared_between_jobs(tmp_path):
         store.close()
 
 
-def test_qualified_temporary_schema_in_other_job_cannot_invalidate_or_create_assets(tmp_path):
+def test_qualified_temporary_schema_in_other_job_cannot_invalidate_or_create_assets(tmp_path: Path) -> None:
+    """Verify that qualified temporary schema in other job cannot invalidate or create assets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Scoped qualified declarations")
@@ -126,7 +152,12 @@ def test_qualified_temporary_schema_in_other_job_cannot_invalidate_or_create_ass
         store.close()
 
 
-def test_ai_merge_uses_source_job_not_last_matching_name(tmp_path):
+def test_ai_merge_uses_source_job_not_last_matching_name(tmp_path: Path) -> None:
+    """Verify that ai merge uses source job not last matching name.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.llm import Profile, assist, merge_claims
 
     store = Store(tmp_path)
@@ -157,7 +188,13 @@ def test_ai_merge_uses_source_job_not_last_matching_name(tmp_path):
 
 
 @pytest.mark.parametrize("job", ["workspace", "batch"])
-def test_same_job_temporary_persistent_collision_keeps_read_unresolved(tmp_path, job):
+def test_same_job_temporary_persistent_collision_keeps_read_unresolved(tmp_path: Path, job: str) -> None:
+    """Verify that same job temporary persistent collision keeps read unresolved.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        job: Job value used by the test case.
+    """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Ambiguous lifetime")
@@ -177,7 +214,13 @@ def test_same_job_temporary_persistent_collision_keeps_read_unresolved(tmp_path,
         store.close()
 
 
-def test_settings_ui_saves_job_assignment_and_distinct_asset_choices(tmp_path, monkeypatch):
+def test_settings_ui_saves_job_assignment_and_distinct_asset_choices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that settings ui saves job assignment and distinct asset choices.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest
@@ -207,7 +250,13 @@ def test_settings_ui_saves_job_assignment_and_distinct_asset_choices(tmp_path, m
 
 
 @pytest.mark.parametrize("declaration", ["", "create table stage as select id from raw.b;"])
-def test_default_temporary_and_foreign_job_persistent_writes_keep_separate_paths(tmp_path, declaration):
+def test_default_temporary_and_foreign_job_persistent_writes_keep_separate_paths(tmp_path: Path, declaration: str) -> None:
+    """Verify that default temporary and foreign job persistent writes keep separate paths.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        declaration: Declaration value used by the test case.
+    """
     from dataforge.graph import LineageGraph
 
     store = Store(tmp_path)
@@ -227,7 +276,12 @@ def test_default_temporary_and_foreign_job_persistent_writes_keep_separate_paths
         store.close()
 
 
-def test_persistent_output_stays_globally_resolvable_when_its_job_also_writes_temporary(tmp_path):
+def test_persistent_output_stays_globally_resolvable_when_its_job_also_writes_temporary(tmp_path: Path) -> None:
+    """Verify that persistent output stays globally resolvable when its job also writes temporary.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.graph import LineageGraph
 
     store = Store(tmp_path)

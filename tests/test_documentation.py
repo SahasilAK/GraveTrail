@@ -2,11 +2,21 @@
 import asyncio
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 
-def reference_rows(document, section):
+def reference_rows(document: Any, section: Any) -> Any:
+    """Handle reference rows for the test scenario.
+
+    Args:
+        document: Document value used by the test case.
+        section: Section value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     text = (Path(__file__).resolve().parents[1] / "docs" / document).read_text(encoding="utf-8")
     start, end = f"<!-- {section}:start -->", f"<!-- {section}:end -->"
     assert text.count(start) == text.count(end) == 1, f"Missing or duplicate {section} reference"
@@ -19,7 +29,8 @@ def reference_rows(document, section):
     return rows
 
 
-def test_cli_guide_lists_every_registered_command_group_and_option():
+def test_cli_guide_lists_every_registered_command_group_and_option() -> None:
+    """Verify that cli guide lists every registered command group and option."""
     import typer.main
 
     from dataforge.cli import app
@@ -27,7 +38,13 @@ def test_cli_guide_lists_every_registered_command_group_and_option():
     root = typer.main.get_command(app)
     commands, groups = {}, set()
 
-    def walk(group, prefix=()):
+    def walk(group: Any, prefix: Any=()) -> None:
+        """Handle walk for the test scenario.
+
+        Args:
+            group: Group value used by the test case.
+            prefix: Prefix value used by the test case.
+        """
         for name, command in group.commands.items():
             route = (*prefix, name)
             if hasattr(command, "commands"):
@@ -40,7 +57,15 @@ def test_cli_guide_lists_every_registered_command_group_and_option():
     rows = reference_rows("CLI_GUIDE.md", "cli-commands")
     assert set(rows) == set(commands)
     assert set(reference_rows("CLI_GUIDE.md", "cli-groups")) == groups
-    def flags(row):
+    def flags(row: Any) -> Any:
+        """Handle flags for the test scenario.
+
+        Args:
+            row: Row value used by the test case.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         return set(re.findall(r"`(-{1,2}[\w-]+)`", row))
 
     for route, command in commands.items():
@@ -59,7 +84,12 @@ def test_cli_guide_lists_every_registered_command_group_and_option():
     assert documented == expected
 
 
-def test_mcp_guide_lists_every_registered_tool_resource_prompt_and_input(tmp_path):
+def test_mcp_guide_lists_every_registered_tool_resource_prompt_and_input(tmp_path: Path) -> None:
+    """Verify that mcp guide lists every registered tool resource prompt and input.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.agent.mcp_server import create_server
     from dataforge.agent.service import AgentService
     from dataforge.store import Store
@@ -67,7 +97,8 @@ def test_mcp_guide_lists_every_registered_tool_resource_prompt_and_input(tmp_pat
     store = Store(tmp_path / "home")
     service = AgentService(store)
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         server = create_server(service)
         tools = await server.list_tools()
         rows = reference_rows("MCP_INTEGRATION.md", "mcp-tools")
@@ -97,7 +128,12 @@ def test_mcp_guide_lists_every_registered_tool_resource_prompt_and_input(tmp_pat
         store.close()
 
 
-def test_publication_filter_excludes_unlisted_files_and_requires_sources(tmp_path):
+def test_publication_filter_excludes_unlisted_files_and_requires_sources(tmp_path: Path) -> None:
+    """Verify that publication filter excludes unlisted files and requires sources.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from scripts.docs.hooks import public_files
 
     (tmp_path / "index.md").write_text("# Public", encoding="utf-8")
@@ -115,14 +151,20 @@ def test_publication_filter_excludes_unlisted_files_and_requires_sources(tmp_pat
         public_files(tmp_path, {"KNOWLEDGE.md"})
 
 
-def test_document_routes_do_not_collide_on_case_insensitive_hosts():
+def test_document_routes_do_not_collide_on_case_insensitive_hosts() -> None:
+    """Verify that document routes do not collide on case insensitive hosts."""
     from scripts.docs.hooks import page_output
 
     outputs = {page_output(name) for name in ("ARCHITECTURE.md", "architecture/overview.md", "index.md")}
     assert outputs == {"architecture/index.html", "architecture/overview/index.html", "index.html"}
 
 
-def test_site_links_validate_project_prefix_fragments_and_missing_targets(tmp_path):
+def test_site_links_validate_project_prefix_fragments_and_missing_targets(tmp_path: Path) -> None:
+    """Verify that site links validate project prefix fragments and missing targets.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from scripts.docs.validate import inspect_site
 
     (tmp_path / "guide").mkdir()
@@ -139,7 +181,12 @@ def test_site_links_validate_project_prefix_fragments_and_missing_targets(tmp_pa
     assert any("project prefix" in error for error in errors)
 
 
-def test_output_inventory_rejects_runtime_and_unexpected_files(tmp_path):
+def test_output_inventory_rejects_runtime_and_unexpected_files(tmp_path: Path) -> None:
+    """Verify that output inventory rejects runtime and unexpected files.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from scripts.docs.validate import inspect_inventory
 
     (tmp_path / "index.html").write_text("Public", encoding="utf-8")

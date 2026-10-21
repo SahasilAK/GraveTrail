@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -7,7 +9,16 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def populated(store, name):
+def populated(store: Any, name: str) -> Any:
+    """Handle populated for the test scenario.
+
+    Args:
+        store: Store instance exercised by the test.
+        name: Name value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     w = store.create_workspace(name)
     importer = Importer(store, w)
     for i in range(4):
@@ -16,7 +27,12 @@ def populated(store, name):
     return w
 
 
-def test_archive_restore_preserves_active_facts_and_isolates_workspaces(tmp_path):
+def test_archive_restore_preserves_active_facts_and_isolates_workspaces(tmp_path: Path) -> None:
+    """Verify that archive restore preserves active facts and isolates workspaces.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.maintenance import archive_history, history_plan, list_archives, restore_history
 
     store = Store(tmp_path)
@@ -41,14 +57,35 @@ def test_archive_restore_preserves_active_facts_and_isolates_workspaces(tmp_path
         store.close()
 
 
-def test_archive_failure_rolls_back_metadata_and_leaves_recovery_file(tmp_path, monkeypatch):
+def test_archive_failure_rolls_back_metadata_and_leaves_recovery_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that archive failure rolls back metadata and leaves recovery file.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        RuntimeError: Raised by the test helper.
+    """
     from dataforge.maintenance import archive_history, list_archives
 
     store = Store(tmp_path)
     try:
         w = populated(store, "Rollback")
         execute = store.execute
-        def fail_delete(sql, params=None):
+        def fail_delete(sql: str, params: Any=None) -> Any:
+            """Handle fail delete for the test scenario.
+
+            Args:
+                sql: SQL source text for the test case.
+                params: Params value used by the test case.
+
+            Returns:
+                Value produced for the test scenario.
+
+            Raises:
+                RuntimeError: Raised by the test helper.
+            """
             if sql.startswith("DELETE FROM ingestion_runs"):
                 raise RuntimeError("Injected failure")
             return execute(sql, params)
@@ -63,7 +100,12 @@ def test_archive_failure_rolls_back_metadata_and_leaves_recovery_file(tmp_path, 
         store.close()
 
 
-def test_recovery_survives_restart_and_rejects_tampering_and_cross_workspace(tmp_path):
+def test_recovery_survives_restart_and_rejects_tampering_and_cross_workspace(tmp_path: Path) -> None:
+    """Verify that recovery survives restart and rejects tampering and cross workspace.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.maintenance import archive_history, restore_history
 
     store = Store(tmp_path)
@@ -90,7 +132,12 @@ def test_recovery_survives_restart_and_rejects_tampering_and_cross_workspace(tmp
         store.close()
 
 
-def test_maintenance_rejects_running_analysis_and_preserves_latest_completed(tmp_path):
+def test_maintenance_rejects_running_analysis_and_preserves_latest_completed(tmp_path: Path) -> None:
+    """Verify that maintenance rejects running analysis and preserves latest completed.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.maintenance import archive_history, history_plan
 
     store = Store(tmp_path)
@@ -112,7 +159,12 @@ def test_maintenance_rejects_running_analysis_and_preserves_latest_completed(tmp
         store.close()
 
 
-def test_active_inventory_import_records_are_protected_and_batches_are_bounded(tmp_path):
+def test_active_inventory_import_records_are_protected_and_batches_are_bounded(tmp_path: Path) -> None:
+    """Verify that active inventory import records are protected and batches are bounded.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.maintenance import history_plan
 
     store = Store(tmp_path)
@@ -128,7 +180,16 @@ def test_active_inventory_import_records_are_protected_and_batches_are_bounded(t
         store.close()
 
 
-def test_failed_restore_has_no_partial_database_changes(tmp_path, monkeypatch):
+def test_failed_restore_has_no_partial_database_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that failed restore has no partial database changes.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        RuntimeError: Raised by the test helper.
+    """
     from dataforge.maintenance import archive_history, restore_history
 
     store = Store(tmp_path)
@@ -136,7 +197,19 @@ def test_failed_restore_has_no_partial_database_changes(tmp_path, monkeypatch):
         w = populated(store, "Atomic recovery")
         archived = archive_history(store, w, keep_runs=1, keep_imports=1)
         execute, calls = store.execute, []
-        def fail_second_insert(sql, params=None):
+        def fail_second_insert(sql: str, params: Any=None) -> Any:
+            """Handle fail second insert for the test scenario.
+
+            Args:
+                sql: SQL source text for the test case.
+                params: Params value used by the test case.
+
+            Returns:
+                Value produced for the test scenario.
+
+            Raises:
+                RuntimeError: Raised by the test helper.
+            """
             if sql.startswith("INSERT INTO analysis_runs"):
                 calls.append(1)
                 if len(calls) == 2:
@@ -151,7 +224,13 @@ def test_failed_restore_has_no_partial_database_changes(tmp_path, monkeypatch):
         store.close()
 
 
-def test_history_size_budget_is_checked_before_removal(tmp_path, monkeypatch):
+def test_history_size_budget_is_checked_before_removal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that history size budget is checked before removal.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import dataforge.maintenance as maintenance
 
     store = Store(tmp_path)
@@ -165,7 +244,12 @@ def test_history_size_budget_is_checked_before_removal(tmp_path, monkeypatch):
         store.close()
 
 
-def test_database_recovery_survives_missing_archive_file_and_restart(tmp_path):
+def test_database_recovery_survives_missing_archive_file_and_restart(tmp_path: Path) -> None:
+    """Verify that database recovery survives missing archive file and restart.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.maintenance import archive_history, list_archives, restore_history
 
     store = Store(tmp_path)
@@ -183,7 +267,12 @@ def test_database_recovery_survives_missing_archive_file_and_restart(tmp_path):
         store.close()
 
 
-def test_history_journal_migration_preserves_v2_facts(tmp_path):
+def test_history_journal_migration_preserves_v2_facts(tmp_path: Path) -> None:
+    """Verify that history journal migration preserves v2 facts.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = populated(store, "Migration")
     edges = store.edges(w)

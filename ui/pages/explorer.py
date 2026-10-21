@@ -81,7 +81,8 @@ if asset:
         revision = revision[0]["run_id"] if revision else "empty"
         graph_key = f"lineage_graph_{w}_{asset}_{evidence_direction}_{depth}_{simplified}_{revision}"
 
-        def navigate_graph():
+        def navigate_graph() -> None:
+            """Move the lineage focus to the node requested by the graph."""
             node = st.session_state[graph_key].get("navigate")
             if node in focused.nodes:
                 focus_asset(st.session_state, w, node, graph.nodes[node]["name"])

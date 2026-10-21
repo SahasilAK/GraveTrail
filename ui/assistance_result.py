@@ -7,9 +7,17 @@ from dataforge.agent.contracts import AgentError
 from dataforge.ai_service import merge_ai_result
 from dataforge.asset_identity import source_job
 from dataforge.services import analyze
+from dataforge.store import Store
 
 
-def render_result(store, workspace, state_key):
+def render_result(store: Store, workspace: str, state_key: str) -> None:
+    """Render an AI result and controls for explicitly merging eligible claims.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+        state_key: Session-state key holding the selected AI record ID.
+    """
     if notice := st.session_state.pop(state_key + "_notice", None):
         st.success(notice)
     record_id = st.session_state.get(state_key)

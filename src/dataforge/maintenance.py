@@ -6,8 +6,13 @@ import json
 import os
 import re
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from dataforge.store import Store
 
 TABLES = {
     "analysis_runs": ("run_id", "workspace_id", "status", "analyzed", "cached", "duration",
@@ -17,7 +22,8 @@ TABLES = {
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
 
 
-def _directory(store, workspace):
+def _directory(store: Store, workspace: str) -> Path:
+    """Validate and return the workspace-owned history recovery directory."""
     if not isinstance(workspace, str) or not re.fullmatch(r"[0-9a-f]{32}", workspace):
         raise ValueError("Invalid workspace identity")
     if not store.rows("SELECT 1 FROM workspaces WHERE workspace_id=?", [workspace]):
@@ -29,7 +35,8 @@ def _directory(store, workspace):
 
 
 @contextmanager
-def _idle(store):
+def _idle(store: Store) -> Iterator[None]:
+    """Hold exclusive idle access while history maintenance uses the workspace store."""
     if not store.analysis_lock.acquire(blocking=False):
         raise ValueError("Analysis is running; retry history maintenance after it finishes")
     try:
@@ -43,7 +50,14 @@ def _idle(store):
         store.analysis_lock.release()
 
 
-def history_plan(store, workspace, keep_runs=20, keep_imports=20, batch_size=25):
+def history_plan(
+    store: Store,
+    workspace: str,
+    keep_runs: int = 20,
+    keep_imports: int = 20,
+    batch_size: int = 25,
+) -> dict[str, list[str]]:
+    """Select bounded, unreferenced run and import history eligible for archival."""
     _directory(store, workspace)
     if any(type(v) is not int or not 1 <= v <= 10000 for v in (keep_runs, keep_imports)):
         raise ValueError("Keep between 1 and 10,000 history records")
@@ -66,11 +80,19 @@ def history_plan(store, workspace, keep_runs=20, keep_imports=20, batch_size=25)
     return {"analysis_runs": [r["run_id"] for r in runs], "ingestion_runs": [r["ingestion_id"] for r in imports]}
 
 
-def _canonical(payload):
+def _canonical(payload: object) -> bytes:
+    """Encode a deterministic JSON representation for archive hashing."""
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str, allow_nan=False).encode("utf-8")
 
 
-def archive_history(store, workspace, keep_runs=20, keep_imports=20, batch_size=25):
+def archive_history(
+    store: Store,
+    workspace: str,
+    keep_runs: int = 20,
+    keep_imports: int = 20,
+    batch_size: int = 25,
+) -> dict[str, Any]:
+    """Archive and remove a bounded batch of unreferenced history records."""
     with _idle(store):
         plan = history_plan(store, workspace, keep_runs, keep_imports, batch_size)
         if not any(plan.values()):
@@ -112,7 +134,8 @@ def archive_history(store, workspace, keep_runs=20, keep_imports=20, batch_size=
         return {"archive_id": archive_id, **{table: len(rows) for table, rows in records.items()}}
 
 
-def list_archives(store, workspace):
+def list_archives(store: Store, workspace: str) -> list[dict[str, Any]]:
+    """List available database and file recovery archives for a workspace."""
     directory = _directory(store, workspace)
     paths = [p for p in directory.glob("*.json")
              if re.fullmatch(r"[0-9a-f]{32}", p.stem) and p.is_file() and not p.is_symlink()]
@@ -128,7 +151,8 @@ def list_archives(store, workspace):
     return sorted(items.values(), key=lambda a: a["created_at"], reverse=True)[:100]
 
 
-def restore_history(store, workspace, archive_id):
+def restore_history(store: Store, workspace: str, archive_id: str) -> dict[str, int]:
+    """Validate and restore supported history rows without replacing existing records."""
     if not isinstance(archive_id, str) or not re.fullmatch(r"[0-9a-f]{32}", archive_id):
         raise ValueError("Invalid recovery archive identity")
     with _idle(store):

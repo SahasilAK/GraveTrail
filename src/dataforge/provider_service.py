@@ -1,43 +1,82 @@
 """Profile/routing operations with launch-bound references and recipient origins."""
 import time
 import uuid
+from typing import Any
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from dataforge.agent.contracts import AgentError
+from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import RuntimeConnections, connection_scope
 from dataforge.llm import TASKS, Adapter, Profile, ProviderError, is_local, response_object
 from dataforge.llm_resources import request_slot
 from dataforge.settings_service import check_revision, revision
+from dataforge.store import Store
 
 READS = {'providers_list', 'provider_get', 'routing_get', 'runtime_status'}
 WRITES = {'provider_save', 'provider_remove', 'routing_update', 'runtime_connect', 'runtime_clear',
           'provider_models', 'provider_test'}
 
 
-def origin(url):
+def origin(url: str) -> tuple[str, str, int]:
+    """Normalize a provider URL to its scheme, host, and effective port.
+
+    Args:
+        url: Provider URL to normalize.
+
+    Returns:
+        Lowercase scheme and host with the explicit or default HTTP port.
+    """
     parsed = urlsplit(url)
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     return parsed.scheme.lower(), (parsed.hostname or '').lower(), port
 
 
 class Routing(BaseModel):
+    """Validate the workspace default, per-task, and fallback profiles."""
     model_config = ConfigDict(extra='forbid', strict=True)
     default_profile: str = ''
     task_models: dict[str, str] = Field(default_factory=dict)
     fallback_profiles: list[str] = Field(default_factory=list, max_length=20)
 
 
-def get_profile(store, workspace, profile_id):
+def get_profile(store: Store, workspace: str, profile_id: str) -> Profile:
+    """Load and validate one provider profile belonging to a workspace.
+
+    Args:
+        store: Workspace store containing the profile.
+        workspace: Workspace identifier that owns the profile.
+        profile_id: Provider profile identifier.
+
+    Returns:
+        The validated provider profile.
+
+    Raises:
+        AgentError: If the profile does not exist in the workspace.
+    """
     rows = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [workspace, profile_id])
     if not rows:
         raise AgentError('not_found', 'Provider profile does not exist in this workspace')
     return Profile.model_validate_json(rows[0]['config'])
 
 
-def save_profile(store, policy, workspace, profile, expected_revision, profile_id=''):
+def save_profile(store: Store, policy: AccessPolicy, workspace: str,
+                 profile: Profile | dict[str, Any], expected_revision: str,
+                 profile_id: str = '') -> dict[str, Any]:
+    """Validate and persist a provider profile after permission and revision checks.
+
+    Args:
+        store: Workspace store receiving the profile.
+        policy: Launch policy authorizing configuration changes and credentials.
+        workspace: Workspace identifier receiving the profile.
+        profile: Profile model or mapping to validate.
+        expected_revision: Current settings revision required for the update.
+        profile_id: Existing profile identifier, or an empty value to create one.
+
+    Returns:
+        The profile identifier and resulting settings revision.
+    """
     policy.require('config')
     check_revision(store, workspace, expected_revision)
     profile = Profile.model_validate(profile, strict=True)
@@ -52,7 +91,23 @@ def save_profile(store, policy, workspace, profile, expected_revision, profile_i
     return {'profile_id': profile_id, 'settings_revision': revision(store, workspace)}
 
 
-def save_routing(store, policy, workspace, values, expected_revision):
+def save_routing(store: Store, policy: AccessPolicy, workspace: str,
+                 values: Routing | dict[str, Any], expected_revision: str) -> dict[str, Any]:
+    """Validate and persist workspace provider routing.
+
+    Args:
+        store: Workspace store receiving the routing settings.
+        policy: Launch policy authorizing configuration changes.
+        workspace: Workspace identifier whose routing is updated.
+        values: Routing fields to validate and save.
+        expected_revision: Current settings revision required for the update.
+
+    Returns:
+        The new settings revision and normalized routing values.
+
+    Raises:
+        AgentError: If task assignments or profile references are invalid.
+    """
     policy.require('config')
     check_revision(store, workspace, expected_revision)
     routing = Routing.model_validate(values)
@@ -68,7 +123,18 @@ def save_routing(store, policy, workspace, values, expected_revision):
     return {'settings_revision': revision(store, workspace), 'routing': routing.model_dump()}
 
 
-def authorize_provider(store, policy, workspace, profile):
+def authorize_provider(store: Store, policy: AccessPolicy, workspace: str, profile: Profile) -> None:
+    """Require launch approval for the provider origin and credential reference.
+
+    Args:
+        store: Workspace store used to read privacy settings.
+        policy: Launch policy containing allowed provider origins and credentials.
+        workspace: Workspace identifier owning the request.
+        profile: Provider profile to authorize.
+
+    Raises:
+        AgentError: If network access, endpoint origin, credentials, or workspace privacy is disallowed.
+    """
     policy.require('network')
     if origin(profile.base_url) not in {origin(url) for url in policy.allowed_llm_origins}:
         raise AgentError('network_not_allowed', 'Provider origin is not explicitly allowed for this launch')
@@ -79,7 +145,19 @@ def authorize_provider(store, policy, workspace, profile):
 
 
 class ProviderOperations:
-    def _runtime_manager(self, w, profile_id, profile):
+    """Implement provider profile, routing, and process-local connection operations."""
+
+    def _runtime_manager(self, w: str, profile_id: str, profile: Profile) -> RuntimeConnections | None:
+        """Return the matching runtime credential manager, clearing stale bindings.
+
+        Args:
+            w: Workspace identifier owning the runtime binding.
+            profile_id: Provider profile identifier.
+            profile: Current provider profile configuration.
+
+        Returns:
+            The matching process-local connection manager, if it is still current.
+        """
         key = (w, profile_id)
         manager = self.runtime_connections.get(key)
         if manager is not None and self.runtime_profiles.get(key) != profile.model_dump_json():
@@ -89,26 +167,81 @@ class ProviderOperations:
             return None
         return manager
 
-    def _public_profile(self, profile):
+    def _public_profile(self, profile: Profile) -> dict[str, Any]:
+        """Return profile settings with unapproved credential references removed.
+
+        Args:
+            profile: Provider profile to expose.
+
+        Returns:
+            Public profile fields safe for the current launch policy.
+        """
         data = profile.model_dump()
         if data['key_env'] not in self.policy.allowed_credential_refs:
             data['key_env'] = ''
         return data
 
-    def _providers_list(self, w, opts):
+    def _providers_list(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Return the paginated provider profiles for a workspace.
+
+        Args:
+            w: Workspace identifier.
+            opts: Validated pagination options.
+
+        Returns:
+            Provider profiles and the current settings revision.
+        """
         rows = self.store.rows('SELECT profile_id,config FROM llm_profiles WHERE workspace_id=? ORDER BY name,profile_id', [w])
         return self._page(w, opts, 'providers', [{'profile_id': r['profile_id'],
             'profile': self._public_profile(Profile.model_validate_json(r['config']))} for r in rows],
             settings_revision=revision(self.store, w))
 
-    def _provider_get(self, w, opts, profile_id):
+    def _provider_get(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+        """Return one workspace provider profile and its settings revision.
+
+        Args:
+            w: Workspace identifier owning the profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier.
+
+        Returns:
+            The public profile and current settings revision.
+        """
         return {'profile_id': profile_id, 'profile': self._public_profile(get_profile(self.store, w, profile_id)),
                 'settings_revision': revision(self.store, w)}
 
-    def _provider_save(self, w, opts, profile, expected_revision, profile_id=''):
+    def _provider_save(self, w: str, opts: QueryOptions, profile: Profile | dict[str, Any],
+                       expected_revision: str, profile_id: str = '') -> dict[str, Any]:
+        """Save a provider profile through the shared authorization checks.
+
+        Args:
+            w: Workspace identifier receiving the profile.
+            opts: Validated operation options.
+            profile: Profile model or mapping to validate and save.
+            expected_revision: Current settings revision required for the update.
+            profile_id: Existing profile identifier, or an empty value to create one.
+
+        Returns:
+            The profile identifier and resulting settings revision.
+        """
         return save_profile(self.store, self.policy, w, profile, expected_revision, profile_id)
 
-    def _provider_remove(self, w, opts, profile_id, expected_revision):
+    def _provider_remove(self, w: str, opts: QueryOptions, profile_id: str,
+                         expected_revision: str) -> dict[str, Any]:
+        """Remove an unused profile and clear any process-local credentials.
+
+        Args:
+            w: Workspace identifier owning the provider profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier to remove.
+            expected_revision: Current settings revision required for the update.
+
+        Returns:
+            Removal status and the resulting settings revision.
+
+        Raises:
+            AgentError: If routing still references the profile.
+        """
         self.policy.require('config')
         check_revision(self.store, w, expected_revision)
         get_profile(self.store, w, profile_id)
@@ -122,14 +255,45 @@ class ProviderOperations:
             manager.clear()
         return {'removed': profile_id, 'settings_revision': revision(self.store, w)}
 
-    def _routing_get(self, w, opts):
+    def _routing_get(self, w: str, opts: QueryOptions) -> dict[str, Any]:
+        """Return workspace routing settings and supported task names.
+
+        Args:
+            w: Workspace identifier.
+            opts: Validated operation options.
+
+        Returns:
+            Routing settings, supported task names, and the settings revision.
+        """
         return {'routing': {key: self.store.setting(w, key, value) for key, value in Routing().model_dump().items()},
                 'tasks': TASKS, 'settings_revision': revision(self.store, w)}
 
-    def _routing_update(self, w, opts, values, expected_revision):
+    def _routing_update(self, w: str, opts: QueryOptions, values: Routing | dict[str, Any],
+                        expected_revision: str) -> dict[str, Any]:
+        """Save validated provider routing for a workspace.
+
+        Args:
+            w: Workspace identifier whose routing is updated.
+            opts: Validated operation options.
+            values: Routing fields to validate and save.
+            expected_revision: Current settings revision required for the update.
+
+        Returns:
+            The normalized routing values and resulting settings revision.
+        """
         return save_routing(self.store, self.policy, w, values, expected_revision)
 
-    def _runtime_status(self, w, opts, profile_id):
+    def _runtime_status(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+        """Report whether an approved runtime credential binding is active.
+
+        Args:
+            w: Workspace identifier owning the profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier.
+
+        Returns:
+            Credential approval and process-local connection status.
+        """
         profile = get_profile(self.store, w, profile_id)
         manager = self._runtime_manager(w, profile_id, profile)
         approved = not profile.key_env or profile.key_env in self.policy.allowed_credential_refs
@@ -137,7 +301,20 @@ class ProviderOperations:
                 'approved': approved, 'connected': manager is not None,
                 'restart': 'Bindings last only for this owning process; UI sessions are separate'}
 
-    def _runtime_connect(self, w, opts, profile_id):
+    def _runtime_connect(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+        """Bind an approved launch credential to the current process.
+
+        Args:
+            w: Workspace identifier owning the provider profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier to connect.
+
+        Returns:
+            Runtime connection status after binding the credential.
+
+        Raises:
+            AgentError: If the endpoint or referenced credential is not authorized or available.
+        """
         profile = get_profile(self.store, w, profile_id)
         authorize_provider(self.store, self.policy, w, profile)
         manager = RuntimeConnections()
@@ -152,7 +329,17 @@ class ProviderOperations:
         self.runtime_profiles[(w, profile_id)] = profile.model_dump_json()
         return self._runtime_status(w, opts, profile_id)
 
-    def _runtime_clear(self, w, opts, profile_id):
+    def _runtime_clear(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+        """Clear a runtime credential binding and return the resulting status.
+
+        Args:
+            w: Workspace identifier owning the profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier.
+
+        Returns:
+            Credential approval and process-local connection status after clearing.
+        """
         get_profile(self.store, w, profile_id)
         manager = self.runtime_connections.pop((w, profile_id), None)
         self.runtime_profiles.pop((w, profile_id), None)
@@ -160,7 +347,22 @@ class ProviderOperations:
             manager.clear()
         return self._runtime_status(w, opts, profile_id)
 
-    def _provider_operation(self, w, opts, profile_id, operation):
+    def _provider_operation(self, w: str, opts: QueryOptions, profile_id: str,
+                            operation: str) -> dict[str, Any]:
+        """Run model discovery or a provider connection check under request limits.
+
+        Args:
+            w: Workspace identifier owning the provider profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier to use.
+            operation: Provider action, either model discovery or a connection check.
+
+        Returns:
+            Sanitized operation result with its duration.
+
+        Raises:
+            AgentError: If authorization fails, request capacity is unavailable, or the provider operation fails.
+        """
         profile = get_profile(self.store, w, profile_id)
         authorize_provider(self.store, self.policy, w, profile)
         manager = self._runtime_manager(w, profile_id, profile) or RuntimeConnections()
@@ -189,8 +391,28 @@ class ProviderOperations:
             if (w, profile_id) not in self.runtime_connections:
                 manager.clear()
 
-    def _provider_models(self, w, opts, profile_id):
+    def _provider_models(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+        """List models through the authorized provider operation path.
+
+        Args:
+            w: Workspace identifier owning the profile.
+            opts: Validated pagination options.
+            profile_id: Provider profile identifier.
+
+        Returns:
+            Paginated model identifiers.
+        """
         return self._provider_operation(w, opts, profile_id, 'models')
 
-    def _provider_test(self, w, opts, profile_id):
+    def _provider_test(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+        """Check provider connectivity through the authorized operation path.
+
+        Args:
+            w: Workspace identifier owning the profile.
+            opts: Validated operation options.
+            profile_id: Provider profile identifier.
+
+        Returns:
+            Connection status and provider usage metadata.
+        """
         return self._provider_operation(w, opts, profile_id, 'test')

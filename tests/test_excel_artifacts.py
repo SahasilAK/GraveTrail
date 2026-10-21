@@ -5,6 +5,9 @@ import hashlib
 import io
 import json
 import zipfile
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -19,7 +22,12 @@ from dataforge.store import Store
 
 
 @pytest.fixture
-def workspace(tmp_path):
+def workspace(tmp_path: Path) -> Iterator[Any]:
+    """Provide the workspace fixture used by the tests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path / 'home')
     w = store.create_workspace('Excel demo')
     raw = b'create table staging.clean as select id from raw.orders; create table mart.sales as select id from staging.clean;'
@@ -31,7 +39,17 @@ def workspace(tmp_path):
     store.close()
 
 
-def artifact_bytes(service, w, artifact):
+def artifact_bytes(service: Any, w: Any, artifact: Any) -> Any:
+    """Handle artifact bytes for the test scenario.
+
+    Args:
+        service: Service value used by the test case.
+        w: Workspace identifier used by the test.
+        artifact: Artifact value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     chunks, offset = [], 0
     while offset < artifact['bytes']:
         result = service.call('artifact_read', w, artifact_id=artifact['artifact_id'], offset=offset)
@@ -40,7 +58,12 @@ def artifact_bytes(service, w, artifact):
     return b''.join(chunks)
 
 
-def test_xlsx_artifact_metadata_default_disclosure_and_revocation(workspace):
+def test_xlsx_artifact_metadata_default_disclosure_and_revocation(workspace: Any) -> None:
+    """Verify that xlsx artifact metadata default disclosure and revocation.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     store, w, service, raw = workspace
     args = {'kind': 'paths', 'format': 'xlsx', 'selection': {'asset': 'mart.sales'}}
     result = service.call('artifact_create', w, **args)
@@ -61,7 +84,12 @@ def test_xlsx_artifact_metadata_default_disclosure_and_revocation(workspace):
         service.call('artifact_create', w, **args)
 
 
-def test_mcp_evidence_hash_and_explicit_raw_source_option(workspace):
+def test_mcp_evidence_hash_and_explicit_raw_source_option(workspace: Any) -> None:
+    """Verify that mcp evidence hash and explicit raw source option.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     _, w, service, raw = workspace
     server = create_server(service)
     result = asyncio.run(server.call_tool('export_dependency_paths', {'workspace_id': w,
@@ -82,7 +110,12 @@ def test_mcp_evidence_hash_and_explicit_raw_source_option(workspace):
         assert b'create table' in archive.read('xl/worksheets/sheet3.xml')
 
 
-def test_cli_xlsx_creation_and_authorized_download(tmp_path):
+def test_cli_xlsx_creation_and_authorized_download(tmp_path: Path) -> None:
+    """Verify that cli xlsx creation and authorized download.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     home = tmp_path / 'home'
     store = Store(home)
     w = store.create_workspace('CLI Excel')
@@ -101,7 +134,12 @@ def test_cli_xlsx_creation_and_authorized_download(tmp_path):
     assert zipfile.is_zipfile(destination)
 
 
-def test_shared_export_rejects_invalid_scope_and_marks_stale_analysis(workspace):
+def test_shared_export_rejects_invalid_scope_and_marks_stale_analysis(workspace: Any) -> None:
+    """Verify that shared export rejects invalid scope and marks stale analysis.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     from dataforge.services import export_lineage_excel
 
     store, w, _, _ = workspace
@@ -114,7 +152,13 @@ def test_shared_export_rejects_invalid_scope_and_marks_stale_analysis(workspace)
     assert any('current' in warning or 'pending' in warning for warning in metadata['warnings'])
 
 
-def test_explorer_prepares_excel_with_reviewable_scope(tmp_path, monkeypatch):
+def test_explorer_prepares_excel_with_reviewable_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that explorer prepares excel with reviewable scope.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest

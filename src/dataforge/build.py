@@ -13,9 +13,11 @@ import tarfile
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 def build_environment() -> dict[str, str]:
+    """Return a controlled subset of the current environment for build subprocesses."""
     allowed = {"path", "systemroot", "windir", "temp", "tmp", "home", "userprofile", "localappdata",
                "appdata", "programfiles", "programfiles(x86)", "programw6432", "pathext", "comspec",
                "lang", "lc_all", "number_of_processors", "processor_architecture"}
@@ -23,11 +25,13 @@ def build_environment() -> dict[str, str]:
 
 
 def _digest(path: Path) -> str:
+    """Calculate a file's SHA-256 digest using streaming file access."""
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def write_manifest(directory: Path, version: str, artifacts: list[Path], target: str) -> Path:
+    """Write artifact hashes and byte sizes to the release manifest and checksum list."""
     path = directory / "manifest.json"
     previous = json.loads(path.read_text()) if path.exists() else {}
     records = {item["path"]: item for item in previous.get("artifacts", [])} if previous.get("version") == version else {}
@@ -43,7 +47,8 @@ def write_manifest(directory: Path, version: str, artifacts: list[Path], target:
     return path
 
 
-def verify_artifacts(directory: Path) -> dict:
+def verify_artifacts(directory: Path) -> dict[str, Any]:
+    """Validate every manifest path, artifact size, digest, and checksum-list entry."""
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     if not manifest.get("artifacts"):
         raise ValueError("Manifest contains no artifacts")
@@ -64,13 +69,15 @@ def verify_artifacts(directory: Path) -> dict:
     return manifest
 
 
-def _run(args: list[str], root: Path, *, capture=False) -> str:
+def _run(args: list[str], root: Path, *, capture: bool = False) -> str:
+    """Run a build command from the repository root with the filtered environment."""
     result = subprocess.run(args, cwd=root, env=build_environment(), check=True,
                             text=True, stdout=subprocess.PIPE if capture else None)
     return result.stdout.strip() if capture else ""
 
 
 def build_python(root: Path, output: Path) -> list[Path]:
+    """Build and locate the version-matched Python wheel and source archive."""
     folder = output / "python"
     _run(["uv", "build", "--out-dir", str(folder)], root)
     version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -82,6 +89,7 @@ def build_python(root: Path, output: Path) -> list[Path]:
 
 
 def build_docker(root: Path, output: Path, version: str) -> list[Path]:
+    """Build the Docker image and write its tag and platform metadata."""
     tag = f"gravetrail:{version}"
     _run(["docker", "build", "--tag", tag, "."], root)
     details = json.loads(_run(["docker", "image", "inspect", tag], root, capture=True))[0]
@@ -92,6 +100,7 @@ def build_docker(root: Path, output: Path, version: str) -> list[Path]:
 
 
 def build_executable(root: Path, output: Path, version: str) -> list[Path]:
+    """Build the locked Python package and package it as a host executable archive."""
     work = output / ".build"
     work.mkdir(parents=True, exist_ok=True)
     venv = work / "venv"
@@ -125,6 +134,7 @@ def build_executable(root: Path, output: Path, version: str) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Build the requested release target or verify an existing artifact manifest."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", choices=["python", "docker", "executable", "all"], default="python")
     parser.add_argument("--verify", action="store_true")

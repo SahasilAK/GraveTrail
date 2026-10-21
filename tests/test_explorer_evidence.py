@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 from dataforge.ingestion import Importer
@@ -8,7 +9,13 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_source_panel_follows_graph_direction_or_active_tree_tab(tmp_path, monkeypatch):
+def test_source_panel_follows_graph_direction_or_active_tree_tab(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that source panel follows graph direction or active tree tab.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve()).run()
     store = Store(tmp_path)
@@ -41,7 +48,13 @@ def test_source_panel_follows_graph_direction_or_active_tree_tab(tmp_path, monke
         store.close()
 
 
-def test_explorer_reports_missing_assets_without_crashing(tmp_path, monkeypatch):
+def test_explorer_reports_missing_assets_without_crashing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that explorer reports missing assets without crashing.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge.graph import LineageGraph
     from ui import common
 

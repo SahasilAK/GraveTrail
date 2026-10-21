@@ -1,12 +1,19 @@
 """Release inputs and downloaded builds must fail closed before publication."""
 import subprocess
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 from dataforge.build import verify_artifacts, write_manifest
 
 
-def test_release_version_is_independent_of_project_and_rejects_unsafe_input(tmp_path):
+def test_release_version_is_independent_of_project_and_rejects_unsafe_input(tmp_path: Path) -> None:
+    """Verify that release version is independent of project and rejects unsafe input.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from scripts.release import validate_version
 
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
@@ -18,7 +25,13 @@ def test_release_version_is_independent_of_project_and_rejects_unsafe_input(tmp_
 
 
 @pytest.mark.parametrize("bump,expected", [("major", "3.0.0"), ("minor", "2.5.0"), ("patch", "2.4.10")])
-def test_resolve_version_uses_highest_published_stable_release(bump, expected):
+def test_resolve_version_uses_highest_published_stable_release(bump: str, expected: str) -> None:
+    """Verify that resolve version uses highest published stable release.
+
+    Args:
+        bump: Bump value used by the test case.
+        expected: Expected result for the test case.
+    """
     from scripts.release import resolve_version
 
     releases = [{"tag_name": tag, "draft": draft, "prerelease": pre}
@@ -34,7 +47,12 @@ def test_resolve_version_uses_highest_published_stable_release(bump, expected):
         resolve_version([], bump="wat")
 
 
-def test_windows_release_accepts_explicit_download_directory_and_keeps_installer(tmp_path):
+def test_windows_release_accepts_explicit_download_directory_and_keeps_installer(tmp_path: Path) -> None:
+    """Verify that windows release accepts explicit download directory and keeps installer.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import json
 
     from scripts.release import stage_assets
@@ -62,7 +80,12 @@ def test_windows_release_accepts_explicit_download_directory_and_keeps_installer
         stage_assets(windows, tmp_path / "tampered", "1.2.3", windows_only=True)
 
 
-def test_materialized_version_updates_project_and_lock_without_dependency_changes(tmp_path):
+def test_materialized_version_updates_project_and_lock_without_dependency_changes(tmp_path: Path) -> None:
+    """Verify that materialized version updates project and lock without dependency changes.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import shutil
     import tomllib
     from pathlib import Path
@@ -82,7 +105,13 @@ def test_materialized_version_updates_project_and_lock_without_dependency_change
         p for p in after["package"] if p["name"] != "gravetrail"]
 
 
-def native_builds(root, version="1.2.3"):
+def native_builds(root: Any, version: Any="1.2.3") -> None:
+    """Handle native builds for the test scenario.
+
+    Args:
+        root: Root value used by the test case.
+        version: Version value used by the test case.
+    """
     for runner, platform, extension in (("Windows-X64", "windows-amd64", ".zip"),
                                          ("Linux-X64", "linux-x86_64", ".tar.gz"),
                                          ("macOS-ARM64", "darwin-arm64", ".tar.gz")):
@@ -96,7 +125,12 @@ def native_builds(root, version="1.2.3"):
         write_manifest(directory, version, [archive, python], "executable")
 
 
-def test_stage_verifies_each_build_and_publishes_only_standalone_archives(tmp_path):
+def test_stage_verifies_each_build_and_publishes_only_standalone_archives(tmp_path: Path) -> None:
+    """Verify that stage verifies each build and publishes only standalone archives.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from scripts.release import stage_assets
 
     downloads, output = tmp_path / "downloads", tmp_path / "release"
@@ -111,7 +145,13 @@ def test_stage_verifies_each_build_and_publishes_only_standalone_archives(tmp_pa
 
 
 @pytest.mark.parametrize("problem", ["missing", "tampered", "version", "duplicate", "unlisted"])
-def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path, problem):
+def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path: Path, problem: str) -> None:
+    """Verify that stage rejects incomplete or inconsistent downloads.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        problem: Problem value used by the test case.
+    """
     from scripts.release import stage_assets
 
     downloads, output = tmp_path / "downloads", tmp_path / "release"
@@ -135,7 +175,12 @@ def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path, problem):
     assert not output.exists(), "Validate every build before copying release assets"
 
 
-def test_stage_refuses_existing_output(tmp_path):
+def test_stage_refuses_existing_output(tmp_path: Path) -> None:
+    """Verify that stage refuses existing output.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from scripts.release import stage_assets
 
     native_builds(tmp_path / "downloads")
@@ -147,12 +192,29 @@ def test_stage_refuses_existing_output(tmp_path):
     assert (output / "keep.txt").read_text() == "existing"
 
 
-def test_copilot_notes_use_only_supplied_context_and_fall_back_on_failure(monkeypatch):
+def test_copilot_notes_use_only_supplied_context_and_fall_back_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that copilot notes use only supplied context and fall back on failure.
+
+    Args:
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        error: Raised by the test helper.
+    """
     from scripts.release import copilot_summary
 
     calls = []
 
-    def run(command, **kwargs):
+    def run(command: Any, **kwargs: Any) -> Any:
+        """Handle run for the test scenario.
+
+        Args:
+            command: Command value used by the test case.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         calls.append((command, kwargs))
         return subprocess.CompletedProcess(command, 0, "## Highlights\n\n- Fix lineage export.\n", "")
 
@@ -168,13 +230,23 @@ def test_copilot_notes_use_only_supplied_context_and_fall_back_on_failure(monkey
 
     for error in (FileNotFoundError(), subprocess.CalledProcessError(1, command),
                   subprocess.TimeoutExpired(command, 90)):
-        def fail(*args, **kwargs):
+        def fail(*args: Any, **kwargs: Any) -> None:
+            """Raise the injected failure used by the test.
+
+            Args:
+                args: Positional arguments forwarded to the operation.
+                kwargs: Keyword arguments forwarded to the operation.
+
+            Raises:
+                error: Raised by the test helper.
+            """
             raise error
         monkeypatch.setattr(subprocess, "run", fail)
         assert copilot_summary("notes", "commits") is None
 
 
-def test_release_notes_always_retain_changes_and_installation_guidance():
+def test_release_notes_always_retain_changes_and_installation_guidance() -> None:
+    """Verify that release notes always retain changes and installation guidance."""
     from scripts.release import release_notes
 
     for summary in (None, "## Highlights\n\n- Export fix."):

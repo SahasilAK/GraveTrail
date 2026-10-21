@@ -1,5 +1,6 @@
 """Static exports retain the UI scene while excluding source and active content."""
 import struct
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -12,7 +13,12 @@ from dataforge.graph import LineageGraph
 NS = {'s': 'http://www.w3.org/2000/svg'}
 
 
-def graph():
+def graph() -> Any:
+    """Provide the graph fixture used by the tests.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     names = ['日本語_' + 'long_' * 60, '<script onload="alert(1)"> & x', 'isolated']
     return LineageGraph([{'asset_id': str(i), 'name': n, 'kind': 'unresolved' if i == 1 else 'table',
                           'temporary': i == 0} for i, n in enumerate(names)], [
@@ -20,7 +26,8 @@ def graph():
         for i, (s, t) in enumerate([('0', '1'), ('1', '0'), ('0', '0')])])
 
 
-def test_standalone_svg_uses_shared_scene_and_inert_full_titles():
+def test_standalone_svg_uses_shared_scene_and_inert_full_titles() -> None:
+    """Verify that standalone svg uses shared scene and inert full titles."""
     g = graph()
     scene = graph_data(g)
     data, meta = images.render_graph_image(g, format='svg', scope={'warnings': ['Depth boundary reached']})
@@ -39,7 +46,12 @@ def test_standalone_svg_uses_shared_scene_and_inert_full_titles():
 
 
 @pytest.mark.parametrize('background', ['light', 'dark', 'transparent'])
-def test_real_png_dimensions_scale_and_background(background):
+def test_real_png_dimensions_scale_and_background(background: str) -> None:
+    """Verify that real png dimensions scale and background.
+
+    Args:
+        background: Background value used by the test case.
+    """
     import io
 
     from PIL import Image
@@ -56,7 +68,8 @@ def test_real_png_dimensions_scale_and_background(background):
     assert b'<svg' in svg
 
 
-def test_empty_and_excessive_graphs_fail_actionably():
+def test_empty_and_excessive_graphs_fail_actionably() -> None:
+    """Verify that empty and excessive graphs fail actionably."""
     with pytest.raises(ValueError, match='no nodes'):
         images.render_graph_image(LineageGraph([], []))
     huge = LineageGraph([{'asset_id': str(i), 'name': str(i)} for i in range(1001)], [])
@@ -64,7 +77,8 @@ def test_empty_and_excessive_graphs_fail_actionably():
         images.render_graph_image(huge)
 
 
-def test_label_modes_and_determinism():
+def test_label_modes_and_determinism() -> None:
+    """Verify that label modes and determinism."""
     for mode in ['hidden', 'compact', 'full']:
         appearance = VisualizationSettings(graph_labels=mode, graph_edge_width=5, graph_palette='neutral')
         a, _ = images.render_graph_image(graph(), appearance=appearance)
@@ -75,7 +89,8 @@ def test_label_modes_and_determinism():
         assert bool(root.findall('.//s:g[@data-node]/s:text', NS)) == (mode != 'hidden')
 
 
-def test_single_node_and_pixel_bounds():
+def test_single_node_and_pixel_bounds() -> None:
+    """Verify that single node and pixel bounds."""
     one = LineageGraph([{'asset_id': 'x', 'name': 'single'}], [])
     data, meta = images.render_graph_image(one)
     assert meta['node_count'] == 1 and ET.fromstring(data).get('viewBox')
@@ -85,20 +100,38 @@ def test_single_node_and_pixel_bounds():
         images.render_graph_image(wide, format='png')
 
 
-def test_png_missing_capability_and_timeout(monkeypatch):
+def test_png_missing_capability_and_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that png missing capability and timeout.
+
+    Args:
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        subprocess.TimeoutExpired: Raised by the test helper.
+    """
     monkeypatch.setattr(images, 'png_available', lambda: False)
     with pytest.raises(ValueError, match='SVG|resvg'):
         images.render_graph_image(graph(), format='png')
     monkeypatch.setattr(images, 'png_available', lambda: True)
     import subprocess
-    def timeout(*args, **kwargs):
+    def timeout(*args: Any, **kwargs: Any) -> None:
+        """Handle timeout for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            subprocess.TimeoutExpired: Raised by the test helper.
+        """
         raise subprocess.TimeoutExpired('renderer', 15)
     monkeypatch.setattr(images.subprocess, 'run', timeout)
     with pytest.raises(ValueError, match='time limit'):
         images.render_graph_image(graph(), format='png')
 
 
-def test_wide_title_wraps_to_fitted_canvas():
+def test_wide_title_wraps_to_fitted_canvas() -> None:
+    """Verify that wide title wraps to fitted canvas."""
     one = LineageGraph([{'asset_id': 'x', 'name': 'single'}], [])
     data, meta = images.render_graph_image(one, options={'title': 'W' * 90, 'legend': False})
     root = ET.fromstring(data)
@@ -108,7 +141,8 @@ def test_wide_title_wraps_to_fitted_canvas():
     assert all(len(t.text) * 14 <= meta['width'] - 40 for t in annotations)
 
 
-def test_png_parallel_jobs_are_bounded():
+def test_png_parallel_jobs_are_bounded() -> None:
+    """Verify that png parallel jobs are bounded."""
     assert images.RENDER_SLOTS.acquire(blocking=False)
     assert images.RENDER_SLOTS.acquire(blocking=False)
     try:

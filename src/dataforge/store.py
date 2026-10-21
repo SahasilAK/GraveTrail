@@ -6,8 +6,10 @@ import json
 import re
 import threading
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import duckdb
 
@@ -41,7 +43,10 @@ CREATE TABLE IF NOT EXISTS prompt_versions(prompt_hash VARCHAR PRIMARY KEY, task
 
 
 class Store:
-    def __init__(self, home: str | Path):
+    """Own a workspace database, immutable source blobs, and serialized access locks."""
+
+    def __init__(self, home: str | Path) -> None:
+        """Open or initialize the database and required workspace storage directories."""
         self.home = Path(home).resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         (self.home / "blobs").mkdir(exist_ok=True)
@@ -88,7 +93,8 @@ class Store:
                 """)
 
     @contextmanager
-    def transaction(self):
+    def transaction(self) -> Iterator[Store]:
+        """Run operations under the store lock and roll back if the block raises."""
         with self.lock:
             self.db.execute("BEGIN TRANSACTION")
             try:
@@ -98,24 +104,36 @@ class Store:
                 self.db.execute("ROLLBACK")
                 raise
 
-    def execute(self, sql: str, params=None):
+    def execute(self, sql: str, params: Any = None) -> None:
+        """Execute one parameterized SQL statement under the store lock."""
         with self.lock:
             self.db.execute(sql, params or [])
 
-    def rows(self, sql: str, params=None) -> list[dict]:
+    def rows(self, sql: str, params: Any = None) -> list[dict[str, Any]]:
+        """Execute a query and return its rows as dictionaries keyed by column name."""
         with self.lock:
             cursor = self.db.execute(sql, params or [])
             columns = [d[0] for d in cursor.description]
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def create_workspace(self, name: str, description: str = "") -> str:
+        """Create a workspace after validating its display name and description.
+
+        Args:
+            name: Workspace display name.
+            description: Optional workspace description.
+
+        Returns:
+            The new workspace identifier.
+        """
         identity = WorkspaceIdentity(name=name, description=description)
         wid = uuid.uuid4().hex
         self.execute("INSERT INTO workspaces(workspace_id,name,description) VALUES (?,?,?)",
                      [wid, identity.name, identity.description])
         return wid
 
-    def update_workspace(self, workspace: str, name: str, description: str = ""):
+    def update_workspace(self, workspace: str, name: str, description: str = "") -> None:
+        """Update a workspace's validated display name and description."""
         identity = WorkspaceIdentity(name=name, description=description)
         with self.transaction():
             if not self.rows("SELECT 1 FROM workspaces WHERE workspace_id=?", [workspace]):
@@ -123,22 +141,27 @@ class Store:
             self.execute("UPDATE workspaces SET name=?,description=? WHERE workspace_id=?",
                          [identity.name, identity.description, workspace])
 
-    def workspaces(self):
+    def workspaces(self) -> list[dict[str, Any]]:
+        """List workspace records ordered by creation time."""
         return self.rows("SELECT * FROM workspaces ORDER BY created_at")
 
-    def setting(self, workspace: str, key: str, default=None):
+    def setting(self, workspace: str, key: str, default: Any = None) -> Any:
+        """Read a JSON setting value or return the supplied default when absent."""
         rows = self.rows("SELECT value FROM settings WHERE workspace_id=? AND key=?", [workspace, key])
         return json.loads(rows[0]["value"]) if rows else default
 
-    def set_setting(self, workspace: str, key: str, value):
+    def set_setting(self, workspace: str, key: str, value: Any) -> None:
+        """Serialize and insert or replace a workspace setting."""
         self.execute("INSERT INTO settings VALUES (?,?,?) ON CONFLICT(workspace_id,key) DO UPDATE SET value=excluded.value",
                      [workspace, key, json.dumps(value)])
 
-    def files(self, workspace: str):
+    def files(self, workspace: str) -> list[dict[str, Any]]:
+        """List a workspace's source inventory without loading raw source content."""
         return self.rows("SELECT * EXCLUDE(raw_content) FROM source_files WHERE workspace_id=? ORDER BY relative_path",
                          [workspace])
 
-    def file(self, file_id: str, content_hash: str | None = None):
+    def file(self, file_id: str, content_hash: str | None = None) -> dict[str, Any]:
+        """Load one source record and optionally retrieve a referenced historical version."""
         rows = self.rows("SELECT * FROM source_files WHERE file_id=?", [file_id])
         if not rows:
             raise ValueError("Source file no longer exists")
@@ -155,10 +178,11 @@ class Store:
         return source
 
     def original(self, file_id: str, content_hash: str | None = None) -> bytes:
+        """Read the immutable original bytes for a current or referenced source version."""
         return (self.home / "blobs" / self.file(file_id, content_hash)["content_hash"]).read_bytes()
 
-    def snapshot_content(self, inventory: dict) -> str:
-        """Read an immutable snapshot captured by files(), even before first analysis."""
+    def snapshot_content(self, inventory: dict[str, Any]) -> str:
+        """Read an immutable inventory snapshot and verify its content hash."""
         digest = inventory["content_hash"]
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise ValueError("Invalid inventory content hash")
@@ -167,24 +191,37 @@ class Store:
             raise ValueError("Original source blob failed integrity verification")
         return data.decode(inventory["encoding"])
 
-    def assets(self, workspace: str):
+    def assets(self, workspace: str) -> list[dict[str, Any]]:
+        """List workspace assets ordered by name."""
         return self.rows("SELECT * FROM assets WHERE workspace_id=? ORDER BY name", [workspace])
 
-    def edges(self, workspace: str):
+    def edges(self, workspace: str) -> list[dict[str, Any]]:
+        """List workspace lineage edges with statement and source evidence fields."""
         return self.rows("SELECT e.*,s.start_line,s.end_line,s.code,s.content_hash AS source_hash,f.relative_path FROM edges e JOIN statements s ON e.statement_id=s.statement_id JOIN source_files f ON e.file_id=f.file_id WHERE e.workspace_id=?", [workspace])
 
-    def diagnostics(self, workspace: str):
+    def diagnostics(self, workspace: str) -> list[dict[str, Any]]:
+        """List workspace diagnostics with source paths when available."""
         return self.rows("SELECT d.*,f.relative_path FROM diagnostics d LEFT JOIN source_files f USING(file_id) WHERE d.workspace_id=? ORDER BY relative_path,line", [workspace])
 
-    def runs(self, workspace: str):
+    def runs(self, workspace: str) -> list[dict[str, Any]]:
+        """List workspace analysis runs newest first."""
         return self.rows("SELECT * FROM analysis_runs WHERE workspace_id=? ORDER BY created_at DESC", [workspace])
 
-    def delete_workspace(self, workspace: str, *, preview=None, confirmation='', backup_first=False):
+    def delete_workspace(
+        self,
+        workspace: str,
+        *,
+        preview: dict[str, Any] | None = None,
+        confirmation: str = '',
+        backup_first: bool = False,
+    ) -> dict[str, Any]:
+        """Delete a workspace through a validated cleanup preview and confirmation."""
         from dataforge.cleanup import apply_cleanup
         if not preview or preview.get('workspace_id') != workspace or preview.get('category') != 'workspace':
             raise ValueError('Use a confirmed cleanup preview to delete a workspace safely')
         return apply_cleanup(self, preview, confirmation, backup_first)
 
-    def close(self):
+    def close(self) -> None:
+        """Close the DuckDB connection under the store lock."""
         with self.lock:
             self.db.close()

@@ -12,7 +12,17 @@ from dataforge.store import Store
 from dataforge.transformations import trace_columns
 
 
-def benchmark(home, stages=120, width=20):
+def benchmark(home: Path, stages: int = 120, width: int = 20) -> dict[str, object]:
+    """Measure analysis and bounded column tracing on a synthetic SQL chain.
+
+    Args:
+        home: Disposable storage directory for the benchmark database.
+        stages: Number of generated transformation stages.
+        width: Number of generated columns in each stage.
+
+    Returns:
+        Timing, memory, and result measurements for the generated workload.
+    """
     store = Store(home)
     try:
         workspace = store.create_workspace('Column transformation review')

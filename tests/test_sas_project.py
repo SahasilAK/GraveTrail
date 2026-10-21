@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
+
 from dataforge.agent.service import AgentService
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer
@@ -10,7 +12,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_sas_project_reaches_all_sources_with_exact_logical_edges_and_evidence(tmp_path):
+def test_sas_project_reaches_all_sources_with_exact_logical_edges_and_evidence(tmp_path: Path) -> None:
+    """Verify that sas project reaches all sources with exact logical edges and evidence.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     archive = Path('tests/sample_data/dataforge_sas_lineage_test_project.zip')
     with ZipFile(archive) as zipped:
         name = next(n for n in zipped.namelist() if n.endswith('expected/lineage_manifest.json'))
@@ -44,7 +51,13 @@ def test_sas_project_reaches_all_sources_with_exact_logical_edges_and_evidence(t
         store.close()
 
 
-def test_parser_upgrade_replaces_old_failed_sas_cache(tmp_path, monkeypatch):
+def test_parser_upgrade_replaces_old_failed_sas_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that parser upgrade replaces old failed sas cache.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import dataforge.services as services
 
     store = Store(tmp_path)

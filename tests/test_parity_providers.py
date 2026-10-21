@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -12,7 +14,13 @@ from dataforge.llm import Profile
 from dataforge.store import Store
 
 
-def test_profiles_revisions_routing_references_and_network(tmp_path, monkeypatch):
+def test_profiles_revisions_routing_references_and_network(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that profiles revisions routing references and network.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('providers')
     canary = 'parity-provider-secret-canary'
@@ -31,7 +39,15 @@ def test_profiles_revisions_routing_references_and_network(tmp_path, monkeypatch
         status = service.call('runtime_connect', w, profile_id=pid)
         assert status['connected'] and canary not in json.dumps(status)
         calls = []
-        def respond(request):
+        def respond(request: pytest.FixtureRequest) -> Any:
+            """Handle respond for the test scenario.
+
+            Args:
+                request: Pytest fixture describing the active test request.
+
+            Returns:
+                Value produced for the test scenario.
+            """
             calls.append(request)
             assert request.headers['Authorization'] == 'Bearer ' + canary
             return httpx.Response(200, json={'data': [{'id': 'auto/best-reasoning'}]})
@@ -46,7 +62,15 @@ def test_profiles_revisions_routing_references_and_network(tmp_path, monkeypatch
         service.call('provider_save', w, profile={**profile, 'base_url': 'http://localhost:20129/v1', 'key_env': 'DATAFORGE_OTHER_KEY'},
             profile_id=pid, expected_revision=service.call('providers_list', w)['settings_revision'])
         recipients = []
-        def edited(request):
+        def edited(request: pytest.FixtureRequest) -> Any:
+            """Handle edited for the test scenario.
+
+            Args:
+                request: Pytest fixture describing the active test request.
+
+            Returns:
+                Value produced for the test scenario.
+            """
             recipients.append((request.url.port, request.headers['Authorization']))
             return httpx.Response(200, json={'data': []})
         service.provider_transport = httpx.MockTransport(edited)
@@ -68,7 +92,12 @@ def test_profiles_revisions_routing_references_and_network(tmp_path, monkeypatch
     assert canary.encode() not in (tmp_path / 'dataforge.duckdb').read_bytes()
 
 
-def test_network_admission_is_immediate_and_does_not_block_settings(tmp_path):
+def test_network_admission_is_immediate_and_does_not_block_settings(tmp_path: Path) -> None:
+    """Verify that network admission is immediate and does not block settings.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import threading
     from concurrent.futures import ThreadPoolExecutor
     store = Store(tmp_path)
@@ -77,7 +106,15 @@ def test_network_admission_is_immediate_and_does_not_block_settings(tmp_path):
     store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'p', profile.model_dump_json()])
     service = AgentService(store, AccessPolicy(allow_write=True, allow_llm=True, allowed_llm_origins=('http://localhost:1234',)))
     entered, release = threading.Event(), threading.Event()
-    def respond(request):
+    def respond(request: pytest.FixtureRequest) -> Any:
+        """Handle respond for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         entered.set()
         release.wait(5)
         return httpx.Response(200, json={'data': []})

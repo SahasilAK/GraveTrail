@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import duckdb
 import typer
@@ -52,25 +52,50 @@ Workspace = Annotated[str, typer.Option("--workspace", "-w", help="Exact workspa
 
 @app.callback()
 def configure(ctx: typer.Context,
-              home: Path = typer.Option(None, help="Runtime home; defaults to DATAFORGE_HOME or .dataforge."),
+              home: Path | None = typer.Option(None, help="Runtime home; defaults to DATAFORGE_HOME or .dataforge."),
               json_output: bool = typer.Option(False, "--json", help="Compact structured JSON output."),
               quiet: bool = typer.Option(False, "--quiet", "-q"),
               allow_write: bool = typer.Option(False, help="Explicitly authorize mutations for this launch."),
               allow_config_write: bool = typer.Option(False),
               allow_llm: bool = typer.Option(False),
-              allowed_llm_origin: list[str] = typer.Option(None),
-              allowed_credential_ref: list[str] = typer.Option(None),
+              allowed_llm_origin: list[str] | None = typer.Option(None),
+              allowed_credential_ref: list[str] | None = typer.Option(None),
               allow_application_config: bool = typer.Option(False),
               allow_admin: bool = typer.Option(False, help="Local CLI administration only; cannot be used by MCP."),
-              allowed_workspace: list[str] = typer.Option(None, help="Restrict to these workspace IDs; repeatable."),
-              allowed_root: list[Path] = typer.Option(None, help="Authorized import root; repeatable."),
+              allowed_workspace: list[str] | None = typer.Option(None, help="Restrict to these workspace IDs; repeatable."),
+              allowed_root: list[Path] | None = typer.Option(None, help="Authorized import root; repeatable."),
               limit: int = typer.Option(50, min=1, max=500), cursor: str = typer.Option(None),
               max_depth: int = typer.Option(15, min=1, max=30),
               max_items: int = typer.Option(2000, min=1, max=20000),
               max_chars: int = typer.Option(12000, min=512, max=100000),
               detail: str = typer.Option("summary", help="summary, standard or detailed."),
-              collapse_temporary: bool = typer.Option(None, "--collapse-temporary/--keep-temporary"),
-              output: Path = typer.Option(None, help="Write JSON to a new local file, without overwriting.")):
+              collapse_temporary: bool | None = typer.Option(None, "--collapse-temporary/--keep-temporary"),
+              output: Path | None = typer.Option(None, help="Write JSON to a new local file, without overwriting.")) -> None:
+    """Build the runtime context from command-line options.
+
+    Args:
+        ctx: Typer context receiving the resolved runtime configuration.
+        home: Optional runtime home directory.
+        json_output: Whether to emit structured JSON.
+        quiet: Whether to suppress successful output.
+        allow_write: Whether to authorize mutations.
+        allow_config_write: Whether to authorize configuration changes.
+        allow_llm: Whether to authorize language model calls.
+        allowed_llm_origin: Allowed language model origins.
+        allowed_credential_ref: Allowed credential references.
+        allow_application_config: Whether to allow application configuration changes.
+        allow_admin: Whether to allow local administrative operations.
+        allowed_workspace: Optional workspace allowlist.
+        allowed_root: Authorized import roots.
+        limit: Default result page size.
+        cursor: Optional initial pagination cursor.
+        max_depth: Maximum lineage depth.
+        max_items: Maximum result item count.
+        max_chars: Maximum result text size.
+        detail: Default response detail level.
+        collapse_temporary: Whether temporary assets are collapsed.
+        output: Optional new file for JSON output.
+    """
     roots = allowed_root or [Path(p) for p in os.environ.get("DATAFORGE_ALLOWED_ROOTS", "").split(os.pathsep) if p]
     ctx.obj = {"home": (home or default_home(source=application_root().name != '_app' and not getattr(sys, 'frozen', False))).resolve(),
                "json": json_output, "quiet": quiet, "output": output,
@@ -83,7 +108,13 @@ def configure(ctx: typer.Context,
                            "collapse_temporary": collapse_temporary}}
 
 
-def emit(ctx, result):
+def emit(ctx: typer.Context, result: dict[str, Any]) -> None:
+    """Render a result according to the configured output options.
+
+    Args:
+        ctx: Typer context containing output preferences.
+        result: Structured service result to display or save.
+    """
     config = ctx.obj
     text = compact(result)
     if config["output"]:
@@ -108,12 +139,23 @@ def emit(ctx, result):
 
 
 @app.command()
-def capabilities(ctx: typer.Context, workspace: str = typer.Option('')):
-    """Discover permitted operations and explicit policy restrictions; follow next_cursor."""
+def capabilities(ctx: typer.Context, workspace: str = typer.Option('')) -> None:
+    """Discover permitted operations and explicit policy restrictions; follow next_cursor.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, 'capabilities', workspace)
 
 
-def fail(ctx, exc):
+def fail(ctx: typer.Context, exc: AgentError) -> None:
+    """Display a sanitized agent error and exit with its CLI status code.
+
+    Args:
+        ctx: Typer command context.
+        exc: Agent error to report.
+    """
     # Errors never write an output artifact or include exception internals such as SQL/paths.
     typer.echo(compact(exc.response()))
     code = {"forbidden": 3, "not_found": 4, "ambiguous_asset": 4, "busy": 5,
@@ -121,7 +163,17 @@ def fail(ctx, exc):
     raise typer.Exit(code)
 
 
-def invoke(ctx, action, workspace_id="", background=False, **arguments):
+def invoke(ctx: typer.Context, action: str, workspace_id: str = "", background: bool = False,
+           **arguments: Any) -> None:
+    """Run an agent operation, manage resources, and render its result.
+
+    Args:
+        ctx: Typer context containing policy, home, and query options.
+        action: Agent service action name.
+        workspace_id: Workspace targeted by the action, when applicable.
+        background: Whether to queue the action as a detached job.
+        **arguments: Action-specific arguments passed to the service.
+    """
     store = service = None
     try:
         config = ctx.obj
@@ -225,7 +277,17 @@ def invoke(ctx, action, workspace_id="", background=False, **arguments):
             store.close()
 
 
-def cli_job_status(config, workspace, record):
+def cli_job_status(config: dict[str, Any], workspace: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Build a job status response using stored or job-snapshot settings.
+
+    Args:
+        config: CLI runtime configuration.
+        workspace: Workspace owning the job.
+        record: Persisted job record.
+
+    Returns:
+        Bounded status result for the job.
+    """
     try:
         store = Store(config["home"])
     except duckdb.Error:
@@ -245,107 +307,260 @@ def cli_job_status(config, workspace, record):
 
 
 @workspace_app.command("list")
-def workspaces(ctx: typer.Context, query: str = ""):
+def workspaces(ctx: typer.Context, query: str = "") -> None:
+    """List workspaces matching an optional query.
+
+        Args:
+            ctx: Typer command context.
+            query: Search query or filter.
+        """
     invoke(ctx, "workspaces", query=query)
 
 
 @workspace_app.command("create")
-def create_workspace(ctx: typer.Context, name: str, description: str = ""):
+def create_workspace(ctx: typer.Context, name: str, description: str = "") -> None:
+    """Create a workspace with the supplied name and description.
+
+        Args:
+            ctx: Typer command context.
+            name: Name.
+            description: Description.
+        """
     invoke(ctx, "create_workspace", name=name, description=description)
 
 
 @workspace_app.command("summary")
-def workspace_summary(ctx: typer.Context, workspace: Workspace):
+def workspace_summary(ctx: typer.Context, workspace: Workspace) -> None:
+    """Show a summary of the selected workspace.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, "summary", workspace)
 
 
 @app.command("ingest")
-def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str = "sql,sas,csv", background: bool = False):
+def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str = "sql,sas,csv", background: bool = False) -> None:
+    """Import supported source files from a directory.
+
+        Args:
+            ctx: Typer command context.
+            path: Source directory to import.
+            workspace: Workspace targeted by the command.
+            extensions: Comma-separated file extensions to include.
+            background: Whether to queue work as a background job.
+        """
     invoke(ctx, "ingest", workspace, background, path=str(path.resolve()), extensions=extensions.split(","))
 
 
 @lineage_app.command("build")
 def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
-          file_id: list[str] = typer.Option(None), background: bool = False):
+          file_id: list[str] = typer.Option(None), background: bool = False) -> None:
+    """Build lineage for a workspace or selected source files.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+            force: Whether to force a fresh analysis.
+            file_id: Optional source file identifier.
+            background: Whether to queue work as a background job.
+        """
     invoke(ctx, "analyze", workspace, background, force=force, file_ids=file_id)
 
 
 @lineage_app.command("upstream")
-def upstream(ctx: typer.Context, asset: str, workspace: Workspace):
+def upstream(ctx: typer.Context, asset: str, workspace: Workspace) -> None:
+    """Query upstream lineage for an asset.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, "lineage", workspace, asset=asset, direction="upstream")
 
 
 @lineage_app.command("downstream")
-def downstream(ctx: typer.Context, asset: str, workspace: Workspace):
+def downstream(ctx: typer.Context, asset: str, workspace: Workspace) -> None:
+    """Query downstream lineage for an asset.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, "lineage", workspace, asset=asset, direction="downstream")
 
 
 @assets_app.command("search")
-def search_assets(ctx: typer.Context, workspace: Workspace, query: str = ""):
+def search_assets(ctx: typer.Context, workspace: Workspace, query: str = "") -> None:
+    """Search workspace assets by name or identifier.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+            query: Search query or filter.
+        """
     invoke(ctx, "assets", workspace, query=query)
 
 
 @columns_app.command("usage")
 def columns(ctx: typer.Context, asset: str, workspace: Workspace, column_query: str = '',
-            usage_type: str = '', file_id: str = '', group_by: str = 'none'):
+            usage_type: str = '', file_id: str = '', group_by: str = 'none') -> None:
+    """Query source-column usage for an asset.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            workspace: Workspace targeted by the command.
+            column_query: Optional column name filter.
+            usage_type: Optional usage category filter.
+            file_id: Optional source file identifier.
+            group_by: Grouping mode for usage results.
+        """
     invoke(ctx, "columns", workspace, asset=asset, column_query=column_query,
            usage_type=usage_type, file_id=file_id, group_by=group_by)
 
 
 @columns_app.command("catalog")
-def transformation_columns(ctx: typer.Context, asset: str, workspace: Workspace):
-    """List exact column identities available for transformation tracing."""
+def transformation_columns(ctx: typer.Context, asset: str, workspace: Workspace) -> None:
+    """List exact column identities available for transformation tracing.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, "column_catalog", workspace, asset=asset)
 
 
 @columns_app.command("lineage")
 def column_lineage(ctx: typer.Context, asset: str, column: str, workspace: Workspace,
-                   direction: str = "upstream", status: str = "all"):
-    """Trace stored transformations; use global depth, item and paging limits."""
+                   direction: str = "upstream", status: str = "all") -> None:
+    """Trace stored transformations; use global depth, item and paging limits.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            column: Column name to trace.
+            workspace: Workspace targeted by the command.
+            direction: Lineage direction to query.
+            status: Transformation status filter.
+        """
     invoke(ctx, "column_lineage", workspace, asset=asset, column=column,
            direction=direction, status=status)
 
 
 @source_app.command("list")
-def files(ctx: typer.Context, workspace: Workspace, query: str = ""):
+def files(ctx: typer.Context, workspace: Workspace, query: str = "") -> None:
+    """List source files matching an optional query.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+            query: Search query or filter.
+        """
     invoke(ctx, "files", workspace, query=query)
 
 
 @source_app.command("show")
-def source(ctx: typer.Context, workspace: Workspace, file_id: str = None, statement_id: str = None,
-           operation_id: str = None, start_line: int = None, end_line: int = None, full: bool = False):
+def source(ctx: typer.Context, workspace: Workspace, file_id: str | None = None, statement_id: str | None = None,
+           operation_id: str | None = None, start_line: int | None = None, end_line: int | None = None, full: bool = False) -> None:
+    """Retrieve source evidence by file, statement, or operation.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+            file_id: Optional source file identifier.
+            statement_id: Optional statement identifier.
+            operation_id: Optional operation identifier.
+            start_line: Optional first source line.
+            end_line: Optional last source line.
+            full: Whether to request the full source content.
+        """
     invoke(ctx, "source", workspace, file_id=file_id, statement_id=statement_id, operation_id=operation_id,
            start_line=start_line, end_line=end_line, full=full)
 
 
 @source_app.command("search")
-def search_source(ctx: typer.Context, query: str, workspace: Workspace, include_matches: bool = False):
+def search_source(ctx: typer.Context, query: str, workspace: Workspace, include_matches: bool = False) -> None:
+    """Search imported source text for a literal query.
+
+        Args:
+            ctx: Typer command context.
+            query: Search query or filter.
+            workspace: Workspace targeted by the command.
+            include_matches: Whether to include matching excerpts.
+        """
     invoke(ctx, "search_code", workspace, query=query, include_matches=include_matches)
 
 
 @app.command("issues")
-def issues(ctx: typer.Context, workspace: Workspace, severity: str = "all"):
+def issues(ctx: typer.Context, workspace: Workspace, severity: str = "all") -> None:
+    """List analysis issues filtered by severity.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+            severity: Issue severity filter.
+        """
     invoke(ctx, "issues", workspace, severity=severity)
 
 
 @impact_app.command("analyze")
-def impact(ctx: typer.Context, asset: str, workspace: Workspace):
+def impact(ctx: typer.Context, asset: str, workspace: Workspace) -> None:
+    """Analyze downstream change impact for an asset.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, "impact", workspace, asset=asset)
 
 
 @jobs_app.command("status")
-def job_status(ctx: typer.Context, job_id: str, workspace: Workspace, wait: bool = False):
+def job_status(ctx: typer.Context, job_id: str, workspace: Workspace, wait: bool = False) -> None:
+    """Read a job status, optionally waiting for completion.
+
+        Args:
+            ctx: Typer command context.
+            job_id: Persisted job identifier.
+            workspace: Workspace targeted by the command.
+            wait: Whether to wait for job completion.
+        """
     invoke(ctx, "job", workspace, job_id=job_id, wait=wait)
 
 
 @exports_app.command("lineage")
-def export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = "json", direction: str = "upstream"):
+def export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = "json", direction: str = "upstream") -> None:
+    """Export bounded lineage for an asset.
+
+        Args:
+            ctx: Typer command context.
+            asset: Asset name or identifier.
+            workspace: Workspace targeted by the command.
+            format: Requested output format.
+            direction: Lineage direction to query.
+        """
     invoke(ctx, "export", workspace, asset=asset, format=format, direction=direction)
 
 
 @exports_app.command("read")
 def result(ctx: typer.Context, result_id: str, workspace: Workspace, format: str = "json",
-           binary: bool = False, offset: int = 0, length: int = 16384):
+           binary: bool = False, offset: int = 0, length: int = 16384) -> None:
+    """Read a stored result or a bounded binary artifact segment.
+
+        Args:
+            ctx: Typer command context.
+            result_id: Stored result identifier.
+            workspace: Workspace targeted by the command.
+            format: Requested output format.
+            binary: Whether to read the artifact as binary data.
+            offset: Byte offset within the artifact.
+            length: Maximum number of bytes to read.
+        """
     if binary:
         invoke(ctx, 'artifact_read', workspace, artifact_id=result_id, offset=offset, length=length)
     else:
@@ -353,14 +568,30 @@ def result(ctx: typer.Context, result_id: str, workspace: Workspace, format: str
 
 
 @batch_app.command("lineage")
-def batch(ctx: typer.Context, assets: list[str], workspace: Workspace, direction: str = "upstream"):
+def batch(ctx: typer.Context, assets: list[str], workspace: Workspace, direction: str = "upstream") -> None:
+    """Query lineage for multiple assets under a shared budget.
+
+        Args:
+            ctx: Typer command context.
+            assets: Asset names or identifiers to query.
+            workspace: Workspace targeted by the command.
+            direction: Lineage direction to query.
+        """
     invoke(ctx, "batch", workspace, assets=assets, direction=direction)
 
 
 @app.command("mcp")
 def mcp(ctx: typer.Context, transport: str = "stdio", host: str = "127.0.0.1", port: int = 8765,
-        public_url: str = None):
-    """Run the independent MCP server (stdio or authenticated streamable-http)."""
+        public_url: str | None = None) -> None:
+    """Run the independent MCP server (stdio or authenticated streamable-http).
+
+        Args:
+            ctx: Typer command context.
+            transport: MCP transport to use.
+            host: HTTP bind host.
+            port: HTTP bind port.
+            public_url: Optional public server URL.
+        """
     from dataforge.agent.mcp_server import serve
     try:
         serve(ctx.obj["home"], ctx.obj["policy"], transport, host, port, public_url)
@@ -371,15 +602,40 @@ def mcp(ctx: typer.Context, transport: str = "stdio", host: str = "127.0.0.1", p
 
 
 @cleanup_app.command('inspect')
-def cleanup_inspect(ctx: typer.Context, workspace: Workspace):
+def cleanup_inspect(ctx: typer.Context, workspace: Workspace) -> None:
+    """Inspect cleanup eligibility for a workspace.
+
+        Args:
+            ctx: Typer command context.
+            workspace: Workspace targeted by the command.
+        """
     invoke(ctx, 'cleanup_inspect', workspace)
 
 
-def _cleanup_command(category):
+def _cleanup_command(category: str) -> Any:
+    """Create a cleanup command bound to one cleanup category.
+
+    Args:
+        category: Cleanup category handled by the returned command.
+
+    Returns:
+        Typer command callback for previewing or applying that category.
+    """
     def command(ctx: typer.Context, workspace: Workspace, dry_run: bool = True,
-                preview: Path = None, confirm: str = '', backup: bool = True,
-                file_id: list[str] = typer.Option(None), run_id: str = None):
-        """Defaults to dry-run. Apply with --no-dry-run --preview FILE --confirm WORKSPACE_NAME."""
+                preview: Path | None = None, confirm: str = '', backup: bool = True,
+                file_id: list[str] | None = typer.Option(None), run_id: str | None = None) -> None:
+        """Defaults to dry-run. Apply with --no-dry-run --preview FILE --confirm WORKSPACE_NAME.
+
+            Args:
+                ctx: Typer command context.
+                workspace: Workspace targeted by the command.
+                dry_run: Dry run.
+                preview: Preview.
+                confirm: Explicit restore confirmation phrase.
+                backup: Backup.
+                file_id: Optional source file identifier.
+                run_id: Run id.
+            """
         if dry_run:
             invoke(ctx, 'cleanup_preview', workspace, category=category, file_ids=file_id, run_id=run_id)
         else:
@@ -403,21 +659,42 @@ workspace_app.command('reset')(_cleanup_command('reset'))
 
 
 @maintenance_app.command('inspect')
-def maintenance_inspect(ctx: typer.Context):
+def maintenance_inspect(ctx: typer.Context) -> None:
+    """Inspect database integrity and managed file counts.
+
+        Args:
+            ctx: Typer command context.
+        """
     _maintenance(ctx, 'inspect')
 
 
 @maintenance_app.command('backup')
-def maintenance_backup(ctx: typer.Context):
+def maintenance_backup(ctx: typer.Context) -> None:
+    """Create a consistent local database backup.
+
+        Args:
+            ctx: Typer command context.
+        """
     _maintenance(ctx, 'backup')
 
 
 @maintenance_app.command('checkpoint')
-def maintenance_checkpoint(ctx: typer.Context):
+def maintenance_checkpoint(ctx: typer.Context) -> None:
+    """Checkpoint the local database write-ahead log.
+
+        Args:
+            ctx: Typer command context.
+        """
     _maintenance(ctx, 'checkpoint')
 
 
-def _maintenance(ctx, operation):
+def _maintenance(ctx: typer.Context, operation: str) -> None:
+    """Run an authorized whole-home maintenance operation.
+
+    Args:
+        ctx: Typer context containing the home and access policy.
+        operation: Maintenance action name.
+    """
     from dataforge.database_maintenance import backup, checkpoint, inspect_database
     if ctx.obj['policy'].workspaces is not None or (operation != 'inspect' and not ctx.obj['policy'].allow_write):
         fail(ctx, AgentError('forbidden', 'Whole-home maintenance requires unrestricted local access and --allow-write for writes'))
@@ -435,7 +712,15 @@ def _maintenance(ctx, operation):
 
 
 @maintenance_app.command('restore')
-def maintenance_restore(ctx: typer.Context, archive: Path, destination: Path, confirm: str = ''):
+def maintenance_restore(ctx: typer.Context, archive: Path, destination: Path, confirm: str = '') -> None:
+    """Restore a backup into a new runtime home after explicit confirmation.
+
+        Args:
+            ctx: Typer command context.
+            archive: Backup archive to restore.
+            destination: New destination home directory.
+            confirm: Explicit restore confirmation phrase.
+        """
     from dataforge.database_maintenance import restore_backup
     if (not ctx.obj['policy'].allow_write or ctx.obj['policy'].workspaces is not None
             or confirm not in {'RESTORE GRAVETRAIL', 'RESTORE DATAFORGE'}):
@@ -448,8 +733,12 @@ def maintenance_restore(ctx: typer.Context, archive: Path, destination: Path, co
 
 
 @app.command('ui', context_settings={'allow_extra_args': True, 'ignore_unknown_options': True})
-def ui(ctx: typer.Context):
-    """Launch the packaged Streamlit UI; extra arguments go to the launcher."""
+def ui(ctx: typer.Context) -> None:
+    """Launch the packaged Streamlit UI; extra arguments go to the launcher.
+
+        Args:
+            ctx: Typer command context.
+        """
     from dataforge.launcher import main
     main(['--home', str(ctx.obj['home']), *ctx.args])
 

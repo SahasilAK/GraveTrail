@@ -2,11 +2,26 @@
 import base64
 import hashlib
 import json
+from typing import Any
 
-from dataforge.agent.contracts import AgentError, compact
+from dataforge.agent.contracts import AgentError, QueryOptions, compact
 
 
-def page(items, options, key, **metadata):
+def page(items: list[Any], options: QueryOptions, key: Any, **metadata: Any) -> dict[str, Any]:
+    """Return one size-bounded page with a query-bound continuation cursor.
+
+    Args:
+        items: Ordered result records to page.
+        options: Validated cursor, page-size, and response-budget options.
+        key: Query identity used to reject cursors from other requests.
+        **metadata: Additional response fields included with every page.
+
+    Returns:
+        A response containing selected items, counts, completeness, and a cursor.
+
+    Raises:
+        AgentError: If the cursor is invalid or the response budget is too small.
+    """
     fingerprint = hashlib.sha256(compact(key).encode()).hexdigest()[:24]
     offset = 0
     if options.cursor:
@@ -18,7 +33,8 @@ def page(items, options, key, **metadata):
         except (ValueError, KeyError, TypeError, UnicodeError):
             raise AgentError("invalid_cursor", "Cursor is invalid, stale or belongs to another query") from None
 
-    def envelope(selected):
+    def envelope(selected: list[Any]) -> dict[str, Any]:
+        """Build response metadata for the selected records."""
         end = offset + len(selected)
         cursor = base64.urlsafe_b64encode(compact({"query": fingerprint, "offset": end}).encode()).decode()
         return {**metadata, "items": selected, "count": len(selected), "total": len(items),
