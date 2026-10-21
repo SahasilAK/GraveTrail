@@ -4,10 +4,16 @@ import json
 import streamlit as st
 
 from dataforge.services import compare_runs
+from dataforge.store import Store
 from ui.common import source_viewer
 
 
-def render_diagnostics(store, w):
+def render_diagnostics(store: Store, w: str) -> None:
+    """Render parser diagnostics and expandable source-backed review controls.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier."""
     diagnostics = store.diagnostics(w)
     visibility = store.setting(w, "diagnostic_visibility", "all")
     if visibility != "all":
@@ -61,7 +67,12 @@ def render_diagnostics(store, w):
             render(store, w)
 
 
-def render_history(store, w):
+def render_history(store: Store, w: str) -> None:
+    """Render recent analysis runs and comparisons between completed runs.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier."""
     from ui.analysis_ai import report
     report(store, w)
     st.subheader("Analysis history", icon=":material/history:")

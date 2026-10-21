@@ -11,13 +11,19 @@ from contextlib import ExitStack
 from dataclasses import asdict
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal, Self
 from urllib.parse import quote, urlparse
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from dataforge.ai_analysis_models import LineageReviewResponse, ProjectLineageResponse, UnitAttemptResult
+from dataforge.ai_analysis_models import (
+    AnalysisUnit,
+    LineageReviewResponse,
+    NormalizedFact,
+    ProjectLineageResponse,
+    UnitAttemptResult,
+)
 from dataforge.ai_budget import project_profile, request_allowance
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
 from dataforge.ai_wire import SourceCitationError
@@ -37,6 +43,9 @@ from dataforge.model_capabilities import (
 from dataforge.models import canonical, stable_id, statements
 from dataforge.parsers.sas import parse_sas, strip_comments
 
+if TYPE_CHECKING:
+    from dataforge.store import Store
+
 PROVIDERS = {"OpenAI": "https://api.openai.com/v1", "Anthropic": "https://api.anthropic.com/v1",
     "Ollama": "http://localhost:11434", "LM Studio": "http://localhost:1234/v1",
     "OmniRoute": "http://localhost:20128/v1", "OpenAI compatible": "http://localhost:8000/v1",
@@ -54,6 +63,13 @@ if not PROMPTS.is_dir():
 
 
 def is_local(url: str) -> bool:
+    """Check whether a provider URL points to a loopback host.
+
+    Args:
+        url: Provider base URL to inspect.
+
+    Returns:
+        Whether the URL host is localhost or a loopback IP address."""
     host = urlparse(url).hostname
     if host == "localhost":
         return True
@@ -83,21 +99,42 @@ class Profile(BaseModel):
     output_mode: Literal['automatic', 'custom'] = 'custom'
 
     @model_validator(mode='after')
-    def bound_capabilities(self):
+    def bound_capabilities(self) -> Self:
+        """Discard capability metadata that no longer matches this profile."""
         if self.model_capabilities and self.model_capabilities.identity != capability_identity(self):
             self.model_capabilities = None
         return self
 
     @field_validator("provider")
     @classmethod
-    def provider_known(cls, value):
+    def provider_known(cls, value: str) -> str:
+        """Reject provider names that are not supported.
+
+        Args:
+            value: Provider name supplied to the profile.
+
+        Returns:
+            The validated provider name.
+
+        Raises:
+            ValueError: If the provider name is unsupported."""
         if value not in PROVIDERS:
             raise ValueError("Unsupported provider")
         return value
 
     @field_validator("base_url")
     @classmethod
-    def secure_endpoint(cls, value):
+    def secure_endpoint(cls, value: str) -> str:
+        """Validate endpoint transport and remove its trailing slash.
+
+        Args:
+            value: HTTP(S) provider base URL.
+
+        Returns:
+            The validated base URL without a trailing slash.
+
+        Raises:
+            ValueError: If the URL is malformed, contains credentials or URL parameters, or uses remote HTTP."""
         parsed = urlparse(value)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ValueError("Use an HTTP(S) base URL without credentials, query or fragment")
@@ -107,7 +144,17 @@ class Profile(BaseModel):
 
     @field_validator("key_env")
     @classmethod
-    def env_name(cls, value):
+    def env_name(cls, value: str) -> str:
+        """Validate a credential environment variable name.
+
+        Args:
+            value: Environment variable reference to validate.
+
+        Returns:
+            The validated variable name.
+
+        Raises:
+            ValueError: If the value is not a valid environment variable name."""
         if value and not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", value):
             raise ValueError("Enter an environment variable name, never the secret value")
         return value
@@ -133,13 +180,29 @@ class GroundedResponse(BaseModel):
 
 
 class ProviderError(Exception):
-    def __init__(self, message, retryable=False):
+    """Describe a provider failure and whether retrying may succeed."""
+
+    def __init__(self, message: str, retryable: bool=False) -> None:
+        """Create a provider error with its retryability flag.
+
+        Args:
+            message: Safe summary of the provider failure.
+            retryable: Whether the failed operation may be retried."""
         super().__init__(message)
         self.retryable = retryable
 
 
-def response_object(text: str) -> dict:
-    """Accept JSON or one enclosing JSON fence, never prose or extracted fragments."""
+def response_object(text: str) -> dict[str, Any]:
+    """Parse a JSON object, optionally enclosed in one JSON code fence.
+
+    Args:
+        text: Provider response text to parse.
+
+    Returns:
+        The decoded JSON object.
+
+    Raises:
+        ValueError: If the content is not a JSON object or exceeds JSON nesting limits."""
     if not isinstance(text, str):
         raise ValueError("Provider content must be a JSON object")
     text = text.strip()
@@ -156,7 +219,17 @@ def response_object(text: str) -> dict:
 
 
 class Adapter:
-    def __init__(self, profile: Profile, transport=None, cancelled=None, before_attempt=None, check=None):
+    """Send non-streaming requests to a configured model provider."""
+
+    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None) -> None:
+        """Create an HTTP client for the profile and current cancellation source.
+
+        Args:
+            profile: Validated provider configuration.
+            transport: Optional HTTPX transport used for the request.
+            cancelled: Optional callback that reports request cancellation.
+            before_attempt: Optional callback that authorizes an attempt and returns its timeout.
+            check: Optional callback that raises when the request is no longer authorized."""
         self.profile = profile
         self.connections = current_connections()
         self.cancelled = cancelled
@@ -165,13 +238,25 @@ class Adapter:
         self.completion_metadata = {}
         self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
 
-    def __enter__(self):
+    def __enter__(self) -> Adapter:
+        """Return this adapter for use as a context manager."""
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: Any) -> None:
+        """Close the underlying HTTP client when leaving a context.
+
+        Args:
+            args: Exception information supplied by the context manager protocol."""
         self.client.close()
 
-    def _headers(self):
+    def _headers(self) -> dict[str, str]:
+        """Build request headers using the configured credential reference.
+
+        Returns:
+            Headers for the provider request, including configured authentication.
+
+        Raises:
+            ValueError: If the supplied value violates the operation constraints."""
         p = self.profile
         key = self.connections.resolve(p.key_env)
         if p.key_env and not key:
@@ -186,7 +271,19 @@ class Adapter:
             headers["anthropic-version"] = "2023-06-01"
         return headers
 
-    def _request(self, method, path, payload=None):
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None=None) -> dict[str, Any]:
+        """Send one bounded JSON request and sanitize its response.
+
+        Args:
+            method: HTTP method for the provider endpoint.
+            path: Provider-relative request path.
+            payload: JSON request body, when the method requires one.
+
+        Returns:
+            Sanitized provider response object.
+
+        Raises:
+            ProviderError: If the request fails, is cancelled, or returns invalid or oversized content."""
         for attempt in range(self.profile.retries + 1):
             if self.cancelled and self.cancelled():
                 raise ProviderError("AI request cancelled; no further retries")
@@ -231,6 +328,17 @@ class Adapter:
         raise ProviderError("Provider request failed")
 
     def complete(self, system: str, user: str) -> tuple[str, dict]:
+        """Submit a system and user prompt using the provider's chat protocol.
+
+        Args:
+            system: System instruction text.
+            user: User prompt text.
+
+        Returns:
+            Provider response text and usage metadata.
+
+        Raises:
+            ProviderError: If the provider response has an unsupported shape."""
         p = self.profile
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         if p.provider == "Anthropic":
@@ -301,9 +409,24 @@ class Adapter:
             raise ProviderError("Provider returned an unsupported response shape") from None
 
     def models(self) -> list[str]:
+        """List model identifiers exposed by providers that support discovery.
+
+        Returns:
+            Available model or endpoint identifiers.
+
+        Raises:
+            ValueError: If Azure deployment discovery is requested through the model API."""
         return [model.id for model in self.model_catalog()]
 
     def model_catalog(self) -> list[ModelDescriptor]:
+        """List provider model descriptors supported by the configured endpoint.
+
+        Returns:
+            Available provider model descriptors.
+
+        Raises:
+            ValueError: If discovery is unsupported or the returned catalog is invalid.
+        """
         if self.profile.provider == "Azure OpenAI":
             raise ValueError("Enter an Azure deployment name manually; model listing requires a separate management API")
         path = "/api/tags" if self.profile.provider == "Ollama" else "/api/2.0/serving-endpoints" if self.profile.provider == "Databricks" else "/models"
@@ -314,7 +437,17 @@ class Adapter:
         return merge_descriptors(normalize_model(item, self.profile.provider) for item in items)
 
     def model_details(self, model: str) -> ModelDescriptor:
-        """Explicit metadata inspection only; never loads a model or submits source."""
+        """Inspect metadata for a selected model without loading it or submitting source.
+
+        Args:
+            model: Provider model identifier to inspect.
+
+        Returns:
+            Sanitized model metadata.
+
+        Raises:
+            ValueError: If the selected model is absent from the provider catalog.
+        """
         if self.profile.provider == 'Ollama':
             data = self._request('POST', '/api/show', {'model': model})
             descriptor = normalize_model({**data, 'id': model}, 'Ollama')
@@ -336,7 +469,21 @@ class Adapter:
         return descriptor.model_copy(update={'capabilities': bind_capabilities(descriptor.capabilities, profile)})
 
 
-def validate_response(response: GroundedResponse, code: str, known: set[str], first: int, last: int):
+def validate_response(response: GroundedResponse, code: str, known: set[str], first: int, last: int) -> GroundedResponse:
+    """Ensure provider claims exactly match supplied source and asset evidence.
+
+    Args:
+        response: Structured provider response to validate.
+        code: Original source text used as evidence.
+        known: Asset names allowed in claims.
+        first: First source line included in the evidence selection.
+        last: Last source line included in the evidence selection.
+
+    Returns:
+        The validated response unchanged.
+
+    Raises:
+        ValueError: If a claim cites an invalid line range, quote, asset, or read/write relationship."""
     lines = code.splitlines()
     known = {canonical(x) for x in known}
     for claim in response.claims:
@@ -366,11 +513,23 @@ def validate_response(response: GroundedResponse, code: str, known: set[str], fi
 
 
 def redact(text: str) -> str:
+    """Redact credential values known to the current connection scope.
+
+    Args:
+        text: Text that may contain a credential value.
+
+    Returns:
+        Text with known credentials replaced by redaction markers."""
     return current_connections().redact(text)
 
 
-def expire_ai_history(store, workspace):
-    """Expire optional bodies without deleting evidence still used by active facts."""
+def expire_ai_history(store: Store, workspace: str) -> None:
+    """Expire optional request bodies while retaining evidence used by active facts.
+
+    Args:
+        store: Workspace store containing AI history.
+        workspace: Workspace whose retention policy is applied.
+    """
     days = int(store.setting(workspace, 'llm_retention_days', 30))
     referenced = {r['record_id'] for r in store.rows('''SELECT record_id FROM ai_analysis_units WHERE workspace_id=?
         UNION SELECT record_id FROM analysis_fact_support WHERE workspace_id=?''', [workspace, workspace])
@@ -386,8 +545,29 @@ def expire_ai_history(store, workspace):
             store.execute('DELETE FROM llm_records WHERE record_id=?', [record['record_id']])
 
 
-def assist(store, workspace, profile, file_id, first, last, task="lineage_validation", profile_id="",
-           transport=None, expected_hash=None, cancelled=None, expected_job=None):
+def assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str="lineage_validation", profile_id: str="",
+           transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, expected_job: str | None=None) -> dict[str, Any]:
+    """Run one privacy-gated AI request while holding workspace request capacity.
+
+    Args:
+        store: Workspace store used to read source and persist the result.
+        workspace: Workspace identifier owning the source.
+        profile: Provider profile selected for this request.
+        file_id: Source file identifier.
+        first: First selected source line.
+        last: Last selected source line.
+        task: Supported prompt task name.
+        profile_id: Saved provider profile identifier.
+        transport: Optional HTTPX transport for the provider request.
+        expected_hash: Optional source hash pinned by an earlier preview.
+        cancelled: Optional callback that reports request cancellation.
+        expected_job: Optional source job identity pinned by an earlier preview.
+
+    Returns:
+        A persisted request result, including outcome, usage, and retryability.
+
+    Raises:
+        InterruptedError: If the request is cancelled before transmission."""
     if cancelled and cancelled():
         raise InterruptedError('AI request cancelled before transmission')
     resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
@@ -403,7 +583,29 @@ def assist(store, workspace, profile, file_id, first, last, task="lineage_valida
                        transport, expected_hash, cancelled, expected_job)
 
 
-def _assist(store, workspace, profile, file_id, first, last, task, profile_id, transport, expected_hash, cancelled, expected_job=None):
+def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str, profile_id: str, transport: httpx.BaseTransport | None, expected_hash: str | None, cancelled: Callable[[], bool] | None, expected_job: str | None=None) -> dict[str, Any]:
+    """Build, send, validate, and persist one bounded AI assistance request.
+
+    Args:
+        store: Workspace store used for evidence and persistence.
+        workspace: Workspace identifier owning the source.
+        profile: Provider profile selected for the request.
+        file_id: Source file identifier.
+        first: First selected source line.
+        last: Last selected source line.
+        task: Supported prompt task name.
+        profile_id: Saved provider profile identifier.
+        transport: Optional HTTPX transport for the provider request.
+        expected_hash: Optional source hash pinned by an earlier preview.
+        cancelled: Optional callback that reports request cancellation.
+        expected_job: Optional source job identity pinned by an earlier preview.
+
+    Returns:
+        Persisted result metadata and any validated response.
+
+    Raises:
+        InterruptedError: If cancellation is observed before transmission.
+        ValueError: If the task, source, selection, privacy policy, or evidence bounds are invalid."""
     if cancelled and cancelled():
         raise InterruptedError("AI request cancelled before transmission")
     if task not in TASKS:
@@ -483,12 +685,36 @@ def _assist(store, workspace, profile, file_id, first, last, task, profile_id, t
             "retryable": retryable}
 
 
-def merge_claims(store, workspace, record_id):
+def merge_claims(store: Store, workspace: str, record_id: str) -> int:
+    """Merge validated lineage claims into stored evidence under the workspace lock.
+
+    Args:
+        store: Workspace store receiving the lineage claims.
+        workspace: Workspace identifier owning the validated result.
+        record_id: Validated AI result identifier.
+
+    Returns:
+        Number of claims merged.
+
+    Raises:
+        ValueError: If the result is unvalidated, stale, unsupported, or no longer evidence-grounded."""
     with store.lock:
         return _merge_claims(store, workspace, record_id)
 
 
-def _merge_claims(store, workspace, record_id):
+def _merge_claims(store: Store, workspace: str, record_id: str) -> int:
+    """Validate a stored AI result and write its claims as inferred lineage.
+
+    Args:
+        store: Workspace store receiving the lineage claims.
+        workspace: Workspace identifier owning the validated result.
+        record_id: Validated AI result identifier.
+
+    Returns:
+        Number of claims merged.
+
+    Raises:
+        ValueError: If the result is unvalidated, stale, unsupported, or no longer evidence-grounded."""
     records = store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND record_id=? AND outcome='validated'", [workspace, record_id])
     if not records:
         raise ValueError("Only validated AI records can be merged")
@@ -519,7 +745,27 @@ def _merge_claims(store, workspace, record_id):
     return len(response.claims)
 
 
-def assist_task(store, workspace, file_id, first, last, task, transport=None, expected_hash=None, cancelled=None, authorize=None, expected_job=None):
+def assist_task(store: Store, workspace: str, file_id: str, first: int, last: int, task: str, transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, authorize: Callable[[str, Profile], Profile] | None=None, expected_job: str | None=None) -> dict[str, Any]:
+    """Select a task profile, apply same-origin fallback, and run assistance.
+
+    Args:
+        store: Workspace store used to load routing and request data.
+        workspace: Workspace identifier owning the source.
+        file_id: Source file identifier.
+        first: First selected source line.
+        last: Last selected source line.
+        task: Supported prompt task name.
+        transport: Optional HTTPX transport for provider requests.
+        expected_hash: Optional source hash pinned by an earlier preview.
+        cancelled: Optional callback that reports request cancellation.
+        authorize: Optional callback that authorizes a profile identifier and profile.
+        expected_job: Optional source job identity pinned by an earlier preview.
+
+    Returns:
+        The selected provider request result.
+
+    Raises:
+        ValueError: If routing has no configured profile or no usable profile can complete."""
     profiles = {r["profile_id"]: Profile.model_validate_json(r["config"])
                 for r in store.rows("SELECT * FROM llm_profiles WHERE workspace_id=?", [workspace])}
     assignments = store.setting(workspace, "task_models", {})
@@ -545,8 +791,20 @@ def assist_task(store, workspace, file_id, first, last, task, transport=None, ex
     return result
 
 
-def analysis_routes(store, workspace, task):
-    """Resolve only same-recipient configured routes, entirely offline."""
+def analysis_routes(store: Store, workspace: str, task: str) -> list[tuple[str, Profile]]:
+    """Resolve configured fallback profiles that share the selected recipient host.
+
+    Args:
+        store: Workspace store containing provider settings.
+        workspace: Workspace identifier.
+        task: Project analysis task to route.
+
+    Returns:
+        Ordered profile identifiers and validated profiles.
+
+    Raises:
+        ValueError: If the task is invalid or no default profile is configured.
+    """
     if task not in PROJECT_TASKS:
         raise ValueError('Project invocation requires a project task')
     profiles = {r['profile_id']:Profile.model_validate_json(r['config'])
@@ -560,8 +818,15 @@ def analysis_routes(store, workspace, task):
     return routes
 
 
-def _transmitted_schema(value):
-    """Drop only schema annotations; keep validation keywords and named properties."""
+def _transmitted_schema(value: Any) -> Any:
+    """Remove display annotations recursively while preserving validation keywords.
+
+    Args:
+        value: JSON schema value to sanitize.
+
+    Returns:
+        Schema data with display-only annotations removed.
+    """
     if isinstance(value,list):
         return [_transmitted_schema(item) for item in value]
     if not isinstance(value,dict):
@@ -582,8 +847,15 @@ def _transmitted_schema(value):
 REVIEW_CONTEXT_CHARS = 2000
 
 
-def review_batches(facts):
-    """Deterministic lossless pages; an oversized singleton gets its own fit check."""
+def review_batches(facts: list[NormalizedFact]) -> list[list[dict[str, Any]]]:
+    """Split normalized facts into deterministic pages bounded by review context size.
+
+    Args:
+        facts: Normalized facts to serialize for review.
+
+    Returns:
+        Ordered groups of serialized facts.
+    """
     batches, current = [], []
     for fact in facts:
         candidate = fact.model_dump(exclude={'detail','evidence','unit_id','evidence_key','status','origin'}, exclude_defaults=True)
@@ -598,12 +870,29 @@ def review_batches(facts):
 
 
 @lru_cache(maxsize=2)
-def _analysis_schema_text(task):
+def _analysis_schema_text(task: str) -> str:
+    """Serialize the validation schema sent for a project analysis task.
+
+    Args:
+        task: Project analysis task whose wire schema is required.
+
+    Returns:
+        Compact JSON for the transmitted schema.
+    """
     from dataforge.ai_wire import wire_schema
     return json.dumps(_transmitted_schema(wire_schema(task)), sort_keys=True, separators=(',', ':'))
 
 
-def analysis_prompt_hash(task, *, focused=False):
+def analysis_prompt_hash(task: str, *, focused: bool=False) -> str:
+    """Hash the system prompt, focus instructions, and transmitted schema.
+
+    Args:
+        task: Project analysis task.
+        focused: Whether unit-specific focus instructions are included.
+
+    Returns:
+        SHA-256 prompt identity.
+    """
     system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
     template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
     focus_path = PROMPTS/task/'focus.md'
@@ -612,8 +901,21 @@ def analysis_prompt_hash(task, *, focused=False):
     return hashlib.sha256((system + template + _analysis_schema_text(task)).encode()).hexdigest()
 
 
-def analysis_prompt(unit, task, execution, *, reserve_review=False):
-    """One JSON user context; prompt/schema/source overhead all count toward the limit."""
+def analysis_prompt(unit: AnalysisUnit, task: str, execution: Any, *, reserve_review: bool=False) -> tuple[str, str, str]:
+    """Build the system prompt, bounded JSON user context, and prompt identity.
+
+    Args:
+        unit: Analysis unit whose source and evidence are under review.
+        task: Project analysis task.
+        execution: Current analysis context and privacy settings.
+        reserve_review: Whether to reserve maximum review candidate space.
+
+    Returns:
+        System prompt, serialized user prompt, and prompt hash.
+
+    Raises:
+        ValueError: If the requested task is not a supported project task.
+    """
     if task not in PROJECT_SCHEMAS:
         raise ValueError('Unknown project task')
     system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
@@ -642,8 +944,20 @@ def analysis_prompt(unit, task, execution, *, reserve_review=False):
     return system,user,digest
 
 
-def preview_analysis_routes(store, workspace, units, execution, *, tasks=None):
-    """Offline route, full-envelope capacity and disclosure checks."""
+def preview_analysis_routes(store: Store, workspace: str, units: list[AnalysisUnit], execution: Any,
+                            *, tasks: list[str] | None=None) -> dict[str, Any]:
+    """Check routes, full-envelope budgets, credentials, and disclosure permissions offline.
+
+    Args:
+        store: Workspace store used to read profiles and privacy settings.
+        workspace: Workspace identifier.
+        units: Analysis units to include in the capacity preview.
+        execution: Current execution context and configured resource limits.
+        tasks: Optional ordered task list to preview.
+
+    Returns:
+        Route availability, blocked reasons, allowances, and budget totals.
+    """
     blocked, routes, excluded, allowances = [], {}, [], []
     tasks = tasks or ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
     for task in tasks:
@@ -691,8 +1005,23 @@ def preview_analysis_routes(store, workspace, units, execution, *, tasks=None):
             'valid': not blocked, 'max_provider_attempts': ceiling, 'max_output_tokens_reserved': tokens}
 
 
-def invoke_analysis_unit(store, workspace, unit, task, execution):
-    """Routed project extraction, with each physical attempt reauthorized and reserved."""
+def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task: str,
+                         execution: Any) -> UnitAttemptResult | None:
+    """Run routed project extraction with each provider attempt reauthorized and reserved.
+
+    Args:
+        store: Workspace store for immutable source and result records.
+        workspace: Workspace identifier.
+        unit: Analysis unit to submit.
+        task: Project analysis task.
+        execution: Current execution state, permissions, and resource reservations.
+
+    Returns:
+        The final recorded attempt result, if a route was available.
+
+    Raises:
+        ValueError: If budgets, source identity, settings, or provider output are invalid.
+    """
     execution.check()
     schema_version, prompt_version = PROJECT_PROTOCOLS[task]
     routes = analysis_routes(store,workspace,task)

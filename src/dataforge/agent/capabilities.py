@@ -1,5 +1,7 @@
 """Versioned explicit UI parity catalog. Restrictions are not operational parity claims."""
 
+from typing import Any
+
 INVENTORY = [{'capability_id': 'P01',
   'description': 'List/get/create/edit/remove provider profiles; '
                  'name/provider/URL/model/reference/auth/timeout/retries/max_tokens/context_chars/temperature/structured/Azure '
@@ -560,7 +562,15 @@ INVENTORY.extend([
 ])
 
 
-def capability_catalog(service, workspace_id=None):
+def capability_catalog(service: Any, workspace_id: str | None=None) -> list[dict[str, Any]]:
+    """Return catalog entries annotated with permissions from the active policy.
+
+    Args:
+        service: Agent service providing workspace validation and launch policy.
+        workspace_id: Optional workspace to validate before building the catalog.
+
+    Returns:
+        Capability descriptions with booleans for the currently permitted actions."""
     if workspace_id:
         service._workspace(workspace_id)
     return [{**entry, 'authorization': {

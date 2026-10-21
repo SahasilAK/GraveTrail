@@ -1,10 +1,22 @@
 """Reconcile explicit DDL without assuming runtime order or discovering a database schema."""
 import json
+from typing import Any
 
-from dataforge.models import AssetRef, Diagnostic, column_key, operation_ids
+from dataforge.asset_identity import AssetResolver
+from dataforge.models import AssetRef, Diagnostic, ParseResult, column_key, operation_ids
 
 
-def collect_schemas(results, workspace, resolver):
+def collect_schemas(results: list[tuple[dict[str, Any], ParseResult]], workspace: str, resolver: AssetResolver) -> dict[str, dict[str, Any]]:
+    """Reconcile declared schemas by resolved asset identity and retain their evidence.
+
+    Args:
+        results: Source records paired with their parser results.
+        workspace: Workspace identifier used to create stable evidence IDs.
+        resolver: Resolver that applies the workspace's asset identity rules.
+
+    Returns:
+        Schema records keyed by resolved asset ID. Conflicting or incomplete declarations
+        are marked unresolved and do not expose columns for wildcard expansion."""
     normalize, resolve = resolver.norm, resolver.resolve
     records = [(source, parsed, record) for source, parsed in results
                for record in parsed.metadata.get("declared_schemas", [])]
