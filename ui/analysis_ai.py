@@ -150,7 +150,8 @@ def controls(store, workspace, file_ids):
             affected = {b.get('unit_id') for b in preview['blocked'] if b.get('unit_id')}
             if affected:
                 paths = {a['path'] for a in preview.get('allowances', []) if a['unit_id'] in affected}
-                st.caption('Affected source selection: ' + ', '.join(sorted(paths)))
+                with st.expander('Affected source files', expanded=False):
+                    st.caption('Affected source selection: ' + ', '.join(sorted(paths)))
             required = max((a['required_characters'] for a in preview.get('allowances', []) if not a['valid']), default=0)
             if 'complete_prompt_exceeds_context_budget' in reasons and 0 < required <= 100000:
                 if st.button(f'Apply calculated context allowance ({required:,} characters)'):
