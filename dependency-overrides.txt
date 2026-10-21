@@ -1,0 +1,4 @@
+# Temporary tested exception: Streamlit 1.66.0 declares Pillow<13.
+# Pillow 13.0.0 fixes the reported security advisories. See SECURITY.md.
+# Remove with the project override when upstream supports a patched Pillow.
+pillow==13.0.0

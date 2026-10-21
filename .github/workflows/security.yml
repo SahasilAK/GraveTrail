@@ -58,3 +58,17 @@ jobs:
         run: uv export --locked --all-extras --all-groups --no-emit-project --no-hashes --output-file requirements-audit.txt
       - name: Audit applicable locked versions against current advisories
         run: uvx --python "${{ matrix.python }}" --from pip-audit==2.10.1 pip-audit --disable-pip --no-deps --requirement requirements-audit.txt
+      - name: Build and install a clean wheel with the explicit compatibility override
+        shell: bash
+        run: |
+          uv build --wheel --out-dir wheel-audit
+          uv venv --python "${{ matrix.python }}" wheel-audit/installed
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            PYTHON=wheel-audit/installed/Scripts/python.exe
+          else
+            PYTHON=wheel-audit/installed/bin/python
+          fi
+          uv pip install --python "$PYTHON" --overrides dependency-overrides.txt wheel-audit/*.whl
+          "$PYTHON" -c 'from importlib.metadata import version; assert version("pillow") == "13.0.0"; assert version("streamlit") == "1.66.0"'
+          SITE_PACKAGES=$("$PYTHON" -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
+          uvx --python "${{ matrix.python }}" --from pip-audit==2.10.1 pip-audit --path "$SITE_PACKAGES"

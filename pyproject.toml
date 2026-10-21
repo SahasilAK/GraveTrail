@@ -9,7 +9,8 @@ description = "Local, evidence-backed SQL and SAS lineage workspace"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "streamlit>=1.66,<2",
+  "streamlit==1.66.0",
+  "pillow==13.0.0",
   "duckdb>=1.5,<2",
   "sqlglot>=30.23,<31",
   "networkx>=3.4,<4",
@@ -30,6 +31,11 @@ build = ["pyinstaller>=6.22,<7"]
 [dependency-groups]
 docs = ["mkdocs==1.6.1", "mkdocs-material==9.7.7", "pymdown-extensions==12.3"]
 
+[tool.uv]
+# Temporary, tested exception to Streamlit 1.66's Pillow<13 metadata. See SECURITY.md.
+# Keep installer overrides in dependency-overrides.txt identical; remove after upstream support.
+override-dependencies = ["pillow==13.0.0"]
+
 [project.scripts]
 gravetrail = "dataforge.cli:app"
 gravetrail-ui = "dataforge.launcher:main"
@@ -48,7 +54,7 @@ path = "scripts/build/hatch_assets.py"
 exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
+include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "/dependency-overrides.txt", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
 exclude = ["docs/prompts/**", "docs/plans/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]

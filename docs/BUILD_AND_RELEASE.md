@@ -29,6 +29,7 @@ application's runtime configuration.
 |---|---|
 | `dist/python/*.whl` | Installable application, UI pages, prompts and default theme |
 | `dist/python/*.tar.gz` | Source distribution, including release/build tooling |
+| `dist/python/dependency-overrides.txt` | Explicit tested installer compatibility policy; distribute with the wheel |
 | `dist/gravetrail-VERSION-OS-ARCH.zip` | Windows executable and complete companion directory |
 | `dist/gravetrail-VERSION-OS-ARCH.tar.gz` | Linux/macOS executable and companion directory |
 | `dist/docker-image.json` | Local Docker image tag, content ID, OS and architecture |
@@ -48,11 +49,11 @@ Portable builds are unsigned unless explicitly processed through the Windows pro
 
 ## Python installation and launches
 
-Install a wheel in a clean virtual environment:
+Install a wheel in a clean virtual environment using its companion compatibility policy. Plain pip cannot resolve the temporary Streamlit/Pillow version conflict; see [installation policy](SETUP_AND_DEPLOYMENT.md#temporary-pillow-security-compatibility):
 
 ```console
-python -m venv .venv
-python -m pip install dist/python/gravetrail-0.1.0-py3-none-any.whl
+uv venv .venv
+uv pip install --overrides dist/python/dependency-overrides.txt dist/python/gravetrail-0.1.0-py3-none-any.whl
 gravetrail-ui --no-browser
 gravetrail --json workspace list
 gravetrail mcp

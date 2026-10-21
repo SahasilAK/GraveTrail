@@ -75,7 +75,7 @@ jobs:
           else
             PYTHON=dist/installed/bin/python
           fi
-          uv pip install --python "$PYTHON" dist/python/*.whl
+          uv pip install --python "$PYTHON" --overrides dist/python/dependency-overrides.txt dist/python/*.whl
           uv run python scripts/build/smoke.py --python "$PYTHON"
       - name: Install checksum-pinned Inno Setup compiler
         if: runner.os == 'Windows'

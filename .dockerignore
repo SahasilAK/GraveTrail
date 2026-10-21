@@ -5,6 +5,7 @@
 !pyproject.toml
 !uv.lock
 !README.md
+!dependency-overrides.txt
 !app.py
 !scripts/
 !scripts/build/

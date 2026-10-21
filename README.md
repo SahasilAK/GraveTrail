@@ -98,9 +98,7 @@ in ignored `.dataforge/`. Choose a location with `uv run gravetrail-ui --home PA
 Use the same explicit `--home` when switching between UI, CLI, and MCP; **one process
 owns each DuckDB home**. Installed launchers use the platform user-data directory.
 
-Prefer pip? In a Python virtual environment, run `python -m pip install -e ".[dev]"`,
-then `gravetrail-ui`. See the [installation guide](docs/SETUP_AND_DEPLOYMENT.md) for
-Windows, Linux, macOS, credentials, and troubleshooting.
+Use the locked uv installation above while the tested Streamlit/Pillow security override is required. Wheel installations need the supplied `dependency-overrides.txt`; plain pip cannot resolve the upstream version conflict. See the [installation guide](docs/SETUP_AND_DEPLOYMENT.md#temporary-pillow-security-compatibility) for the explicit install command and removal policy.
 
 <details>
 <summary><strong>Docker or a standalone build</strong></summary>

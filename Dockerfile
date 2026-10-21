@@ -3,7 +3,7 @@ FROM python:3.11-slim-bookworm AS build
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /build
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md dependency-overrides.txt ./
 COPY src/ ./src/
 COPY ui/ ./ui/
 COPY prompts/ ./prompts/

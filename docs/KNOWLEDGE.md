@@ -88,3 +88,5 @@ AI_ANALYSIS includes the expression-reference restoration step/diagram and stric
 TESTING records the post-push Certifi lock fix and unresolved Streamlit/Pillow security constraint; audit stays enforced.
 
 LLM_INTEGRATION/AI_ANALYSIS explain the one-hour request limit, separate execution budget and elapsed/wait timer semantics; TESTING records the bounded best-coding browser check and its functionality-only scope.
+
+SECURITY/setup/build guides explain temporary Streamlit1.66/Pillow13 exception, explicit uv wheel/source commands, ordinarypip conflict, artifact companion policy and upstream removal gates. TESTING preserves historical failures and records remediation proof.

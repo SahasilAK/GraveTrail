@@ -108,3 +108,5 @@ Validator3 is owned by ai_validation and imported by analysis_service. Both unit
 Parser14/validator3 add exact projection/SAS assignment occurrence checks. Extraction wire3/prompt4 resolves optional expression references before canonical validation; review stays wire2/prompt3 and durable compact-v2 payloads remain compatible.
 
 Profile timeout cap is3600seconds; current run deadlines still clamp HTTP waits. analysis_service emits source-free waiting/validation stages around extraction/review. Existing saved/default profiles are unchanged.
+
+Build Python artifacts now include dependency-overrides.txt in manifest alongside wheel/sdist; native locked export stays authoritative. Exact Streamlit/Pillow exception and installer/removal policy live in SECURITY.md.
