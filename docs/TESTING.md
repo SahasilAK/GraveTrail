@@ -10,6 +10,16 @@ catalog v1/run-results v6, identities, columns, settings, access, maintenance an
 The reproducible 1,000-model workload and exact scope limits are in [dbt support](DBT_SUPPORT.md).
 This extends the historical SQL/SAS acceptance evidence below.
 
+AI preparation status verification: **915 passed, 2 existing Windows skips** in
+178.66 seconds. `tests/test_ai_preparation.py` covers offline file/task progress,
+status-before-calculation ordering, automatic preview reuse and ready/blocked/error
+presentation. Existing custom/reset/context allowance controls pass. A real browser
+with a disposable 12-file fixture and deliberately slowed source reads verified
+the live native elapsed timer, expansion during work, frozen completion duration,
+expanded missing-credential/failure details and disabled analysis actions. No live
+provider requests were made. Ruff, lock validation and the strict documentation
+build pass; packaged applications were not rebuilt for this UI change.
+
 This table distinguishes delivered behavior, dated environment evidence and still-open gates.
 Earlier numerical results below are historical; a later source change does not refresh a
 previously tested distribution artifact. Optional local `plans/` records are not shipped or

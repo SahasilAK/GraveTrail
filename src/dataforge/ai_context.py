@@ -68,7 +68,7 @@ class AIPlan:
                 (not entry.get('temporary') or entry['job_id'] == unit.job_id)]
 
 
-def prepare_analysis(store, workspace, request):
+def prepare_analysis(store, workspace, request, *, progress=None):
     """Pin inventory, settings, original bytes and previous publication under one read lock."""
     request = AnalysisRequest.model_validate(request)
     from dataforge.dbt.service import reject_dbt_ai
@@ -81,8 +81,16 @@ def prepare_analysis(store, workspace, request):
         settings = ParsingSettings.model_validate({k:store.setting(workspace,k,v)
             for k,v in ParsingSettings().model_dump().items()}).model_dump()
         revisions = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1",[workspace])
-        sources = tuple(SourceSnapshot(f['file_id'],f['content_hash'],f['relative_path'],f['extension'],
-                       source_job(f,settings),store.snapshot_content(f)) for f in inventory if f['file_id'] in selected)
+        sources = []
+        if progress:
+            progress('Reading selected files', 0, len(selected))
+        for f in inventory:
+            if f['file_id'] in selected:
+                sources.append(SourceSnapshot(f['file_id'],f['content_hash'],f['relative_path'],f['extension'],
+                               source_job(f,settings),store.snapshot_content(f)))
+                if progress:
+                    progress('Reading selected files', len(sources), len(selected))
+        sources = tuple(sources)
         manifest = [{'file_id':f['file_id'],'content_hash':f['content_hash'],'path':f['relative_path'],
                      'extension':f['extension'],'job_id':source_job(f,settings)} for f in inventory]
     settings_json = json.dumps(settings,sort_keys=True)
@@ -130,12 +138,14 @@ def _unit_spans(code, extension):
         yield block_start,len(code.rstrip())
 
 
-def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source=False):
+def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source=False, progress=None):
     """Page complete units without the manual selector's 50-chunk limit."""
     if type(max_chars) is not int or not 1 <= max_chars <= 200000:
         raise ValueError('Invalid complete-unit budget')
     units,blocked,empty,disclosure,catalog = [],[],[],[],[]
-    for source in prepared.sources:
+    for index, source in enumerate(prepared.sources):
+        if progress:
+            progress('Splitting source into tasks', index, len(prepared.sources))
         if source.extension not in {'.sql','.sas'}:
             continue
         spans = list(_unit_spans(source.code,source.extension))
@@ -166,10 +176,14 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
                 catalog.append({'name':name,'role':'declaration' if match[1].lower().startswith('create') else 'observed',
                     'verified_schema':False,'temporary':name.lower().startswith('work.'),'job_id':source.job_id,
                     'file_id':source.file_id,'content_hash':source.content_hash,'unit_id':unit.unit_id})
+    if progress:
+        progress('Splitting source into tasks', len(prepared.sources), len(prepared.sources))
     # Extract declaration metadata only; never provide parser relationships or transformations.
     from dataforge.parsers.sql import parse_sql
     declaration_groups = {}
-    for unit in units:
+    for index, unit in enumerate(units):
+        if progress:
+            progress('Building shared source context', index, len(units))
         if unit.extension != '.sql':
             continue
         dialect = prepared.settings.get('dialect_by_extension',{}).get(unit.extension,prepared.settings.get('dialect',''))
@@ -184,6 +198,8 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
                 'temporary':temporary,'job_id':unit.job_id,'file_id':unit.file_id,'content_hash':unit.content_hash,
                 'unit_id':unit.unit_id,'evidence':EvidenceCitation.from_unit(unit).model_dump()}
             declaration_groups.setdefault((name.casefold(),unit.job_id if temporary else ''),[]).append(entry)
+    if progress:
+        progress('Building shared source context', len(units), len(units))
     for entries in declaration_groups.values():
         signatures = {json.dumps(entry['columns'],sort_keys=True) for entry in entries}
         conflict = len(signatures) != 1 or any(not entry['columns'] for entry in entries)

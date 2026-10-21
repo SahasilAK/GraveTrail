@@ -70,9 +70,10 @@ def _usage(counts, result):
             counts[key] += value
 
 
-def _prepare(store, workspace, request, connections=None, cancelled=None, transport=None, authorize=None):
+def _prepare(store, workspace, request, connections=None, cancelled=None, transport=None, authorize=None,
+             preparation_progress=None):
     try:
-        prepared = prepare_analysis(store, workspace, request)
+        prepared = prepare_analysis(store, workspace, request, progress=preparation_progress)
     except ValueError:
         if request.resume_run_id:
             raise ValueError('source_or_configuration_changed') from None
@@ -84,7 +85,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         if pin != {'manifest':prepared.manifest_hash,'revision':_state_revision(store,workspace),
                    'prior':prepared.prior_revision,'protocol':_protocol_hash()}:
             raise ValueError('source_or_configuration_changed')
-    plan = plan_ai_units(prepared, max_chars=200000)
+    plan = plan_ai_units(prepared, max_chars=200000, progress=preparation_progress)
     execution = AIExecutionContext(request, connections=connections or current_connections(),
         cancelled=cancelled, transport=transport, settings=prepared.settings, authorize=authorize,
         source_hashes={s.file_id: s.content_hash for s in prepared.sources})
@@ -115,13 +116,22 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
                 if parts:
                     return [page for part in parts for page in fit(part)]
             return [unit]
-        plan=replace(plan,units=tuple(page for unit in plan.units for page in fit(unit)))
+        pages = []
+        for index, unit in enumerate(plan.units):
+            if preparation_progress:
+                preparation_progress('Sizing source tasks', index, len(plan.units))
+            pages.extend(fit(unit))
+        if preparation_progress:
+            preparation_progress('Sizing source tasks', len(plan.units), len(plan.units))
+        plan=replace(plan,units=tuple(pages))
     plan=replace(plan,context_hash=_hash({'context':plan.context_hash,
         'partitions':[(u.unit_id,u.focus.model_dump() if u.focus else None) for u in plan.units]}))
     blocked, routes, bundles, allowances, excluded = list(plan.blocked), {}, [], [], []
     reusable, ends, review_provisional = 0, [], False
     expected = _state_revision(store, workspace)
-    for unit in plan.units:
+    for index, unit in enumerate(plan.units):
+        if preparation_progress:
+            preparation_progress('Checking prompt budgets and provider credentials', index, len(plan.units))
         execution.catalog = plan.context_for(unit)
         execution.review_candidates = []
         context_hash = _unit_context_hash(prepared, plan, execution, unit, expected)
@@ -163,6 +173,9 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
             seconds=sum(p['timeout']*p['attempts_per_unit'] for rr in preview['routes'].values() for p in rr)
             bundles.append((preview['max_provider_attempts'],preview['max_output_tokens_reserved'],seconds))
         ends.append(len(bundles))
+    if preparation_progress:
+        preparation_progress('Checking prompt budgets and provider credentials', len(plan.units), len(plan.units))
+        preparation_progress('Calculating execution budgets', 0, 1)
     execution.review_candidates=[]
     budget=execution_budget(bundles,**{k:getattr(request,k) for k in
         ('max_provider_attempts','max_output_tokens_total','max_seconds')})
@@ -177,6 +190,8 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
             for start,end in zip(starts,ends)),
         selected_units=sum(end<=selected_stages for end in ends),
         remaining_units=sum(end>selected_stages for end in ends))
+    if preparation_progress:
+        preparation_progress('Calculating execution budgets', 1, 1)
     return prepared,plan,execution,{'valid':not blocked,'mode':request.mode,
         'files':len(prepared.sources),'units':len(plan.units),'empty_files':len(plan.empty_files),
         'blocked':blocked,'routes':routes,'disclosure':list(plan.disclosure),
@@ -187,13 +202,13 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         'max_output_tokens_reserved':budget['total_output_tokens'],'manifest_hash':prepared.manifest_hash}
 
 
-def preview_analysis(store, workspace, request, *, connections=None):
+def preview_analysis(store, workspace, request, *, connections=None, progress=None):
     """Offline disclosure/context/budget preview; no connection tests or requests."""
     request = _resume_request(store, workspace, AnalysisRequest.model_validate(request))
     if request.mode == 'parser':
         return {'valid': True, 'mode': 'parser', 'files': len(store.files(workspace)),
                 'units': 0, 'blocked': [], 'routes': {}, 'max_provider_attempts': 0}
-    return _prepare(store, workspace, request, connections)[3]
+    return _prepare(store, workspace, request, connections, preparation_progress=progress)[3]
 
 
 def _current(store, workspace, prepared, expected_revision):
