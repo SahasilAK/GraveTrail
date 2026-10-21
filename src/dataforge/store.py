@@ -126,6 +126,10 @@ class Store:
                     CREATE INDEX ai_snapshots_workspace ON ai_analysis_snapshots(workspace_id,run_id,file_id);
                     INSERT INTO schema_migrations(version) VALUES (7);
                 """)
+            if (8,) not in versions:
+                from dataforge.dbt.persistence import DBT_SCHEMA
+                self.db.execute(DBT_SCHEMA)
+                self.db.execute('INSERT INTO schema_migrations(version) VALUES (8)')
 
     @contextmanager
     def transaction(self) -> Iterator[Store]:
@@ -202,8 +206,12 @@ class Store:
             raise ValueError("Source file no longer exists")
         source = rows[0]
         if content_hash and content_hash != source["content_hash"]:
-            if not re.fullmatch(r"[0-9a-f]{64}", content_hash) or not self.rows(
-                "SELECT 1 FROM statements WHERE file_id=? AND content_hash=? LIMIT 1", [file_id, content_hash]):
+            if not re.fullmatch(r"[0-9a-f]{64}", content_hash) or not (self.rows(
+                "SELECT 1 FROM statements WHERE file_id=? AND content_hash=? LIMIT 1", [file_id, content_hash]) or self.rows('''
+                SELECT 1 FROM dbt_project_snapshots s, json_each(s.payload_json,'$.snapshot.sources') ref
+                WHERE s.workspace_id=? AND json_extract_string(ref.value,'$.file_id')=?
+                AND json_extract_string(ref.value,'$.content_hash')=? LIMIT 1''',
+                [source['workspace_id'], file_id, content_hash])):
                 raise ValueError("Original source version is not referenced by this file")
             from dataforge.ingestion import decode
             data = (self.home / "blobs" / content_hash).read_bytes()

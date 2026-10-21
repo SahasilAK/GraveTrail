@@ -85,7 +85,11 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `history preview` | — | `--workspace`, `-w` **required**; `--keep-runs`; `--keep-imports`; `--batch-size`; `--help` |
 | `history restore` | `ARCHIVE_ID` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
 | `impact analyze` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
-| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--background`, `--no-background`; `--help` |
+| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--background`, `--no-background`; `--source-kind`; `--dbt-mode`; `--artifact-path`; `--include-packages`, `--no-include-packages`; `--help` |
+| `dbt projects` | — | `--workspace`, `-w` **required**; `--help` |
+| `dbt resources` | — | `--workspace`, `-w` **required**; `--project-id`; `--resource-type`; `--help` |
+| `dbt resource` | `RESOURCE_ID` | `--workspace`, `-w` **required**; `--help` |
+| `dbt dependencies` | `RESOURCE_ID` | `--workspace`, `-w` **required**; `--direction`; `--kind`; `--max-depth`; `--help` |
 | `ingestions get` | `INGESTION_ID` | `--workspace`, `-w` **required**; `--help` |
 | `ingestions list` | — | `--workspace`, `-w` **required**; `--help` |
 | `issues` | — | `--workspace`, `-w` **required**; `--severity`; `--help` |
@@ -150,6 +154,7 @@ Groups organize commands; use `gravetrail GROUP --help` to list their children.
 <!-- cli-groups:start -->
 | Group | Purpose |
 | --- | --- |
+| `dbt` | Offline dbt project/resource inventory and typed dependency or macro impact reports. |
 | `agent` | Actual schemas, credential-free client examples and local MCP handler self-test. |
 | `ai` | Explicit hash/job-pinned grounded assistance; preview operations are offline. |
 | `ai results` | Durable results; detailed reads need source permission. |

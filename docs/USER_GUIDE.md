@@ -1,5 +1,9 @@
 # User guide
 
+For multi-model dbt repositories, choose **Sources → Project type → dbt project**.
+Import configured models, property YAML and macros together, then run parser analysis.
+See [dbt project support](DBT_SUPPORT.md) for artifact selection, resource impact and limits.
+
 Create or switch workspaces in the sidebar. Every workspace has its own source inventory,
 analysis, settings and provider profiles. Workspaces reopen automatically after restart.
 

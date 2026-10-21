@@ -4,6 +4,11 @@ DuckDB lives at `DATAFORGE_HOME/dataforge.duckdb`. Schema migrations are additiv
 inside a transaction. Version 1 creates tables; version 2 adds statement source content hashes;
 version 3 adds the compressed history recovery journal.
 Version 4 adds temporary recovery; version 5 adds indexed column transformation facts.
+Version 8 adds `dbt_projects`, `dbt_resources`, `dbt_relationships`,
+`dbt_relation_bindings`, `dbt_evidence` and `dbt_project_snapshots`.
+Logical dbt asset identity includes root/package/type/name/version; physical bindings
+remain context-qualified metadata. Evidence records source hashes, offsets, origins and
+optional JSON Pointers. Normalized snapshots retain historical source reachability.
 Do not edit schema destructively or delete runtime data to resolve a migration error.
 
 ```mermaid

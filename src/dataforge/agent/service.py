@@ -30,6 +30,8 @@ from dataforge.artifacts import READS as ARTIFACT_READS
 from dataforge.artifacts import WRITES as ARTIFACT_WRITES
 from dataforge.artifacts import ArtifactOperations
 from dataforge.asset_identity import asset_label
+from dataforge.dbt.service import READS as DBT_READS
+from dataforge.dbt.service import DbtOperations
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer, Limits
 from dataforge.models import canonical
@@ -52,7 +54,7 @@ WRITES |= {'theme_apply', 'logging_update'} | PROJECT_WRITES
 LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge'}
 
 
-class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactOperations, ProjectAnalysisOperations):
+class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperations, ArtifactOperations, ProjectAnalysisOperations):
     """Coordinate authorized automation requests over application services."""
 
     def __init__(self, store: Any, policy: AccessPolicy | None = None) -> None:
@@ -141,7 +143,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS:
+                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS | DBT_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -1283,9 +1285,11 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
             report_progress = (lambda report: progress(min(.99, report.discovered / limits.max_files), "Importing")) if progress else None
             with self.store.analysis_lock:
                 if path.is_dir():
-                    report = importer.directory(path, extensions, progress=report_progress)
+                    report = importer.directory(path, extensions, progress=report_progress,
+                        source_kind=arguments.get('source_kind', 'files'), dbt_options=arguments.get('dbt_options'))
                 elif path.suffix.lower() == ".zip" and path.stat().st_size <= limits.max_archive_bytes:
-                    report = importer.zip(path.read_bytes(), extensions, progress=report_progress)
+                    report = importer.zip(path.read_bytes(), extensions, progress=report_progress,
+                        source_kind=arguments.get('source_kind', 'files'), dbt_options=arguments.get('dbt_options'))
                 else:
                     raise AgentError("invalid_path", "Import an allowed directory or bounded ZIP archive")
             result = asdict(report)
@@ -1294,7 +1298,7 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         self.audit(w, operation, "completed")
         return result
 
-    def _ingest(self, w: str, opts: QueryOptions, path: str, extensions: list[str]) -> dict[str, Any]:
+    def _ingest(self, w: str, opts: QueryOptions, path: str, extensions: list[str], source_kind: str='files', dbt_options: dict | None=None) -> dict[str, Any]:
         """Validate import inputs and enqueue a background ingestion job.
 
         Args:
@@ -1309,10 +1313,12 @@ class AgentService(ProviderOperations, AIOperations, ReportOperations, ArtifactO
         Raises:
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
         self.policy.import_path(path)
-        if not extensions or not {e.lstrip(".").lower() for e in extensions} <= {"sql", "sas", "csv"}:
+        if source_kind not in {'files', 'dbt'}:
+            raise AgentError('invalid_argument', 'Select files or dbt source kind')
+        if source_kind == 'files' and (not extensions or not {e.lstrip(".").lower() for e in extensions} <= {"sql", "sas", "csv"}):
             raise AgentError("invalid_argument", "Select sql, sas and/or csv extensions")
         return self.jobs.start(w, "ingest", lambda p: self.run_operation(w, "ingest", {
-            "path": path, "extensions": extensions}, p), AgentSettings.from_store(self.store, w).model_dump())
+            "path": path, "extensions": extensions, 'source_kind': source_kind, 'dbt_options': dbt_options}, p), AgentSettings.from_store(self.store, w).model_dump())
 
     def _analyze(self, w: str, opts: QueryOptions, file_ids: list[str] | None=None, force: bool=False, mode: str='parser', **arguments: Any) -> dict[str, Any]:
         """Enqueue a background analysis job for selected or all workspace files.

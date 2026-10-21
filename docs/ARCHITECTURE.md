@@ -24,6 +24,11 @@ flowchart LR
 `parsers/` returns facts and diagnostics without DB/UI access. `services.py` snapshots input,
 uses hash/config/path caches, parses with 1–8 workers, and atomically materializes facts.
 `store.py` serializes connection access and applies versioned transactional schema migrations.
+`dbt/` imports project members without execution, inventories typed resources and resolves
+logical model identities before adapting query facts to the same column/graph engine.
+Project fingerprints include every admitted member and public context; normalized snapshots
+and the resource catalog publish atomically with lineage. Supplied compiled SQL retains
+separate JSON Pointer evidence. See [dbt support](DBT_SUPPORT.md) for qualified boundaries.
 `maintenance.py` previews bounded unreferenced history, archives with a transactional recovery
 journal plus local JSON copy, and restores missing records without changing materialized facts.
 `cleanup.py` owns broader dependency-aware category plans and guarded apply; the specialized

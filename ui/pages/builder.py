@@ -16,7 +16,19 @@ if mode == "Import":
         st.subheader("Add source files", icon=":material/upload_file:")
         st.caption("SQL · SAS · CSV / original files are retained as evidence")
         mode = st.segmented_control("Input source", ["ZIP archive", "Folder upload", "Host directory"], default="ZIP archive")
-        extensions = {"." + x for x in st.multiselect("File types to analyze", ["sql", "sas", "csv"], default=["sql", "sas", "csv"])}
+        project_type = st.selectbox('Project type', ['SQL / SAS / CSV files', 'dbt project'])
+        source_kind, dbt_options = ('dbt' if project_type == 'dbt project' else 'files'), None
+        if source_kind == 'dbt':
+            dbt_mode = st.selectbox('dbt analysis mode', ['source', 'enriched', 'artifact'])
+            artifact_paths = st.text_area('Selected artifact paths (one per line)',
+                placeholder='retail/target/manifest.json')
+            include_packages = st.checkbox('Include supplied dbt package sources', value=False)
+            dbt_options = {'mode': dbt_mode, 'artifact_paths': [p.strip() for p in artifact_paths.splitlines() if p.strip()],
+                           'include_packages': include_packages}
+            extensions = set()
+            st.caption('dbt projects include configured models, YAML schemas, macros, seeds and tests. Profiles, secrets and unselected generated files are excluded.')
+        else:
+            extensions = {"." + x for x in st.multiselect("File types to analyze", ["sql", "sas", "csv"], default=["sql", "sas", "csv"])}
         entries, archive, directory = [], None, ""
         if mode == "ZIP archive":
             archive = st.file_uploader("Choose a ZIP archive", type=["zip"])
@@ -27,7 +39,7 @@ if mode == "Import":
             st.caption("Allowed roots: " + "; ".join(str(p) for p in roots))
             directory = st.text_input("Directory on application host", value=str(roots[0] / "scenario") if roots else "")
         st.caption("Source files are analyzed as text and never executed. Unsupported files are skipped and reported.")
-        if st.button("Import into inventory", type="primary", disabled=not extensions):
+        if st.button("Import into inventory", type="primary", disabled=not extensions and source_kind != 'dbt'):
             try:
                 limits = Limits(max_file_bytes=int(store.setting(w, "max_file_mb", 20)) * 1024 * 1024,
                                 max_files=int(store.setting(w, "max_files", 10000)))
@@ -41,11 +53,11 @@ if mode == "Import":
                     """
                     status.caption(f"Discovered {r.discovered}; accepted {r.accepted}; skipped {r.skipped}")
                 if mode == "ZIP archive" and archive:
-                    report = importer.zip(archive.getvalue(), extensions, progress)
+                    report = importer.zip(archive.getvalue(), extensions, progress, source_kind=source_kind, dbt_options=dbt_options)
                 elif mode == "Folder upload" and entries:
-                    report = importer.files(((f.name, f.getvalue()) for f in entries), extensions, progress)
+                    report = importer.files(((f.name, f.getvalue()) for f in entries), extensions, progress, source_kind=source_kind, dbt_options=dbt_options)
                 elif mode == "Host directory":
-                    report = importer.directory(directory, extensions, progress)
+                    report = importer.directory(directory, extensions, progress, source_kind=source_kind, dbt_options=dbt_options)
                 else:
                     raise ValueError("Choose source files first")
                 progress(report)

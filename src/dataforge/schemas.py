@@ -27,10 +27,10 @@ def collect_schemas(results: list[tuple[dict[str, Any], ParseResult]], workspace
             qualified.setdefault(name.rsplit(".", 1)[-1], []).append((record["table"], source))
     declarations = {}
     for source, parsed, record in records:
-        aid, _ = resolve(AssetRef(record["table"]), source, parsed)
+        aid, _ = resolve(AssetRef(record["table"], identity=record.get('asset_identity', '')), source, parsed)
         declarations.setdefault(aid, []).append((source, parsed, record))
         name = normalize(record["table"])
-        if "." not in name:
+        if "." not in name and not record.get('asset_identity'):
             # Ambiguous unqualified DDL may affect any qualified candidate; never choose one.
             for candidate, declaration_source in qualified.get(name, []):
                 if not resolver.visible_from(candidate, declaration_source, source):

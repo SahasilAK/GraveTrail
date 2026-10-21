@@ -112,9 +112,35 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call("summary", workspace_id)
 
     @server.tool(annotations=write)
-    async def ingest_sources(workspace_id: str, path: str, extensions: list[Literal["sql", "sas", "csv"]]) -> CallToolResult:
+    async def ingest_sources(workspace_id: str, path: str, extensions: list[Literal["sql", "sas", "csv"]],
+                             source_kind: Literal['files', 'dbt'] = 'files', dbt_options: dict | None = None) -> CallToolResult:
         """Start bounded directory/ZIP import from allowed roots; returns job_id."""
-        return await call("ingest", workspace_id, path=path, extensions=extensions)
+        return await call("ingest", workspace_id, path=path, extensions=extensions,
+                          source_kind=source_kind, dbt_options=dbt_options)
+
+    @server.tool(annotations=read)
+    async def list_dbt_projects(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """List stored dbt project contexts and coverage; never runs dbt."""
+        return await call('dbt_projects', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def list_dbt_resources(workspace_id: str, project_id: str = '', resource_types: list[str] | None = None,
+                                 options: QueryOptions | None = None) -> CallToolResult:
+        """List logical dbt resources, including macros/tests and metadata-only resources."""
+        return await call('dbt_resources', workspace_id, options, project_id=project_id, resource_types=resource_types)
+
+    @server.tool(annotations=read)
+    async def get_dbt_resource(workspace_id: str, resource_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """Inspect one exact dbt resource; detailed evidence requires source permission."""
+        return await call('dbt_resource', workspace_id, options, resource_id=resource_id)
+
+    @server.tool(annotations=read)
+    async def trace_dbt_dependencies(workspace_id: str, resource_id: str, direction: Literal['upstream', 'downstream'] = 'downstream',
+                                     relationship_kinds: list[str] | None = None, max_depth: int = 10,
+                                     options: QueryOptions | None = None) -> CallToolResult:
+        """Trace typed resource dependencies, including macro consumers, with bounded depth."""
+        return await call('dbt_dependencies', workspace_id, options, resource_id=resource_id, direction=direction,
+                          relationship_kinds=relationship_kinds, max_depth=max_depth)
 
     @server.tool(annotations=write)
     async def start_lineage_analysis(workspace_id: str, file_ids: list[str] | None = None, force: bool = False,

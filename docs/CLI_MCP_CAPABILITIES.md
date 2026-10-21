@@ -1,14 +1,14 @@
 # CLI and MCP capability coverage
 
-Verified source implementation: 2026-10-20. All 48 UI coverage IDs are accounted for:
-38 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
+Source inventory updated 2026-10-21. All 49 UI coverage IDs are accounted for:
+39 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
 rows have working permitted reads/local routes; they do **not** claim full MCP parity.
 `gravetrail capabilities` and MCP `get_capabilities` return this versioned inventory,
 including scope, aggregate effects, required grants and current launch authorization.
 Follow `next_cursor`; availability does not mean the current caller has permission.
 
-These 48 IDs group UI capabilities; they are not command/tool counts. The registered
-interface has **103 CLI command routes, 29 CLI groups, 83 MCP tools, 2 concrete resources,
+These 49 IDs group UI capabilities; they are not command/tool counts. The registered
+interface has **107 CLI command routes, 30 CLI groups, 87 MCP tools, 2 concrete resources,
 4 resource templates and 1 prompt** (verified 2026-10-19). The CLI and MCP guides list
 every route/tool, including basic discovery commands outside this UI capability matrix.
 Documentation tests compare those references with actual registrations and inputs.
@@ -83,6 +83,7 @@ is used for session credentials. Redirects are refused.
 | C05 | Automatic expired staging preference; only app-created files,24h,100 files/25MB per visit | `settings get`<br>`settings update`<br>`staging clean` | `get_workspace_settings`<br>`update_workspace_settings`<br>`preview_staging_cleanup` | **Restricted:** MCP may read/disable the automatic preference, never enable or execute it. Automatic cleanup runs only on the existing opt-in UI event. |
 | M01 | Database integrity/storage, checkpoint, full-home backup, backup list/download, new-home restore | `maintenance inspect`<br>`maintenance backup`<br>`maintenance checkpoint`<br>`maintenance restore`<br>`maintenance backups`<br>`maintenance download` | `inspect_database_maintenance`<br>`list_runtime_backups` | **Restricted:** MCP exposes authorized unrestricted metadata only. Checkpoint/backup/restore and backup download are local CLI/UI; restore requires a new home. |
 | I01 | Browser ZIP/folder uploads and file inspection | `ingest`<br>`source list`<br>`source metadata`<br>`source download` | `ingest_sources`<br>`search_source_code`<br>`get_source_metadata`<br>`export_original_source` | Implemented |
+| DBT01 | Offline dbt project/resource catalog and macro impact | `dbt projects`<br>`dbt resources`<br>`dbt resource`<br>`dbt dependencies` | `list_dbt_projects`<br>`list_dbt_resources`<br>`get_dbt_resource`<br>`trace_dbt_dependencies` | Implemented; detailed evidence requires source access |
 
 Artifacts use managed IDs, home/workspace binding, exact source versions, SHA-256 and
 bounded base64 reads (at most 16 KiB before encoding and the response budget). Files cap at

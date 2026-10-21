@@ -8,12 +8,14 @@ from dataforge.exports import graph_data, graph_html, path_rows, report_csv, sou
 from dataforge.graph_images import png_available
 from dataforge.services import export_graph_image, export_lineage_excel
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
+from ui.dbt_sections import render_resources
 from ui.lineage_navigation import ALL_ASSETS, focus_asset, move_history, remember_view
 from ui.lineage_tree import render_tree
 from ui.presentation import section
 
 title("Lineage", "Trace upstream inputs, downstream impact and the source evidence behind each relationship.")
 store, w = context()
+render_resources(store, w)
 graph = load_graph(store, w)
 appearance = VisualizationSettings.from_store(store, w)
 asset = choose_asset(graph, "lineage", allow_all=True)

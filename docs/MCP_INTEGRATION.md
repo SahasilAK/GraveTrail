@@ -147,7 +147,11 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `get_workspace_settings` | `section`, `workspace_id` | — |
 | `get_workspace_summary` | `workspace_id` | — |
 | `import_workspace_configuration` | `configuration` | — |
-| `ingest_sources` | `extensions`, `path`, `workspace_id` | — |
+| `ingest_sources` | `extensions`, `path`, `workspace_id` | `source_kind`, `dbt_options` |
+| `list_dbt_projects` | `workspace_id` | `options` |
+| `list_dbt_resources` | `workspace_id` | `project_id`, `resource_types`, `options` |
+| `get_dbt_resource` | `workspace_id`, `resource_id` | `options` |
+| `trace_dbt_dependencies` | `workspace_id`, `resource_id` | `direction`, `relationship_kinds`, `max_depth`, `options` |
 | `inspect_cleanup` | `workspace_id` | — |
 | `inspect_database_maintenance` | — | `options` |
 | `list_ai_results` | `workspace_id` | `options` |

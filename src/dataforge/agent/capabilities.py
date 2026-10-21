@@ -548,6 +548,11 @@ INVENTORY = [{'capability_id': 'P01',
 
 
 INVENTORY.extend([
+    {'capability_id': 'DBT01', 'description': 'Offline dbt project/resource catalog and typed dependency or macro impact reports',
+     'cli': [['dbt', 'projects'], ['dbt', 'resources'], ['dbt', 'resource'], ['dbt', 'dependencies']],
+     'mcp': ['list_dbt_projects', 'list_dbt_resources', 'get_dbt_resource', 'trace_dbt_dependencies'],
+     'scope': 'workspace', 'effects': ['read'], 'required_permissions': ['source_permission_for_detailed'],
+     'availability': 'implemented', 'restriction': '', 'slice': 10},
     {'capability_id': 'A06', 'description': 'Explicit staged project AI/hybrid analysis with offline disclosure preview, semantic validation and paged reports',
      'cli': [['lineage', 'build'], ['lineage', 'preview'], ['lineage', 'analysis-report']],
      'mcp': ['start_lineage_analysis', 'preview_project_analysis', 'get_project_analysis_report'],

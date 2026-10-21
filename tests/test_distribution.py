@@ -194,7 +194,7 @@ def test_source_distribution_includes_release_toolkit_and_compose(tmp_path: Path
             relative = Path(name).parts[1:]
             assert not any(part in {"plans", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
                            for part in relative), name
-        for expected in ('dependency-overrides.txt', 'compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
+        for expected in ('.streamlit/config.toml', 'dependency-overrides.txt', 'compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
                          'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py',
                          'scripts/build/windows.iss', 'scripts/build/windows_installer.ps1',
                          'scripts/build/sign_windows.ps1', 'scripts/build/smoke_installer.py'):

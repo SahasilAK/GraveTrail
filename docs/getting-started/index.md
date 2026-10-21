@@ -1,6 +1,11 @@
 # Getting started
 
-GraveTrail turns imported SQL and SAS into a local, evidence-backed dependency graph.
+GraveTrail turns imported SQL, SAS and dbt projects into a local, evidence-backed dependency graph.
+
+For dbt, start with the [dbt quick-start workflow](quick-start.md#try-the-dbt-sample)
+and [support reference](../DBT_SUPPORT.md). Import the project as a unit, including models,
+property YAML and macros, and use local parser analysis. Supplied manifests can add compiled
+SQL evidence; imported dbt/Jinja/Python code is never executed.
 Use it to investigate an unfamiliar project, trace the inputs of a report, or assess
 which downstream assets a change could affect. CSV imports add source metadata;
 their values are never interpreted as code.

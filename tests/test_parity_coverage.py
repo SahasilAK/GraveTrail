@@ -24,7 +24,7 @@ def test_checked_capabilities_resolve_to_actual_cli_and_mcp(tmp_path: Path) -> N
     service = AgentService(store)
     try:
         entries = capability_catalog(service)
-        assert len(entries) == 48 and {e['capability_id'] for e in entries} == set(expected)
+        assert len(entries) == 49 and {e['capability_id'] for e in entries} == set(expected)
         cli = typer.main.get_command(app)
         tools = {t.name for t in asyncio.run(create_server(service).list_tools())}
         for entry in entries:

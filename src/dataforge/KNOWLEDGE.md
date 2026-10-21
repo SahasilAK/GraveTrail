@@ -11,6 +11,7 @@ round-trips additively; parser11/migration5 preserve direct usage/table contract
 integrity and full-home backup/restore include all four column tables and legacy v4 restores.
 
 ## Subfolders
+- `dbt/` — Project/artifact inventory, logical identity, query adaptation and evidence. See [dbt/KNOWLEDGE.md](dbt/KNOWLEDGE.md).
 - `agent/` — Shared automation requests, permissions, jobs, paging and MCP. See [agent/KNOWLEDGE.md](agent/KNOWLEDGE.md).
 - `parsers/` — [parsers/KNOWLEDGE.md](parsers/KNOWLEDGE.md).
 

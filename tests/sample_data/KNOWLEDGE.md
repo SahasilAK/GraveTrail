@@ -1,5 +1,8 @@
 # tests/sample_data/
 
+`gravetrail_dbt_lineage_test_project.zip` — Synthetic retail dbt input, checked against
+tests/fixtures/dbt/gold.json; explicit dbt import mode, no execution.
+
 Use these sample project archives for future application import and lineage testing.
 
 ## Files

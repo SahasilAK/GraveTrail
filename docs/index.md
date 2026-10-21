@@ -10,7 +10,7 @@ hide:
 
 ## Every dependency leaves a trail.
 
-Understand the SQL and SAS pipelines in front of you. Follow a table’s dependencies
+Understand the SQL, SAS and dbt pipelines in front of you. Follow a table’s dependencies
 all the way back to the original statements, in a workspace that keeps your source local.
 
 [Build your first lineage](getting-started/quick-start.md){ .md-button .md-button--primary }
@@ -20,6 +20,19 @@ Local storage. No LLM required. Imported code is never executed.
 { .gt-local }
 
 </div>
+
+## dbt projects, models and macro impact
+
+Import multiple models, property YAML, sources, seeds, snapshots and supplied package
+code together. Follow logical model dependencies across versions and schemas, inspect
+macro consumers, and trace supported SQL column expressions. Already-generated dbt
+manifests can supply declared dependencies and compiled SQL with exact JSON evidence.
+
+dbt uses local static analysis: templates, Python and dbt commands are never executed.
+Dynamic macros retain partial coverage; Python and semantic resources have explicit
+dependency/metadata limits.
+
+[Explore dbt support and limits](DBT_SUPPORT.md){ .md-button }
 
 <figure class="gt-product" markdown>
 

@@ -1,5 +1,8 @@
 # ui/pages/
 
+dbt: builder chooses project/mode/artifact paths; analysis displays coverage;
+explorer adds resource/macro impact alongside the shared logical graph and column IDs.
+
 Analysis Run delegates explicit AI controls, worker progress and validation reporting to
 ui/analysis_ai.py; parser stays the unchecked default. History includes durable project runs.
 

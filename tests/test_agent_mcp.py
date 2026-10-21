@@ -76,7 +76,7 @@ def test_stdio_real_client_without_streamlit(tmp_path: Path) -> None:
                 result = await session.call_tool("list_workspaces", {})
                 assert not result.isError and result.structuredContent["count"] == 0
                 capabilities = await session.call_tool('get_capabilities', {})
-                assert not capabilities.isError and capabilities.structuredContent['total'] == 48
+                assert not capabilities.isError and capabilities.structuredContent['total'] == 49
     asyncio.run(check())
 
 

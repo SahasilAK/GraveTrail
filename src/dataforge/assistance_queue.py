@@ -9,7 +9,8 @@ from dataforge.store import Store
 _ELIGIBLE = """FROM diagnostics d JOIN source_files f
     ON d.file_id=f.file_id AND d.workspace_id=f.workspace_id
     WHERE d.workspace_id=? AND d.severity IN ('warning','error')
-    AND f.extension IN ('.sql','.sas') AND f.parsing_status IN ('success','partial','failed')"""
+    AND f.extension IN ('.sql','.sas') AND f.parsing_status IN ('success','partial','failed')
+    AND coalesce(json_extract_string(f.metadata,'$.source_kind'),'files')<>'dbt'"""
 _FIELDS = "d.*,f.relative_path,f.extension,f.content_hash"
 
 

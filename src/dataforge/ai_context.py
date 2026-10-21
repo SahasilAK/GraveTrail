@@ -71,6 +71,8 @@ class AIPlan:
 def prepare_analysis(store, workspace, request):
     """Pin inventory, settings, original bytes and previous publication under one read lock."""
     request = AnalysisRequest.model_validate(request)
+    from dataforge.dbt.service import reject_dbt_ai
+    reject_dbt_ai(store, workspace, request.file_ids)
     with store.lock:
         inventory = store.files(workspace)
         selected = set(request.file_ids) if request.file_ids is not None else {f['file_id'] for f in inventory}

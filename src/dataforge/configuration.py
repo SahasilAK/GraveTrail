@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlglot import Dialect
 
+from dataforge.dbt.models import DbtSettings
+
 if TYPE_CHECKING:
     from dataforge.store import Store
 
@@ -130,6 +132,7 @@ class PortableSettings(ParsingSettings, VisualizationSettings, LLMResourceSettin
     graph_limit: int = Field(default=150, ge=10, le=1000)
     traversal_depth: int = Field(default=5, ge=1, le=30)
     tree_expansion_depth: int = Field(default=1, ge=0, le=30)
+    dbt: DbtSettings = Field(default_factory=DbtSettings)
 
 
 class WorkspaceConfiguration(WorkspaceIdentity):

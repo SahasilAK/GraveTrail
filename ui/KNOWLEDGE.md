@@ -6,6 +6,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 
 ## Files
+- `dbt_sections.py` — Project coverage and resource/macro-impact panels over shared reports; exact resource IDs and source/generated evidence.
 - `icon.png` — Supplied navy/orange icon with transparent exterior, shared byte-for-byte with Pages and packaged with the UI.
 - `data_management.py` — Data management cleanup metrics, dry-run/typed confirmation, mandatory whole-home backup, rebuild, integrity/checkpoint/new-home restore and opt-in expired staging cleanup.
 - `agent_settings.py` — Workspace agent permissions/budgets/auditing, client setup examples and actual in-process MCP handler test; discovers tools only when its local test panel opens. Publishes credential-free status-polling revocation snapshots.

@@ -22,6 +22,13 @@ cannot guarantee complete lineage, so inspect omissions and unresolved evidence.
 
 ## Build a trustworthy workspace
 
+For dbt repositories, choose **Sources → Project type → dbt project**. Import configured
+models, YAML and macros together, then run parser analysis. The **dbt resources and macro
+impact** panel in Lineage shows resource definitions and typed consumers; the normal graph,
+Columns and Transformations views use logical dbt assets. Select an already-generated
+manifest for compiled SQL evidence when needed. Read [dbt support](../DBT_SUPPORT.md)
+for project modes, artifact versions and static-analysis limits. AI/hybrid builds reject dbt.
+
 ??? example "View the sample workspace dashboard"
     ![Actual dashboard: 86 SQL files, 92 registered assets, 128 dependencies and no diagnostics](../assets/images/gravetrail-workspace-dashboard.png)
 

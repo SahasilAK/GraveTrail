@@ -1,5 +1,5 @@
 site_name: GraveTrail
-site_description: Nothing stays buried. Every dependency leaves a trail. Local SQL and SAS lineage by default, with optional AI analysis and source evidence.
+site_description: Nothing stays buried. Every dependency leaves a trail. Local SQL, SAS and dbt lineage with original evidence, model dependencies and macro impact.
 site_url: https://sahasilak.github.io/GraveTrail/
 repo_url: https://github.com/SahasilAK/GraveTrail
 repo_name: SahasilAK/GraveTrail
@@ -77,6 +77,7 @@ nav:
   - User guide:
       - user-guide/index.md
       - UI reference: USER_GUIDE.md
+      - dbt projects: DBT_SUPPORT.md
       - AI project analysis: AI_ANALYSIS.md
       - Column transformations: TRANSFORMATION_LINEAGE.md
       - Data management & recovery: DATA_MANAGEMENT.md

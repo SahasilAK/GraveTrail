@@ -1,5 +1,8 @@
 # docs/user-guide/
 
+`index.md` routes dbt users to project intake, local parser analysis, resource/macro impact
+and DBT_SUPPORT.md; imported code is never executed and AI builds reject dbt.
+
 Workflow hub. `index.md` links canonical USER_GUIDE/DATA_MANAGEMENT, explains conservative evidence and includes real isolated SQL fixture screenshots. No copied parser/runtime implementation.
 
 Transformation lineage follows Columns as a focused route, with its own canonical coverage/workflow guide.

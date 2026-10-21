@@ -20,17 +20,18 @@ from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 from dataforge.store import Store
 
-PARSER_VERSION = "14"
+PARSER_VERSION = "15"
 log = logging.getLogger(__name__)
 
 
 def analysis_is_current(store: Store, workspace: str) -> bool:
     """Check whether the latest completed analysis matches current files and settings."""
+    from dataforge.dbt.service import dbt_settings_current
     files = store.files(workspace)
     runs = store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
     config = ParsingSettings.model_validate({key: store.setting(workspace, key, default)
         for key, default in ParsingSettings().model_dump().items()}).model_dump()
-    return bool(runs) and all(f['parsing_status'] != 'pending' for f in files) and (
+    return bool(runs) and dbt_settings_current(store, workspace) and all(f['parsing_status'] != 'pending' for f in files) and (
         json.loads(runs[0]['snapshot'])['files'] == {f['relative_path']: f['content_hash'] for f in files}
         and json.loads(runs[0]['configuration']) == config)
 
@@ -175,11 +176,17 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
     analyzed = cached = 0
     results = []
     files = store.files(workspace)
+    dbt_settings_snapshot = store.setting(workspace, 'dbt', {})
     try:
+        from dataforge.dbt.service import is_dbt, prepare_dbt_analysis
+        dbt_projects, dbt_counts = prepare_dbt_analysis(store, workspace, file_ids, force, cancelled)
+        results.extend(pair for project in dbt_projects for pair in project.file_results)
         workers = min(8, max(1, int(store.setting(workspace, "parse_workers", 1))))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             jobs = []
             for metadata in files:
+                if is_dbt(metadata):
+                    continue
                 fid = metadata["file_id"]
                 key = stable_id(PARSER_VERSION, metadata["content_hash"], metadata["relative_path"], json.dumps(config, sort_keys=True))
                 existing = store.rows("SELECT result FROM parse_cache WHERE cache_key=?", [key])
@@ -189,11 +196,15 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
                 elif selected or metadata["parsing_status"] != "pending":
                     jobs.append((metadata, key, None, pool.submit(_parse_inventory, store, metadata, config)))
             _collect_jobs(store, jobs, results, progress, cancelled)
-        analyzed = sum(job[3] is not None for job in jobs)
-        cached = len(jobs) - analyzed
+        analyzed = sum(job[3] is not None for job in jobs) + dbt_counts['analyzed']
+        cached = sum(job[3] is None for job in jobs) + dbt_counts['cached']
         _restore_ai_results(store, workspace, results, config)
         with store.transaction():
-            snapshot = _materialize(store, workspace, run_id, results, config)
+            current_files = {m['file_id']: m['content_hash'] for m in store.files(workspace) if is_dbt(m)}
+            if dbt_projects and (current_files != {m['file_id']: m['content_hash'] for m in files if is_dbt(m)}
+                    or store.setting(workspace, 'dbt', {}) != dbt_settings_snapshot):
+                raise ValueError('Inventory changed during analysis; previous lineage retained')
+            snapshot = _materialize(store, workspace, run_id, results, config, dbt_projects=dbt_projects)
             duration = time.perf_counter() - start
             store.execute("UPDATE analysis_runs SET status='completed',analyzed=?,cached=?,duration=?,snapshot=? WHERE run_id=?",
                           [analyzed, cached, duration, json.dumps(snapshot), run_id])
@@ -229,6 +240,8 @@ def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] |
     from dataforge.ai_analysis_store import accepted_file_ids, load_accepted_file_results
 
     started = time.perf_counter()
+    from dataforge.dbt.service import is_dbt, prepare_dbt_analysis
+    dbt_projects, dbt_counts = prepare_dbt_analysis(store, workspace, file_ids, force, cancelled)
     config = ParsingSettings.model_validate({k: store.setting(workspace, k, default)
         for k, default in ParsingSettings().model_dump().items()}).model_dump()
     accepted = load_accepted_file_results(store, workspace, config)
@@ -237,9 +250,11 @@ def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] |
         incompatible = (saved_scope - set(file_ids)) & {m['file_id'] for m in store.files(workspace)} - set(accepted)
         if incompatible:
             raise ValueError('Saved AI facts for unselected files are incompatible; include affected files for reanalysis')
-    results, jobs = [], []
+    results, jobs = [pair for project in dbt_projects for pair in project.file_results], []
     with ThreadPoolExecutor(max_workers=min(8, max(1, int(store.setting(workspace, 'parse_workers', 1))))) as pool:
         for metadata in store.files(workspace):
+            if is_dbt(metadata):
+                continue
             fid = metadata['file_id']
             selected = file_ids is None or fid in file_ids
             if not selected and fid in accepted:
@@ -252,8 +267,8 @@ def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] |
             elif selected or metadata['parsing_status'] != 'pending':
                 jobs.append((metadata, key, None, pool.submit(_parse_inventory, store, metadata, config)))
         _collect_jobs(store, jobs, results, progress, cancelled)
-    return results, config, {'analyzed': sum(j[3] is not None for j in jobs),
-        'cached': len(results) - sum(j[3] is not None for j in jobs), 'started': started}
+    return results, config, {'analyzed': sum(j[3] is not None for j in jobs) + dbt_counts['analyzed'],
+        'cached': sum(j[3] is None for j in jobs) + dbt_counts['cached'], 'started': started, 'dbt_projects': dbt_projects}
 
 
 def publish_analysis_results(store: Store, workspace: str, results: list[tuple[dict[str, Any], ParseResult]],
@@ -269,7 +284,7 @@ def publish_analysis_results(store: Store, workspace: str, results: list[tuple[d
     run_id = run_id or uuid.uuid4().hex
     store.execute('INSERT INTO analysis_runs(run_id,workspace_id,status,configuration) VALUES (?,?,?,?)',
                   [run_id, workspace, 'running', json.dumps(config)])
-    snapshot = _materialize(store, workspace, run_id, results, config)
+    snapshot = _materialize(store, workspace, run_id, results, config, dbt_projects=counts.get('dbt_projects'))
     duration = time.perf_counter() - counts.get('started', time.perf_counter())
     store.execute("UPDATE analysis_runs SET status='completed',analyzed=?,cached=?,duration=?,snapshot=? WHERE run_id=?",
         [counts.get('analyzed', 0), counts.get('cached', 0), duration, json.dumps(snapshot), run_id])
@@ -285,7 +300,9 @@ def _parse_inventory(store: Store, metadata: dict[str, Any], config: dict[str, A
         return parse_sql(content, source_dialect(metadata, config))
     if ext == ".sas":
         return parse_sas(content, config["library_mappings"], config["macros"], source_dialect(metadata, config))
-    return parse_csv(content, metadata["relative_path"], sample_size=config["csv_sample_rows"])
+    if ext == '.csv':
+        return parse_csv(content, metadata["relative_path"], sample_size=config["csv_sample_rows"])
+    return ParseResult()
 
 
 def _collect_jobs(store: Store, jobs: list[tuple[dict[str, Any], str, ParseResult | None, Future[ParseResult] | None]], results: list[tuple[dict[str, Any], ParseResult]], progress: Callable[[float, str], None] | None, cancelled: Callable[[], bool] | None) -> None:
@@ -309,7 +326,7 @@ def _collect_jobs(store: Store, jobs: list[tuple[dict[str, Any], str, ParseResul
             progress((i + 1) / max(len(jobs), 1), metadata["relative_path"])
 
 
-def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]], config: dict[str, Any]) -> dict[str, Any]:
+def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]], config: dict[str, Any], *, dbt_projects=None) -> dict[str, Any]:
     """Resolve parsed facts and replace a workspace's derived records transactionally.
 
     Raises:
@@ -329,7 +346,7 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
         parsed.metadata["job_id"] = source_job(metadata, config)
         for ref in parsed.assets:
             aid, _ = resolve(ref, metadata, parsed)
-            registry[aid][6] = json.dumps({**{k: v for k, v in parsed.metadata.items() if k != "job_id"},
+            registry[aid][6] = json.dumps({**{k: v for k, v in parsed.metadata.items() if k not in {"job_id", 'dbt_asset_metadata'}},
                                          **json.loads(registry[aid][6])})
         for i, op in enumerate(parsed.operations):
             sid, oid = operation_ids(workspace, metadata, i, op)
@@ -354,7 +371,7 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
                     op.method, min(op.confidence, .8 if op.method in {'llm', 'ai-project'} else .85) if inferred else op.confidence,
                     "unresolved" if any(registry[a][4] == "unresolved" for a in (source, target)) else "inferred" if inferred else "verified", run_id])
             for j, u in enumerate(op.usages):
-                aid, inferred = resolve(AssetRef(u.table), metadata, parsed)
+                aid, inferred = resolve(AssetRef(u.table, identity=u.table_identity), metadata, parsed)
                 schema = schemas.get(aid, {})
                 expanded = (registry[aid][4] != "unresolved" and u.column == "*" and u.wildcard_safe and config["expand_wildcards"]
                             and schema.get("schema_status") == "declared")
@@ -382,6 +399,17 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
             store.db.executemany(f"INSERT INTO {table} VALUES ({','.join('?' for _ in values[0])})", values)
     if statuses:
         store.db.executemany("UPDATE source_files SET parsing_status=?,metadata=?,error_details=? WHERE file_id=? AND content_hash=?", statuses)
+    if dbt_projects is not None:
+        from dataforge.dbt.persistence import DBT_CURRENT_TABLES, stage_dbt_rows
+        for table in DBT_CURRENT_TABLES:
+            store.execute(f'DELETE FROM {table} WHERE workspace_id=?', [workspace])
+        for project in dbt_projects:
+            from dataforge.dbt.models import DbtSettings
+            for table, records in stage_dbt_rows(project, run_id, workspace,
+                    DbtSettings.model_validate(store.setting(workspace, 'dbt', {})).model_dump()).items():
+                if records:
+                    unique = {tuple(row): row for row in records}
+                    store.db.executemany(f'INSERT INTO {table} VALUES ({",".join("?" for _ in records[0])})', list(unique.values()))
     from dataforge.ai_analysis_store import refresh_published_support
     refresh_published_support(store, workspace, results)
     return {"assets": [{"name": a[3], "kind": a[4], "job_id": json.loads(a[6]).get("job_id")} for a in registry.values()],
@@ -431,7 +459,7 @@ def _restore_ai_results(store: Store, workspace: str, results: list[tuple[dict[s
 
     accepted = load_accepted_file_results(store, workspace, config)
     for index, (metadata, parsed) in enumerate(results):
-        if metadata['file_id'] in accepted:
+        if metadata['file_id'] in accepted and parsed.metadata.get('source_kind') != 'dbt':
             results[index] = accepted[metadata['file_id']]
     restore_manual_ai_results(store, workspace, results, config)
 
@@ -451,6 +479,8 @@ def restore_manual_ai_results(store: Store, workspace: str, results: list[tuple[
         if record["file_id"] not in by_file:
             continue
         metadata, parsed = by_file[record["file_id"]]
+        if parsed.metadata.get('source_kind') == 'dbt':
+            continue
         if metadata["content_hash"] != details["content_hash"]:
             continue
         if details.get("job_id", "workspace") != source_job(metadata, config):

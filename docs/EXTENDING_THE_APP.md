@@ -5,6 +5,11 @@
 uncertainties. Add file extension routing in ingestion/services and UI filters. Never execute
 imported content. Add positive and negative fixtures and bump `PARSER_VERSION`.
 
+**dbt:** extend `dbt/` project/resource readers and the shared `DbtOperations` handlers.
+Preserve exact logical identities, candidate versus resolved relationships, bounded static
+analysis and source/generated evidence origins. Add schema fixtures before claiming another
+artifact version or adapter; see [dbt support](DBT_SUPPORT.md).
+
 **Providers:** add a validated provider identity/default URL and protocol branch in `Adapter`.
 Test payloads, auth headers, discovery, retries and responses with HTTPX MockTransport. Honor
 external/context/privacy gates and never persist a secret. Unsupported model capabilities must

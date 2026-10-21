@@ -26,14 +26,19 @@
 
 ## Every dependency leaves a trail.
 
-**GraveTrail engineering hub** is a local-first workspace for understanding SQL and SAS
-projects. Import a folder or ZIP, build table lineage, and follow every relationship back
+**GraveTrail engineering hub** is a local-first workspace for understanding SQL, SAS
+and dbt projects. Import a folder or ZIP, build table lineage, and follow every relationship back
 to the exact source statement. Find direct column references, investigate downstream
 impact, and share an interactive graph that works offline.
 
 Built for data engineers, analysts, architects, and developers working through unfamiliar
 pipelines, migrations, and change reviews. Deterministic analysis needs **no LLM, cloud
 account, or paid service**. Imported code is never executed.
+
+[dbt project support](docs/DBT_SUPPORT.md) covers multiple models, project roots, packages,
+versions and schemas, property YAML, macros and typed resource dependencies. Source-only
+analysis stays conservative around generated SQL; supplied manifests can provide compiled
+expressions with separate JSON evidence. dbt analysis uses the local parser workflow.
 
 ## Choose local analysis or optional AI
 

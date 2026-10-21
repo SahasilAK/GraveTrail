@@ -13,6 +13,7 @@ from dataforge.configuration import (
     ParsingSettings,
     VisualizationSettings,
 )
+from dataforge.dbt.models import DbtSettings
 from dataforge.model_capabilities import execution_profile
 from dataforge.store import Store
 
@@ -46,7 +47,7 @@ class TemporaryPreferences(BaseModel):
 
 SECTIONS = {'parsing': ParsingSettings, 'analysis': AnalysisPreferences, 'resources': Resources,
             'visualization': Visualization, 'privacy': Privacy, 'agent_access': AgentSettings,
-            'temporary_cleanup': TemporaryPreferences}
+            'temporary_cleanup': TemporaryPreferences, 'dbt': DbtSettings}
 LOCAL_ADMIN = AccessPolicy(allow_write=True, allow_config_write=True, allow_admin=True)
 
 
@@ -89,7 +90,9 @@ def read_settings(store: Store, workspace: str, section: str) -> dict[str, Any]:
     if section not in SECTIONS:
         raise AgentError('validation_failed', 'Unknown settings section')
     model = SECTIONS[section]
-    if section == 'agent_access':
+    if section == 'dbt':
+        values = store.setting(workspace, 'dbt', {})
+    elif section == 'agent_access':
         values = AgentSettings.from_store(store, workspace).model_dump()
     elif section == 'temporary_cleanup':
         values = {'enabled': store.setting(workspace, 'auto_cleanup_temporary', False)}
@@ -138,7 +141,9 @@ def update_settings(store: Store, policy: AccessPolicy, workspace: str, section:
             policy.require('admin')
         changed = sorted(k for k in before if before[k] != after[k])
         with store.transaction():
-            if section == 'agent_access':
+            if section == 'dbt':
+                store.set_setting(workspace, 'dbt', after)
+            elif section == 'agent_access':
                 AgentSettings.model_validate(after).save(store, workspace)
             elif section == 'temporary_cleanup':
                 store.set_setting(workspace, 'auto_cleanup_temporary', after['enabled'])
@@ -146,8 +151,8 @@ def update_settings(store: Store, policy: AccessPolicy, workspace: str, section:
                 for key in changed:
                     store.set_setting(workspace, key, after[key])
         return {'changed_fields': changed, 'settings_revision': revision(store, workspace),
-                'analysis_required': bool(changed) and section == 'parsing', 'reload_required': False,
-                'warnings': ['Analyze to apply parsing changes; existing facts retained'] if changed and section == 'parsing' else []}
+                'analysis_required': bool(changed) and section in {'parsing', 'dbt'}, 'reload_required': False,
+                'warnings': ['Analyze to apply parsing changes; existing facts retained'] if changed and section in {'parsing', 'dbt'} else []}
 
 
 def save_ui_settings(store: Store, workspace: str, section: str, values: dict[str, Any]) -> dict[str, Any]:

@@ -1,0 +1,34 @@
+version: 2
+models:
+  - name: orders
+    latest_version: 2
+    versions: [{v: 1}, {v: 2}]
+  - name: fct_orders
+    description: Synthetic retail qualification model
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+unit_tests:
+  - name: order_example
+    model: fct_orders
+    given: []
+    expect: {rows: []}
+exposures:
+  - name: sales_dashboard
+    type: dashboard
+    depends_on: ["ref('fct_orders')"]
+semantic_models:
+  - name: orders_semantics
+    model: ref('fct_orders')
+    entities: [{name: order_id, type: primary, expr: order_id}]
+metrics:
+  - name: order_count
+    type: simple
+    label: Order count
+    type_params: {measure: orders}
+saved_queries:
+  - name: sales
+    query_params: {metrics: [order_count]}
+groups:
+  - name: analytics
+    owner: {name: Synthetic team}
