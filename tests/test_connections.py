@@ -1,6 +1,4 @@
 import os
-from pathlib import Path
-from typing import Any
 
 import httpx
 import pytest
@@ -9,12 +7,7 @@ from dataforge.connections import RuntimeConnections, connection_scope
 from dataforge.llm import Adapter, Profile
 
 
-def test_session_keys_are_isolated_and_environment_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that session keys are isolated and environment is read only.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_session_keys_are_isolated_and_environment_is_read_only(monkeypatch):
     monkeypatch.setenv('DATAFORGE_OPENAI_API_KEY', 'launch-dummy')
     before = dict(os.environ)
     first, second = RuntimeConnections(), RuntimeConnections()
@@ -31,12 +24,7 @@ def test_session_keys_are_isolated_and_environment_is_read_only(monkeypatch: pyt
     assert 'session-dummy' not in repr(first)
 
 
-def test_expiration_scoped_environment_and_redaction(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that expiration scoped environment and redaction.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_expiration_scoped_environment_and_redaction(monkeypatch):
     manager = RuntimeConnections()
     manager.register('DATAFORGE_CUSTOM_API_KEY', 'dummy-sensitive-123')
     assert manager.redact('echo dummy-sensitive-123 Authorization: Bearer abc') == 'echo [REDACTED] Authorization: Bearer [REDACTED]'
@@ -48,14 +36,7 @@ def test_expiration_scoped_environment_and_redaction(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.parametrize('credential_mode', ['session', 'environment', 'rotated_environment'])
-def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credential_mode: str) -> None:
-    """Verify that provider echo is redacted before persistence.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-        credential_mode: Credential mode value used by the test case.
-    """
+def test_provider_echo_is_redacted_before_persistence(tmp_path, monkeypatch, credential_mode):
     from dataforge.connections import set_credential_environment
     from dataforge.ingestion import Importer
     from dataforge.llm import assist
@@ -73,15 +54,7 @@ def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatc
         monkeypatch.setenv('DATAFORGE_TEST_API_KEY', '')
         set_credential_environment('DATAFORGE_TEST_API_KEY', 'dummy-sensitive-123')
     profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
-    def handler(request: pytest.FixtureRequest) -> Any:
-        """Handle handler for the test scenario.
-
-        Args:
-            request: Pytest fixture describing the active test request.
-
-        Returns:
-            Value produced for the test scenario.
-        """
+    def handler(request):
         if credential_mode == 'rotated_environment':
             set_credential_environment('DATAFORGE_TEST_API_KEY', 'replacement-dummy')
         return httpx.Response(200, json={'message': {'content': '{"explanation":"dummy-sensitive-123"}'}})
@@ -95,13 +68,7 @@ def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatc
     assert all(b'dummy-sensitive-123' not in p.read_bytes() for p in tmp_path.rglob('*') if p.is_file())
 
 
-def test_masked_ui_credential_is_cleared_without_persistence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that masked ui credential is cleared without persistence.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_masked_ui_credential_is_cleared_without_persistence(tmp_path, monkeypatch):
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest
@@ -125,12 +92,7 @@ def test_masked_ui_credential_is_cleared_without_persistence(tmp_path: Path, mon
     assert app.session_state['runtime_connections'].resolve('DATAFORGE_OLLAMA_API_KEY') == ''
 
 
-def test_environment_credential_is_used_without_retaining_session_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that environment credential is used without retaining session copy.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_environment_credential_is_used_without_retaining_session_copy(monkeypatch):
     import logging
 
     from dataforge.connections import set_credential_environment
@@ -159,13 +121,7 @@ def test_environment_credential_is_used_without_retaining_session_copy(monkeypat
     ('DATAFORGE_TEST_API_KEY', 'x' * 16385),
 ], ids=['system-name', 'legacy-name', 'invalid-name', 'empty-name', 'empty-value',
         'newline', 'carriage-return', 'null', 'oversize'])
-def test_environment_credential_validation_preserves_environment(name: str, secret: str) -> None:
-    """Verify that environment credential validation preserves environment.
-
-    Args:
-        name: Name value used by the test case.
-        secret: Secret value used by the test case.
-    """
+def test_environment_credential_validation_preserves_environment(name, secret):
     from dataforge.connections import set_credential_environment
 
     before = dict(os.environ)
@@ -176,14 +132,7 @@ def test_environment_credential_validation_preserves_environment(name: str, secr
     assert dict(os.environ) == before
 
 
-def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
-    """Verify that masked ui sets actual environment without persisting secret.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-        caplog: Pytest fixture for capturing log records.
-    """
+def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path, monkeypatch, caplog):
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest
@@ -223,12 +172,7 @@ def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path: P
     assert all(b'dummy-sensitive-123' not in p.read_bytes() for p in tmp_path.rglob('*') if p.is_file())
 
 
-def test_json_escaped_secret_is_redacted_before_persistence(tmp_path: Path) -> None:
-    """Verify that json escaped secret is redacted before persistence.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_json_escaped_secret_is_redacted_before_persistence(tmp_path):
     import json
 
     from dataforge.ingestion import Importer
@@ -253,12 +197,7 @@ def test_json_escaped_secret_is_redacted_before_persistence(tmp_path: Path) -> N
     store.close()
 
 
-def test_explicit_environment_reference_redacts_arbitrary_variable_names(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that explicit environment reference redacts arbitrary variable names.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_explicit_environment_reference_redacts_arbitrary_variable_names(monkeypatch):
     monkeypatch.setenv('DATAFORGE_AUTH_CREDENTIAL', 'dummy-environment-sensitive-123')
     profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_AUTH_CREDENTIAL')
     transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': '{"explanation":"dummy-environment-sensitive-123"}'}}))
@@ -267,8 +206,7 @@ def test_explicit_environment_reference_redacts_arbitrary_variable_names(monkeyp
     assert 'dummy-environment-sensitive-123' not in content
 
 
-def test_sanitize_redacts_keys_values_and_shared_containers_without_mutation() -> None:
-    """Verify that sanitize redacts keys values and shared containers without mutation."""
+def test_sanitize_redacts_keys_values_and_shared_containers_without_mutation():
     manager = RuntimeConnections()
     secret = 'dummy"quoted\\secret'
     manager.register('DATAFORGE_TEST_API_KEY', secret)
@@ -287,13 +225,7 @@ def test_sanitize_redacts_keys_values_and_shared_containers_without_mutation() -
 
 @pytest.mark.parametrize('kind', ['dict', 'list', 'mixed'])
 @pytest.mark.parametrize('depth', [65, 1100])
-def test_sanitize_rejects_excessive_nesting(kind: str, depth: int) -> None:
-    """Verify that sanitize rejects excessive nesting.
-
-    Args:
-        kind: Kind value used by the test case.
-        depth: Depth value used by the test case.
-    """
+def test_sanitize_rejects_excessive_nesting(kind, depth):
     value = 'dummy-sensitive-123'
     for level in range(depth):
         value = {'child': value} if kind == 'dict' or (kind == 'mixed' and level % 2) else [value]
@@ -302,8 +234,7 @@ def test_sanitize_rejects_excessive_nesting(kind: str, depth: int) -> None:
         RuntimeConnections().sanitize(value)
 
 
-def test_sanitize_redacts_at_nesting_limit() -> None:
-    """Verify that sanitize redacts at nesting limit."""
+def test_sanitize_redacts_at_nesting_limit():
     manager = RuntimeConnections()
     manager.register('DATAFORGE_TEST_API_KEY', 'dummy-sensitive-123')
     value = 'dummy-sensitive-123'
@@ -317,12 +248,7 @@ def test_sanitize_redacts_at_nesting_limit() -> None:
 
 
 @pytest.mark.parametrize('kind', ['dict', 'list', 'mixed'])
-def test_sanitize_rejects_cycles(kind: str) -> None:
-    """Verify that sanitize rejects cycles.
-
-    Args:
-        kind: Kind value used by the test case.
-    """
+def test_sanitize_rejects_cycles(kind):
     if kind == 'dict':
         value = {}
         value['self'] = value

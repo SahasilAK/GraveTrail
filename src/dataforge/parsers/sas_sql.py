@@ -4,8 +4,7 @@ from collections import Counter
 
 from sqlglot import Dialect, exp
 from sqlglot.errors import ParseError
-from sqlglot.parser import Parser
-from sqlglot.tokens import Token, TokenType
+from sqlglot.tokens import TokenType
 
 from dataforge.models import Diagnostic, ParseResult
 from dataforge.parsers.sql import parse_sql
@@ -14,33 +13,14 @@ FORMAT_VALUE = re.compile(r'\$?(?:[A-Za-z_]\w*|[0-9]+)\.[0-9]*(?![\w.])')
 
 
 def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
-    """Parse one SAS PROC SQL statement with SAS projection attributes enabled.
-
-    Args:
-        statement: PROC SQL source statement.
-        sql_dialect: SQLGlot dialect name used for SQL syntax.
-
-    Returns:
-        SQL parse result with SAS-specific alias diagnostics included.
-    """
     dialect = Dialect.get_or_raise(sql_dialect)
     diagnostics = []
 
     class SASParser(dialect.parser_class):
-        """Dialect parser override for SAS FORMAT, LENGTH, and CALCULATED syntax."""
-
         FUNCTIONS = {**dialect.parser_class.FUNCTIONS,
                      'DATETIME': lambda args: exp.Anonymous(this='DATETIME', expressions=args)}
 
-        def _parse_projections(self: Parser) -> tuple[list[exp.Expr], list[exp.Expr] | None]:
-            """Parse projections while marking their expression context.
-
-            Args:
-                self: SQLGlot parser instance.
-
-            Returns:
-                Projection expressions and an optional projection alias list.
-            """
+        def _parse_projections(self):
             previous = getattr(self, '_sas_projection', False)
             self._sas_projection = True
             try:
@@ -48,15 +28,7 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
             finally:
                 self._sas_projection = previous
 
-        def _parse_expression(self: Parser) -> exp.Expr | None:
-            """Parse a SAS projection expression and its surrounding attributes.
-
-            Args:
-                self: SQLGlot parser instance.
-
-            Returns:
-                Parsed expression, or ``None`` when the parser has no expression.
-            """
+        def _parse_expression(self):
             if not getattr(self, '_sas_projection', False):
                 return super()._parse_expression()
             # Nested expression contexts keep their dialect grammar, including WHERE.
@@ -70,15 +42,7 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
             finally:
                 self._sas_projection = True
 
-        def _parse_sas_attributes(self: Parser) -> None:
-            """Consume supported SAS FORMAT and LENGTH projection attributes.
-
-            Args:
-                self: SQLGlot parser instance.
-
-            Raises:
-                ParseError: If an attribute does not use supported literal syntax.
-            """
+        def _parse_sas_attributes(self):
             while (self._curr.token_type in {TokenType.FORMAT, TokenType.VAR}
                    and self._curr.text.upper() in {'FORMAT', 'LENGTH'}
                    and self._next.token_type == TokenType.EQ):
@@ -95,15 +59,7 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
                     while self._index < self._tokens_size and self._curr.start < value.end():
                         self._advance()
 
-        def _parse_column(self: Parser) -> exp.Expr | None:
-            """Parse CALCULATED aliases as derived variables in projection context.
-
-            Args:
-                self: SQLGlot parser instance.
-
-            Returns:
-                Parsed column expression, or ``None`` when no column is present.
-            """
+        def _parse_column(self):
             if (self._curr.token_type == TokenType.VAR and self._curr.text.upper() == 'CALCULATED'
                     and self._next.token_type in self.ID_VAR_TOKENS):
                 self._advance()
@@ -115,16 +71,7 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
                 return variable
             return super()._parse_column()
 
-        def parse(self: Parser, raw_tokens: list[Token], sql: str | None = None) -> list[exp.Expr | None]:
-            """Parse tokens and diagnose missing or ambiguous CALCULATED aliases.
-
-            Args:
-                raw_tokens: SQLGlot tokens for the statement.
-                sql: Original SQL text associated with the tokens, when available.
-
-            Returns:
-                Parsed expression trees, including ``None`` for empty statements.
-            """
+        def parse(self, raw_tokens, sql=None):
             trees = super().parse(raw_tokens, sql)
             for tree in trees:
                 if tree is None:

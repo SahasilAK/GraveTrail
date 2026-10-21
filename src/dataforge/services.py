@@ -5,10 +5,8 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any
 
 from dataforge.asset_identity import AssetResolver, asset_label, source_job
 from dataforge.configuration import ParsingSettings
@@ -18,14 +16,12 @@ from dataforge.parsers.csv import parse_csv
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
-from dataforge.store import Store
 
 PARSER_VERSION = "11"
 log = logging.getLogger(__name__)
 
 
-def analysis_is_current(store: Store, workspace: str) -> bool:
-    """Check whether the latest completed analysis matches current files and settings."""
+def analysis_is_current(store, workspace):
     files = store.files(workspace)
     runs = store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
     config = ParsingSettings.model_validate({key: store.setting(workspace, key, default)
@@ -35,39 +31,10 @@ def analysis_is_current(store: Store, workspace: str) -> bool:
         and json.loads(runs[0]['configuration']) == config)
 
 
-def export_lineage_excel(
-    store: Store,
-    workspace: str,
-    asset: str,
-    *,
-    direction: str = 'upstream',
-    max_paths: int = 50,
-    max_depth: int = 15,
-    max_relationships: int = 2000,
-    collapse_temporary: bool | None = None,
-    include_evidence: bool = False,
-    include_source_text: bool = False,
-) -> tuple[bytes, dict[str, Any]]:
-    """Snapshot committed facts and build a bounded, evidence-aware lineage workbook.
-
-    Args:
-        store: Workspace store containing committed lineage and source evidence.
-        workspace: Workspace identifier to export.
-        asset: Exact asset ID at which path traversal starts.
-        direction: Upstream or downstream traversal direction.
-        max_paths: Maximum number of paths to include.
-        max_depth: Maximum relationships per path.
-        max_relationships: Maximum total relationships in the report.
-        collapse_temporary: Whether eligible temporary assets are contracted.
-        include_evidence: Whether to include the offline evidence worksheet.
-        include_source_text: Whether to include source excerpts in evidence rows.
-
-    Returns:
-        Workbook bytes and metadata, including the selected source versions.
-
-    Raises:
-        ValueError: If the selection or export limits are invalid or exceeded.
-    """
+def export_lineage_excel(store, workspace, asset, *, direction='upstream', max_paths=50, max_depth=15,
+                         max_relationships=2000, collapse_temporary=None, include_evidence=False,
+                         include_source_text=False):
+    """Snapshot committed facts/settings, then build a bounded offline workbook; callers authorize disclosure."""
     from dataforge.excel_exports import MAX_SECONDS, MAX_TEXT_BYTES, lineage_xlsx
     from dataforge.graph import LineageGraph
 
@@ -141,43 +108,18 @@ def export_lineage_excel(
     return data, metadata
 
 
-def analyze(
-    store: Store,
-    workspace: str,
-    file_ids: list[str] | None = None,
-    force: bool = False,
-    progress: Callable[[float, str], None] | None = None,
-    cancelled: Callable[[], bool] | None = None,
-) -> dict[str, Any]:
-    """Analyze selected or pending workspace files under the exclusive analysis lock."""
+def analyze(store, workspace: str, file_ids: list[str] | None = None, force: bool = False,
+            progress=None, cancelled=None) -> dict:
     with store.analysis_lock:
         return _analyze(store, workspace, file_ids, force, progress, cancelled)
 
 
-def _analyze(
-    store: Store,
-    workspace: str,
-    file_ids: list[str] | None,
-    force: bool,
-    progress: Callable[[float, str], None] | None,
-    cancelled: Callable[[], bool] | None,
-) -> dict[str, Any]:
-    """Rebuild derived facts atomically while reusing compatible cached parse results.
+def _analyze(store, workspace, file_ids, force, progress, cancelled):
+    """Rebuild derived facts atomically; hashes skip unchanged parser work.
 
     A selection reparses selected files and reuses compatible cached analysis for others.
     Previously analyzed files whose cache became incompatible are refreshed to preserve a
     coherent workspace. Newly imported unselected files remain pending.
-
-    Args:
-        store: Workspace store for inventory, cache, and transactional facts.
-        workspace: Workspace identifier to analyze.
-        file_ids: Optional source IDs to select for parsing.
-        force: Whether selected files bypass otherwise reusable cached results.
-        progress: Optional callback receiving fractional progress and the current path.
-        cancelled: Optional callback checked between completed parse jobs.
-
-    Returns:
-        Run ID, parsed/cache counts, duration, and resulting asset and edge counts.
     """
     start = time.perf_counter()
     run_id = uuid.uuid4().hex
@@ -220,8 +162,7 @@ def _analyze(
         raise
 
 
-def source_dialect(metadata: dict[str, Any], config: dict[str, Any]) -> str:
-    """Select the SQL dialect using extension defaults and longest matching folder prefix."""
+def source_dialect(metadata, config):
     dialect = config.get("dialect_by_extension", {}).get(metadata["extension"], config["dialect"])
     for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
         if metadata["relative_path"].startswith(prefix):
@@ -229,8 +170,7 @@ def source_dialect(metadata: dict[str, Any], config: dict[str, Any]) -> str:
     return dialect
 
 
-def _parse_inventory(store: Store, metadata: dict[str, Any], config: dict[str, Any]) -> ParseResult:
-    """Read a pinned inventory snapshot and dispatch it to the matching parser."""
+def _parse_inventory(store, metadata, config):
     content = store.snapshot_content(metadata)
     ext = metadata["extension"]
     if ext == ".sql":
@@ -240,14 +180,7 @@ def _parse_inventory(store: Store, metadata: dict[str, Any], config: dict[str, A
     return parse_csv(content, metadata["relative_path"], sample_size=config["csv_sample_rows"])
 
 
-def _collect_jobs(
-    store: Store,
-    jobs: list[tuple[dict[str, Any], str, ParseResult | None, Future[ParseResult] | None]],
-    results: list[tuple[dict[str, Any], ParseResult]],
-    progress: Callable[[float, str], None] | None,
-    cancelled: Callable[[], bool] | None,
-) -> None:
-    """Collect parser results, persist cache entries, and report bounded progress."""
+def _collect_jobs(store, jobs, results, progress, cancelled):
     for i, (metadata, key, parsed, future) in enumerate(jobs):
         if cancelled and cancelled():
             raise InterruptedError("Analysis cancelled; previous lineage retained")
@@ -263,14 +196,7 @@ def _collect_jobs(
             progress((i + 1) / max(len(jobs), 1), metadata["relative_path"])
 
 
-def _materialize(
-    store: Store,
-    workspace: str,
-    run_id: str,
-    results: list[tuple[dict[str, Any], ParseResult]],
-    config: dict[str, Any],
-) -> dict[str, Any]:
-    """Resolve parsed facts and replace a workspace's derived records transactionally."""
+def _materialize(store, workspace, run_id, results, config):
     from dataforge.transformations import materialize_columns
     resolver = AssetResolver(workspace, results, config)
     resolve = resolver.resolve
@@ -339,8 +265,7 @@ def _materialize(
             "files": {m["relative_path"]: m["content_hash"] for m, _ in results}}
 
 
-def column_report(store: Store, workspace: str, asset_id: str) -> list[dict[str, Any]]:
-    """List direct column usages with source evidence and declared-schema context."""
+def column_report(store, workspace: str, asset_id: str) -> list[dict]:
     rows = store.rows("""SELECT u.*,a.name AS source_table,a.metadata AS schema_metadata,f.file_name,f.relative_path,s.start_line,s.end_line,s.code,s.content_hash AS source_hash,
         o.kind AS operation_type FROM column_usages u JOIN assets a ON u.asset_id=a.asset_id
         JOIN source_files f ON u.file_id=f.file_id JOIN statements s ON u.statement_id=s.statement_id
@@ -353,11 +278,8 @@ def column_report(store: Store, workspace: str, asset_id: str) -> list[dict[str,
     return rows
 
 
-def column_names(
-    rows: list[dict[str, Any]],
-    metadata: dict[str, Any],
-) -> tuple[list[str], list[str] | None]:
-    """Return used column names and unused declared columns when coverage is complete."""
+def column_names(rows: list[dict], metadata: dict) -> tuple[list[str], list[str] | None]:
+    """Distinct direct names and schema columns without known usage; None means unknown coverage."""
     names = {r["column_name"] for r in rows}
     used = sorted(names - {"*"}, key=str.casefold)
     if metadata.get("schema_status") != "declared" or "*" in names:
@@ -368,8 +290,7 @@ def column_names(
     return used, sorted(declared - names, key=str.casefold)
 
 
-def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any]:
-    """Compare two stored analysis snapshots by assets, edges, and source file hashes."""
+def compare_runs(first: dict, second: dict) -> dict:
     a, b = json.loads(first["snapshot"]), json.loads(second["snapshot"])
     aset, bset = {asset_label(x) for x in a["assets"]}, {asset_label(x) for x in b["assets"]}
     ae, be = {tuple(e) for e in a["edges"]}, {tuple(e) for e in b["edges"]}
@@ -378,13 +299,7 @@ def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
             "changed_files": sorted(k for k in set(a["files"]) | set(b["files"]) if a["files"].get(k) != b["files"].get(k))}
 
 
-def _restore_ai_results(
-    store: Store,
-    workspace: str,
-    results: list[tuple[dict[str, Any], ParseResult]],
-    config: dict[str, Any],
-) -> None:
-    """Revalidate previously merged AI claims against the current parsed source results."""
+def _restore_ai_results(store, workspace, results, config):
     from dataforge.llm import GroundedResponse, validate_response
     from dataforge.models import Operation
 

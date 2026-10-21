@@ -3,18 +3,14 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
-from typing import Any
 
 
 def stable_id(*parts: str) -> str:
-    """Create a stable 32-character identifier from ordered string components."""
     return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()[:32]
 
 
 def canonical(name: str) -> str:
-    """Normalize a qualified identifier while preserving quoted component boundaries."""
     parts = re.findall(r'"(?:""|[^"])*"|`(?:``|[^`])*`|\[(?:\]\]|[^\]])*\]|[^.]+', name.strip())
     normalized = []
     for part in parts:
@@ -27,12 +23,10 @@ def canonical(name: str) -> str:
 
 
 def file_asset(path: str) -> str:
-    """Convert a filesystem path into the parser's normalized file asset name."""
     return "file:" + path.replace("\\", "/").removeprefix("./")
 
 
 def column_key(name: str, case_sensitive: bool = False) -> str:
-    """Create a stable column key while preserving quoted names and wildcard markers."""
     value = name.strip()
     if value in {'', '*'}:
         return value
@@ -44,8 +38,6 @@ def column_key(name: str, case_sensitive: bool = False) -> str:
 
 @dataclass
 class AssetRef:
-    """Represent a parsed asset reference and its temporary or file/table identity."""
-
     name: str
     temporary: bool = False
     kind: str = "table"
@@ -53,8 +45,6 @@ class AssetRef:
 
 @dataclass
 class Usage:
-    """Represent a column usage and the parser's evidence status for that usage."""
-
     table: str
     column: str
     context: str = "SELECT"
@@ -66,8 +56,6 @@ class Usage:
 
 @dataclass
 class Operation:
-    """Represent one parsed operation, its asset references, and column evidence."""
-
     kind: str
     sources: list[AssetRef]
     targets: list[AssetRef]
@@ -78,13 +66,11 @@ class Operation:
     confidence: float = 1.0
     usages: list[Usage] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-    derivations: list[dict[str, Any]] = field(default_factory=list)
+    derivations: list[dict] = field(default_factory=list)
 
 
 @dataclass
 class Diagnostic:
-    """Represent a parser diagnostic with source line, severity, and symbol context."""
-
     message: str
     line: int = 1
     severity: str = "warning"
@@ -93,20 +79,16 @@ class Diagnostic:
 
 @dataclass
 class ParseResult:
-    """Collect parser operations, discovered assets, diagnostics, and metadata."""
-
     operations: list[Operation] = field(default_factory=list)
     assets: list[AssetRef] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict = field(default_factory=dict)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert the result and nested dataclasses to plain dictionaries and lists."""
+    def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ParseResult:
-        """Reconstruct typed parser records from their serialized dictionary form."""
+    def from_dict(cls, data: dict) -> ParseResult:
         return cls(
             operations=[Operation(**{**o,
                 "sources": [AssetRef(**a) for a in o["sources"]],
@@ -117,16 +99,8 @@ class ParseResult:
         )
 
 
-def statements(text: str, sas: bool = False) -> Iterator[tuple[str, int, int]]:
-    """Split source at unquoted semicolons while preserving exact statement line ranges.
-
-    Args:
-        text: Complete SQL or SAS source text.
-        sas: Whether SAS datalines/cards blocks should be treated as indivisible units.
-
-    Yields:
-        Statement text with its one-based inclusive start and end line numbers.
-    """
+def statements(text: str, sas: bool = False):
+    """Split at unquoted semicolons, preserving offsets, comments and exact evidence."""
     start = 0
     i = 0
     quote = None

@@ -4,14 +4,11 @@ from __future__ import annotations
 import copy
 import json
 from collections import deque
-from typing import Any
 
 from networkx import DiGraph, strongly_connected_components
 
-from dataforge.asset_identity import AssetResolver
 from dataforge.configuration import ParsingSettings
-from dataforge.models import AssetRef, ParseResult, column_key, stable_id
-from dataforge.store import Store
+from dataforge.models import AssetRef, column_key, stable_id
 
 ROW_ROLES = {'row_filter', 'join'}
 STATUSES = {'all', 'verified', 'inferred', 'unresolved'}
@@ -19,22 +16,7 @@ INSERT_MAPPING_GAPS = {'INSERT target column mapping requires an explicit list o
                        'Output and projection cardinality mismatch', 'Output column name cannot be established'}
 
 
-def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]],
-                        resolver: AssetResolver, schemas: dict[str, Any], config: dict[str, Any]
-                        ) -> dict[str, list[list[Any]]]:
-    """Build column lineage rows from parsed operations and known schemas.
-
-    Args:
-        workspace: Workspace identifier used in generated row identities.
-        run_id: Analysis run identifier attached to derivation rows.
-        results: File metadata and parse results to materialize.
-        resolver: Resolver used to map table references to assets.
-        schemas: Imported schema metadata indexed by asset identifier.
-        config: Parsing and identity settings used during materialization.
-
-    Returns:
-        Row collections for column references, derivations, and dependencies.
-    """
+def materialize_columns(workspace, run_id, results, resolver, schemas, config):
     rows = {'column_references': [], 'column_derivations': [], 'column_dependencies': []}
     references = {}
     for metadata, parsed in results:
@@ -47,9 +29,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
             outputs = {resolver.norm(t.name): resolver.resolve(t, metadata, parsed, 'output')[0]
                        for t in op.targets}
 
-            def reference(table: str, name: str, scope: str = '', version: str = '',
-                          output: bool = False) -> tuple[str, bool]:
-                """Resolve a table column and record its reference row."""
+            def reference(table, name, scope='', version='', output=False):
                 if scope:
                     # Scope records live under their output asset without polluting table lineage.
                     anchor = next(iter(outputs.values()), None)
@@ -143,27 +123,12 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
     return rows
 
 
-def _asset(store: Store, workspace: str, asset_id: str) -> None:
-    """Raise when an asset does not belong to the given workspace."""
+def _asset(store, workspace, asset_id):
     if not store.rows('SELECT 1 FROM assets WHERE workspace_id=? AND asset_id=?', [workspace, asset_id]):
         raise ValueError('Asset does not exist in this workspace')
 
 
-def column_catalog(store: Store, workspace: str, asset_id: str, limit: int = 500) -> list[dict[str, Any]]:
-    """List known columns for an asset in stable catalog order.
-
-    Args:
-        store: Database access object.
-        workspace: Workspace containing the asset.
-        asset_id: Asset whose column references should be listed.
-        limit: Maximum number of catalog rows to return.
-
-    Returns:
-        Column reference rows.
-
-    Raises:
-        ValueError: If the limit is outside the supported range or the asset is missing.
-    """
+def column_catalog(store, workspace, asset_id, limit=500):
     if type(limit) is not int or not 1 <= limit <= 20000:
         raise ValueError('Column catalog limit must be 1–20000')
     with store.lock:
@@ -173,33 +138,12 @@ def column_catalog(store: Store, workspace: str, asset_id: str, limit: int = 500
             ORDER BY scope,column_key,version,column_id LIMIT ?''', [workspace, asset_id, limit])
 
 
-def _ref(row: dict[str, Any]) -> dict[str, Any]:
-    """Convert a database column row into a public reference object."""
+def _ref(row):
     return {k: row[k] for k in ('column_id', 'asset_id', 'column_name', 'scope', 'version')} | {'table': row['table_name']}
 
 
-def trace_columns(store: Store, workspace: str, asset_id: str, column: str, direction: str = 'upstream',
-                  depth: int = 5, limit: int = 200, status: str = 'all',
-                  include_source: bool = False) -> dict[str, Any]:
-    """Trace column derivations upstream or downstream within an asset.
-
-    Args:
-        store: Database access object.
-        workspace: Workspace containing the asset.
-        asset_id: Asset containing the selected column.
-        column: Column name or exact column identifier.
-        direction: Traversal direction, either ``upstream`` or ``downstream``.
-        depth: Maximum number of derivation levels to traverse.
-        limit: Maximum number of derivations and supporting rows to inspect.
-        status: Derivation status filter, or ``all`` to include every status.
-        include_source: Whether to include capped source text in evidence.
-
-    Returns:
-        Trace results, paths, coverage details, and completeness state.
-
-    Raises:
-        ValueError: If the direction, status, depth, limit, or column is invalid.
-    """
+def trace_columns(store, workspace, asset_id, column, direction='upstream', depth=5, limit=200,
+                  status='all', include_source=False):
     if direction not in {'upstream', 'downstream'} or status not in STATUSES:
         raise ValueError('Invalid direction or status')
     if type(depth) is not int or not 1 <= depth <= 30 or type(limit) is not int or not 1 <= limit <= 20000:
@@ -211,9 +155,7 @@ def trace_columns(store: Store, workspace: str, asset_id: str, column: str, dire
         return _trace(store, workspace, asset_id, column, direction, depth, limit, status, include_source)
 
 
-def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: int, limit: int,
-           status: str, include_source: bool) -> dict[str, Any]:
-    """Traverse derivations and collect bounded lineage evidence."""
+def _trace(store, w, aid, column, direction, depth, limit, status, include_source):
     from dataforge.services import PARSER_VERSION
 
     analysis = store.rows('''SELECT c.run_id,c.parser_version,r.configuration FROM column_analysis c JOIN analysis_runs r
@@ -223,8 +165,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
               'complete': False, 'state': 'not_analyzed', 'run_id': analysis[0]['run_id'] if analysis else None}
     coverage = result['coverage']
 
-    def boundary(reason: str, **context: Any) -> None:
-        """Add a coverage marker once, preserving the first-seen order."""
+    def boundary(reason, **context):
         marker = {'reason': reason, **context}
         if marker not in coverage:
             coverage.append(marker)
@@ -275,8 +216,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
     visited, emitted = set(), set()
     root_rows = []
 
-    def scope_boundaries(column_id: str) -> bool:
-        """Record unresolved scoped writes associated with a column."""
+    def scope_boundaries(column_id):
         gaps = store.rows('''SELECT d.derivation_id,d.coverage,d.statement_id,d.operation_id,
             s.content_hash AS source_hash FROM column_references current
             JOIN column_references scope ON current.workspace_id=scope.workspace_id

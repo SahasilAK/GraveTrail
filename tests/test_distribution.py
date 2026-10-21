@@ -12,8 +12,7 @@ from pathlib import Path
 import pytest
 
 
-def test_gravetrail_distribution_keeps_legacy_entry_points() -> None:
-    """Verify that gravetrail distribution keeps legacy entry points."""
+def test_gravetrail_distribution_keeps_legacy_entry_points():
     root = Path(__file__).resolve().parents[1]
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     assert project["name"] == "gravetrail"
@@ -21,13 +20,7 @@ def test_gravetrail_distribution_keeps_legacy_entry_points() -> None:
         assert project["scripts"]["gravetrail" + suffix] == project["scripts"]["dataforge" + suffix]
 
 
-def test_frozen_cli_uses_gravetrail_program_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that frozen cli uses gravetrail program name.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_frozen_cli_uses_gravetrail_program_name(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     monkeypatch.setattr(sys, "argv", ["gravetrail.exe", "--cli", "--help"])
@@ -38,13 +31,7 @@ def test_frozen_cli_uses_gravetrail_program_name(tmp_path: Path, monkeypatch: py
     assert calls == [["gravetrail", "--help"]]
 
 
-def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that python build ignores unrelated brand and previous version artifacts.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp_path, monkeypatch):
     from dataforge.build import build_python
 
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
@@ -62,12 +49,7 @@ def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp
         build_python(tmp_path, output)
 
 
-def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path: Path) -> None:
-    """Verify that installed home is outside package and honors os conventions.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path):
     from dataforge.launcher import default_home
 
     assert default_home(source=False, platform="win32", environ={"LOCALAPPDATA": str(tmp_path)}) == tmp_path / "DataForge"
@@ -76,12 +58,7 @@ def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path: P
     assert default_home(source=True, environ={}) == Path.cwd() / ".dataforge"
 
 
-def test_runtime_theme_is_copied_once_and_package_is_unchanged(tmp_path: Path) -> None:
-    """Verify that runtime theme is copied once and package is unchanged.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_runtime_theme_is_copied_once_and_package_is_unchanged(tmp_path):
     from dataforge.launcher import prepare_runtime
 
     assets = tmp_path / "assets"
@@ -96,12 +73,7 @@ def test_runtime_theme_is_copied_once_and_package_is_unchanged(tmp_path: Path) -
     assert (assets / ".streamlit/config.toml").read_text() == original
 
 
-def test_manifest_detects_tampering_missing_and_unsafe_files(tmp_path: Path) -> None:
-    """Verify that manifest detects tampering missing and unsafe files.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_manifest_detects_tampering_missing_and_unsafe_files(tmp_path):
     from dataforge.build import verify_artifacts, write_manifest
 
     (tmp_path / "release.whl").write_bytes(b"wheel")
@@ -120,12 +92,7 @@ def test_manifest_detects_tampering_missing_and_unsafe_files(tmp_path: Path) -> 
         verify_artifacts(tmp_path)
 
 
-def test_build_environment_does_not_inherit_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that build environment does not inherit credentials.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
+def test_build_environment_does_not_inherit_credentials(monkeypatch):
     from dataforge.build import build_environment
 
     monkeypatch.setenv("OMNIROUTE_API_KEY", "dummy-secret")
@@ -137,12 +104,7 @@ def test_build_environment_does_not_inherit_credentials(monkeypatch: pytest.Monk
     assert not any(key in env for key in ("OMNIROUTE_API_KEY", "DATAFORGE_MCP_TOKEN", "DATAFORGE_HOME", "CUSTOM_SECRET"))
 
 
-def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path: Path) -> None:
-    """Verify that wheel assets exclude secret and runtime canaries.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
     root = Path(__file__).resolve().parents[1]
     for name in ("pyproject.toml", "README.md", "app.py"):
         shutil.copyfile(root / name, tmp_path / name)
@@ -175,12 +137,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path: Path) -> Non
                 assert b"DUMMY_PACKAGING_SECRET_CANARY" not in archive.extractfile(member).read()
 
 
-def test_source_distribution_includes_release_toolkit_and_compose(tmp_path: Path) -> None:
-    """Verify that source distribution includes release toolkit and compose.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_source_distribution_includes_release_toolkit_and_compose(tmp_path):
     root = Path(__file__).resolve().parents[1]
     subprocess.run(['uv', 'build', '--sdist', '--out-dir', str(tmp_path)], cwd=root,
                    check=True, capture_output=True, text=True, timeout=60)

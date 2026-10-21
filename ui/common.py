@@ -4,7 +4,6 @@ import json
 import os
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Callable
 
 import duckdb
 import streamlit as st
@@ -22,42 +21,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @st.cache_resource
 def get_store(home: str) -> Store:
-    """Return the cached storage service for a configured data home.
-
-    Args:
-        home: Absolute or validated application storage path.
-
-    Returns:
-        The Store instance associated with ``home``.
-    """
     return Store(home)
 
 
-def context() -> tuple[Store, str]:
-    """Return the active storage object and workspace ID from session state.
-
-    Returns:
-        Active Store instance and workspace identifier.
-    """
+def context():
     return get_store(current_home()), st.session_state["workspace"]
 
 
-def storage_homes() -> list[str]:
-    """Return configured storage directories allowed for this app session.
-
-    Returns:
-        Allowed storage directory paths.
-    """
+def storage_homes():
     return allowed_homes(os.environ.get("DATAFORGE_HOME", str(ROOT / ".dataforge")),
                          os.environ.get("DATAFORGE_STORAGE_LOCATIONS", ""))
 
 
-def current_home() -> str:
-    """Resolve the selected storage home, resetting session state if it is disallowed.
-
-    Returns:
-        Validated storage directory path.
-    """
+def current_home():
     homes = storage_homes()
     selected = st.session_state.get("dataforge_home", homes[0])
     if selected not in homes:
@@ -67,12 +43,8 @@ def current_home() -> str:
     return validate_home(selected, homes)
 
 
-def open_storage_home(selected: str) -> None:
-    """Validate and open a selected storage home before clearing stale session controls.
-
-    Args:
-        selected: Storage directory chosen by the user.
-    """
+def open_storage_home(selected):
+    """Widget callback: validate/open first, then clear this session's old workspace controls."""
     try:
         home = validate_home(selected, storage_homes())
         get_store(home)
@@ -84,37 +56,17 @@ def open_storage_home(selected: str) -> None:
     st.session_state["storage_notice"] = "Storage location opened. Each location keeps its own workspaces and source files."
 
 
-def allowed_roots() -> list[Path]:
-    """Return the resolved directories allowed for source access.
-
-    Returns:
-        Resolved allowed-root paths.
-    """
+def allowed_roots():
     return [Path(p).resolve() for p in os.environ.get("DATAFORGE_ALLOWED_ROOTS", str(ROOT / "tests" / "fixtures")).split(os.pathsep) if p]
 
 
-def title(name: str, description: str) -> None:
-    """Render a page title and its short description.
-
-    Args:
-        name: Page heading.
-        description: Supporting text shown beneath the heading.
-    """
+def title(name: str, description: str):
     with st.container(key="page_heading"):
         st.title(name)
         st.caption(description)
 
 
-def load_graph(store: Store, workspace: str) -> LineageGraph:
-    """Load the latest completed workspace lineage graph with saved view filters.
-
-    Args:
-        store: Workspace storage service.
-        workspace: Workspace identifier.
-
-    Returns:
-        The cached graph for the current analysis revision and preferences.
-    """
+def load_graph(store, workspace):
     latest = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
     preferences = AnalysisPreferences.model_validate({k: store.setting(workspace, k, v)
         for k, v in AnalysisPreferences().model_dump().items()})
@@ -129,37 +81,14 @@ def load_graph(store: Store, workspace: str) -> LineageGraph:
 
 
 @st.cache_resource(max_entries=32, ttl=300)
-def _cached_graph(home: str, workspace: str, revision: str, min_confidence: float = 0.0,
-                  include_inferred: bool = True) -> LineageGraph:
-    """Build or retrieve the graph for a workspace revision and display filters.
-
-    Args:
-        home: Storage directory used by the workspace.
-        workspace: Workspace identifier.
-        revision: Latest completed run ID, or ``empty`` when none exists.
-        min_confidence: Minimum edge confidence retained in the graph.
-        include_inferred: Whether inferred relationships are included.
-
-    Returns:
-        LineageGraph built from the selected persisted facts.
-    """
+def _cached_graph(home, workspace, revision, min_confidence=0., include_inferred=True):
     store = get_store(home)
     with store.lock:
         assets, edges = store.assets(workspace), store.edges(workspace)
         return LineageGraph(assets, edges, min_confidence, include_inferred)
 
 
-def choose_asset(graph: LineageGraph, key: str, allow_all: bool = False) -> str | None:
-    """Render a search and exact-asset selector for the graph.
-
-    Args:
-        graph: Lineage graph searched for matching assets.
-        key: Selector namespace used to keep controls independent.
-        allow_all: Whether to include the all-assets choice.
-
-    Returns:
-        Selected asset ID, the all-assets sentinel, or ``None`` if no choice is available.
-    """
+def choose_asset(graph, key, allow_all=False):
     with st.container(horizontal=True, vertical_alignment="bottom"):
         with st.container(width=360, key="asset_query_" + key):
             query = st.text_input("Search tables, datasets or file assets", placeholder="e.g. orders or mart.customer_summary", key=f"asset_search_{key}", persist_state="session")
@@ -180,8 +109,7 @@ def choose_asset(graph: LineageGraph, key: str, allow_all: bool = False) -> str 
             if st.session_state.get(shared_key) in mapping:
                 st.session_state[choice_key] = st.session_state[shared_key]
 
-        def remember_asset() -> None:
-            """Persist this asset choice and clear competing exploration choices."""
+        def remember_asset():
             if st.session_state.get(choice_key) == ALL_ASSETS:
                 return
             st.session_state[shared_key] = st.session_state.get(choice_key)
@@ -199,14 +127,7 @@ def choose_asset(graph: LineageGraph, key: str, allow_all: bool = False) -> str 
     return chosen
 
 
-def downloads(rows: list[dict[str, Any]], stem: str, include_html: bool = True) -> None:
-    """Render download controls for report CSV, JSON, and optional HTML formats.
-
-    Args:
-        rows: Report records to serialize.
-        stem: Filename stem and unique widget-key prefix.
-        include_html: Whether to show the HTML report download.
-    """
+def downloads(rows, stem, include_html=True):
     with st.popover("Export report", icon=":material/download:"):
         st.download_button("Download CSV", lambda: report_csv(rows), stem + ".csv", "text/csv", key=stem + "_csv", on_click="ignore")
         st.download_button("Download JSON", lambda: json.dumps(rows, default=str, indent=2), stem + ".json", "application/json", key=stem + "_json", on_click="ignore")
@@ -214,16 +135,7 @@ def downloads(rows: list[dict[str, Any]], stem: str, include_html: bool = True) 
             st.download_button("Download HTML report", lambda: report_html(rows), stem + ".html", "text/html", key=stem + "_html", on_click="ignore")
 
 
-def source_viewer(store: Store, file_ids: list[str], key: str = "source",
-                  evidence: list[dict[str, Any]] | None = None) -> None:
-    """Render original source text and any selected statement evidence.
-
-    Args:
-        store: Workspace storage service.
-        file_ids: Source file IDs available for selection.
-        key: Session-state and widget-key prefix.
-        evidence: Optional evidence records used to select relevant source versions.
-    """
+def source_viewer(store, file_ids, key="source", evidence=None):
     if not file_ids:
         st.info("No source evidence in this selection.")
         return
@@ -273,20 +185,7 @@ _GRAPH = st.components.v2.component("dataforge_graph", html=GRAPH_BODY, css=GRAP
     js=GRAPH_JS + "\nexport default function(c){return mountGraph(c.parentElement,c.data,v=>c.setStateValue('selection',v),v=>c.setTriggerValue('navigate',v));}\n")
 
 
-def graph_view(graph: LineageGraph, key: str = "graph",
-               appearance: VisualizationSettings | None = None,
-               on_navigate: Callable[[], None] | None = None) -> Any:
-    """Render the interactive lineage graph with the selected appearance.
-
-    Args:
-        graph: Lineage graph to display.
-        key: Unique key for the graph component.
-        appearance: Optional saved visualization settings.
-        on_navigate: Callback invoked when graph navigation requests a new asset.
-
-    Returns:
-        The value returned by Streamlit's graph component.
-    """
+def graph_view(graph, key="graph", appearance=None, on_navigate=None):
     from ui.themes import _loaded_preset
 
     return _GRAPH(data=graph_data(graph, appearance, theme=_loaded_preset()), key=key, default={"selection": None},

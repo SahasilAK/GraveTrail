@@ -1,7 +1,6 @@
 """Versioned explicit UI parity catalog. Restrictions are not operational parity claims."""
-from typing import Any
 
-INVENTORY: list[dict[str, Any]] = [{'capability_id': 'P01',
+INVENTORY = [{'capability_id': 'P01',
   'description': 'List/get/create/edit/remove provider profiles; '
                  'name/provider/URL/model/reference/auth/timeout/retries/max_tokens/context_chars/temperature/structured/Azure '
                  'API version',
@@ -546,16 +545,7 @@ INVENTORY: list[dict[str, Any]] = [{'capability_id': 'P01',
   'slice': 5}]
 
 
-def capability_catalog(service: Any, workspace_id: str | None = None) -> list[dict[str, Any]]:
-    """Return catalog entries annotated with permissions from the active policy.
-
-    Args:
-        service: Agent service providing workspace validation and launch policy.
-        workspace_id: Optional workspace to validate before building the catalog.
-
-    Returns:
-        Capability descriptions with booleans for the currently permitted actions.
-    """
+def capability_catalog(service, workspace_id=None):
     if workspace_id:
         service._workspace(workspace_id)
     return [{**entry, 'authorization': {

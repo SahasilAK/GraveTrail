@@ -6,10 +6,7 @@ import re
 import threading
 import time
 import uuid
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from typing import Any
 
 from dataforge.agent.contracts import AgentError, compact
 from dataforge.agent.paging import page
@@ -18,44 +15,18 @@ TERMINAL = {"completed", "failed", "interrupted"}
 
 
 class Jobs:
-    """Manage bounded asynchronous jobs and their local JSON journals."""
-
-    def __init__(self, home: Path) -> None:
-        """Initialize the job journal and its two-worker executor.
-
-        Args:
-            home: Runtime data home where job records are stored.
-        """
+    def __init__(self, home):
         self.directory = home / "agent" / "jobs"
         self.directory.mkdir(parents=True, exist_ok=True)
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gravetrail-agent")
         self.lock = threading.RLock()
 
-    def path(self, job_id: str) -> Path:
-        """Return the journal path for a syntactically valid job identifier.
-
-        Args:
-            job_id: Hexadecimal job identifier.
-
-        Returns:
-            The path to the job's JSON journal.
-
-        Raises:
-            AgentError: If the identifier is malformed.
-        """
+    def path(self, job_id):
         if not re.fullmatch(r"[a-f0-9]{32}", job_id):
             raise AgentError("not_found", "Job does not exist")
         return self.directory / (job_id + ".json")
 
-    def write(self, record: dict[str, Any]) -> None:
-        """Atomically publish a job record to its journal file.
-
-        Args:
-            record: Job state containing a ``job_id`` field.
-
-        Raises:
-            PermissionError: If replacement remains blocked after retries.
-        """
+    def write(self, record):
         target = self.path(record["job_id"])
         temporary = target.with_suffix("." + uuid.uuid4().hex + ".tmp")
         temporary.write_text(compact(record), encoding="utf-8")
@@ -70,20 +41,7 @@ class Jobs:
                     raise
                 time.sleep(.01)
 
-    def read(self, job_id: str, workspace: str, private: bool = False) -> dict[str, Any]:
-        """Read a job record, hiding internal access and request fields by default.
-
-        Args:
-            job_id: Identifier of the job to read.
-            workspace: Workspace expected to own the job.
-            private: Whether to include internal fields for trusted local callers.
-
-        Returns:
-            The job record, with stale nonterminal jobs reported as interrupted.
-
-        Raises:
-            AgentError: If the job is missing or belongs to another workspace.
-        """
+    def read(self, job_id, workspace, private=False):
         try:
             for attempt in range(20):
                 try:
@@ -103,20 +61,7 @@ class Jobs:
             record = {**record, "status": "interrupted", "error": "Worker heartbeat expired; retry explicitly"}
         return record if private else {k: v for k, v in record.items() if k not in {"access", "request"}}
 
-    def create(self, workspace: str, operation: str, access: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Create and journal a queued job if capacity permits.
-
-        Args:
-            workspace: Workspace that owns the job.
-            operation: Operation name to execute.
-            access: Optional access snapshot associated with the job.
-
-        Returns:
-            The newly created queued job record.
-
-        Raises:
-            AgentError: If the journal limit or active-job limit is reached.
-        """
+    def create(self, workspace, operation, access=None):
         with self.lock:
             files = list(self.directory.glob("*.json"))
             if len(files) >= 1000:
@@ -133,52 +78,20 @@ class Jobs:
             self.write(record)
             return record
 
-    def start(
-        self,
-        workspace: str,
-        operation: str,
-        function: Callable[[Callable[[float, Any], None]], Any],
-        access: dict[str, Any] | None = None,
-    ) -> dict[str, str]:
-        """Queue an operation on the job executor.
-
-        Args:
-            workspace: Workspace that owns the job.
-            operation: Operation name to execute.
-            function: Work callback receiving a progress callback.
-            access: Optional access snapshot associated with the job.
-
-        Returns:
-            The new job identifier and its initial status.
-
-        Raises:
-            AgentError: If a job cannot be created under current capacity limits.
-        """
+    def start(self, workspace, operation, function, access=None):
         record = self.create(workspace, operation, access)
         self.pool.submit(self.run, record, function)
         return {"job_id": record["job_id"], "status": "queued"}
 
-    def run(
-        self,
-        record: dict[str, Any],
-        function: Callable[[Callable[[float, Any], None]], Any],
-    ) -> None:
-        """Run a job while recording heartbeat, progress, and terminal status.
-
-        Args:
-            record: Mutable job record to update.
-            function: Work callback receiving a progress callback.
-        """
+    def run(self, record, function):
         stop = threading.Event()
 
-        def update(**values: Any) -> None:
-            """Update and persist the job record under the journal lock."""
+        def update(**values):
             with self.lock:
                 record.update(values, updated_at=time.time())
                 self.write(record)
 
-        def heartbeat() -> None:
-            """Refresh the job timestamp until the worker signals completion."""
+        def heartbeat():
             while not stop.wait(2):
                 update()
 
@@ -196,20 +109,7 @@ class Jobs:
             code = exc.code if isinstance(exc, AgentError) else type(exc).__name__
             update(status="failed", error=code)
 
-    def wait(self, job_id: str, workspace: str, timeout: float = 300) -> dict[str, Any]:
-        """Poll a job until it reaches a terminal state or the timeout expires.
-
-        Args:
-            job_id: Identifier of the job to wait for.
-            workspace: Workspace expected to own the job.
-            timeout: Maximum number of seconds to wait.
-
-        Returns:
-            The terminal job record.
-
-        Raises:
-            AgentError: If the job is missing or still running when time expires.
-        """
+    def wait(self, job_id, workspace, timeout=300):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             record = self.read(job_id, workspace)
@@ -218,24 +118,11 @@ class Jobs:
             time.sleep(.05)
         raise AgentError("busy", "Job is still running; poll its job_id", job_id=job_id)
 
-    def close(self) -> None:
-        """Wait for submitted jobs and shut down the executor."""
+    def close(self):
         self.pool.shutdown(wait=True)
 
 
-def status_result(record: dict[str, Any], options: Any) -> dict[str, Any]:
-    """Build a bounded public job response, paging diagnostics when requested.
-
-    Args:
-        record: Internal job record.
-        options: Validated response detail and character-budget options.
-
-    Returns:
-        A sanitized job response, optionally with a diagnostics page.
-
-    Raises:
-        AgentError: If the serialized response exceeds the requested budget.
-    """
+def status_result(record, options):
     result = {k: v for k, v in record.items() if k not in {"access", "request"}}
     if "diagnostics" in result.get("result", {}):
         diagnostics = result["result"]["diagnostics"]

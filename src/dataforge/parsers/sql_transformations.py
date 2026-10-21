@@ -2,35 +2,18 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
-from sqlglot import Dialect, exp
+from sqlglot import exp
 from sqlglot.optimizer.scope import Scope
 
 
-def identifier(node: exp.Expression | None) -> str:
-    """Render an SQLGlot identifier while preserving quoted spelling.
-
-    Args:
-        node: Identifier-like expression, if available.
-
-    Returns:
-        SQL name text, or an empty string for ``None``.
-    """
+def identifier(node):
     if isinstance(node, exp.Identifier):
         return '"' + node.name.replace('"', '""') + '"' if node.args.get("quoted") else node.name
     return node.name if node is not None else ""
 
 
-def relation(table: exp.Table) -> str:
-    """Render a relation name with SQL Server temporary prefixes preserved.
-
-    Args:
-        table: SQLGlot table expression.
-
-    Returns:
-        Qualified relation name with quoting for dotted identifier parts.
-    """
+def relation(table):
     parts = []
     for part in table.parts:
         prefix = "##" if part.args.get("global_") else "#" if part.args.get("temporary") else ""
@@ -39,18 +22,8 @@ def relation(table: exp.Table) -> str:
     return ".".join(parts)
 
 
-def _projection_ranges(code: str, dialect: Dialect) -> list[tuple[int, int]]:
-    """Find source character ranges for SELECT projection expressions.
-
-    Token boundaries preserve parentheses and comments absent from AST metadata.
-
-    Args:
-        code: Original SQL statement text.
-        dialect: SQLGlot dialect used to tokenize the statement.
-
-    Returns:
-        Start/end character offsets for projection ranges.
-    """
+def _projection_ranges(code, dialect):
+    """Token boundaries preserve parentheses/comments absent from AST source metadata."""
     tokens = dialect.tokenize(code)
     ranges = []
     endings = {"FROM", "INTO", "WHERE", "GROUP_BY", "HAVING", "QUALIFY", "WINDOW",
@@ -94,17 +67,7 @@ def _projection_ranges(code: str, dialect: Dialect) -> list[tuple[int, int]]:
     return ranges
 
 
-def _original(projection: exp.Expression, ranges: list[tuple[int, int]], code: str) -> str:
-    """Recover the original source text covering one parsed projection.
-
-    Args:
-        projection: Parsed projection expression.
-        ranges: Candidate source ranges returned by ``_projection_ranges``.
-        code: Original SQL statement text.
-
-    Returns:
-        The smallest containing source range, or an empty string when unavailable.
-    """
+def _original(projection, ranges, code):
     offsets = [(n.meta["start"], n.meta["end"]) for n in projection.walk()
                if "start" in n.meta and "end" in n.meta]
     if not offsets:
@@ -117,43 +80,15 @@ def _original(projection: exp.Expression, ranges: list[tuple[int, int]], code: s
     return code[a:b].strip()
 
 
-def _record(table: str, column: str, scope: str, expression: str,
-            category: str = "expression", coverage: list[str] | None = None,
-            **extra: Any) -> dict[str, Any]:
-    """Build one SQL column derivation record with its evidence status.
-
-    Args:
-        table: Target table or intermediate query name.
-        column: Target output column name.
-        scope: Query scope identifier.
-        expression: Original projection text.
-        category: Transformation category.
-        coverage: Unresolved conditions associated with the record.
-        **extra: Additional fields specific to a record type.
-
-    Returns:
-        Derivation mapping in the persisted parser result shape.
-    """
+def _record(table, column, scope, expression, category="expression", coverage=None, **extra):
     coverage = list(coverage or [])
     return {"target_table": table, "target_column": column, "scope": scope, "target_version": "",
             "expression": expression, "category": category, "status": "unresolved" if coverage else "verified",
             "inputs": [], "coverage": coverage, "branch": 0, "ordinal": 0, **extra}
 
 
-def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
-                            scopes: list[Scope], target: exp.Table | None = None) -> list[dict[str, Any]]:
-    """Extract scope-preserving column derivations and explicit uncertainty coverage.
-
-    Args:
-        tree: Parsed SQL statement tree.
-        code: Original SQL statement text.
-        dialect: SQLGlot dialect used to parse the statement.
-        scopes: Active SQLGlot query scopes.
-        target: Optional physical target table for the statement.
-
-    Returns:
-        Column derivation records; unsupported boundaries remain unresolved.
-    """
+def extract_transformations(tree, code, dialect, scopes, target=None):
+    """Return static facts; unresolved boundaries never fabricate source column names."""
     target_name = relation(target) if target is not None else "__result__"
     root_scope = "" if target is not None else "result:0"
     lateral_aliases = dialect.__class__.__name__.casefold() in {
@@ -184,12 +119,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
         destinations[id(root)] = target_name, root_scope
 
     # UNION branches write the parent's output columns, with independent evidence.
-    def share_destination(scope: Scope) -> None:
-        """Assign UNION child scopes to their parent's target destination.
-
-        Args:
-            scope: Parent query scope whose set-operation children are visited.
-        """
+    def share_destination(scope):
         for child in scope.set_operation_scopes:
             destinations[id(child)] = destinations[id(scope)]
             share_destination(child)
@@ -201,15 +131,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
     records = []
     branch_counts = {}
 
-    def output_names(scope: Scope) -> list[str]:
-        """Return known output names for a query scope and its set branches.
-
-        Args:
-            scope: Query scope whose projected output names are inspected.
-
-        Returns:
-            Output names in projection order.
-        """
+    def output_names(scope):
         parent = scope.expression.parent
         if isinstance(parent, (exp.CTE, exp.Subquery)):
             alias = parent.args.get("alias")
@@ -223,15 +145,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
                 else identifier(p.this) if isinstance(p, exp.Column) else "*" if isinstance(p, exp.Star)
                 else "" for p in scope.expression.expressions]
 
-    def name_key(name: str) -> str:
-        """Normalize quoted and unquoted output names for matching.
-
-        Args:
-            name: SQL output column spelling.
-
-        Returns:
-            Case-folded unquoted name or case-preserved quoted name.
-        """
+    def name_key(name):
         return name[1:-1].replace('""', '"') if name.startswith('"') else name.casefold()
 
     for scope in scopes:
@@ -257,12 +171,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
         if output_scope.set_operation_scopes:
             leaves = []
 
-            def collect_leaves(item: Scope) -> None:
-                """Collect terminal scopes from a nested set-operation tree.
-
-                Args:
-                    item: Current set-operation scope.
-                """
+            def collect_leaves(item):
                 if item.set_operation_scopes:
                     for child in item.set_operation_scopes:
                         collect_leaves(child)
@@ -278,15 +187,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
         projection_aliases = [(position, name_key(identifier(p.args["alias"])))
                               for position, p in enumerate(query.expressions) if isinstance(p, exp.Alias)]
 
-        def lookup(alias: exp.Identifier) -> exp.Table | Scope | None:
-            """Resolve a relation alias only when its source is unambiguous.
-
-            Args:
-                alias: Relation alias identifier to look up.
-
-            Returns:
-                Its table or query-scope source, or ``None`` when ambiguous.
-            """
+        def lookup(alias):
             if isinstance(alias, exp.Identifier) and alias.args.get("quoted"):
                 return mapping.get(alias.name)
             matches = [source for name, source in mapping.items() if name.casefold() == alias.name.casefold()]
@@ -295,31 +196,14 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
         branch = branch_counts.get(destination, 0)
         branch_counts[destination] = branch + 1
 
-        def source_ref(source: exp.Table | Scope) -> tuple[str, str]:
-            """Return a relation name and query scope for one selected source.
-
-            Args:
-                source: Selected physical table or nested query scope.
-
-            Returns:
-                Source table name and scope identifier, or empty values if unresolved.
-            """
+        def source_ref(source):
             if isinstance(source, exp.Table) and isinstance(source.this, exp.Identifier):
                 return relation(source), ""
             if isinstance(source, Scope):
                 return destinations.get(id(source), ("", ""))
             return "", ""
 
-        def add_input(record: dict[str, Any], source: exp.Table | Scope | None,
-                      column: str, role: str) -> None:
-            """Add one distinct source dependency or record an unresolved source.
-
-            Args:
-                record: Derivation record to update.
-                source: Selected table or nested scope.
-                column: Source column name, or an empty/wildcard marker.
-                role: Dependency role such as value, filter, or rowset.
-            """
+        def add_input(record, source, column, role):
             source_table, source_scope = source_ref(source)
             if not source_table:
                 record["coverage"].append("Dynamic or unsupported relation source")
@@ -328,14 +212,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
             if item not in record["inputs"]:
                 record["inputs"].append(item)
 
-        def resolve(record: dict[str, Any], column: exp.Column, role: str) -> None:
-            """Resolve one column expression against the active relation mapping.
-
-            Args:
-                record: Derivation record receiving dependencies and coverage.
-                column: SQL column expression to resolve.
-                role: Dependency role assigned to a resolved input.
-            """
+        def resolve(record, column, role):
             if not column.table and any(alias == name_key(identifier(column.this))
                                         and (resolving_context or lateral_aliases and position != ordinal)
                                         for position, alias in projection_aliases):
@@ -358,14 +235,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect,
                 return
             add_input(record, source, name, role)
 
-        def dependencies(node: exp.Expression, role: str, record: dict[str, Any]) -> None:
-            """Walk an expression and collect its value and context dependencies.
-
-            Args:
-                node: SQL expression node to inspect.
-                role: Dependency role inherited by child expressions.
-                record: Derivation record receiving inputs and coverage.
-            """
+        def dependencies(node, role, record):
             if isinstance(node, exp.Column):
                 resolve(record, node, role)
                 return
