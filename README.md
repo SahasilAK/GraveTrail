@@ -11,6 +11,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-b6532c" alt="Apache License 2.0"></a>
   <a href="https://github.com/SahasilAK/GraveTrail/actions/workflows/tests.yml"><img src="https://github.com/SahasilAK/GraveTrail/actions/workflows/tests.yml/badge.svg" alt="Application tests"></a>
   <a href="https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml"><img src="https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml/badge.svg" alt="Documentation build and Pages deployment"></a>
+  <a href="https://github.com/SahasilAK/GraveTrail/releases/latest"><img src="https://img.shields.io/github/v/release/SahasilAK/GraveTrail?display_name=tag" alt="Latest release"></a>
 </p>
 
 <p align="center">
@@ -149,10 +150,6 @@ and [fixture verification limits](docs/TESTING.md).
 | [Architecture](docs/architecture/overview.md) | [Lineage engine](docs/LINEAGE_ENGINE.md) · [SQL](docs/SQL_PARSING.md) · [SAS](docs/SAS_PARSING.md) · [Security](docs/SECURITY.md) |
 | [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Build verification](docs/BUILD_AND_RELEASE.md) |
 | [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
-
-| Release |
-| --- |
-| [![Latest release](https://img.shields.io/github/v/release/SahasilAK/GraveTrail?display_name=tag)](https://github.com/SahasilAK/GraveTrail/releases/latest) |
 
 Explore the [live documentation website](https://sahasilak.github.io/GraveTrail/)
 with search and light/dark mode. See the [Pages deployment guide](docs/deployment/github-pages.md)
