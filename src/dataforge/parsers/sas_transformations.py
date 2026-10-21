@@ -168,7 +168,7 @@ def data_step_derivations(operation, block):
     unavailable = dropped_input | {old for old, new in source_options['rename'].items() if old != new}
     state, versions, steps = {}, {}, []
     keep, drop, rename = None, set(), {}
-    for raw, clean in body:
+    for body_index, (raw, clean) in enumerate(body):
         if match := re.match(r'\s*(keep|drop|rename)\s+(.+?)\s*;?$', clean, re.I | re.S):
             try:
                 if match[1].casefold() == 'rename':
@@ -192,6 +192,7 @@ def data_step_derivations(operation, block):
         step = derivation(targets[0], name, raw, scope='data-step', version=str(versions[name]),
                           inputs=inputs, category='expression' if inputs or errors else 'constant',
                           coverage=errors, ordinal=len(steps))
+        step['_expression_offset'] = block[body_index + 1][4] - block[0][4]
         state[name] = step
         steps.append(step)
 

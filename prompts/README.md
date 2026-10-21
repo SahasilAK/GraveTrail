@@ -15,4 +15,6 @@ advisory task can merge table relationships, including legacy records during ref
 
 Change prompt version, generated schemas and regression tests together.
 
-Project analysis uses `project_lineage` and `lineage_review` version 1, separately from manual assistance. Full immutable units, declarations and JSON schema form user context. Model output cannot set publication status; deterministic source/semantic validation remains authoritative. Review must decide the exact host candidate set and cannot add facts.
+Project analysis uses `project_lineage` extraction prompt 4 / wire v3 and `lineage_review` prompt 3 / wire v2, separately from manual assistance. Full immutable units, declarations and JSON schema form user context. Model output cannot set publication status; deterministic source/semantic validation remains authoritative. Review must decide the exact host candidate set and cannot add facts.
+
+Extraction prefers source-only host expression references; exact original text/offsets are restored before canonical and semantic checks. Strict legacy expression responses and compact canonical v2 storage remain supported.

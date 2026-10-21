@@ -68,3 +68,5 @@ evidence only; source/packaging checks and open release gates are dated in docs/
 README and Pages position local parser analysis as the primary default with no source sent to AI; optional AI/hybrid supports additional investigation in complex projects, with explicit disclosure and no completeness guarantee.
 
 Parser13/validator2: SAS PROC SQL typed constants preserve complete generated usage text; their value derivations remain unresolved. DML follows reachable USING/scalar subqueries with outer-only alias ownership. Semantic versions pin AI caches and continuation. Banking archive scorer masks fixture answers; table-only manifests cannot qualify column precision. Evidence: docs/TESTING.md.
+
+Parser14/validator3: source-only expression references hydrate exact original SQL/SAS text/coordinates before semantic checks. Identical UNION branches and SAS assignment versions retain occurrence identity. Extraction wire3/prompt4; review wire2/prompt3 and canonical compact-v2 storage remain compatible. No independent column-gold implementation or qualified live accuracy claim.

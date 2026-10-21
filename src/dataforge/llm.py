@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from dataforge.ai_analysis_models import LineageReviewResponse, ProjectLineageResponse, UnitAttemptResult
 from dataforge.ai_budget import project_profile, request_allowance
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
+from dataforge.ai_wire import SourceCitationError
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
 from dataforge.connections import connection_scope, current_connections
@@ -46,6 +47,7 @@ PROJECT_TASKS = ["project_lineage", "lineage_review"]
 ROUTABLE_TASKS = MANUAL_TASKS + PROJECT_TASKS
 TASKS = MANUAL_TASKS  # Existing manual selectors must keep their five contracts.
 PROJECT_SCHEMAS = {"project_lineage": ProjectLineageResponse, "lineage_review": LineageReviewResponse}
+PROJECT_PROTOCOLS = {'project_lineage': ('3', '4'), 'lineage_review': ('2', '3')}
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 if not PROMPTS.is_dir():
     PROMPTS = Path(__file__).resolve().parent / "prompts"
@@ -622,7 +624,13 @@ def analysis_prompt(unit, task, execution, *, reserve_review=False):
     if unit.focus and (PROMPTS/task/'focus.md').exists():
         system += '\n' + (PROMPTS/task/'focus.md').read_text(encoding='utf-8')
     context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
-               'schema':schema,'schema_version':'2'}
+               'schema':schema,'schema_version':PROJECT_PROTOCOLS[task][0]}
+    if task == 'project_lineage':
+        from dataforge.ai_citations import source_references
+        context['expression_references'] = [
+            {k: v for k, v in reference.items()
+             if k not in {'start_offset', 'end_offset'} and (k != 'text' or reference['kind'] != 'unit')}
+            for reference in source_references(unit, execution.settings)]
     if unit.focus:
         from dataforge.ai_semantic import source_view, unit_dialect
         context['unit'].pop('code')
@@ -686,6 +694,7 @@ def preview_analysis_routes(store, workspace, units, execution, *, tasks=None):
 def invoke_analysis_unit(store, workspace, unit, task, execution):
     """Routed project extraction, with each physical attempt reauthorized and reserved."""
     execution.check()
+    schema_version, prompt_version = PROJECT_PROTOCOLS[task]
     routes = analysis_routes(store,workspace,task)
     system,user,prompt_hash = analysis_prompt(unit,task,execution)
     manager = execution.connections or current_connections()
@@ -749,7 +758,7 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
                 if len(raw) > 1024*1024:
                     raise ValueError('Model content exceeds response budget')
                 from dataforge.ai_wire import decode_project_result
-                validated = decode_project_result(task, response_object(raw), unit)
+                validated = decode_project_result(task, response_object(raw), unit, settings=execution.settings)
                 if task == 'project_lineage':
                     validated.assert_unit(unit)
                 else:
@@ -761,9 +770,11 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
             # Pydantic errors include rejected input values; retain only host error codes.
             outcome = 'quarantined'
             reason = str(exc)[:500] if isinstance(exc, ProviderError) else 'project_response_contract_invalid'
+            if isinstance(exc, SourceCitationError):
+                reason = str(exc)
             retryable = isinstance(exc, ProviderError) and exc.retryable
         record_id = uuid.uuid4().hex
-        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':'2','prompt_version':'3',
+        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':schema_version,'prompt_version':prompt_version,
                    'reason':reason,'attempts':execution.attempts-attempt_start,'requested_model':profile.model,
                    'resolved_model':metadata.get('resolved_model'),'finish_reason':metadata.get('finish_reason'),
                    'usage_known':metadata.get('usage_known',False),'result':None,
@@ -773,7 +784,7 @@ def invoke_analysis_unit(store, workspace, unit, task, execution):
             details.update(context=user,response=raw)
         safe_details,safe_usage = manager.sanitize(details),manager.sanitize(usage)
         with store.transaction():
-            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,'3'])
+            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,prompt_version])
             store.execute('INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                 [record_id,workspace,pid,task,unit.file_id,unit.first,prompt_hash,profile.provider,profile.model,
                  outcome,time.perf_counter()-started,json.dumps(safe_usage),json.dumps(safe_details)])

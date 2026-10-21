@@ -37,6 +37,12 @@ def test_review_reference_schema_and_candidate_validation():
             'decision': 'supported', 'evidence': []}]}, unit())
 
 
+def test_generated_wire_schema_assets_match_runtime_contracts():
+    from dataforge.llm import PROJECT_TASKS, PROMPTS
+    for task in PROJECT_TASKS:
+        assert json.loads((PROMPTS / 'schemas' / f'{task}_wire_response.json').read_text(encoding='utf-8')) == wire_schema(task)
+
+
 def test_many_claims_store_compactly_even_when_canonical_expansion_exceeds_record_limit():
     u = unit()
     payload = {'unit_id': 'u', 'relationships': [{'source': 'a', 'target': 'b', 'operation': 'CREATE',

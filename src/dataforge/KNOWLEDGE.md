@@ -89,7 +89,7 @@ Graph images: graph_images.py serializes inert SVG from exports.graph_data paths
 - `analysis_service.py` — Offline preview, physical-attempt budgeting, cache revalidation, optional bounded review and atomic freshness-checked publication. Failures preserve the previous graph.
 - `project_analysis.py` — AgentService mixin for policy-gated project preview/build/report and job cancellation; exact profile-bound session credentials.
 
-Current parser cache is12; migration6 adds project provenance without replacing legacy
+Current parser cache is14; migration6 adds project provenance without replacing legacy
 direct/column tables. Operation evidence_key/table_pairs retain one original writer and
 explicit accepted edges. Graph/column/artifact queries preserve unresolved boundaries and
 original source-version scope. Full AI bodies remain history opt-in; retention removes them
@@ -102,4 +102,7 @@ Accepted claim quotes are compact source refs on disk and hydrate only for sourc
 - `ai_semantic.py` — Exact-source SELECT projection partitions, allowlisted query clauses and AST/token span verification, scoped parser expressions, static PROC SQL spans and one-writer publication merging.
 Semantic continuation persists unit_spec in planned/staged rows and reviewed candidate IDs after each bounded review batch. Saved source/config/protocol pins are checked before hydration. Preview budgets paid stages and labels unknown review sizing provisional; eligible requests above 100 projections split for response cardinality. Root conditional focus instructions are hashed with the actual transmitted variant.
 
-Validator2 is owned by ai_validation and imported by analysis_service. Both unit-cache and protocol pins include validator/parser versions (parser13). Upgrade invalidates paused work before another call; committed graphs remain available.
+Validator3 is owned by ai_validation and imported by analysis_service. Both unit-cache and protocol pins include validator/parser versions (parser14). Upgrade invalidates paused work before another call; committed graphs remain available.
+
+- `ai_citations.py` — Bounded cached source-only projection/assignment locations, static PROC SQL pages/SAS formats, immutable/dialect-bound IDs and focused visibility. Used by prompt construction and wire decoding; supplies no dependency answers.
+Parser14/validator3 add exact projection/SAS assignment occurrence checks. Extraction wire3/prompt4 resolves optional expression references before canonical validation; review stays wire2/prompt3 and durable compact-v2 payloads remain compatible.

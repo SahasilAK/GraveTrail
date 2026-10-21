@@ -18,3 +18,5 @@ Version 1 grounded AI tasks. Source goes in JSON user context, never system inst
 Project tasks are separate from five manual contracts: `project_lineage/` and `lineage_review/` v1 use strict full-unit evidence schemas under schemas/. Project task registration is routing-only; manual selection retains existing task names.
 
 Project extraction/review now use protocol v2 compact unit references; manual task protocols stay v1. Host hydration restores immutable citations before canonical validation. Both canonical and wire generated schemas are packaged.
+
+Extraction now uses wire3/prompt4 source-only expression references, restored by the host before canonical validation. Review stays wire2/prompt3; durable compact-v2 records remain readable. Root runtime assets and generated schema parity tests change together.

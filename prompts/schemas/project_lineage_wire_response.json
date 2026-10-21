@@ -130,8 +130,8 @@
           "type": "string"
         },
         "expression": {
+          "default": "",
           "maxLength": 20000,
-          "minLength": 1,
           "title": "Expression",
           "type": "string"
         },
@@ -212,12 +212,25 @@
           ],
           "default": null,
           "title": "Expression End Offset"
+        },
+        "expression_reference": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression Reference"
         }
       },
       "required": [
         "target_table",
         "target_column",
-        "expression",
         "category",
         "evidence"
       ],

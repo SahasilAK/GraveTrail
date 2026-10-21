@@ -1,4 +1,4 @@
-"""Protocol v2: host-issued evidence references, expanded before canonical validation."""
+"""Project protocol v3 expression references; strict legacy v2 payloads remain readable."""
 from __future__ import annotations
 
 import json
@@ -25,6 +25,10 @@ class EvidenceReference(StrictModel):
     unit_id: Name
 
 
+class SourceCitationError(ValueError):
+    """A fixed host code, safe to retain without source text or provider input."""
+
+
 def _wire_model(model, **overrides):
     # Copy field constraints, not canonical validators that need hydrated source text.
     fields = {name: (field.annotation, deepcopy(field)) for name, field in model.model_fields.items()}
@@ -35,7 +39,8 @@ def _wire_model(model, **overrides):
 WireAsset = _wire_model(AssetCandidate, evidence=(EvidenceReference, ...))
 WireRelationship = _wire_model(TableRelationship, evidence=(EvidenceReference, ...))
 WireColumn = _wire_model(ColumnCandidate, evidence=(EvidenceReference, ...))
-WireDerivation = _wire_model(DerivationCandidate, evidence=(EvidenceReference, ...))
+WireDerivation = _wire_model(DerivationCandidate, evidence=(EvidenceReference, ...),
+    expression=(str, Field(default='', max_length=20000)), expression_reference=(Name | None, None))
 WireDecision = _wire_model(ReviewDecision, evidence=(list[EvidenceReference], Field(default_factory=list, max_length=20)))
 WIRE_MODELS = {
     'project_lineage': _wire_model(ProjectLineageResponse,
@@ -58,7 +63,7 @@ def wire_schema(task):
     return json.loads(_schema_json(task))
 
 
-def decode_project_result(task, payload, unit):
+def decode_project_result(task, payload, unit, *, settings=None):
     values = WIRE_MODELS[task].model_validate(payload).model_dump()
     citation = EvidenceCitation.from_unit(unit).model_dump()
 
@@ -68,9 +73,25 @@ def decode_project_result(task, payload, unit):
         return citation.copy()
 
     if task == 'project_lineage':
+        references = None
         for group in ('assets', 'relationships', 'columns', 'derivations'):
             for claim in values[group]:
                 claim['evidence'] = hydrate(claim['evidence'])
+                if group == 'derivations':
+                    reference_id = claim.pop('expression_reference')
+                    if reference_id is not None:
+                        if references is None:
+                            from dataforge.ai_citations import source_references
+                            references = {r['reference_id']: r for r in source_references(unit, settings)}
+                        reference = references.get(reference_id)
+                        if reference is None:
+                            raise SourceCitationError('unknown_source_expression_reference')
+                        for field, expected in [('expression', reference['text']),
+                                                ('expression_start_offset', reference['start_offset']),
+                                                ('expression_end_offset', reference['end_offset'])]:
+                            if claim.get(field) not in (None, '') and claim[field] != expected:
+                                raise SourceCitationError('conflicting_source_expression_reference')
+                            claim[field] = expected
     else:
         for decision in values['decisions']:
             decision['evidence'] = [hydrate(ref) for ref in decision['evidence']]

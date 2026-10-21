@@ -104,3 +104,5 @@ Navigation uses a non-minimum custom budget to detect widget cleanup; Continue p
 
 - `test_qualification_semantics.py` — Valid/invalid SAS typed literals, suffix-dropping false claims, DML subqueries/unused CTEs, inner/outer alias shadows and semantic-version continuation guards.
 - `test_archive_qualification.py` — Hash/inventory integrity, answer leakage prevention, grouped splits, failed-prediction omissions and insufficient-evidence gates. Evaluation tests preserve known metering for quarantined responses.
+
+- `test_ai_citations.py` — Immutable/dialect-bound expression IDs, absolute original coordinates, Unicode/comments, focused visibility, repeated UNION/SAS occurrence rejection, DML RHS, paged PROC SQL/SAS formats, sanitized transport quarantine and reference-only publication/reopen/offline reuse. Wire tests pin generated schema parity; default eight-assignment context remains unchanged.

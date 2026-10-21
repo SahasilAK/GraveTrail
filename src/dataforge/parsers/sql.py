@@ -164,6 +164,7 @@ def wrapped_sql(tree, dialect, depth, code, start, end):
     for op in parsed.operations:
         op.code, op.start, op.end, op.method = code, start, end, method
         for derivation in op.derivations:
+            derivation.pop('_expression_offset', None)  # Inner-body offsets are not wrapper coordinates.
             if derivation["expression"] and derivation["expression"] not in code:
                 derivation["expression"] = ""
                 derivation["status"] = "unresolved"
