@@ -125,10 +125,13 @@ def render(store: Store, workspace: str) -> None:
         temperature = st.number_input("Temperature", 0., 2., float(config.get("temperature") or 0.), step=.1, key=prefix + '_temperature')
         structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True), key=prefix + '_structured')
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
+        quota_group = st.text_input('Shared provider quota group', config.get('quota_group', ''), key=prefix + '_quota_group',
+            help='Optional non-secret account/project label shared by profiles using the same quota. Empty groups coordinate conservatively by endpoint.')
     values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
                   context_mode=context_mode, output_mode=output_mode,
-                  temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version)
+                  temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version,
+                  quota_group=quota_group)
     signature = (url, key_env, auth, api_version)
     discovery = st.session_state.get(models_key, {})
     if discovery.get('signature') != signature:

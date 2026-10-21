@@ -352,7 +352,7 @@ def evaluate_projects():
 
 
 
-def evaluate_scale(units=1000):
+def evaluate_scale(units=1000, *, files=1, max_files_per_request=None, max_parallel_requests=None, scenario='scale'):
     """Real transport/storage lifecycle, synthetic units only; no provider/network dependency."""
     import tracemalloc
 
@@ -362,16 +362,23 @@ def evaluate_scale(units=1000):
     from dataforge.ingestion import Importer
     from dataforge.llm import Profile
     from dataforge.store import Store
-    if not 1000 <= units <= 5000:
+    if not 1 <= files <= units <= 200000:
         raise ValueError('Scale qualification requires 1,000Ã¢â‚¬â€œ5,000 synthetic units')
     seen = []
     def respond(request):
         body = json.loads(request.content)
         text = body['messages'][-1]['content']
         context = json.loads(text[text.index('{'):])
-        seen.append(context['unit']['unit_id'])
-        return httpx.Response(200, json={'message': {'content': json.dumps({
-            'unit_id': context['unit']['unit_id'], 'coverage': {'status': 'no_operations'}})},
+        items = context.get('items', [context])
+        if scenario == 'rate-limit' and not getattr(respond, 'throttled', False):
+            respond.throttled = True
+            return httpx.Response(429, headers={'Retry-After': '0'})
+        results = []
+        for item in items:
+            seen.append(item['unit']['unit_id'])
+            results.append({'unit_id': item['unit']['unit_id'], 'coverage': {'status': 'no_operations'}})
+        payload = {'items': results} if 'items' in context else results[0]
+        return httpx.Response(200, json={'message': {'content': json.dumps(payload)},
             'done_reason': 'stop', 'prompt_eval_count': 1, 'eval_count': 1})
     started = time.perf_counter()
     tracemalloc.start()
@@ -380,12 +387,29 @@ def evaluate_scale(units=1000):
         store = Store(directory)
         try:
             workspace = store.create_workspace('Synthetic continuation qualification')
-            Importer(store, workspace).files([('scale.sql', ''.join(f'select {i};\n' for i in range(units)).encode())], {'.sql'})
-            profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock', retries=0, context_chars=100000)
+            entries = [(f'scale/{i}.sql', ''.join(f'select {j};\n' for j in range(i, units, files)).encode())
+                       for i in range(files)]
+            if scenario == 'mixed':
+                if files < 3:
+                    raise ValueError('Mixed qualification requires at least three source files')
+                entries = []
+                for i in range(files - 1):
+                    statements = [j for j in range(i, units - 1, files - 1)]
+                    code = ''.join(f'proc sql; select {j}; quit;\n' if i == 0 else f'select {j};\n' for j in statements)
+                    entries.append((f'scale/{i}.sas' if i == 0 else f'scale/{i}.sql', code.encode()))
+                Importer(store, workspace).files(entries, {'.sql', '.sas'})
+                Importer(store, workspace).files([('dbt/dbt_project.yml', b'name: benchmark'),
+                    ('dbt/models/base.sql', b'select 1 as id')], set(), source_kind='dbt')
+            else:
+                Importer(store, workspace).files(entries, {'.sql'})
+            profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock', retries=1 if scenario == 'rate-limit' else 0, context_chars=100000, max_tokens=64 if scenario == 'scale' else 8192)
             store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', workspace, 'mock', profile.model_dump_json()])
             store.set_setting(workspace, 'default_profile', 'p')
             store.set_setting(workspace, 'max_context_chars', 100000)
-            request = AnalysisRequest(mode='hybrid', max_provider_attempts=100)
+            store.set_setting(workspace, 'llm_concurrency', 4)
+            request = AnalysisRequest(mode='hybrid', max_provider_attempts=100 if scenario == 'recovery' else 2000,
+                auto_continue=scenario != 'recovery', max_files_per_request=max_files_per_request,
+                max_parallel_requests=max_parallel_requests)
             preview = preview_analysis(store, workspace, request)
             while True:
                 report = run_analysis(store, workspace, request, transport=httpx.MockTransport(respond))
@@ -401,14 +425,14 @@ def evaluate_scale(units=1000):
                 # Reopen the actual durable store between bounded executions.
                 store.close()
                 store = Store(directory)
-                request = AnalysisRequest(mode='hybrid', max_provider_attempts=100, resume_run_id=report.run_id)
+                request = request.model_copy(update={'resume_run_id': report.run_id})
             _, peak = tracemalloc.get_traced_memory()
             max_record = store.rows('SELECT max(octet_length(encode(result))) AS n FROM ai_analysis_units')[0]['n']
             if not (len(seen) == len(set(seen)) == units == report.counts['processed']):
                 raise ValueError('Scale unit coverage mismatch or repeated request')
             if peak > 512 * 1024 * 1024 or max_record > 16 * 1024 * 1024:
                 raise ValueError('Scale qualification exceeded its measured memory or record bound')
-            return {'synthetic_units': units, 'executions': executions, 'requests': len(seen),
+            return {'synthetic_units': units, 'source_files': files, 'scenario': scenario, 'executions': executions, 'requests': report.counts['requests'],
                 'unique_requested_units': len(set(seen)), 'processed': report.counts['processed'],
                 'initial_selected_units': preview['selected_units'], 'final_status': report.status,
                 'publication_count': len(store.rows('SELECT * FROM analysis_runs')),
@@ -422,6 +446,11 @@ def evaluate_scale(units=1000):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
+    parser.add_argument('--scenario', choices=['existing', 'mixed', 'rate-limit', 'recovery', 'scale'], default='existing')
+    parser.add_argument('--files', type=int, default=1)
+    parser.add_argument('--units', type=int)
+    parser.add_argument('--max-files-per-request', type=int)
+    parser.add_argument('--max-parallel-requests', type=int)
     parser.add_argument('--scale-units', type=int, help='Exercise 1,000Ã¢â‚¬â€œ5,000 synthetic units through mock transport and durable continuation')
     parser.add_argument('--cases', nargs='+', help='Explicit checked-in fixture IDs; required with --live')
     parser.add_argument('--predictions', type=Path)
@@ -434,10 +463,12 @@ def main(argv=None):
     try:
         report = evaluate(predictions=args.predictions, live=args.live, key_env=args.key_env,
                           max_attempts=args.max_attempts, max_seconds=args.max_seconds, case_ids=args.cases)
-        if args.scale_units:
+        if args.scale_units or args.units or args.scenario != 'existing':
             if args.live:
                 raise ValueError('Scale qualification never uses live providers')
-            report['scale'] = evaluate_scale(args.scale_units)
+            report['scale'] = evaluate_scale(args.scale_units or args.units or 1000, files=args.files,
+                max_files_per_request=args.max_files_per_request, max_parallel_requests=args.max_parallel_requests,
+                scenario=args.scenario if args.scenario != 'existing' else 'scale')
         if args.project_gold:
             report['offline_project_gold'] = evaluate_projects()
     except (ValueError, OSError, KeyError) as exc:

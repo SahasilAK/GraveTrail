@@ -8,6 +8,24 @@ HARD_LIMITS = {'max_provider_attempts': 2000, 'max_output_tokens_total': 2000000
 MIN_LIMITS = {'max_provider_attempts': 1, 'max_output_tokens_total': 1000, 'max_seconds': 30}
 
 
+def resolve_project_allowance(bundles, request):
+    """Freeze a batch-independent lifetime allowance, separate from execution caps.
+
+    Reserve one repair and two resolution rounds per singleton. Review bundles
+    are already included by the caller. No enlargement after dispatch begins.
+    """
+    totals = tuple(sum(bundle[i] for bundle in bundles) for i in range(3))
+    result = {'extraction_attempts': totals[0], 'bounded_extra_rounds': 3}
+    for key, total in zip(HARD_LIMITS, totals):
+        ceiling = max(MIN_LIMITS[key], ceil(total * 4))
+        field = 'project_' + key
+        limit = type(request).model_fields[field].metadata[-1].le
+        if ceiling > limit:
+            raise ValueError('project_allowance_exceeds_application_limit')
+        result[key] = getattr(request, field) or ceiling
+    return result
+
+
 @dataclass(frozen=True)
 class TokenEstimate:
     upper_bound: int

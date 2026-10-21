@@ -57,3 +57,5 @@ billable resume after owner restart. Exact profile bindings isolate shared crede
 Project preview/start accept nullable automatic execution limits, pinned `resume_run_id` and explicit `retry_unknown`. Actual HTTP SDK regression covers bounded start, poll and continuation; resumed parser-default entry routes to the original AI mode with source/network checks.
 
 Job journals add created_at/started_at/stage_started_at/finished_at epoch times. Heartbeats preserve stage timers; terminal completion freezes elapsed time. Legacy journals remain readable; no source/credential timer metadata.
+
+AI build/preview share nullable files/request and parallel maxima, auto continuation, lifetime attempts/output/seconds and existing execution/resume/retry fields across CLI/MCP/UI. Permissions remain source/network gated.

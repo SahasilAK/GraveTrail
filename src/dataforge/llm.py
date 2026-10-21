@@ -93,6 +93,7 @@ class Profile(BaseModel):
     context_chars: int = Field(default=16000, ge=500, le=200000)
     temperature: float | None = Field(default=None, ge=0, le=2)
     structured: bool = True
+    quota_group: str = Field(default='', max_length=100, pattern=r'^[A-Za-z0-9_.-]*$')
     api_version: str = "2024-10-21"
     model_capabilities: ModelCapabilities | None = None
     context_mode: Literal['automatic', 'custom'] = 'custom'
@@ -182,7 +183,7 @@ class GroundedResponse(BaseModel):
 class ProviderError(Exception):
     """Describe a provider failure and whether retrying may succeed."""
 
-    def __init__(self, message: str, retryable: bool=False) -> None:
+    def __init__(self, message: str, retryable: bool=False, *, unknown: bool=False) -> None:
         """Create a provider error with its retryability flag.
 
         Args:
@@ -190,6 +191,7 @@ class ProviderError(Exception):
             retryable: Whether the failed operation may be retried."""
         super().__init__(message)
         self.retryable = retryable
+        self.unknown = unknown
 
 
 def response_object(text: str) -> dict[str, Any]:
@@ -221,7 +223,7 @@ def response_object(text: str) -> dict[str, Any]:
 class Adapter:
     """Send non-streaming requests to a configured model provider."""
 
-    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None) -> None:
+    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True) -> None:
         """Create an HTTP client for the profile and current cancellation source.
 
         Args:
@@ -236,6 +238,9 @@ class Adapter:
         self.before_attempt = before_attempt
         self.check = check
         self.completion_metadata = {}
+        self.response_observer = response_observer
+        self.wait = wait or self._wait
+        self.retry_unknown_transports = retry_unknown_transports
         self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
 
     def __enter__(self) -> Adapter:
@@ -288,18 +293,44 @@ class Adapter:
             if self.cancelled and self.cancelled():
                 raise ProviderError("AI request cancelled; no further retries")
             try:
-                headers = self._headers()
-                # Keep sent credentials local through sanitization if another session rotates the environment.
-                request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
-                    if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
                 timeout = self.before_attempt(self.profile) if self.before_attempt else self.profile.timeout
                 if self.check:
                     self.check()
+                # Admission can wait: resolve credentials only at the disclosure boundary.
+                headers = self._headers()
+                request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
+                    if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
                 with self.client.stream(method, self.profile.base_url + path, headers=headers, json=payload,
                                         timeout=timeout or self.profile.timeout) as response:
+                    if self.response_observer:
+                        from dataforge.ai_rate_limits import normalize_rate_limits
+                        self.response_observer(response.status_code,
+                            normalize_rate_limits(self.profile.provider, dict(response.headers), now=time.time()))
+                    category = ''
+                    if response.status_code == 429:
+                        chunks, total = [], 0
+                        for chunk in response.iter_bytes():
+                            total += len(chunk)
+                            if total > 65536:
+                                break
+                            chunks.append(chunk)
+                        try:
+                            error = json.loads(b''.join(chunks)).get('error', {})
+                            code = error.get('code', '') if isinstance(error, dict) else ''
+                            if code in {'insufficient_quota', 'credit_balance_too_low', 'billing_hard_limit_reached'}:
+                                category = 'provider_credits_exhausted'
+                            elif code in {'daily_quota_exceeded', 'daily_limit_exceeded'}:
+                                category = 'provider_daily_quota_exhausted'
+                            elif isinstance(error, dict) and any('perday' in str(item).lower() for item in error.get('details', [])):
+                                category = 'provider_daily_quota_exhausted'
+                        except (ValueError, TypeError, AttributeError):
+                            pass
+                    if category:
+                        raise ProviderError(category)
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < self.profile.retries:
-                            time.sleep(.25 * (attempt + 1))
+                            from dataforge.ai_rate_limits import retry_delay
+                            self.wait(retry_delay(attempt, dict(response.headers), now=time.time()))
                             continue
                     if response.status_code >= 300:
                         raise ProviderError(f"Provider request failed (HTTP {response.status_code})",
@@ -322,10 +353,21 @@ class Adapter:
                     except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
             except httpx.TransportError:
+                if not self.retry_unknown_transports:
+                    raise ProviderError('Provider response outcome is unknown', unknown=True) from None
                 if attempt >= self.profile.retries:
                     raise ProviderError("Provider connection failed or timed out", True) from None
-                time.sleep(.25 * (attempt + 1))
+                self.wait(min(60, 2 ** attempt))
         raise ProviderError("Provider request failed")
+
+    def _wait(self, seconds):
+        until = time.monotonic() + seconds
+        while time.monotonic() < until:
+            if self.check:
+                self.check()
+            if self.cancelled and self.cancelled():
+                raise ProviderError('AI request cancelled; no further retries')
+            time.sleep(min(.2, max(0, until - time.monotonic())))
 
     def complete(self, system: str, user: str) -> tuple[str, dict]:
         """Submit a system and user prompt using the provider's chat protocol.
@@ -886,7 +928,7 @@ def _analysis_schema_text(task: str) -> str:
     return json.dumps(_transmitted_schema(wire_schema(task)), sort_keys=True, separators=(',', ':'))
 
 
-def analysis_prompt_hash(task: str, *, focused: bool=False) -> str:
+def analysis_prompt_hash(task: str, *, focused: bool=False, source_kind: str='sql') -> str:
     """Hash the system prompt, focus instructions, and transmitted schema.
 
     Args:
@@ -901,6 +943,10 @@ def analysis_prompt_hash(task: str, *, focused: bool=False) -> str:
     focus_path = PROMPTS/task/'focus.md'
     if focused and focus_path.exists():
         system += '\n' + focus_path.read_text(encoding='utf-8')
+    if task == 'project_lineage':
+        handler = PROMPTS / task / (source_kind + '.md')
+        if handler.exists():
+            system += '\n' + handler.read_text(encoding='utf-8')
     return hashlib.sha256((system + template + _analysis_schema_text(task)).encode()).hexdigest()
 
 
@@ -925,11 +971,18 @@ def analysis_prompt(unit: AnalysisUnit, task: str, execution: Any, *, reserve_re
     template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
     schema_text = _analysis_schema_text(task)
     schema = json.loads(schema_text)
-    digest = analysis_prompt_hash(task, focused=bool(unit.focus))
+    digest = analysis_prompt_hash(task, focused=bool(unit.focus), source_kind=unit.source_kind)
     if unit.focus and (PROMPTS/task/'focus.md').exists():
         system += '\n' + (PROMPTS/task/'focus.md').read_text(encoding='utf-8')
+    if task == 'project_lineage':
+        handler = PROMPTS / task / (unit.source_kind + '.md')
+        if handler.exists():
+            system += '\n' + handler.read_text(encoding='utf-8')
     context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
                'schema':schema,'schema_version':PROJECT_PROTOCOLS[task][0]}
+    if getattr(execution, 'resolution_context', None):
+        system += '\n' + (PROMPTS / 'project_resolution' / 'system.md').read_text(encoding='utf-8')
+        context['resolution'] = execution.resolution_context
     if task == 'project_lineage':
         from dataforge.ai_citations import source_references
         context['expression_references'] = [
@@ -1070,13 +1123,20 @@ def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task:
                     raise ValueError('External LLM requests are disabled')
                 if not store.setting(workspace,'allow_full_source',False):
                     raise ValueError('Complete source transmission is disabled')
+            from dataforge.ai_rate_limits import QUOTAS, quota_scope
+            wait_until = QUOTAS.admit(quota_scope(active_profile), estimated_input=allowance.estimated_input,
+                reserved_output=active_profile.max_tokens, now=time.time())
+            if wait_until > time.time():
+                execution.wait_provider(wait_until - time.time())
             return execution.before_attempt(active_profile)
 
         try:
             resources = LLMResourceSettings.model_validate({k:store.setting(workspace,k,v)
                 for k,v in LLMResourceSettings().model_dump().items()})
             with connection_scope(manager), request_slot(store.home,workspace,resources.llm_concurrency), Adapter(
-                    profile,execution.transport,cancelled=execution.cancelled,before_attempt=before_attempt,check=execution.check) as adapter:
+                    profile,execution.transport,cancelled=execution.cancelled,before_attempt=before_attempt,check=execution.check,
+                    wait=execution.wait_provider, retry_unknown_transports=False,
+                    response_observer=lambda status, limits: _observe_quota(profile, limits)) as adapter:
                 send_user = manager.redact(user) if store.setting(workspace,'redact_secrets',True) else user
                 raw,usage = adapter.complete(system,send_user)
                 metadata = adapter.completion_metadata
@@ -1128,3 +1188,8 @@ def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task:
         if not retryable:
             return result
     return result
+
+
+def _observe_quota(profile, limits):
+    from dataforge.ai_rate_limits import QUOTAS, quota_scope
+    QUOTAS.observe(quota_scope(profile), limits)

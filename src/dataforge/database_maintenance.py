@@ -17,7 +17,7 @@ import duckdb
 
 from dataforge.cleanup import WORKSPACE_TABLES, checked_path, maintenance_guard
 from dataforge.dbt.persistence import DBT_TABLES
-from dataforge.store import AI_ANALYSIS_TABLES, AI_SNAPSHOT_TABLES, COLUMN_TABLES
+from dataforge.store import AI_ANALYSIS_TABLES, AI_PIPELINE_TABLES, AI_SNAPSHOT_TABLES, COLUMN_TABLES
 
 MAX_BACKUP_BYTES = 512 * 1024 * 1024
 MAX_FILES = 50000
@@ -57,11 +57,16 @@ def _inspect_database(home: Path, rows: Any) -> dict[str, Any]:
     """
     versions = [r['version'] for r in rows('SELECT version FROM schema_migrations ORDER BY version')]
     workspace_tables = tuple(t for t in WORKSPACE_TABLES
-        if (8 in versions or t not in DBT_TABLES) and (7 in versions or t not in AI_SNAPSHOT_TABLES) and (5 in versions or t not in COLUMN_TABLES) and (6 in versions or t not in AI_ANALYSIS_TABLES))
+        if (9 in versions or t not in AI_PIPELINE_TABLES) and (8 in versions or t not in DBT_TABLES) and (7 in versions or t not in AI_SNAPSHOT_TABLES) and (5 in versions or t not in COLUMN_TABLES) and (6 in versions or t not in AI_ANALYSIS_TABLES))
     tables = {}
     for table in (*workspace_tables, 'parse_cache', 'prompt_versions'):
         tables[table] = rows(f'SELECT count(*) AS n FROM {table}')[0]['n']
     orphaned = {}
+    if 9 in versions:
+        for table in AI_PIPELINE_TABLES:
+            orphaned[table + '_run'] = rows(f'''SELECT count(*) AS n FROM {table} p
+                LEFT JOIN ai_analysis_runs r ON p.run_id=r.run_id AND p.workspace_id=r.workspace_id
+                WHERE r.run_id IS NULL''')[0]['n']
     for table in workspace_tables:
         if table in {'workspaces', 'settings'}:
             continue
@@ -121,7 +126,7 @@ def _inspect_database(home: Path, rows: Any) -> dict[str, Any]:
         path = checked_path(home, 'blobs/' + digest)
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             missing.append(digest)
-    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 6], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 6, 7], [1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 6, 7, 8]),
+    return {'ok': not any(orphaned.values()) and not missing and versions in ([1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 6], [1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 6, 7], [1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 6, 7, 8], list(range(1, 10)), [1, 2, 3, 4, 6, 7, 8, 9]),
             'schema_versions': versions, 'records': tables, 'orphan_records': orphaned,
             'missing_or_invalid_blobs': missing, 'database_bytes': (home / 'dataforge.duckdb').stat().st_size}
 
@@ -319,13 +324,15 @@ def _restore_backup(archive_path: str | Path, destination: str | Path) -> Path:
         connection = duckdb.connect(str(database), read_only=True, config={'enable_external_access': False})
         try:
             versions = connection.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()
-            if versions not in ([(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)],
+            if versions not in ([(i,) for i in range(1, 10)], [(1,), (2,), (3,), (4,), (6,), (7,), (8,), (9,)], [(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)],
                                 [(1,), (2,), (3,), (4,), (6,)], [(1,), (2,), (3,), (4,), (5,), (6,)],
                                 [(1,), (2,), (3,), (4,), (5,), (6,), (7,)], [(1,), (2,), (3,), (4,), (6,), (7,)],
                                 [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)],
                                 [(1,), (2,), (3,), (4,), (6,), (7,), (8,)]):
                 raise ValueError('Unsupported backup schema')
             for table in WORKSPACE_TABLES:
+                if (9,) not in versions and table in AI_PIPELINE_TABLES:
+                    continue
                 if (8,) not in versions and table in DBT_TABLES:
                     continue
                 if (7,) not in versions and table in AI_SNAPSHOT_TABLES:

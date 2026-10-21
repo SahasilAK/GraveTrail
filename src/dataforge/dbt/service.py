@@ -85,12 +85,10 @@ def is_dbt(metadata):
     return json.loads(metadata.get('metadata') or '{}').get('source_kind') == 'dbt'
 
 
-def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled=None):
-    files = [m for m in store.files(workspace) if is_dbt(m)]
+def discover_dbt_snapshots(files, read_source, stored_settings):
     by_id = {m['file_id']: m for m in files}
-    stored_settings = store.setting(workspace, 'dbt', {})
     settings = DbtSettings.model_validate(stored_settings)
-    snapshots = discover_projects(source_refs(files), lambda ref: store.snapshot_content(by_id[ref.file_id]), settings=settings)
+    snapshots = discover_projects(source_refs(files), read_source, settings=settings)
     if 'mode' not in stored_settings:
         from dataclasses import replace
 
@@ -102,6 +100,14 @@ def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled
             adjusted.append(replace(snapshot, context=replace(snapshot.context, mode=mode),
                                     fingerprint=stable_id(snapshot.fingerprint, mode)))
         snapshots = tuple(adjusted)
+    return snapshots
+
+
+def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled=None):
+    files = [m for m in store.files(workspace) if is_dbt(m)]
+    by_id = {m['file_id']: m for m in files}
+    stored_settings = store.setting(workspace, 'dbt', {})
+    snapshots = discover_dbt_snapshots(files, lambda ref: store.snapshot_content(by_id[ref.file_id]), stored_settings)
     previous = {r.snapshot.project_id: r for r in load_committed_dbt_results(store, workspace)}
     projects, analyzed, cached = [], 0, 0
     for snapshot in snapshots:
@@ -133,8 +139,3 @@ def dbt_settings_current(store, workspace):
     settings = DbtSettings.model_validate(store.setting(workspace, 'dbt', {})).model_dump()
     return all(json.loads(row['context_json']).get('settings') == settings
                for row in store.rows('SELECT context_json FROM dbt_projects WHERE workspace_id=?', [workspace]))
-
-
-def reject_dbt_ai(store, workspace, file_ids=None):
-    if any(is_dbt(m) and (file_ids is None or m['file_id'] in file_ids) for m in store.files(workspace)):
-        raise ValueError('dbt projects currently require parser analysis; AI/hybrid dbt analysis is unsupported')

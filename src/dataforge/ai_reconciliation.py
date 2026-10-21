@@ -5,7 +5,13 @@ import json
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 
-from dataforge.ai_analysis_models import EvidenceCitation, NormalizedFact, ValidationContext, ValidationReport
+from dataforge.ai_analysis_models import (
+    DerivationInput,
+    EvidenceCitation,
+    NormalizedFact,
+    ValidationContext,
+    ValidationReport,
+)
 from dataforge.ai_validation import _detail, expression_key, operation_contexts
 from dataforge.models import AssetRef, Operation, ParseResult, Usage, canonical, stable_id
 
@@ -58,7 +64,9 @@ def normalize_parser_facts(parsed, context):
             fact = NormalizedFact(kind="derivation", table=record["target_table"], column=record["target_column"],
                                   expression=record["expression"], scope=record.get("scope", ""),
                                   branch=record.get("branch", 0), version=record.get("target_version", ""),
-                                  ordinal=record.get("ordinal", 0), inputs=record["inputs"],
+                                  ordinal=record.get("ordinal", 0),
+                                  inputs=[{k: v for k, v in item.items() if k in DerivationInput.model_fields}
+                                          for item in record["inputs"]],
                                   status=record.get("status", "unresolved"), **common)
             fact.detail = {**fact.detail, "derivation": record.copy()}
             facts.append(fact)

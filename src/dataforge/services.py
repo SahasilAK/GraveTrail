@@ -459,7 +459,7 @@ def _restore_ai_results(store: Store, workspace: str, results: list[tuple[dict[s
 
     accepted = load_accepted_file_results(store, workspace, config)
     for index, (metadata, parsed) in enumerate(results):
-        if metadata['file_id'] in accepted and parsed.metadata.get('source_kind') != 'dbt':
+        if metadata['file_id'] in accepted:
             results[index] = accepted[metadata['file_id']]
     restore_manual_ai_results(store, workspace, results, config)
 

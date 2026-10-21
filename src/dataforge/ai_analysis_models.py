@@ -24,6 +24,12 @@ class AnalysisRequest(StrictModel):
     max_provider_attempts: int | None = Field(default=None, ge=1, le=2000)
     max_output_tokens_total: int | None = Field(default=None, ge=1000, le=2000000)
     max_seconds: int | None = Field(default=None, ge=30, le=14400)
+    max_files_per_request: int | None = Field(default=None, ge=1, le=100)
+    max_parallel_requests: int | None = Field(default=None, ge=1, le=4)
+    auto_continue: bool = True
+    project_max_provider_attempts: int | None = Field(default=None, ge=1, le=100000000)
+    project_max_output_tokens_total: int | None = Field(default=None, ge=1000, le=1000000000000)
+    project_max_seconds: int | None = Field(default=None, ge=30, le=31536000)
 
     resume_run_id: str = Field(default='', max_length=100)
     retry_unknown: bool = False
@@ -52,7 +58,8 @@ class AnalysisUnit(StrictModel):
     file_id: Name
     content_hash: Name
     path: str = Field(max_length=4000)
-    extension: Literal['.sql', '.sas']
+    extension: Literal['.sql', '.sas', '.py', '.json']
+    source_kind: Literal['sql', 'sas', 'dbt'] = 'sql'
     job_id: str = Field(default='', max_length=500)
     first: int = Field(ge=1)
     last: int = Field(ge=1)
@@ -254,6 +261,8 @@ class ValidationReport(StrictModel):
     unresolved: list[ClaimDecision] = Field(default_factory=list)
     coverage: Coverage = Field(default_factory=Coverage)
     reviewed_candidates: list[Name] = Field(default_factory=list)
+    resolution_rounds: int = Field(default=0, ge=0, le=2)
+    resolution_done: bool = False
 
 
 class ReconciliationReport(StrictModel):

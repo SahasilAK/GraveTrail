@@ -57,7 +57,7 @@ exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*
 
 [tool.hatch.build.targets.sdist]
 include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "/dependency-overrides.txt", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
-exclude = ["docs/prompts/**", "docs/plans/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
+exclude = ["docs/prompts/**", "docs/plans/**", "docs/superpowers/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]
 ".streamlit/config.toml" = ".streamlit/config.toml"

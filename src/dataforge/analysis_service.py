@@ -30,7 +30,7 @@ from dataforge.ai_analysis_store import (
     save_unit_result,
     save_validation_checkpoint,
 )
-from dataforge.ai_budget import execution_budget
+from dataforge.ai_budget import execution_budget, resolve_project_allowance
 from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_analysis
 from dataforge.ai_validation import VALIDATOR_VERSION
 from dataforge.ai_wire import decode_project_result, encode_project_result
@@ -89,6 +89,13 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
     execution = AIExecutionContext(request, connections=connections or current_connections(),
         cancelled=cancelled, transport=transport, settings=prepared.settings, authorize=authorize,
         source_hashes={s.file_id: s.content_hash for s in prepared.sources})
+    from dataforge.llm import analysis_routes
+    try:
+        execution.cache_identity = [{k: getattr(profile, k) for k in
+            ('provider', 'base_url', 'model', 'max_tokens', 'output_mode', 'temperature', 'structured')}
+            for _, profile in analysis_routes(store, workspace, 'project_lineage')]
+    except ValueError:
+        execution.cache_identity = []
     from dataforge.ai_semantic import (
         projection_count,
         split_proc_sql_unit,
@@ -136,6 +143,8 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         execution.review_candidates = []
         context_hash = _unit_context_hash(prepared, plan, execution, unit, expected)
         checkpoint = load_validation_checkpoint(store, workspace, request.resume_run_id, unit, context_hash) if request.resume_run_id else None
+        if not checkpoint and not request.refresh_ai:
+            checkpoint = _prior_checkpoint(store, workspace, unit, context_hash, request)
         cached = None if request.refresh_ai else _cached(store, workspace, unit, context_hash)
         tasks=[]
         if not checkpoint and cached is None:
@@ -179,6 +188,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
     execution.review_candidates=[]
     budget=execution_budget(bundles,**{k:getattr(request,k) for k in
         ('max_provider_attempts','max_output_tokens_total','max_seconds')})
+    budget['project_allowance'] = resolve_project_allowance(bundles, request)
     execution.request=request.model_copy(update=budget['effective'])
     selected_stages=budget['selected_units']
     if bundles and (not selected_stages or (selected_stages<len(bundles)
@@ -211,17 +221,22 @@ def preview_analysis(store, workspace, request, *, connections=None, progress=No
     return _prepare(store, workspace, request, connections, preparation_progress=progress)[3]
 
 
-def _current(store, workspace, prepared, expected_revision):
-    current = prepare_analysis(store, workspace, prepared.request)
-    if (current.manifest_hash != prepared.manifest_hash or current.prior_revision != prepared.prior_revision
+def _current(store, workspace, prepared, expected_revision, *, full=False):
+    from dataforge.ai_context import inventory_revision
+    prior = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+    if (inventory_revision(store, workspace) != prepared.inventory_revision
+            or (prior[0]['run_id'] if prior else '') != prepared.prior_revision
             or _state_revision(store, workspace) != expected_revision):
+        raise ValueError('source_or_configuration_changed')
+    if full and prepare_analysis(store, workspace, prepared.request).manifest_hash != prepared.manifest_hash:
         raise ValueError('source_or_configuration_changed')
 
 
 def _unit_context_hash(prepared, plan, execution, unit, expected_revision):
-    prompt_hash = analysis_prompt_hash('project_lineage',focused=bool(unit.focus))
-    return _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
-        'prompt': prompt_hash, 'settings_revision': expected_revision,
+    prompt_hash = analysis_prompt_hash('project_lineage',focused=bool(unit.focus), source_kind=unit.source_kind)
+    return _hash({'source': unit.model_dump(exclude={'code'}), 'context': plan.context_for(unit),
+        'model_routes': getattr(execution, 'cache_identity', []),
+        'settings': prepared.settings, 'prompt': prompt_hash,
         'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION, 'mode': prepared.request.mode})
 
 
@@ -240,7 +255,7 @@ def _resume_request(store, workspace, request):
         raise ValueError('Continuation source selection is pinned')
     if request.mode not in {'parser', saved['mode']}:
         raise ValueError('Continuation analysis mode is pinned')
-    return AnalysisRequest.model_validate({**saved, **{k: getattr(request, k) for k in
+    return AnalysisRequest.model_validate({**{'auto_continue': False}, **saved, **{k: getattr(request, k) for k in
         ('max_provider_attempts', 'max_output_tokens_total', 'max_seconds', 'resume_run_id', 'retry_unknown')}})
 
 
@@ -262,6 +277,20 @@ def _cached(store, workspace, unit, context_hash):
         return result
     except ValueError:
         return None
+
+
+def _prior_checkpoint(store, workspace, unit, context_hash, request):
+    rows = store.rows('''SELECT u.run_id FROM ai_analysis_units u JOIN ai_analysis_runs r
+        ON u.run_id=r.run_id AND u.workspace_id=r.workspace_id WHERE u.workspace_id=?
+        AND u.unit_id=? AND u.context_hash=? AND u.status IN ('validated','staged')
+        ORDER BY r.created_at DESC LIMIT 1''', [workspace, unit.unit_id, context_hash])
+    if not rows:
+        return None
+    checkpoint = load_validation_checkpoint(store, workspace, rows[0]['run_id'], unit, context_hash)
+    if checkpoint:
+        report, _, record, cache = checkpoint
+        reviewed = not request.additional_ai_review or all(f.candidate_id in report.reviewed_candidates for f in report.accepted)
+        return report, reviewed, record, cache
 
 
 def run_analysis(store, workspace, request, *, connections=None, authorize=None,
@@ -305,11 +334,28 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 if pin != {'manifest': prepared.manifest_hash, 'revision': expected_revision,
                            'prior': prepared.prior_revision, 'protocol': _protocol_hash()}:
                     raise ValueError('source_or_configuration_changed')
-                if prior_summary.get('inflight') and not request.retry_unknown:
+                from dataforge.ai_pipeline_store import recover_pipeline
+                unknown = recover_pipeline(store, workspace, run_id)['unknown']
+                from dataforge.ai_rate_limits import QUOTAS
+                for attempt in store.rows('SELECT details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=?', [workspace, run_id]):
+                    details = json.loads(attempt['details'])
+                    if details.get('limits') and details.get('quota_scope'):
+                        QUOTAS.observe(details['quota_scope'], details['limits'])
+                if (prior_summary.get('inflight') or unknown) and not request.retry_unknown:
                     return AnalysisReport(run_id=run_id, mode=request.mode, status='awaiting_continuation',
                         reasons=['unknown_inflight_request_requires_explicit_retry'])
+                if request.retry_unknown:
+                    for attempt in unknown:
+                        store.execute("UPDATE ai_analysis_attempts SET status='retry_authorized' WHERE attempt_id=?", [attempt['attempt_id']])
             execution.prior_requests = prior_summary.get('counts', {}).get('requests', 0)
             execution.prior_reserved = prior_summary.get('counts', {}).get('reserved_output_tokens', 0)
+            if request.resume_run_id:
+                from dataforge.ai_pipeline_store import attempt_totals
+                journal_requests, journal_reserved = attempt_totals(store, workspace, run_id)
+                execution.prior_requests = max(execution.prior_requests, journal_requests)
+                execution.prior_reserved = max(execution.prior_reserved, journal_reserved)
+            execution.project_allowance = prior_summary.get('project_allowance', preview['project_allowance'])
+            execution.prior_seconds = prior_summary.get('active_seconds', 0)
             counts['input_tokens'] = prior_summary.get('counts', {}).get('input_tokens', 0)
             counts['output_tokens'] = prior_summary.get('counts', {}).get('output_tokens', 0)
             counts['review_batches'] = prior_summary.get('counts', {}).get('review_batches', 0)
@@ -325,6 +371,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             if not preview['valid']:
                 raise ValueError('preflight_blocked: ' + ', '.join(sorted({x['reason'] for x in preview['blocked']})))
             context_ids = {c['file_id'] for c in plan.catalog if c.get('role') == 'declaration'}
+            context_ids.update(s.file_id for s in prepared.sources if s.source_kind == 'dbt')
             preserved_ids = {m['file_id'] for m in prepared.manifest} - {s.file_id for s in prepared.sources}
             context_sources = {(m['file_id'], m['content_hash']): m
                 for m in inherited_context_sources(store, workspace, preserved_ids)}
@@ -338,11 +385,22 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                          'pin': {'manifest': prepared.manifest_hash, 'revision': expected_revision,
                                  'prior': prepared.prior_revision, 'protocol': _protocol_hash()},
                          'counts': {**dict(counts), 'requests': execution.prior_requests,
-                                    'reserved_output_tokens': execution.prior_reserved}, 'inflight': False})
+                                    'reserved_output_tokens': execution.prior_reserved}, 'inflight': False,
+                         'project_allowance': execution.project_allowance})
             registered = True
             if not request.resume_run_id:
                 with store.transaction():
                     for unit in plan.units:
+                        from dataforge.ai_pipeline_store import save_context_dependencies
+                        dependencies = [{'file_id': unit.file_id, 'content_hash': unit.content_hash,
+                                         'kind': 'original', 'source_kind': unit.source_kind}]
+                        for entry in plan.context_for(unit):
+                            if entry.get('file_id'):
+                                dependencies.append({k: entry[k] for k in ('file_id', 'content_hash', 'name') if k in entry})
+                            for resource in entry.get('resources', []):
+                                dependencies.append({**resource['definition']['source'],
+                                    'lookup_key': resource['name'], 'scope': resource['project_id']})
+                        save_context_dependencies(store, workspace, run_id, unit.unit_id, dependencies)
                         save_unit_result(store,workspace,run_id,unit.unit_id,file_id=unit.file_id,
                             content_hash=unit.content_hash,start_char=unit.start_offset,end_char=unit.end_offset,
                             context_hash=_unit_context_hash(prepared,plan,execution,unit,expected_revision),status='planned',
@@ -355,6 +413,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         parser = {m['file_id']: p for m, p in local_results}
         rebuilt = {fid: ParseResult(diagnostics=list(p.diagnostics), metadata=dict(p.metadata))
                    for fid, p in parser.items() if fid in selected}
+        for fid, output in rebuilt.items():
+            if output.metadata.get('source_kind') == 'dbt':
+                output.assets = list(parser[fid].assets)
         sources = {s.file_id: s for s in prepared.sources}
         counts['units'] = len(plan.units)
         claims = []
@@ -363,6 +424,49 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         save_run(store, workspace, run_id, mode=request.mode, status=stage)
         from dataforge.ai_reconciliation import reconcile_candidates
         from dataforge.ai_validation import operation_contexts, validate_project_response
+
+        # Use the established single-request path when the user selects one worker
+        # and one file. Auto scales up after three initial singleton units.
+        optimized = ((request.max_parallel_requests or 1) > 1 or (request.max_files_per_request or 1) > 1
+                     or (request.max_files_per_request is None and len(plan.units) > 3))
+        if optimized:
+            from dataforge.ai_scheduler import run_pending_requests
+            hashes = {u.unit_id: _unit_context_hash(prepared, plan, execution, u, expected_revision) for u in plan.units}
+            pending = tuple(u for u in plan.units if not load_validation_checkpoint(store, workspace, run_id, u, hashes[u.unit_id])
+                and (request.refresh_ai or (_cached(store, workspace, u, hashes[u.unit_id]) is None
+                    and _prior_checkpoint(store, workspace, u, hashes[u.unit_id], request) is None)))
+            def accept_item(unit, response, record_id):
+                settings = dict(config)
+                from dataforge.services import source_dialect
+                metadata = next(m for m, _ in local_results if m['file_id'] == unit.file_id)
+                settings['dialect'] = source_dialect(metadata, config)
+                context = ValidationContext(unit=unit, workspace_id=workspace, source_text=sources[unit.file_id].code,
+                    settings=settings, catalog=plan.context_for(unit), parser_result=parser[unit.file_id])
+                validated = validate_project_response(response, context)
+                cacheable = (not validated.rejected and not validated.unresolved
+                             and validated.coverage.status in {'complete', 'no_operations'})
+                save_validation_checkpoint(store, workspace, run_id, unit, hashes[unit.unit_id], validated,
+                    reviewed=not request.additional_ai_review, record_id=record_id,
+                    cache={'wire_version': 2, 'payload': encode_project_result(response)} if cacheable else None,
+                    transaction=False)
+            def record_usage(outcome):
+                nonlocal usage_known
+                from types import SimpleNamespace
+                _usage(counts, SimpleNamespace(usage=outcome.usage))
+                usage_known &= bool(outcome.metadata.get('usage_known')) and not outcome.error
+                save_run(store, workspace, run_id, mode=request.mode, status='extracting',
+                    summary={'counts': {**dict(counts), 'requests': execution.prior_requests + execution.attempts,
+                        'reserved_output_tokens': execution.prior_reserved + execution.reserved_output_tokens},
+                        'usage_known': usage_known})
+            try:
+                run_pending_requests(store, workspace, run_id, pending, execution,
+                    contexts={u.unit_id: plan.context_for(u) for u in pending}, accept=accept_item,
+                    progress=progress, record_usage=record_usage)
+            except TimeoutError as exc:
+                if str(exc) not in {'execution_budget_reached', 'project_allowance_reached'}:
+                    raise
+                execution.pause_reason = str(exc)
+                return _pause(store, workspace, run_id, request, execution, counts, usage_known)
 
         for index, unit in enumerate(plan.units):
             execution.check()
@@ -377,6 +481,13 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 source_text=sources[unit.file_id].code, settings=settings, catalog=execution.catalog,
                 parser_result=parser[unit.file_id])
             checkpoint = load_validation_checkpoint(store, workspace, run_id, unit, context_hash)
+            if not checkpoint and not request.refresh_ai:
+                checkpoint = _prior_checkpoint(store, workspace, unit, context_hash, request)
+                if checkpoint:
+                    counts['cache_hits'] += 1
+                    saved, saved_reviewed, saved_record, saved_cache = checkpoint
+                    save_validation_checkpoint(store, workspace, run_id, unit, context_hash, saved,
+                        reviewed=saved_reviewed, record_id=saved_record, cache=saved_cache)
             record_id, reviewed, cache = None, False, None
             if checkpoint:
                 validated, reviewed, record_id, cache = checkpoint
@@ -404,6 +515,32 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated,
                     reviewed=reviewed, record_id=record_id, cache=cache)
                 _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
+            from dataforge.ai_resolution import apply_resolution, plan_resolution
+            resolution = plan_resolution(validated)
+            while resolution:
+                stage = 'resolving'
+                execution.resolution_context = resolution
+                trial = preview_analysis_routes(store, workspace, [unit], execution, tasks=['project_lineage'])
+                if any(not b['reason'].startswith('worst_case_') for b in trial['blocked']):
+                    validated.resolution_done = True
+                    break
+                if not _stage_ready(store, workspace, unit, 'project_lineage', execution):
+                    return _pause(store, workspace, run_id, request, execution, counts, usage_known)
+                _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'project_lineage')
+                update(.1 + .75 * index / max(1, len(plan.units)), 'Resolving targeted source uncertainty')
+                result = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
+                if result is None or result.outcome != 'validated' or result.result is None:
+                    raise ValueError('incomplete_resolution_response')
+                usage_known &= result.usage_known
+                _usage(counts, result)
+                validated, _ = apply_resolution(validated, validate_project_response(result.result, context))
+                counts['resolution_rounds'] += 1
+                cache = None
+                save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated,
+                    reviewed=reviewed, record_id=record_id, cache=cache)
+                _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
+                resolution = plan_resolution(validated)
+            execution.resolution_context = None
             parser_indexes = {id(op): i for i, op in enumerate(parser[unit.file_id].operations)}
             original_indexes[unit.file_id].update({key: parser_indexes[id(op)]
                 for op, _, _, key in operation_contexts(context, parser[unit.file_id], scoped=False)})
@@ -487,6 +624,17 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         results = [(m, rebuilt[m['file_id']] if m['file_id'] in rebuilt and m['extension'] != '.csv' else p)
                    for m, p in local_results]
         restore_manual_ai_results(store, workspace, results, config)
+        stage = 'linking'
+        update(.9, 'Linking saved table and column facts')
+        from dataforge.ai_linking import compose_dbt_publication, link_stored_facts, load_link_snapshot
+        from dataforge.ai_pipeline_store import save_link_checkpoint
+        link_hashes = {u.unit_id: _unit_context_hash(prepared, plan, execution, u, expected_revision) for u in plan.units}
+        linked = link_stored_facts(load_link_snapshot(store, workspace, run_id, plan.units, link_hashes),
+                                  case_sensitive=config.get('case_sensitive', False))
+        save_link_checkpoint(store, workspace, run_id, linked['fingerprint'], linked)
+        counts['link_conflicts'] = len(linked['unresolved'])
+        counts['coverage_gaps'] += len(linked['unresolved'])
+        local_counts['dbt_projects'] = compose_dbt_publication(local_counts.get('dbt_projects', []), results, mode=request.mode)
         stage = 'ready'
         execution.check()
         counts['requests'] = execution.prior_requests + execution.attempts
@@ -498,20 +646,24 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             reasons=['semantic_coverage_incomplete'] if counts['coverage_gaps'] else [])
         with store.analysis_lock, store.transaction():
             execution.check()
-            _current(store, workspace, prepared, expected_revision)
+            _current(store, workspace, prepared, expected_revision, full=True)
             published = publish_analysis_results(store, workspace, results, config, local_counts,
                                                  cancelled=cancelled)
             report.counts.update({k: published[k] for k in ('analyzed', 'cached', 'assets', 'edges')})
             save_claim_decisions(store, workspace, run_id, claims)
             attach_published_support(store, workspace, run_id, results, claims)
             save_run(store, workspace, run_id, mode=request.mode, status='committed',
-                analysis_run_id=published['run_id'], accepted_results=results, configuration=config,
+                analysis_run_id=published['run_id'], accepted_results=results,
+                configuration={**config, **({'dbt': prepared.settings['dbt']} if 'dbt' in prepared.settings else {})},
                 summary=report.model_dump())
         update(1., 'Publication complete')
         return report
     except (ValueError, OSError, TimeoutError, InterruptedError) as exc:
-        reason = 'cancelled' if isinstance(exc, InterruptedError) else (
-            'deadline_exceeded' if isinstance(exc, TimeoutError) else str(exc))
+        reason = 'cancelled' if isinstance(exc, InterruptedError) else str(exc)
+        if isinstance(exc, TimeoutError) and reason not in {'project_allowance_reached',
+                'provider_daily_quota_exhausted', 'provider_credits_exhausted',
+                'unknown_inflight_request_requires_explicit_retry'}:
+            reason = 'deadline_exceeded'
         reason = manager.redact(reason)[:500]
         status = 'awaiting_continuation' if isinstance(exc, TimeoutError) and registered else 'cancelled' if isinstance(exc, InterruptedError) else (
             'stale' if reason == 'source_or_configuration_changed' else 'blocked' if not registered else 'failed')
@@ -550,7 +702,10 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
 
 
 def _protocol_hash():
-    return _hash({'semantic_planning': 1, 'review_batching': 1,
+    from dataforge.llm import PROMPTS
+    return _hash({'semantic_planning': 2, 'review_batching': 1,
+        'resolution': (PROMPTS / 'project_resolution' / 'system.md').read_text(encoding='utf-8'),
+        'source_handlers': {kind: analysis_prompt_hash('project_lineage', source_kind=kind) for kind in ('sql', 'sas', 'dbt')},
         'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION,
         'prompts':{task:{'complete':analysis_prompt_hash(task),'focused':analysis_prompt_hash(task,focused=True)}
             for task in ('project_lineage','lineage_review')}})
@@ -565,6 +720,8 @@ def _clear_inflight(store, workspace, run_id, request, execution, counts, usage_
 
 
 def _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, task):
+    execution.journal_wait = lambda until: save_run(store, workspace, run_id, mode=request.mode,
+        status='waiting_provider', summary={'wait_until': until, 'active_seconds': execution.active_seconds})
     def journal():
         snapshot = dict(counts)
         snapshot['requests'] = execution.prior_requests + execution.attempts
@@ -583,8 +740,16 @@ def _stage_ready(store,workspace,unit,task,execution):
     attempts=max(execution.attempts,getattr(execution,'stage_attempts',0))+preview['max_provider_attempts']
     tokens=max(execution.reserved_output_tokens,getattr(execution,'stage_tokens',0))+preview['max_output_tokens_reserved']
     execution.check()
-    if attempts>execution.request.max_provider_attempts or tokens>execution.request.max_output_tokens_total:
+    allowance = getattr(execution, 'project_allowance', None)
+    if allowance and (execution.prior_requests + attempts > allowance['max_provider_attempts']
+            or execution.prior_reserved + tokens > allowance['max_output_tokens_total']):
+        execution.pause_reason = 'project_allowance_reached'
         return False
+    if attempts>execution.request.max_provider_attempts or tokens>execution.request.max_output_tokens_total:
+        if not execution.request.auto_continue:
+            return False
+        execution.rollover()
+        attempts, tokens = preview['max_provider_attempts'], preview['max_output_tokens_reserved']
     execution.stage_attempts,execution.stage_tokens=attempts,tokens
     return True
 
@@ -592,10 +757,13 @@ def _stage_ready(store,workspace,unit,task,execution):
 def _pause(store, workspace, run_id, request, execution, counts, usage_known):
     counts['requests'] = execution.prior_requests + execution.attempts
     counts['reserved_output_tokens'] = execution.prior_reserved + execution.reserved_output_tokens
-    counts['remaining'] = counts['units'] - counts['processed']
+    counts['checkpointed'] = store.rows("SELECT count(*) AS n FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status IN ('validated','staged')", [workspace, run_id])[0]['n']
+    counts['remaining'] = counts['units'] - counts['checkpointed']
     report = AnalysisReport(run_id=run_id, mode=request.mode, status='awaiting_continuation',
-        counts=dict(counts), usage_known=usage_known, reasons=['execution_budget_reached'])
-    save_run(store, workspace, run_id, mode=request.mode, status=report.status, summary=report.model_dump())
+        counts=dict(counts), usage_known=usage_known,
+        reasons=[getattr(execution, 'pause_reason', 'execution_budget_reached')])
+    save_run(store, workspace, run_id, mode=request.mode, status=report.status,
+        summary={**report.model_dump(), 'active_seconds': execution.active_seconds})
     return report
 
 

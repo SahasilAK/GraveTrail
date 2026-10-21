@@ -170,7 +170,7 @@ def test_actual_mcp_http_sdk_auto_budget_and_continuation(tmp_path, monkeypatch)
                         run_id = ''
                         for expected in ('awaiting_continuation', 'committed'):
                             job = await session.call_tool('start_lineage_analysis', {'workspace_id': w,
-                                'mode': 'hybrid', 'max_provider_attempts': 1, 'resume_run_id': run_id})
+                                'mode': 'hybrid', 'auto_continue': False, 'max_provider_attempts': 1, 'resume_run_id': run_id})
                             assert not job.isError, job
                             for _ in range(100):
                                 status = await session.call_tool('get_job_status', {'workspace_id': w,

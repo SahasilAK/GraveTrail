@@ -130,7 +130,7 @@ def test_validator_upgrade_invalidates_continuation_before_any_new_call(tmp_path
             execution.before_attempt(profile)
             return UnitAttemptResult(unit_id=unit.unit_id, task=task, result=ProjectLineageResponse(unit_id=unit.unit_id))
         monkeypatch.setattr('dataforge.analysis_service.invoke_analysis_unit', extract)
-        first = run_analysis(store, workspace, AnalysisRequest(mode='hybrid', max_provider_attempts=1))
+        first = run_analysis(store, workspace, AnalysisRequest(mode='hybrid', auto_continue=False, max_provider_attempts=1))
         assert first.status == 'awaiting_continuation'
         import dataforge.analysis_service as service
         monkeypatch.setattr(service, symbol, 'upgrade', raising=False)

@@ -50,3 +50,5 @@ Budget values have non-widget session storage so navigation cannot discard Custo
 `analysis_ai.py` preview identifies semantic source tasks, original-context projection paging and provisional review sizing. Existing Custom controls/Continue remain; the shared service owns per-batch checkpoints and final atomic publication.
 
 Provider request timeout accepts1–3600seconds without changing saved/default values. analysis_ai progress uses journal start/stage/finish timestamps for two-second total/wait elapsed refresh and frozen terminal duration; queued state stays distinct. Assistance/review/provider checks use native show_time spinners.
+
+`analysis_ai.py` now exposes files/request and parallel maxima immediately after enabling AI, separate execution and lifetime budgets, quota/unknown-outcome recovery and dbt project disclosure. `provider_settings.py` adds a non-secret shared quota-group label.

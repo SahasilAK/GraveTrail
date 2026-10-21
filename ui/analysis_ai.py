@@ -49,13 +49,20 @@ def _preview_with_status(store, workspace, request, status, activity, started):
 def controls(store, workspace, file_ids):
     if not st.checkbox('Use AI for analysis', key='ai_build_' + workspace):
         return None, True
+    max_files = st.number_input('Maximum files per request', 1, 100, value=None,
+        placeholder='Auto', key='ai_files_per_request_' + workspace,
+        help='An upper bound. Context size, output space and the 8-item safety cap may reduce a request.')
+    max_parallel = st.number_input('Maximum parallel requests', 1, 4, value=None,
+        placeholder='Auto', key='ai_parallel_requests_' + workspace,
+        help='Further limited by workspace concurrency, shared provider quotas and available request slots.')
     compare = st.checkbox('Compare with parser', value=True, key='ai_compare_' + workspace)
     review = st.checkbox('Additional AI review', key='ai_review_' + workspace)
     if not compare:
         st.warning('AI-generated mode is experimental. Unsupported claims remain unresolved; parser-only relationships are omitted.')
     refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
     base = dict(mode='hybrid' if compare else 'ai', file_ids=file_ids,
-                additional_ai_review=review, refresh_ai=refresh)
+                additional_ai_review=review, refresh_ai=refresh,
+                max_files_per_request=max_files, max_parallel_requests=max_parallel)
     status = st.status('Preparing AI analysis…', expanded=False)
     status.caption('Local preparation only. Model requests start when you choose Analyze.')
     activity = status.empty()
@@ -70,6 +77,8 @@ def controls(store, workspace, file_ids):
         return AnalysisRequest(**base), False
     overrides = {}
     with st.expander('AI request budget'):
+        base['auto_continue'] = st.checkbox('Automatically continue execution windows', value=True,
+            key='ai_auto_continue_' + workspace)
         def reset():
             for suffix in ('attempts', 'output', 'seconds'):
                 st.session_state.pop('ai_custom_' + suffix + '_' + workspace, None)
@@ -94,13 +103,24 @@ def controls(store, workspace, file_ids):
             value = st.number_input(label, low, high, step=step, key=key, on_change=edited)
             overrides[field] = value if custom else None
             st.caption(label + ': ' + ('Custom' if custom else 'Automatic'))
-        st.caption('Automatic values include retries, fallback and optional review. Each execution stays within application limits; larger projects continue explicitly. In-flight requests may already be billed.')
+        st.caption('These are per-execution limits. Larger builds continue automatically within the finite project allowance below. In-flight requests may already be billed.')
+        for field, label, low, high in [
+            ('project_max_provider_attempts', 'Project maximum provider attempts', 1, 100000000),
+            ('project_max_output_tokens_total', 'Project maximum reserved output tokens', 1000, 1000000000000),
+            ('project_max_seconds', 'Project maximum active seconds', 30, 31536000)]:
+            base[field] = st.number_input(label, low, high, value=None, placeholder='Auto', key=field + '_' + workspace)
     request = AnalysisRequest(**base, **overrides)
     try:
         preview = (_preview_with_status(store, workspace, request, status, activity, started)
-                   if any(value is not None for value in overrides.values()) else automatic)
+                   if any(value is not None for value in overrides.values()) or any(base.get(k) is not None
+                       for k in ('project_max_provider_attempts', 'project_max_output_tokens_total', 'project_max_seconds')) else automatic)
         st.caption(f"{preview['files']} selected files · {preview['units']} source tasks · "
                    f"at most {preview['max_provider_attempts']} provider attempts including retries and fallback.")
+        allowance = preview.get('project_allowance', {})
+        if allowance:
+            st.caption(f"Project lifetime allowance: {allowance['max_provider_attempts']:,} attempts · "
+                       f"{allowance['max_output_tokens_total']:,} reserved output tokens. "
+                       'Includes bounded repair and resolution work; reservation is not billed usage.')
         if preview.get('semantic_pages'):
             st.caption(f"{preview['semantic_pages']} projection tasks retain original shared SQL context and validate against the complete source.")
         if preview.get('review_sizing_provisional'):
@@ -109,7 +129,7 @@ def controls(store, workspace, file_ids):
             st.dataframe([{'Task': task, 'Provider': p['provider'], 'Model': p['model']}
                           for task, profiles in preview['routes'].items() for p in profiles],
                          hide_index=True, alt='Configured AI routes for this build')
-        st.caption('Selected SQL/SAS source and relevant declarations are sent to these routes. A local gateway such as OmniRoute may forward requests. AI additions remain inferred.')
+        st.caption('Selected SQL/SAS/dbt source and disclosed project context are sent to these routes. A local gateway such as OmniRoute may forward requests. AI additions remain inferred. Provider rate limits are learned separately from model context size.')
         if preview.get('excluded_routes'):
             names = {p['profile_id']: p['name'] for p in store.rows(
                 'SELECT profile_id,name FROM llm_profiles WHERE workspace_id=?', [workspace])}
@@ -118,7 +138,9 @@ def controls(store, workspace, file_ids):
             st.caption('Skipped fallback profiles: ' + '; '.join(name + ': ' + reason for name, reason in excluded))
 
         if preview.get('remaining_units'):
-            st.info(f"This execution covers {preview['selected_new_units']} units needing AI work; {preview['remaining_units']} continue later. The current graph remains until all units finish.")
+            st.info(f"This window covers up to {preview['selected_new_units']} units needing AI work; "
+                    f"{preview['remaining_units']} continue {'automatically' if request.auto_continue else 'when resumed'}. "
+                    'The current graph remains until all required units finish.')
         st.caption('Input estimates use conservative UTF-8 bytes plus framing and capacity headroom; reported usage is shown after execution.')
         if preview['blocked']:
             reasons = sorted({b['reason'] for b in preview['blocked']})
@@ -215,7 +237,8 @@ def report(store, workspace):
     result = analysis_report(store, workspace, selected, include_source=True)
     summary = result['summary']
     if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
-        unknown = bool(result['summary'].get('inflight'))
+        from dataforge.ai_pipeline_store import recover_pipeline
+        unknown = bool(result['summary'].get('inflight') or recover_pipeline(store, workspace, selected)['unknown'])
         retry = st.checkbox('Retry the unknown in-flight request (may incur a duplicate charge)', key='ai_retry_' + selected) if unknown else False
         limits = {}
         for suffix, field in [('attempts', 'max_provider_attempts'), ('output', 'max_output_tokens_total'), ('seconds', 'max_seconds')]:

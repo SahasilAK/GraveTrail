@@ -15,9 +15,11 @@ import duckdb
 
 from dataforge.configuration import WorkspaceIdentity
 
+AI_PIPELINE_TABLES = ('ai_analysis_attempts', 'ai_analysis_requests', 'ai_context_dependencies', 'ai_link_checkpoints')
+
 COLUMN_TABLES = ('column_dependencies', 'column_derivations', 'column_references', 'column_analysis')
 AI_SNAPSHOT_TABLES = ('ai_analysis_snapshots',)
-AI_ANALYSIS_TABLES = (*AI_SNAPSHOT_TABLES, 'analysis_fact_support', 'ai_analysis_claims', 'ai_analysis_units', 'ai_analysis_runs')
+AI_ANALYSIS_TABLES = (*AI_PIPELINE_TABLES, *AI_SNAPSHOT_TABLES, 'analysis_fact_support', 'ai_analysis_claims', 'ai_analysis_units', 'ai_analysis_runs')
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT current_timestamp);
@@ -130,6 +132,10 @@ class Store:
                 from dataforge.dbt.persistence import DBT_SCHEMA
                 self.db.execute(DBT_SCHEMA)
                 self.db.execute('INSERT INTO schema_migrations(version) VALUES (8)')
+            if (9,) not in versions:
+                from dataforge.ai_pipeline_store import PIPELINE_SCHEMA
+                self.db.execute(PIPELINE_SCHEMA)
+                self.db.execute('INSERT INTO schema_migrations(version) VALUES (9)')
 
     @contextmanager
     def transaction(self) -> Iterator[Store]:

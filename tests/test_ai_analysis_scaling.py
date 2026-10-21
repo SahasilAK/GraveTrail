@@ -279,7 +279,7 @@ def test_review_batches_resume_after_reopen_without_repeating_completed_batch(tm
     first = run_analysis(
         store,
         w,
-        AnalysisRequest(mode="ai", additional_ai_review=True, max_provider_attempts=2),
+        AnalysisRequest(mode="ai", auto_continue=False, additional_ai_review=True, max_provider_attempts=2),
         transport=transport,
     )
     assert first.status == "awaiting_continuation", first.reasons
@@ -376,7 +376,7 @@ def test_wide_query_real_transport_preserves_every_projection_and_one_writer(tmp
         )
 
     transport = httpx.MockTransport(respond)
-    first = run_analysis(store, w, AnalysisRequest(mode="ai", max_provider_attempts=1), transport=transport)
+    first = run_analysis(store, w, AnalysisRequest(mode="ai", auto_continue=False, max_provider_attempts=1), transport=transport)
     assert first.status == "awaiting_continuation", first.reasons
     run_id = first.run_id
     store.close()
@@ -485,7 +485,7 @@ def test_changed_shorter_source_is_sanitized_stale_before_plan_hydration(tmp_pat
             unit_id=u.unit_id, task=t, result=ProjectLineageResponse(unit_id=u.unit_id)
         ),
     )
-    first = run_analysis(store, w, AnalysisRequest(mode="hybrid", max_provider_attempts=1))
+    first = run_analysis(store, w, AnalysisRequest(mode="hybrid", auto_continue=False, max_provider_attempts=1))
     assert first.status == "awaiting_continuation"
     Importer(store, w).files([("q.sql", b"SELECT 1;")], {".sql"})
     with pytest.raises(ValueError, match="^source_or_configuration_changed$"):

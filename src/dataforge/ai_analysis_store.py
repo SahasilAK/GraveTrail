@@ -5,6 +5,7 @@ Callers own the publication transaction. No network or parser cache writes occur
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 
 from dataforge.asset_identity import source_job
 from dataforge.models import ParseResult, stable_id
@@ -24,7 +25,7 @@ def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None
              configuration=None, summary=None, analysis_run_id=None, accepted_results=None):
     if mode not in {'ai', 'hybrid', 'parser'}:
         raise ValueError('Unknown analysis mode')
-    if status not in TERMINAL | {'planning', 'extracting', 'validating', 'reconciling', 'reviewing', 'ready'}:
+    if status not in TERMINAL | {'planning', 'extracting', 'validating', 'reconciling', 'reviewing', 'waiting_provider', 'linking', 'resolving', 'ready'}:
         raise ValueError('Unknown AI analysis state')
     old = store.rows('SELECT workspace_id,configuration,summary FROM ai_analysis_runs WHERE run_id=?', [run_id])
     if old and old[0]['workspace_id'] != workspace:
@@ -168,10 +169,11 @@ def load_accepted_file_results(store, workspace, config=None):
     accepted, seen = {}, set()
     for run in store.rows("SELECT * FROM ai_analysis_runs WHERE workspace_id=? AND status='committed' ORDER BY created_at DESC,run_id DESC", [workspace]):
         configuration = json.loads(run['configuration'])
+        parsing_configuration = {k: v for k, v in configuration.items() if k != 'dbt'}
         manifest = json.loads(run['manifest'])
         # The immutable context catalog can cite another file's declarations. Revalidate
         # its evidence as well as the direct source before permitting offline reuse.
-        context_current = True
+        context_current = 'dbt' not in configuration or configuration['dbt'] == store.setting(workspace, 'dbt', {})
         entries = manifest if isinstance(manifest, list) else manifest.get('sources', [])
         for entry in entries:
             current = inventory.get(entry.get('file_id'))
@@ -186,7 +188,7 @@ def load_accepted_file_results(store, workspace, config=None):
                 continue
             seen.add(fid)
             current = inventory.get(fid)
-            if (not current or not context_current or (config is not None and configuration != config)
+            if (not current or not context_current or (config is not None and parsing_configuration != config)
                     or any(current[k] != saved[k] for k in ('content_hash', 'relative_path', 'extension'))
                     or item['job_id'] != source_job(current, config or configuration)):
                 continue
@@ -372,7 +374,7 @@ def _accepted_items(store, workspace, run, *, hydrate=True, file_id=None):
 
 
 def save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated, *, reviewed=False,
-                               record_id=None, cache=None):
+                               record_id=None, cache=None, transaction=True):
     """Only locally validated claims survive; no rejected provider body is retained."""
     header = validated.model_dump(exclude={'accepted'})
     # Minimal host operation shapes; source text is referenced, never copied per claim.
@@ -382,7 +384,7 @@ def save_validation_checkpoint(store, workspace, run_id, unit, context_hash, val
         for decision in header[group]:
             decision['evidence'] = None
     accepted_ids = []
-    with store.transaction():
+    with store.transaction() if transaction else nullcontext():
         for fact in validated.accepted:
             payload = fact.model_dump()
             payload['evidence'] = {'unit_id': unit.unit_id}

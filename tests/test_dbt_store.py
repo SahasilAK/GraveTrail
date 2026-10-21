@@ -19,7 +19,7 @@ def test_resource_identity_survives_legacy_and_new_cache_payloads():
 def test_dbt_migration_reopens_without_erasing_legacy_data(tmp_path):
     with closing(Store(tmp_path)) as store:
         workspace = store.create_workspace('existing')
-        assert store.rows('SELECT max(version) AS v FROM schema_migrations')[0]['v'] == 8
+        assert store.rows('SELECT max(version) AS v FROM schema_migrations')[0]['v'] == 9
         for table in ('dbt_projects', 'dbt_resources', 'dbt_relationships', 'dbt_evidence',
                       'dbt_relation_bindings', 'dbt_project_snapshots'):
             assert store.rows(f'SELECT count(*) AS n FROM {table}')[0]['n'] == 0

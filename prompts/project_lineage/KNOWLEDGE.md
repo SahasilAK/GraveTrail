@@ -7,3 +7,7 @@ Prompt4 / wire3 project extraction assets, separate from five manual assistance 
 - `focus.md` — Conditional original header/projection/shared-context instructions, original ordinals, first-page shared facts, visible references only and static PROC SQL. Hashed with the transmitted focused variant; both variants pin continuation.
 
 Host decoding restores exact immutable unit and expression coordinates before canonical/semantic checks. Review stays wire2/prompt3; canonical compact-v2 storage is compatible. Catalog metadata counts toward unchanged request/privacy limits.
+
+- `dbt.md` — Project/package/version, ref/source/macro/YAML/artifact origin and partial dynamic/Python semantics.
+- `sas.md` — Whole DATA/PROC/macro state, job/library context and abstention.
+SQL reuses `system.md`; no duplicate handler. Batches share the item schema but cannot share item evidence authority.

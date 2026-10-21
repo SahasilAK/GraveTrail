@@ -376,7 +376,10 @@ def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str
 def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
           file_id: list[str] = typer.Option(None), background: bool = False, mode: str = 'parser',
           additional_ai_review: bool = False, refresh_ai: bool = False,
-          max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> None:
+          max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
+          max_files_per_request: int | None = None, max_parallel_requests: int | None = None,
+          auto_continue: bool = True, project_max_provider_attempts: int | None = None,
+          project_max_output_tokens_total: int | None = None, project_max_seconds: int | None = None) -> None:
     """Build lineage for a workspace or selected source files.
 
     Args:
@@ -388,13 +391,19 @@ def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
     invoke(ctx, "analyze", workspace, background, force=force, file_ids=file_id, mode=mode,
            additional_ai_review=additional_ai_review, refresh_ai=refresh_ai,
            max_provider_attempts=max_provider_attempts, max_output_tokens_total=max_output_tokens_total,
-           max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+           max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
+           max_files_per_request=max_files_per_request, max_parallel_requests=max_parallel_requests,
+           auto_continue=auto_continue, project_max_provider_attempts=project_max_provider_attempts,
+           project_max_output_tokens_total=project_max_output_tokens_total, project_max_seconds=project_max_seconds)
 
 
 @lineage_app.command('preview')
 def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'hybrid',
                   file_id: list[str] = typer.Option(None), additional_ai_review: bool = False,
-                  max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> None:
+                  max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
+          max_files_per_request: int | None = None, max_parallel_requests: int | None = None,
+          auto_continue: bool = True, project_max_provider_attempts: int | None = None,
+          project_max_output_tokens_total: int | None = None, project_max_seconds: int | None = None) -> None:
     """Preview analysis inputs, disclosure, and provider budgets without running analysis.
 
     Args:
@@ -411,7 +420,10 @@ def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'hybrid'
     """
     invoke(ctx, 'analysis_preview', workspace, mode=mode, file_ids=file_id,
            additional_ai_review=additional_ai_review, max_provider_attempts=max_provider_attempts,
-           max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+           max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
+           max_files_per_request=max_files_per_request, max_parallel_requests=max_parallel_requests,
+           auto_continue=auto_continue, project_max_provider_attempts=project_max_provider_attempts,
+           project_max_output_tokens_total=project_max_output_tokens_total, project_max_seconds=project_max_seconds)
 
 
 @lineage_app.command('analysis-report')

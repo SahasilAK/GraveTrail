@@ -191,6 +191,7 @@ AGENTS.md
 .knowledge-base/
 
 # Local Codex instructions and implementation records
+.superpowers/
 .codex/
 .kbignore
 /plans/**
