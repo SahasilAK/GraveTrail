@@ -32,6 +32,7 @@ from dataforge.ai_analysis_store import (
 )
 from dataforge.ai_budget import execution_budget
 from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_analysis
+from dataforge.ai_validation import VALIDATOR_VERSION
 from dataforge.ai_wire import decode_project_result, encode_project_result
 from dataforge.connections import current_connections
 from dataforge.llm import (
@@ -42,14 +43,13 @@ from dataforge.llm import (
 )
 from dataforge.models import ParseResult, stable_id
 from dataforge.services import (
+    PARSER_VERSION,
     analyze,
     prepare_analysis_results,
     publish_analysis_results,
     restore_manual_ai_results,
 )
 from dataforge.settings_service import revision
-
-VALIDATOR_VERSION = '1'
 
 
 def _hash(value):
@@ -207,7 +207,7 @@ def _unit_context_hash(prepared, plan, execution, unit, expected_revision):
     prompt_hash = analysis_prompt_hash('project_lineage',focused=bool(unit.focus))
     return _hash({'manifest': prepared.manifest_hash, 'context': plan.context_hash,
         'prompt': prompt_hash, 'settings_revision': expected_revision,
-        'validator': VALIDATOR_VERSION, 'mode': prepared.request.mode})
+        'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION, 'mode': prepared.request.mode})
 
 
 def _resume_request(store, workspace, request):
@@ -373,7 +373,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if not _stage_ready(store,workspace,unit,'project_lineage',execution):
                         return _pause(store,workspace,run_id,request,execution,counts,usage_known)
                     _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'project_lineage')
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Waiting for AI extraction response')
                     result = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Validating AI extraction response')
                     if result is None or result.outcome != 'validated' or result.result is None:
                         raise ValueError('incomplete_ai_response')
                     response, record_id = result.result, result.record_id or None
@@ -400,7 +402,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if not _stage_ready(store,workspace,unit,'lineage_review',execution):
                         return _pause(store,workspace,run_id,request,execution,counts,usage_known)
                     _set_inflight_callback(store,workspace,run_id,request,execution,counts,unit,'lineage_review')
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Waiting for AI review response')
                     review=invoke_analysis_unit(store,workspace,unit,'lineage_review',execution)
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Validating AI review response')
                     if review is None or review.outcome!='validated' or review.result is None:
                         raise ValueError('incomplete_ai_review')
                     usage_known &= review.usage_known
@@ -532,6 +536,7 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
 
 def _protocol_hash():
     return _hash({'semantic_planning': 1, 'review_batching': 1,
+        'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION,
         'prompts':{task:{'complete':analysis_prompt_hash(task),'focused':analysis_prompt_hash(task,focused=True)}
             for task in ('project_lineage','lineage_review')}})
 

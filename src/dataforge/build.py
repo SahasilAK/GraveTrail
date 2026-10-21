@@ -78,7 +78,9 @@ def build_python(root: Path, output: Path) -> list[Path]:
     source = folder / f"gravetrail-{version}.tar.gz"
     if len(wheels) != 1 or not source.is_file():
         raise ValueError("Expected exactly one current GraveTrail wheel and source archive")
-    return [*wheels, source]
+    overrides = folder / 'dependency-overrides.txt'
+    shutil.copyfile(root / overrides.name, overrides)
+    return [*wheels, source, overrides]
 
 
 def build_docker(root: Path, output: Path, version: str) -> list[Path]:

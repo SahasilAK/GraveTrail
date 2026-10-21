@@ -39,7 +39,7 @@ def render(store, workspace):
     st.caption("Only the selected code range is sent, subject to your privacy gates, redaction and context budget. AI explanations remain advisory; relationships require exact source quotes and explicit read/write evidence.")
     if st.button("Analyze selected evidence with AI", key=f"manual_ai_request_{workspace}_{fid}_{source['content_hash']}"):
         try:
-            with st.spinner("Requesting grounded analysis"):
+            with st.spinner("Requesting grounded analysis", show_time=True):
                 response = assist_task(store, workspace, fid, int(first), int(last), task,
                                        expected_hash=source["content_hash"])
             st.session_state["ai_record_" + workspace] = response["record_id"]

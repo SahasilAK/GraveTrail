@@ -258,7 +258,11 @@ def test_eight_assignment_review_fits_default_context(project):
             payload = encode_project_result(payload)
         return httpx.Response(200, json={'message': {'content': json.dumps(payload)}, 'done_reason': 'stop'})
 
+    stages = []
     result = run_analysis(store, w, AnalysisRequest(mode='hybrid', additional_ai_review=True),
-                          transport=httpx.MockTransport(respond))
+                          transport=httpx.MockTransport(respond), progress=lambda _, stage: stages.append(stage))
     assert result.status == 'committed', result.reasons
     assert len(sent) == 2 and len(sent[1]['candidates']) == 8
+    for stage in ('AI extraction', 'AI review'):
+        waiting = stages.index('Waiting for ' + stage + ' response')
+        assert stages[waiting + 1] == 'Validating ' + stage + ' response'

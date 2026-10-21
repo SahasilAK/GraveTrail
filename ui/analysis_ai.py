@@ -1,5 +1,7 @@
 """Explicit AI build controls, offline preview and persisted worker progress."""
+from datetime import timedelta
 from pathlib import Path
+from time import time
 
 import streamlit as st
 
@@ -120,6 +122,16 @@ def progress(store, workspace):
     jobs = analysis_jobs(str(store.home))
     record = jobs.read(job_id, workspace)
     st.progress(float(record['progress']), text=record.get('stage', record['status']))
+    started = record.get('started_at')
+    if started is not None:
+        ended = record.get('finished_at', record.get('updated_at', started)) if record['status'] in TERMINAL else time()
+        timing = f'Elapsed: {timedelta(seconds=max(0, int(ended - started)))}'
+        if record['status'] not in TERMINAL and record.get('stage', '').startswith('Waiting for AI'):
+            waiting = max(0, int(ended - record.get('stage_started_at', started)))
+            timing += f' · Waiting: {timedelta(seconds=waiting)} · Waiting for provider response; refreshes every 2 seconds.'
+        st.caption(timing)
+    elif record['status'] == 'queued':
+        st.caption('Queued — waiting for an analysis worker.')
     if record['status'] not in TERMINAL:
         if st.button('Cancel AI analysis', key='ai_cancel_' + workspace):
             jobs.cancel(job_id, workspace)

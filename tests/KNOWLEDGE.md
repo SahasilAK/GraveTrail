@@ -101,3 +101,12 @@ Automatic AI tests: `test_model_capabilities.py` validates metadata/identity/fre
 Navigation uses a non-minimum custom budget to detect widget cleanup; Continue preserves saved API/CLI limits. Constrained fallback transport must send only to the fitting primary. Wide claim tests bound repeated host detail; final durable claims reference original source instead of duplicating quotes.
 
 - `test_ai_analysis_scaling.py` — Exact semantic source/AST/token bounds, dialect/modifier abstention, Unicode/comments, ordinals, JOIN/WHERE roles, sibling-expression rejection, static PROC SQL, response cardinality, real adapter/mock HTTP one-writer publication, all-candidate review/no-repeat reopen and sanitized stale-source continuation.
+
+- `test_qualification_semantics.py` — Valid/invalid SAS typed literals, suffix-dropping false claims, DML subqueries/unused CTEs, inner/outer alias shadows and semantic-version continuation guards.
+- `test_archive_qualification.py` — Hash/inventory integrity, answer leakage prevention, grouped splits, failed-prediction omissions and insufficient-evidence gates. Evaluation tests preserve known metering for quarantined responses.
+
+- `test_ai_citations.py` — Immutable/dialect-bound expression IDs, absolute original coordinates, Unicode/comments, focused visibility, repeated UNION/SAS occurrence rejection, DML RHS, paged PROC SQL/SAS formats, sanitized transport quarantine and reference-only publication/reopen/offline reuse. Wire tests pin generated schema parity; default eight-assignment context remains unchanged.
+
+Timeout/progress regressions cover3600 acceptance/3601 rejection, remaining-run clamping, saved provider UI reopen, journal timer ordering, clock advancement/frozen completion, legacy status and extraction/review waiting-stage order.
+
+- `test_pillow_compatibility.py` — Exact runtime/project/installer pin parity, sole expected upstream metadata exception, Streamlit image resize/encoding modes and public icon/array rendering. Distribution tests ensure companion manifest/wheel/sdist/Docker inputs and no ignored context leakage.

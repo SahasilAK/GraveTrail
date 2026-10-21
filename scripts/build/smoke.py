@@ -22,7 +22,8 @@ async def render_session(port: int) -> None:
     from websockets.asyncio.client import connect
 
     connection = await connect(f"ws://127.0.0.1:{port}/_stcore/stream",
-                               origin=f"http://127.0.0.1:{port}", subprotocols=["streamlit"])
+                               origin=f"http://127.0.0.1:{port}", subprotocols=["streamlit"],
+                               max_size=8 * 1024 * 1024)
     request = BackMsg()
     request.rerun_script.query_string = ""
     await connection.send(request.SerializeToString())

@@ -1,6 +1,7 @@
 """SAS SELECT attributes and calculated aliases over the configured SQLGlot dialect."""
 import re
 from collections import Counter
+from datetime import date
 
 from sqlglot import Dialect, exp
 from sqlglot.errors import ParseError
@@ -12,6 +13,29 @@ from dataforge.parsers.sql import parse_sql
 FORMAT_VALUE = re.compile(r'\$?(?:[A-Za-z_]\w*|[0-9]+)\.[0-9]*(?![\w.])')
 
 
+def _valid_typed_literal(value, suffix):
+    """Recognize literal syntax only; SAS date values/yearcutoff are never evaluated."""
+    if suffix in {'d', 'dt'}:
+        match = re.fullmatch(r'(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{4}|\d{2})(.*)', value, re.I)
+        if not match:
+            return False
+        day, month, year, tail = match.groups()
+        # Two-digit leap days depend on YEARCUTOFF, so that ambiguous form abstains.
+        if len(year) == 2 and month.upper() == 'FEB' and int(day) == 29:
+            return False
+        try:
+            date(int(year) if len(year) == 4 else 2000 + int(year),
+                 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC'.split().index(month.upper()) + 1, int(day))
+        except ValueError:
+            return False
+        if suffix == 'd':
+            return not tail
+        if not tail.startswith(':'):
+            return False
+        value = tail[1:]
+    return bool(re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?', value))
+
+
 def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
     dialect = Dialect.get_or_raise(sql_dialect)
     diagnostics = []
@@ -19,6 +43,28 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
     class SASParser(dialect.parser_class):
         FUNCTIONS = {**dialect.parser_class.FUNCTIONS,
                      'DATETIME': lambda args: exp.Anonymous(this='DATETIME', expressions=args)}
+
+        def _parse_atom(self):
+            if (self._curr.token_type == TokenType.STRING and self._next
+                    and self._next.start == self._curr.end + 1
+                    and self._next.text.lower() in {'d', 't', 'dt'}):
+                return self._parse_primary()
+            return super()._parse_atom()
+
+        def _parse_primary(self):
+            token = self._curr
+            if (token.token_type == TokenType.STRING and self._next
+                    and self._next.start == token.end + 1
+                    and self._next.text.lower() in {'d', 't', 'dt'}):
+                suffix = self._next.text.lower()
+                if not _valid_typed_literal(token.text, suffix):
+                    raise ParseError('Unsupported or invalid SAS typed literal')
+                original = self.sql[token.start:self._next.end + 1]
+                self._advance(2)
+                # Var preserves the complete typed token in generated usage expressions;
+                # value derivations conservatively abstain instead of treating a date as a string.
+                return exp.Var(this=original)
+            return super()._parse_primary()
 
         def _parse_projections(self):
             previous = getattr(self, '_sas_projection', False)

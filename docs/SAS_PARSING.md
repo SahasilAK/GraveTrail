@@ -12,12 +12,20 @@ character and custom formats ending in a period or decimal precision), before or
 and positive literal `LENGTH=` modifiers. `CALCULATED` references use uniquely defined SELECT
 aliases without inventing base-table columns; missing or ambiguous aliases produce diagnostics.
 SAS `DATETIME()` is recognized as an expression. Malformed modifiers remain parse errors.
+PROC SQL also recognizes adjacent literal date (`'01JAN2025'd`), time
+(`'12:30:01't`) and datetime (`'01JAN2025:12:30:01'dt`) constants. These remain
+literal syntax for dependency analysis; their SAS numeric values are not evaluated.
+Invalid calendar/time values, unknown suffixes and two-digit-year leap-day constants
+remain unsupported. This does not implement session `YEARCUTOFF` behavior. Original
+typed-literal text and source coordinates remain evidence.
+Transformations involving these typed constants remain unresolved until their value
+semantics are supported; table dependencies and exact direct-usage evidence remain available.
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 11 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 13 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
-evidence remain intact. Existing packaged executables/images need rebuilding for version 11.
+evidence remain intact. Existing packaged executables/images need rebuilding for version 13.
 
 ## Column transformation subset
 

@@ -47,3 +47,5 @@ Asset/query/direction/depth/collapse and analysis file selections persist via na
 Budget values have non-widget session storage so navigation cannot discard Custom ceilings; Continue inherits saved numeric limits unless Reset explicitly releases them. Manual chunk-size help distinguishes the automatic project planner.
 
 `analysis_ai.py` preview identifies semantic source tasks, original-context projection paging and provisional review sizing. Existing Custom controls/Continue remain; the shared service owns per-batch checkpoints and final atomic publication.
+
+Provider request timeout accepts1–3600seconds without changing saved/default values. analysis_ai progress uses journal start/stage/finish timestamps for two-second total/wait elapsed refresh and frozen terminal duration; queued state stays distinct. Assistance/review/provider checks use native show_time spinners.

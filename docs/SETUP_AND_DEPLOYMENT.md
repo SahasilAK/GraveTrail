@@ -58,33 +58,33 @@ working directory. Keep this directory out of source control.
 
 ## 4. Python installation
 
-### Source installation with pip
+### Source installation without activation
 
 Clone as above, then create a dedicated environment. Windows PowerShell:
 
 ```powershell
-py -3.11 -m venv .venv
-.venv\Scripts\python.exe -m pip install -e ".[dev]"
+uv venv --python 3.11 .venv
+uv pip install --python .venv/Scripts/python.exe --overrides dependency-overrides.txt -e ".[dev]"
 .venv\Scripts\gravetrail-ui.exe --home D:\GraveTrail\data
 ```
 
 Linux/macOS:
 
 ```sh
-python3.11 -m venv .venv
-.venv/bin/python -m pip install -e '.[dev]'
+uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python --overrides dependency-overrides.txt -e '.[dev]'
 .venv/bin/gravetrail-ui --home "$HOME/.local/share/dataforge"
 ```
 
 Using the environment's executables directly avoids activation and PowerShell execution
-policy issues. pip resolves the declared version ranges; `uv sync --locked` uses the lock.
+policy issues. These explicit uv installer commands resolve the declared ranges with the tested override; `uv sync --locked` uses the reproducible lock and project override.
 
 ### Wheel installation
 
-Obtain or build the wheel described in section 7 and install its actual filename:
+Obtain or build the wheel and companion `dependency-overrides.txt` described in section 7. Create/activate a virtual environment, then install the actual filenames:
 
 ```sh
-python -m pip install /path/to/gravetrail-0.1.0-py3-none-any.whl
+uv pip install --overrides /path/to/dependency-overrides.txt /path/to/gravetrail-0.1.0-py3-none-any.whl
 gravetrail-ui --home /path/to/dataforge-data
 gravetrail --help
 ```
@@ -614,3 +614,13 @@ Review dependency licenses when redistributing a bundled application.
 The [48-ID capability matrix](CLI_MCP_CAPABILITIES.md) lists all permitted shared operations and local-only restrictions. New launch grants are independent: configuration, outbound AI with exact origins/credential references, and unrestricted application settings. Use `gravetrail capabilities` and subgroup `--help` to inspect the installed version. Local `--allow-admin` cannot launch MCP. Existing packaged artifacts must be rebuilt to include these new routes; source verification commands are in the [testing guide](TESTING.md).
 
 See [GraveTrail rebrand compatibility](BUILD_AND_RELEASE.md#gravetrail-rebrand-compatibility) before upgrading an existing installation.
+
+## Temporary Pillow security compatibility
+
+The tested pair is **Streamlit 1.66.0 / Pillow 13.0.0**. Streamlit's published metadata still requires Pillow below 13, while Pillow 13 fixes the eight reported advisories. GraveTrail deliberately pins the tested pair and uses an explicit uv dependency override. This is a compatibility exception outside upstream's declared range, not an upstream support claim. See [Pillow 13 changes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html).
+
+For a checkout, `uv sync --locked` applies the project override. For a wheel, use the companion file produced by `gravetrail-build --target python` and the explicit `uv pip install --overrides ...` command above. The companion is included in the artifact manifest, wheel resources and source archive. Ordinary pip resolution intentionally fails on the declared conflict, preventing installation with vulnerable Pillow; do not work around it with unreviewed `--no-deps` installs or advisory ignores.
+
+Docker and native builds use the same lock; release and security CI test explicit clean-wheel installations and audit installed third-party packages as well as all locked groups. The single expected Streamlit/Pillow metadata discrepancy is checked by the compatibility tests; other unsatisfied requirements fail. Standard `pip check` still reports that upstream metadata discrepancy.
+
+Remove the override only after a stable Streamlit release declares support for a patched Pillow: update the Streamlit requirement, remove the temporary project/file overrides together, retain a patched Pillow requirement, regenerate the lock, and rerun UI/image/export/full-suite, installed-wheel and Windows/Linux security checks. Until then, update the exact pair only with the same evidence. Reverting this change restores the older vulnerable Pillow and failing audit; it is not a security-approved rollback.

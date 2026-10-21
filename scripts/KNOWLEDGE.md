@@ -27,3 +27,5 @@ Benchmark/live-check temporary directories use gravetrail prefixes; supplied fix
 - `benchmark_ai_analysis.py` — Offline operation/scope/version/role gold scorer and optional synthetic ZIP acceptance; explicit doubly opted-in bounded live OmniRoute evaluation. Aggregate sanitized metrics distinguish absent precision/sample-size insufficiency from pass.
 
 `benchmark_ai_analysis.py --scale-units 1000` adds mock-transport durable continuation, exact request/unit coverage, reopen, one final publication, elapsed time, peak Python allocations and maximum unit record bytes. Scale mode never makes live provider calls.
+
+- `benchmark_lineage_archives.py` — Supplied synthetic SQL/SAS ZIP checksum/inventory checks, answer-header masking preserving offsets, versioned scenario-group splits and per-script table-manifest agreement. Offline default; explicit bounded live samples reuse production planner/adapter/validator and compare parser/AI/hybrid. Receipts include quarantined metering and gateway-reported models. Missing column gold keeps qualification open.

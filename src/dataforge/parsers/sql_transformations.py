@@ -67,17 +67,26 @@ def _projection_ranges(code, dialect):
     return ranges
 
 
-def _original(projection, ranges, code):
+def _original_range(projection, ranges, code):
     offsets = [(n.meta["start"], n.meta["end"]) for n in projection.walk()
                if "start" in n.meta and "end" in n.meta]
     if not offsets:
-        return ""
+        return None
     low, high = min(a for a, _ in offsets), max(b for _, b in offsets)
     matches = [(a, b) for a, b in ranges if a <= low and high < b]
     if not matches:
-        return ""
+        return None
     a, b = min(matches, key=lambda item: item[1] - item[0])
-    return code[a:b].strip()
+    while a < b and code[a].isspace():
+        a += 1
+    while b > a and code[b - 1].isspace():
+        b -= 1
+    return a, b
+
+
+def _original(projection, ranges, code):
+    span = _original_range(projection, ranges, code)
+    return code[span[0]:span[1]] if span is not None else ""
 
 
 def _record(table, column, scope, expression, category="expression", coverage=None, **extra):
@@ -309,6 +318,9 @@ def extract_transformations(tree, code, dialect, scopes, target=None):
                         else "aggregate" if isinstance(value, exp.AggFunc) else "expression")
             record = _record(table, name or "*", scope_key, expression, category, local_coverage,
                              branch=branch, ordinal=ordinal)
+            original_span = _original_range(projection, ranges, code)
+            if original_span is not None:
+                record['_expression_offset'] = original_span[0]
             if isinstance(tree, exp.Insert) and not scope_key and not isinstance(tree.this, exp.Schema):
                 record["target_mapping_missing"] = True
                 record["projection_count"] = len(query.expressions)

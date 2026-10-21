@@ -398,7 +398,7 @@ def test_wide_query_real_transport_preserves_every_projection_and_one_writer(tmp
     assert store.rows("SELECT count(*) AS n FROM analysis_runs")[0]["n"] == 1
     assert result.usage_known
     assert store.rows("SELECT DISTINCT version FROM prompt_versions WHERE task='project_lineage'") == [
-        {"version": "3"}
+        {"version": "4"}
     ]
     store.close()
 

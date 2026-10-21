@@ -42,7 +42,7 @@ def render(store, workspace):
             st.info("Configure a default or task-specific provider in Connections & AI to request AI review. This local preview needs no provider.")
         if st.button("Request AI review of this range", disabled=over_budget or not configured, key=key + "_request"):
             try:
-                with st.spinner("Reviewing selected diagnostic evidence"):
+                with st.spinner("Reviewing selected diagnostic evidence", show_time=True):
                     result = request_review(store, workspace, selected, preview["content_hash"], int(first), int(last))
                 st.session_state["review_result_" + workspace] = result["record_id"]
             except ValueError as exc:

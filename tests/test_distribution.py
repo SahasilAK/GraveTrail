@@ -35,6 +35,7 @@ def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp
     from dataforge.build import build_python
 
     (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
+    (tmp_path / 'dependency-overrides.txt').write_text('pillow==13.0.0\n', encoding='utf-8')
     output = tmp_path / "dist"
     folder = output / "python"
     folder.mkdir(parents=True)
@@ -43,7 +44,8 @@ def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp
         (folder / name).write_bytes(b"artifact")
     monkeypatch.setattr("dataforge.build._run", lambda *args, **kwargs: None)
     assert {p.name for p in build_python(tmp_path, output)} == {
-        "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"}
+        "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz", "dependency-overrides.txt"}
+    assert (folder / 'dependency-overrides.txt').read_text(encoding='utf-8') == 'pillow==13.0.0\n'
     (folder / "gravetrail-1.2.3-py3-none-any.whl").unlink()
     with pytest.raises(ValueError, match="current GraveTrail"):
         build_python(tmp_path, output)
@@ -56,6 +58,14 @@ def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path):
     assert default_home(source=False, platform="linux", environ={"XDG_DATA_HOME": str(tmp_path)}) == tmp_path / "dataforge"
     assert default_home(source=False, platform="darwin", environ={"HOME": str(tmp_path)}) == tmp_path / "Library/Application Support/DataForge"
     assert default_home(source=True, environ={}) == Path.cwd() / ".dataforge"
+
+
+def test_docker_build_receives_the_required_installer_policy_file():
+    root = Path(__file__).resolve().parents[1]
+    assert '!dependency-overrides.txt' in (root / '.dockerignore').read_text(encoding='utf-8').splitlines()
+    copies = [line.split()[1:-1] for line in (root / 'Dockerfile').read_text(encoding='utf-8').splitlines()
+              if line.startswith('COPY ') and '--from=' not in line]
+    assert any('dependency-overrides.txt' in paths for paths in copies)
 
 
 def test_runtime_theme_is_copied_once_and_package_is_unchanged(tmp_path):
@@ -106,7 +116,7 @@ def test_build_environment_does_not_inherit_credentials(monkeypatch):
 
 def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
     root = Path(__file__).resolve().parents[1]
-    for name in ("pyproject.toml", "README.md", "app.py"):
+    for name in ("pyproject.toml", "README.md", "app.py", "dependency-overrides.txt"):
         shutil.copyfile(root / name, tmp_path / name)
     for folder in ("src/dataforge", "ui", "prompts", ".streamlit"):
         (tmp_path / folder).mkdir(parents=True, exist_ok=True)
@@ -130,6 +140,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path):
         assert "dataforge/_app/.streamlit/config.toml" in names
         assert wheel.read("dataforge/_app/ui/style.css") == (root / "ui/style.css").read_bytes()
         assert "dataforge/prompts/prompt.md" in names
+        assert wheel.read('dataforge/dependency-overrides.txt') == (root / 'dependency-overrides.txt').read_bytes()
         assert not any(b"DUMMY_PACKAGING_SECRET_CANARY" in wheel.read(name) for name in names)
     with tarfile.open(next((tmp_path / "dist").glob("*.tar.gz"))) as archive:
         for member in archive.getmembers():
@@ -147,7 +158,7 @@ def test_source_distribution_includes_release_toolkit_and_compose(tmp_path):
             relative = Path(name).parts[1:]
             assert not any(part in {"plans", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
                            for part in relative), name
-        for expected in ('compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
+        for expected in ('dependency-overrides.txt', 'compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
                          'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py',
                          'scripts/build/windows.iss', 'scripts/build/windows_installer.ps1',
                          'scripts/build/sign_windows.ps1', 'scripts/build/smoke_installer.py'):

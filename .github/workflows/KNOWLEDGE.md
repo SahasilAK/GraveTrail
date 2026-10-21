@@ -15,3 +15,5 @@ including the nested upload action in the Pages composite; test commands also in
 - `release.yml` additionally accepts resolved release_version and explicit development/production mode. Checkout-only uv version/lock materialization; Windows Inno Setup 7.1.0 checksum pin, complete inventory, protected signing and installed lifecycle checks before final manifest/upload. Development uses hosted Windows; production requires protected windows-production and restricted self-hosted gravetrail-signing runner/key. Existing other-platform and container build paths remain available.
 
 Release build/upload/download patterns and executable smoke paths use gravetrail consistently; repository and Pages references now use SahasilAK/GraveTrail and /GraveTrail/.
+
+Security matrix additionally builds/installs clean wheels with explicit dependency-overrides.txt, checks exact tested Streamlit/Pillow versions and audits actual installed third-party metadata. Release wheel smoke uses the emitted companion file. No ignored advisories or weaker audit gate.

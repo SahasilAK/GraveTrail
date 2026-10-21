@@ -172,6 +172,32 @@ def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path, m
     assert all(b'dummy-sensitive-123' not in p.read_bytes() for p in tmp_path.rglob('*') if p.is_file())
 
 
+def test_provider_ui_saves_and_reopens_hour_timeout(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+
+    from ui.common import get_store
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/connections.py').run()
+    next(s for s in view.selectbox if s.label == 'Provider').select('OmniRoute').run()
+    next(t for t in view.text_input if t.label == 'Model or deployment identifier').set_value('auto/best-coding')
+    timeout = next(n for n in view.number_input if n.label == 'Request timeout (seconds)')
+    assert timeout.proto.max == 3600
+    timeout.set_value(3600)
+    next(b for b in view.button if b.label == 'Save provider profile').click().run()
+    assert not view.exception
+    store = get_store(str(tmp_path))
+    profile = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
+    assert profile['timeout'] == 3600 and profile['model'] == 'auto/best-coding'
+    next(s for s in view.selectbox if s.label == 'Provider profile').select_index(1).run()
+    assert next(n for n in view.number_input if n.label == 'Request timeout (seconds)').value == 3600
+    st.cache_resource.clear()
+
+
 def test_json_escaped_secret_is_redacted_before_persistence(tmp_path):
     import json
 

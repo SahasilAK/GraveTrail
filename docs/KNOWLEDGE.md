@@ -80,3 +80,13 @@ AI guides document selected capability provenance, combined/separate estimates, 
 AI_ANALYSIS/PROMPT_ENGINEERING document exact projection paging, conservative dialect limits, static PROC SQL, response cardinality, conditional root focus prompt hashes and lossless per-batch review continuation. CLI/MCP previews share the service; DATA_MODEL covers unit_spec/review progress in existing tables. Mermaid includes review checkpoints; TESTING distinguishes mock proof from live precision.
 
 Homepage, onboarding, user and AI/provider guides make the default local/no-AI workflow prominent alongside optional hybrid coverage for complex projects. Project size alone does not require AI; validation and unresolved coverage remain explicit.
+
+TESTING documents supplied banking archive manifest agreement, offline/live commands, scenario grouping and absent independent column gold. SQL/SAS guides cover parser13 typed constants and DML scope boundaries; AI_ANALYSIS records validator2 and parser-version continuation pins. Table agreement never becomes a live column-accuracy claim.
+
+AI_ANALYSIS includes the expression-reference restoration step/diagram and strict semantic boundary; PROMPT_ENGINEERING records extraction wire3/prompt4 versus review wire2/prompt3, legacy response/storage compatibility and full-envelope accounting. DATA_MODEL confirms no migration; TESTING distinguishes citation functionality from unqualified live accuracy and deferred independent labels.
+
+TESTING records the post-push Certifi lock fix and unresolved Streamlit/Pillow security constraint; audit stays enforced.
+
+LLM_INTEGRATION/AI_ANALYSIS explain the one-hour request limit, separate execution budget and elapsed/wait timer semantics; TESTING records the bounded best-coding browser check and its functionality-only scope.
+
+SECURITY/setup/build guides explain temporary Streamlit1.66/Pillow13 exception, explicit uv wheel/source commands, ordinarypip conflict, artifact companion policy and upstream removal gates. TESTING preserves historical failures and records remediation proof.

@@ -46,9 +46,11 @@ flowchart TD
     B --> C[Offline complete-unit and disclosure preview]
     C --> D[Local extraction]
     C --> P[Fit complete statements or independent projection groups]
-    P --> E[AI extraction from exact original source segments]
+    P --> Q[Issue source expression references]
+    Q --> E[AI extraction from original source and references]
+    E --> X[Restore exact expression text and coordinates]
     D --> F[Deterministic evidence and semantic checks]
-    E --> F
+    X --> F
     F --> G[Comparison by original operation]
     G --> H[Optional bounded AI review batch]
     G --> L
@@ -74,6 +76,10 @@ A remote project run can transmit a complete selected file across several chunks
 
 ## Context and run budgets
 
+Parser cache 14 and validator 3 pin semantic versions into AI cache and continuation
+identities. An upgrade makes an older paused run stale before another request; start a
+new run to use the new semantics. The previous published graph remains available.
+
 Connection discovery retains allowlisted model limits when the endpoint reports them. The selected model's metadata is bound to its endpoint, model, authentication, API version and credential reference. **Inspect selected model limits** refreshes it explicitly; Ollama also checks its currently loaded allocation. Discovery and offline preview submit no project source. Unknown/stale metadata uses configured caps. Gateway aliases such as OmniRoute `auto/...` may change upstream: advertised maxima are advisory, and upstream errors remain possible.
 
 New profiles start with **Automatic** context/output values. Existing saved numeric limits remain **Custom**, including values equal to old defaults. Editing a number makes it Custom; **Reset profile limits to automatic** explicitly enables recommendations. Automatic output allocation scales with the complete unit, bounded by the profile/output capacity. Automatic calculation does not widen existing source permissions or the workspace Privacy allowance.
@@ -94,6 +100,8 @@ Large projects return **awaiting_continuation** at the execution limit. Complete
 
 Every extraction/review/retry/fallback attempt reserves its configured maximum output allocation before dispatch and rechecks current authorization, source identity, cancellation and remaining budget. Unknown usage keeps that conservative reservation. Reported token counts remain provider metadata; absent usage is unknown. No monetary estimate is invented.
 
+Provider profiles allow a request timeout of 1–3,600 seconds (one hour); existing saved/default values remain unchanged. Set it under Connections & AI → Advanced request options and save the profile. The progress panel refreshes every two seconds with total elapsed time and current extraction/review waiting time; completion freezes the timer. These timers indicate a pending request, not upstream model progress.
+
 The deadline starts when work enters execution, excluding queue time. HTTP timeouts are limited by remaining time; checks also run between received chunks, stages and immediately before publication. A blocked socket/parser cannot always be preempted exactly, so cancellation or deadline reporting may return later. An already sent request may have incurred usage.
 
 ## Oversized operations and large review sets
@@ -108,7 +116,17 @@ Review batches account for every eligible candidate. A singleton that exceeds ro
 
 ## Validation, comparison and reuse
 
-Every candidate must pass strict bounded contracts and cite the complete immutable original unit with exact hash, offsets, lines and quote. Protocol v2 returns only the exact host-issued unit reference in each citation. The host restores the complete immutable citation before canonical and semantic validation. Unknown IDs, additional citation keys and truncated output are rejected. Columns also require exact expression spans, scope, branch/version and dependency roles. The host can locate omitted expression offsets only when the exact expression occurs once in the unit; ambiguous, missing or explicitly wrong spans are rejected. SQL projections include their original aliases; assignment expressions follow the task protocol. A real fragment that omits a JOIN does not establish ownership. Names in comments, literals, unused CTEs, unknown runtime macros and unknown wildcard outputs cannot manufacture dependencies.
+Every candidate must pass strict bounded contracts and cite the complete immutable original unit. Model evidence contains only the exact host-issued `unit_id`; the host restores its hash, offsets, lines and quote before canonical and semantic validation. Unknown IDs, additional citation keys and truncated output are rejected.
+
+### Source expression references
+
+Extraction protocol **v3 / prompt 4** supplies `expression_references`: source-only SQL projections, UPDATE/MERGE right-hand sides and SAS assignments, plus a whole-unit reference for SAS final projections. The model copies an issued `reference_id` into `expression_reference` and omits expression text and offsets. The app resolves the exact original text and absolute character coordinates, including repeated expressions, comments and Unicode. The catalog contains syntax locations, never parser dependency answers. Relevant dialect settings are used consistently for issuance and decoding.
+
+References bind the immutable unit, file/hash, job, dialect, original span, kind and expression text. Focused tasks receive references only for visible source segments; an omitted sibling cannot be cited. A reference proves location only: target ownership, scope, branch/version, ordinal and every value/join/filter/rowset dependency still require independent host checks. Identical text in another UNION branch or SAS assignment version cannot substitute for the correct occurrence. Unknown, stale, foreign or conflicting references quarantine the response, with a source-free reason in default history.
+
+Strict legacy expression responses remain supported. Without a reference, omitted offsets resolve only for a unique exact substring; ambiguous, missing or explicitly wrong spans fail. SQL projections include original aliases; SQL assignments cite their right-hand sides and SAS assignments retain the complete original statement. Unsupported syntax may have no expression reference and must use exact legacy evidence or remain unresolved. Comments, literals, unused CTEs, runtime macros and unknown wildcard outputs cannot manufacture dependencies.
+
+The catalog and generated wire schema count toward the actual request envelope, so existing planning, privacy and model limits remain binding. Review stays protocol **v2 / prompt 3**. Canonical accepted facts and compact v2 durable payloads remain readable; expression references are resolved before storage, with no database migration. Older paused runs become stale after the semantic/prompt upgrade and require a new run.
 
 Supported parser structure verifies ordinary claims. Separately bounded static SQL UPDATE/MERGE assignment verifiers cover a small tested gap subset. Unsupported branches, ownership or semantics remain unresolved. Join, filter, partition, order and rowset effects remain distinct from output value inputs. Additional AI agreement cannot override this boundary.
 
@@ -125,6 +143,12 @@ Extraction, validation and comparison stage before publication. Final source/set
 Synthetic SQL/SAS holdout labels and mock HTTP tests exercise exact evidence, deceptive negatives, roles, abstention, transport and orchestration. They do not measure a live model's precision. There is no claim of universal SQL/SAS coverage, inferred runtime execution order or a complete database schema.
 
 A bounded development smoke on 2026-10-20 used loopback OmniRoute `auto/best-reasoning` on two synthetic SQL units. Both committed with known token usage: seven accepted claims, no rejected/unresolved candidates and one AI-only UPDATE derivation. Earlier development attempts exposed offset/protocol errors and informed prompt changes. This is a functionality check after tuning, not an independent precision evaluation or SAS qualification.
+
+The [banking archive evaluation](TESTING.md#supplied-banking-archive-evaluation-2026-10-21)
+on 2026-10-21 checks all 4,315 source scripts offline and records bounded real-provider
+samples. Low contract-valid coverage and missing independent column gold leave the live
+gate open. The later host-expression-reference enhancement removes model offset arithmetic, but its two development provider attempts timed out; no new live accuracy result is claimed. Those results support keeping the local parser primary and AI-only experimental;
+they do not establish that hybrid improves coverage for this corpus.
 
 The live qualification targets remain unestablished: at least 99% accepted table-edge precision and 98% accepted value-column dependency precision, reported separately by language with coverage and sample sizes. The intended minimum is 100 accepted table predictions and 200 accepted value-dependency predictions across at least 20 scripts per language. No provider calls or private-project transmission are part of normal CI or documentation builds. See [testing](TESTING.md), [provider integration](LLM_INTEGRATION.md), [CLI](CLI_GUIDE.md) and [MCP](MCP_INTEGRATION.md).
 

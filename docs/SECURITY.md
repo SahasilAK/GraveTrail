@@ -125,3 +125,7 @@ should be read-only and data mounts scoped to a dedicated home. Docker administr
 local data-home administrators can access its contents. Artifact manifests/checksums are not
 code signing; native code signing/notarization and a multi-user auth layer are not supplied.
 See [setup and deployment](SETUP_AND_DEPLOYMENT.md) for actual launch/recovery commands.
+
+## Dependency compatibility policy
+
+The temporary tested Streamlit 1.66.0 / Pillow 13.0.0 exception replaces the vulnerable Pillow version without ignoring advisories. Use the locked checkout or explicit wheel installer override described in [installation](SETUP_AND_DEPLOYMENT.md#temporary-pillow-security-compatibility). It remains outside Streamlit's declared metadata range; compatibility tests and locked/installed-payload audits stay enforced. Remove it only when an official stable upstream release supports patched Pillow and all documented gates pass.

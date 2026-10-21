@@ -1,13 +1,9 @@
 # prompts/project_lineage/
 
-Version3 project extraction assets, separate from the five manual assistance tasks.
+Prompt4 / wire3 project extraction assets, separate from five manual assistance tasks.
 
-- `system.md` — Strict source-as-data instructions, exact host citation template,
-  operation/category/context protocol, SQL/SAS expression/version conventions,
-  unique-offset omission rule and positive/negative examples.
-- `user_template.md` — One JSON context placeholder. Schema comes from the strict
-  ProjectLineageResponse contract; provider output never grants publication rights.
+- `system.md` — Source-as-data instructions; prefer issued expression references; strict legacy text/offset fallback, operation/context/category and SQL/SAS branch/version/dependency roles.
+- `user_template.md` — One JSON context placeholder; generated wire schema and source-only expression catalog. Host validation owns publication.
+- `focus.md` — Conditional original header/projection/shared-context instructions, original ordinals, first-page shared facts, visible references only and static PROC SQL. Hashed with the transmitted focused variant; both variants pin continuation.
 
-Protocol v2: model evidence is exactly the host-issued unit_id reference; no repeated source quote. Canonical host validation remains exact and source-backed.
-
-- `focus.md` — Conditional exact-source header/projection/shared-context guidance, original ordinals, first-page shared facts and static PROC SQL statements. Loaded only for focused extraction; hashed with the actual transmitted variant. Continuation pins complete/focused identities; wire/canonical evidence remains v2.
+Host decoding restores exact immutable unit and expression coordinates before canonical/semantic checks. Review stays wire2/prompt3; canonical compact-v2 storage is compatible. Catalog metadata counts toward unchanged request/privacy limits.

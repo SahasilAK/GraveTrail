@@ -59,3 +59,5 @@ and direct offline-file browser interaction retain explicit unexecuted gates.
   scoped query service, SQL/SAS tests, separate UI/CLI/MCP, recovery/docs and PR verification.
 
 - `SCALABLE_AI_OPERATIONS.md` — Local-only enhancement 4 design, plan, review rulings and qualification for source-bound projection/PROC SQL tasks and durable review batches. Public behavior/limits remain in AI_ANALYSIS and TESTING.
+
+- `AI_LINEAGE_QUALIFICATION_EXECUTION.md` — Item2/3 ledger, review fixes and live evidence limits. Related archive receipts, frozen selection and import reports are ignored local artifacts; tracked acceptance lives in docs/TESTING.md.

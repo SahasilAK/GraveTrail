@@ -18,3 +18,5 @@ Distribution smoke also requires the GraveTrail page title and MCP server identi
 Frozen --cli sets the program name to gravetrail so help/errors reflect the product; worker module paths remain compatible.
 
 Image packaging: frozen_entry.py dispatches --render-graph-image; smoke.py verifies real SVG/PNG CLI files outside checkout alongside MCP and UI startup.
+
+Hatch assets include root dependency-overrides.txt in wheel resources; root-anchored sdist input avoids leaking ignored build outputs. smoke.render_session permits bounded8MB WebSocket frames for the real2.5MB startup UI; source/native smoke share it.
