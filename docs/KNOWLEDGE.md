@@ -84,3 +84,5 @@ Homepage, onboarding, user and AI/provider guides make the default local/no-AI w
 TESTING documents supplied banking archive manifest agreement, offline/live commands, scenario grouping and absent independent column gold. SQL/SAS guides cover parser13 typed constants and DML scope boundaries; AI_ANALYSIS records validator2 and parser-version continuation pins. Table agreement never becomes a live column-accuracy claim.
 
 AI_ANALYSIS includes the expression-reference restoration step/diagram and strict semantic boundary; PROMPT_ENGINEERING records extraction wire3/prompt4 versus review wire2/prompt3, legacy response/storage compatibility and full-envelope accounting. DATA_MODEL confirms no migration; TESTING distinguishes citation functionality from unqualified live accuracy and deferred independent labels.
+
+TESTING records the post-push Certifi lock fix and unresolved Streamlit/Pillow security constraint; audit stays enforced.
