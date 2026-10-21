@@ -329,3 +329,10 @@ Both the all-groups/extras locked audit and the actual installed-wheel third-par
 The initial installed UI smoke hit the harness's 1 MB WebSocket frame ceiling on a legitimate 2.5 MB startup frame; the smoke client now permits a bounded 8 MB frame. Imported SQL/SAS is never executed. No live model calls or user-data migrations were required. A Docker runtime build could not run locally because the Docker daemon is unavailable; container source/input regressions pass, and the release build gate remains enabled.
 
 Final remediation source verification: **859 passed, 2 existing Windows symlink-privilege skips** in 151.39 seconds. Ruff/lock and six documentation regressions pass. The fresh installed-wheel smoke passes CLI import/lineage, actual SVG/PNG export, real stdio MCP query, UI health and a rendered session outside the checkout. No provider requests were made.
+
+
+## Resumable AI analysis
+
+Resumable pipeline tests cover project/window separation, automatic rollover, request-level recovery, batch item isolation, owner-thread database access, mixed SQL/SAS/dbt table/column publication, scoped stored-fact linking and bounded resolution. `test_ai_pipeline_qualification.py` reproduces the screenshot task shape. Mock HTTP and synthetic scale evidence establish behavior only; live model precision and native release acceptance remain separate gates.
+
+Final local qualification for this pipeline: **940 passed, 2 existing Windows skips** (`python -m pytest -q`, 183.72 seconds, Python 3.11.16). `ruff check .` and the strict docs build pass (42 public pages). A fresh wheel installed to a separate target and exercised outside the checkout passed mixed SQL/SAS/dbt table+column publication, packaged dbt/resolution prompts and schema9 integrity with zero live calls. Native executable/container and live-provider accuracy were not rerun.

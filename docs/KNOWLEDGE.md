@@ -11,6 +11,7 @@ through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CL
 references now enumerate107 executable routes and87 tools; UI has eleven destinations.
 
 ## Subfolders
+- `superpowers/` — Internal requirements and execution plans, excluded from the public documentation site. See [superpowers/KNOWLEDGE.md](superpowers/KNOWLEDGE.md).
 - `overrides/` — [overrides/KNOWLEDGE.md](overrides/KNOWLEDGE.md): inject shared theme CSS into Material without app dependencies.
 - `getting-started/` — [getting-started/KNOWLEDGE.md](getting-started/KNOWLEDGE.md).
 - `user-guide/` — [user-guide/KNOWLEDGE.md](user-guide/KNOWLEDGE.md).
@@ -94,3 +95,5 @@ TESTING records the post-push Certifi lock fix and unresolved Streamlit/Pillow s
 LLM_INTEGRATION/AI_ANALYSIS explain the one-hour request limit, separate execution budget and elapsed/wait timer semantics; TESTING records the bounded best-coding browser check and its functionality-only scope.
 
 SECURITY/setup/build guides explain temporary Streamlit1.66/Pillow13 exception, explicit uv wheel/source commands, ordinarypip conflict, artifact companion policy and upstream removal gates. TESTING preserves historical failures and records remediation proof.
+
+Three public pages detail the resumable AI flow, controls/recovery and architecture; mkdocs.yml publishes them with CLI/MCP references. Internal superpowers plan/spec stay outside site and source distribution. Migration9 tables, dbt AI inclusion and bounded synthetic qualification are documented.

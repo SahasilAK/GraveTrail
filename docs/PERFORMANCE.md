@@ -90,3 +90,8 @@ lifecycle/storage check, not a speed comparison or live-model precision result;
 native DuckDB/process memory is excluded. Separate real-adapter/mock HTTP checks
 cover 36 wide-query outputs in one original writer and all 24 review candidates
 across durable continuation without repeats.
+
+
+## Resumable AI analysis
+
+A 2026-10-21 synthetic mock-transport qualification processed 2,001 distinct units/physical requests across automatic windows in one Start with one publication: 171.007 seconds with tracemalloc, 60,722,523 peak Python bytes and 791 maximum unit-record bytes. This is local scheduling/storage evidence, not a provider latency or accuracy benchmark. Reproduce with `python scripts/benchmark_ai_analysis.py --scenario scale --units 2001 --files 7 --max-files-per-request 1 --max-parallel-requests 2 --output pipeline-scale.json`. The planner also has a 2,200-file/6,238-unit synthetic regression.

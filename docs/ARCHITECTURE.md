@@ -103,3 +103,8 @@ Checksums prove file integrity, not publisher authenticity or runtime correctnes
 artifacts need native runner smoke tests. Docker runs the installed wheel as a non-root user
 with persistent `/data`. UI and MCP are alternative owners of a home, not concurrent services
 against one DuckDB file. See [build verification](BUILD_AND_RELEASE.md).
+
+
+## Resumable AI analysis
+
+The resumable AI coordinator owns DuckDB, quotas, physical-attempt journals and accepted-item checkpoints; provider workers receive prompt/profile snapshots and request admission through an event bridge. Stored validated facts are linked before one atomic publication. See [AI pipeline architecture](architecture/ai-analysis-pipeline.md).

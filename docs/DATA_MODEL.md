@@ -98,3 +98,8 @@ Accepted claim payloads also retain compact source references with original enco
 AI source tasks also retain a bounded `unit_spec` in planned/staged unit rows. It pins original coordinates and optional projection bounds/ordinals without copying source text. Validated checkpoints retain reviewed candidate IDs after each review batch. Clean continuation reconstructs the same source plan and skips completed batches; partial task publication is not allowed. This uses the existing migration 6/7 tables and needs no additional migration.
 
 Extraction protocol v3 expression references are transient model citations. The host resolves them to exact original expression text/coordinates before storing the existing compact canonical v2 payload; no new table or migration is required. Parser 14 / validator 3 and extraction prompt/schema hashes invalidate incompatible cached or paused work while preserving the previously published graph. Review remains protocol v2.
+
+
+## Resumable AI analysis
+
+Migration 9 adds `ai_analysis_requests`, `ai_analysis_attempts`, `ai_context_dependencies` and `ai_link_checkpoints`. They store request/item membership, independent dispatch outcomes/reservations, relevant source dependencies and staged link reports. They are included in cleanup, integrity and whole-home backup/restore. See [AI persistence and ownership](architecture/ai-analysis-pipeline.md#durable-state).

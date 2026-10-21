@@ -35,3 +35,8 @@ Focused requests carry exact original header/projection/shared-context segments 
 Prompt 4 issues source-only `expression_references` and accepts `expression_reference` on a derivation. The model omits expression text/offsets for this path; `ai_wire.decode_project_result` regenerates the catalog with the same dialect/settings and resolves exact original text/absolute coordinates before canonical validation. Conflicting supplied text/positions, foreign IDs and references hidden by projection focus fail closed. Semantic validation still checks the exact occurrence, branch, SAS version and dependency roles.
 
 `ai_citations.py` creates locations from original syntax and tokens, including paged static PROC SQL and bounded SAS format syntax. It supplies no parser lineage answers. Full catalog metadata counts in preview/dispatch limits; redundant source/coordinate copies are omitted from the transmitted catalog. The runtime wire schema and generated `project_lineage_wire_response.json` change together, with parity tests. Legacy strict text/offset responses and compact canonical v2 checkpoints remain readable. Parser 14 / validator 3 plus prompt/schema hashes invalidate incompatible continuations and caches. Independent column labels and live precision qualification are separate work.
+
+
+## Resumable AI analysis
+
+Project extraction uses shared strict facts with SQL/SAS/dbt context. dbt prompts include safe source/resource/YAML/macro/artifact context rather than computed parser lineage answers. Batch protocol 1 wraps independently validated unit payloads (maximum eight); targeted resolution reuses exact source evidence and cannot override host validation. See [AI pipeline](architecture/ai-analysis-pipeline.md).

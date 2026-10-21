@@ -96,11 +96,11 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `jobs cancel` | `JOB_ID` | `--workspace`, `-w` **required**; `--help` |
 | `jobs status` | `JOB_ID` | `--workspace`, `-w` **required**; `--wait`, `--no-wait`; `--help` |
 | `lineage analysis-report` | — | `--workspace`, `-w` **required**; `--run-id`; `--help` |
-| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--mode`; `--additional-ai-review`, `--no-additional-ai-review`; `--refresh-ai`, `--no-refresh-ai`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
+| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--mode`; `--additional-ai-review`, `--no-additional-ai-review`; `--refresh-ai`, `--no-refresh-ai`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--max-files-per-request`; `--max-parallel-requests`; `--auto-continue`, `--no-auto-continue`; `--project-max-provider-attempts`; `--project-max-output-tokens-total`; `--project-max-seconds`; `--help` |
 | `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
 | `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
-| `lineage preview` | — | `--workspace`, `-w` **required**; `--mode`; `--file-id` (repeatable); `--additional-ai-review`, `--no-additional-ai-review`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
+| `lineage preview` | — | `--workspace`, `-w` **required**; `--mode`; `--file-id` (repeatable); `--additional-ai-review`, `--no-additional-ai-review`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--max-files-per-request`; `--max-parallel-requests`; `--auto-continue`, `--no-auto-continue`; `--project-max-provider-attempts`; `--project-max-output-tokens-total`; `--project-max-seconds`; `--help` |
 | `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
 | `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |

@@ -169,7 +169,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` |
 | `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
 | `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
-| `preview_project_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `resume_run_id`, `retry_unknown` |
+| `preview_project_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `resume_run_id`, `retry_unknown`, `max_files_per_request`, `max_parallel_requests`, `auto_continue`, `project_max_provider_attempts`, `project_max_output_tokens_total`, `project_max_seconds` |
 | `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
 | `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` |
@@ -177,7 +177,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
-| `start_lineage_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `force`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `refresh_ai`, `resume_run_id`, `retry_unknown` |
+| `start_lineage_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `force`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `refresh_ai`, `resume_run_id`, `retry_unknown`, `max_files_per_request`, `max_parallel_requests`, `auto_continue`, `project_max_provider_attempts`, `project_max_output_tokens_total`, `project_max_seconds` |
 | `test_local_agent_access` | `workspace_id` | `options` |
 | `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
 | `update_application_logging` | `level` | `options` |

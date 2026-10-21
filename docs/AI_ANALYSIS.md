@@ -1,8 +1,9 @@
 # AI project analysis
 
-dbt projects use parser analysis. Selected dbt sources are rejected before AI context
-disclosure, including manual diagnostic assistance. Select ordinary SQL/SAS files separately
-to use this workflow in a mixed workspace; existing dbt facts are preserved.
+SQL, SAS and dbt support the shared resumable AI/hybrid build. The static parsers
+remain unchanged. Start with the [full analysis flow](user-guide/ai-analysis-flow.md),
+[controls and recovery](user-guide/ai-analysis-controls-and-recovery.md), and
+[pipeline architecture](architecture/ai-analysis-pipeline.md).
 
 **Local parser analysis is the primary, default workflow.** It builds table lineage,
 column usage and supported transformations without sending source to an AI provider.
@@ -24,7 +25,7 @@ AI-generated mode is experimental and has no qualified live precision claim.
 
 ## Choose a build
 
-| Analysis controls | Mode | Published SQL/SAS facts |
+| Analysis controls | Mode | Published SQL/SAS/dbt facts |
 | --- | --- | --- |
 | **Use AI for analysis** off | `parser` | Existing local parsing and still-valid saved inferred support; no new AI requests |
 | AI on, **Compare with parser** on | `hybrid` | Parser facts plus independently extracted, deterministically validated AI facts |
@@ -34,7 +35,7 @@ CSV continues to supply local schema metadata. **Additional AI review** is optio
 
 Review receives every eligible compact candidate in deterministic batches, targeting 2,000 candidate characters and at most 100 decisions per request. A larger single candidate gets its own full-envelope fit check; it is never silently dropped. Preview labels review sizing provisional until extraction produces candidates. Continue uses the actual remaining batches and saves progress after every completed batch. Reviewer approval cannot override local validation.
 
-1. Import SQL/SAS source files and configure a provider under **Connections & AI**.
+1. Import SQL/SAS files or dbt projects and configure a provider under **Connections & AI**.
 2. Open **Analysis**, select files, and enable **Use AI for analysis**. Keep **Compare with parser** selected for a hybrid build.
 3. Inspect the offline preview: selected files, complete units, disclosure, configured routes, context failures, retry/fallback call ceiling and output-token reservations. Preview does not test connections or send source.
 4. Start the explicit AI analysis action. Inspect the completed comparison/report and original evidence; unresolved and rejected candidates do not become accepted dependencies.
@@ -71,10 +72,10 @@ flowchart TD
     H --> R[Save reviewed candidate IDs]
     R --> S{More review batches?}
     S -->|Yes, allowance available| H
-    S -->|Yes, execution limit| N
+    S -->|Yes, execution rollover| N
     S -->|No| L[Durable validated stage checkpoint]
     L --> M{All units processed?}
-    M -->|No| N[Await explicit Continue; keep previous graph]
+    M -->|No| N[Continue within project allowance; keep previous graph]
     N --> C
     M -->|Yes| I
     I --> J[Atomic publication of accepted facts]
@@ -83,7 +84,7 @@ flowchart TD
 
 Units retain original character offsets and lines, including multiple statements on one line. Complete SQL statements and SAS blocks are preferred. When the complete request cannot fit, eligible independent SQL projections or static PROC SQL statements become smaller source tasks as described below. Relevant declarations are retrieved by exact symbol names; project coverage does not depend on a top-k search. An unsupported indivisible unit still blocks rather than being truncated. Project planning can exceed 50 tasks; the manual selection limit remains 50 chunks.
 
-Each request receives its original unit, relevant selected-source declarations and safe configured context. Extraction does not receive parser relationship or transformation answers. The declaration catalog includes provenance and marks conflicts unknown. Unselected source is not implicitly sent as extra context. Static schemas and structural parsing are shared inputs, so independent extraction is not independent proof.
+Each request receives its original unit, relevant selected-source declarations and safe configured context. Extraction does not receive parser relationship or transformation answers. The declaration catalog includes provenance and marks conflicts unknown. Ordinary unselected SQL/SAS is not implicitly sent as extra context. Selecting a dbt member discloses its project closure before dispatch. Static schemas and structural parsing are shared inputs, so independent extraction is not independent proof.
 
 A remote project run can transmit a complete selected file across several chunks. It requires both **external requests** and **complete source** permission. A loopback gateway such as OmniRoute may forward data to another provider. Source, comments and embedded instructions are untrusted data and are never executed. Session credentials remain in memory; credentials and provider echoes are redacted through the existing connection boundary.
 
@@ -109,7 +110,7 @@ If the complete envelope exceeds a character allowance, preview shows an **Apply
 
 Values in the existing **AI request budget** menu recalculate with source/model/review selection. Edit an individual value to preserve a Custom ceiling; **Reset AI budgets to automatic** clears those overrides. CLI/MCP omitted or null limits request Automatic; explicit numbers remain Custom. Preview reports total work separately from the largest prefix of extraction/review stages fitting this execution. A unit may pause after extraction or between review batches without losing completed work.
 
-Large projects return **awaiting_continuation** at the execution limit. Completed extraction/validation and individual review batches are durable, including partial semantic outcomes. Original source partitions and reviewed candidate IDs are saved so capacity metadata aging cannot silently repartition a continuation. **Continue AI analysis** rechecks the pinned sources, configuration, original publication, prompts, routes, permissions and budgets. It makes no calls for completed stages. The current graph remains visible until all required units finish and a single final publication succeeds. Process restart never sends requests automatically. A lost in-flight response needs the explicit retry choice, which identifies the possibility of a duplicate charge. Cumulative reservations and unknown usage remain visible across executions.
+Active builds continue automatically across execution windows within a finite project allowance. Disable automatic continuation for manual windows. Project allowance exhaustion, cancellation or restart can return **awaiting_continuation**. Completed extraction/validation and individual review batches are durable, including partial semantic outcomes. Original source partitions and reviewed candidate IDs are saved so capacity metadata aging cannot silently repartition a continuation. **Continue AI analysis** rechecks the pinned sources, configuration, original publication, prompts, routes, permissions and budgets. It makes no calls for completed stages. The current graph remains visible until all required units finish and a single final publication succeeds. Process restart never sends requests automatically. A lost in-flight response needs the explicit retry choice, which identifies the possibility of a duplicate charge. Cumulative reservations and unknown usage remain visible across executions.
 
 Every extraction/review/retry/fallback attempt reserves its configured maximum output allocation before dispatch and rechecks current authorization, source identity, cancellation and remaining budget. Unknown usage keeps that conservative reservation. Reported token counts remain provider metadata; absent usage is unknown. No monetary estimate is invented.
 
@@ -145,7 +146,7 @@ Supported parser structure verifies ordinary claims. Separately bounded static S
 
 Hybrid comparison preserves parser-only facts and reports omissions. AI-only candidates publish only after deterministic checks. Corroboration of one original operation remains one writer. Conflicting/uncertain support stays inspectable; confident traversal stops at unresolved boundaries and unknown writer order.
 
-Accepted project facts and minimal provenance are durable and can be reused by offline parser rebuilds. Selected-file runs preserve compatible unselected contributions. AI cache reuse requires the same source/context, job/settings, route/model, prompt/schema and validation identity; current source and authorization are checked again. Cache hits make zero new requests and do not turn historical usage into zero. **Refresh AI** explicitly bypasses AI extraction reuse; forcing local parser work alone does not authorize AI requests.
+Accepted project facts and minimal provenance are durable and can be reused by offline parser rebuilds. Selected-file runs preserve compatible unselected contributions. AI cache reuse requires the same source/context, job/settings, relevant context, prompt/schema and validation identity; current source and authorization are checked again. Cache hits make zero new requests and do not turn historical usage into zero. **Refresh AI** explicitly bypasses AI extraction reuse; forcing local parser work alone does not authorize AI requests.
 
 Preserved contributions carry their original declaration dependencies into later selected-file snapshots. Changing a declaration invalidates dependent offline reuse even if the most recent run analyzed another file.
 
@@ -169,10 +170,20 @@ The live qualification targets remain unestablished: at least 99% accepted table
 
 The design follows [context engineering guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents): keep complete, relevant source and retrieve context when needed. Long-window support alone does not establish effective task performance ([RULER](https://arxiv.org/abs/2404.06654)). Provider metadata can expose distinct limits ([Google model resource](https://ai.google.dev/api/models), [OpenRouter model properties](https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties)); unknown window semantics are handled conservatively. Prompt caching can reduce repeated-input cost but does not remove context or output reservations.
 
-Automatic-budget qualification processed 1,000 synthetic units across ten explicit
+Historical automatic-budget qualification processed 1,000 synthetic units across ten explicit
 executions with exactly 1,000 unique requests and one final publication. A separate
 browser fixture processed three units in three executions, accepting nine locally
 validated claims. The real MCP HTTP SDK and a clean installed wheel also exercised
 continuation. These mock-transport checks do not establish live-model accuracy.
 A fresh OmniRoute attempt for this extension could not complete (provider error);
 no new live precision result is claimed. See [performance measurements](PERFORMANCE.md#automatic-ai-continuation-qualification-2026-10-20).
+
+## Resumable pipeline qualification (2026-10-21)
+
+A synthetic mock-transport build completed **2,001 unique physical requests in one
+Start**, crossing the 2,000-attempt window and publishing once. All 2,001 units
+were processed without repeated extraction. With tracemalloc enabled on this
+Windows workspace: 171.007 seconds, 60,722,523 peak Python bytes, maximum unit record
+791 bytes. These measurements cover scheduling/storage and accounting, not live
+model quality. A separate planner test matches the screenshot's 2,200 files and
+6,238 complete units. See the [pipeline guide](architecture/ai-analysis-pipeline.md).

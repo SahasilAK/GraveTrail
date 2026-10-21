@@ -78,3 +78,5 @@ Parser14/validator3: source-only expression references hydrate exact original SQ
 Security compatibility: exactStreamlit1.66/Pillow13runtime pins plus temporaryexplicituvPillow override replace vulnerablePillow. dependency-overrides.txt is the wheel installer policy; plainpip fails onupstreammetadata conflict. Source/Docker/native sharelock; CI audits lock andcleanwheel. Removal/limits: SECURITY.md anddocs/SETUP_AND_DEPLOYMENT.md.
 
 - `dependency-overrides.txt` — Exact temporary Pillow installer exception; keep synchronized with pyproject tool.uv/runtime pins, package with Python artifacts, remove only after tested stable upstream support.
+
+Resumable SQL/SAS/dbt AI analysis uses finite lifetime allowances, automatic bounded execution windows and request/item journals. Public walkthrough: [docs/user-guide/ai-analysis-flow.md](docs/user-guide/ai-analysis-flow.md).

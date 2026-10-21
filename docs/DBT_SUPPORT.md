@@ -97,8 +97,13 @@ target label, selected artifact paths and per-root `projects` overrides. Only de
 non-secret variable values belong here. Never supply profiles, credentials or environment
 values. Settings are included in portable workspace configuration and project freshness.
 
-AI/hybrid project builds reject selected dbt sources before source disclosure. Use parser
-analysis for dbt; ordinary SQL/SAS AI analysis remains available for separately selected files.
+AI/hybrid project builds include dbt alongside SQL and SAS. Project membership
+selects dbt prompt context with resource/package/version identity, YAML, macros and
+supplied artifact origin. Selecting a member includes the disclosed project closure.
+AI-only publishes validated AI data-flow facts; hybrid also compares parser facts.
+Dynamic Jinja, Python column semantics and unsupported compiled-to-original mappings
+remain partial. Manual range assistance still requires project-aware context; use
+project AI analysis instead. See [the AI flow](user-guide/ai-analysis-flow.md).
 
 ## Upgrade and recovery
 

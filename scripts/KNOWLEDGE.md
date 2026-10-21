@@ -32,3 +32,5 @@ Benchmark/live-check temporary directories use gravetrail prefixes; supplied fix
 `benchmark_ai_analysis.py --scale-units 1000` adds mock-transport durable continuation, exact request/unit coverage, reopen, one final publication, elapsed time, peak Python allocations and maximum unit record bytes. Scale mode never makes live provider calls.
 
 - `benchmark_lineage_archives.py` — Supplied synthetic SQL/SAS ZIP checksum/inventory checks, answer-header masking preserving offsets, versioned scenario-group splits and per-script table-manifest agreement. Offline default; explicit bounded live samples reuse production planner/adapter/validator and compare parser/AI/hybrid. Receipts include quarantined metering and gateway-reported models. Missing column gold keeps qualification open.
+
+`benchmark_ai_analysis.py` adds --scenario existing/mixed/rate-limit/recovery/scale, --files/--units and grouping/parallel controls. Scale scenarios stay mock-only; 2001 unique physical calls crossed the 2000-attempt window in one Start/one publication. Semantic scoring/live qualification remains separate.
