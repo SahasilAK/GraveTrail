@@ -150,6 +150,10 @@ and [fixture verification limits](docs/TESTING.md).
 | [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Build verification](docs/BUILD_AND_RELEASE.md) |
 | [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
 
+| Release |
+| --- |
+| [![Latest release](https://img.shields.io/github/v/release/SahasilAK/GraveTrail?display_name=tag)](https://github.com/SahasilAK/GraveTrail/releases/latest) |
+
 Explore the [live documentation website](https://sahasilak.github.io/GraveTrail/)
 with search and light/dark mode. See the [Pages deployment guide](docs/deployment/github-pages.md)
 for publishing details. GitHub Pages hosts the documentation;
