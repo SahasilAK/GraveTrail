@@ -48,6 +48,17 @@ def test_execution_reserves_every_attempt_and_deadline():
         execution.check()
 
 
+def test_hour_timeout_respects_the_remaining_execution_deadline():
+    p = Profile(provider='OmniRoute', base_url='http://localhost:20128/v1', model='auto/best-coding', timeout=3600)
+    with pytest.raises(ValueError):
+        Profile(**{**p.model_dump(), 'timeout': 3601})
+    clock = [0.0]
+    execution = AIExecutionContext(AnalysisRequest(mode='hybrid', max_seconds=7200), clock=lambda: clock[0])
+    assert execution.before_attempt(p) == 3600
+    clock[0] = 7100
+    assert execution.before_attempt(p) == 100
+
+
 def test_task_registries_and_generated_schemas():
     from dataforge.llm import PROJECT_SCHEMAS, PROMPTS
     assert len(MANUAL_TASKS)==5 and set(PROJECT_TASKS)=={'project_lineage','lineage_review'}

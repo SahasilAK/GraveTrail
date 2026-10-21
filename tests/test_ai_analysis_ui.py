@@ -56,6 +56,37 @@ def test_completed_worker_refreshes_the_whole_report_once(tmp_path, monkeypatch)
     st.cache_resource.clear()
 
 
+def test_pending_worker_elapsed_advances_and_stops_on_completion(tmp_path, monkeypatch):
+    import ui.analysis_ai as ai
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Elapsed UI')
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    now = [1165.0]
+    monkeypatch.setattr(ai, 'time', lambda: now[0])
+    record = {'status': 'running', 'progress': .1, 'stage': 'Waiting for AI extraction response',
+              'created_at': 900.0, 'started_at': 1000.0, 'stage_started_at': 1100.0}
+    class PendingJobs:
+        def read(self, *args):
+            return record
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *args: PendingJobs())
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.session_state['ai_analysis_job_' + w] = 'job'
+    view.switch_page('ui/pages/analysis.py').run()
+    assert not view.exception
+    assert any('Elapsed: 0:02:45' in c.value and 'Waiting: 0:01:05' in c.value for c in view.caption)
+    now[0] += 30
+    view.run()
+    assert any('Elapsed: 0:03:15' in c.value and 'Waiting: 0:01:35' in c.value for c in view.caption)
+    record.update(status='completed', finished_at=1200.0, result={'status': 'committed'})
+    now[0] = 9999
+    view.run()
+    assert not view.exception
+    assert any('Elapsed: 0:03:20' in c.value and 'Waiting:' not in c.value for c in view.caption)
+    import streamlit as st
+    st.cache_resource.clear()
+
+
 def test_budget_defaults_are_automatic_editable_and_resettable(tmp_path, monkeypatch):
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     store = get_store(str(tmp_path))

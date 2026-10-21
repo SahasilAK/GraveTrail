@@ -75,7 +75,8 @@ class Jobs:
             if len(active) >= 2 or any(r["workspace_id"] == workspace for r in active):
                 raise AgentError("busy", "A job is already active for this workspace or both workers are busy")
             record = {"job_id": uuid.uuid4().hex, "workspace_id": workspace, "operation": operation,
-                      "status": "queued", "progress": 0, "updated_at": time.time(), "access": access or {}}
+                      "status": "queued", "progress": 0, "created_at": time.time(),
+                      "updated_at": time.time(), "access": access or {}}
             self.write(record)
             return record
 
@@ -109,12 +110,12 @@ class Jobs:
             while not stop.wait(2):
                 update()
 
-        update(status="running")
+        update(status="running", started_at=time.time())
         thread = threading.Thread(target=heartbeat, daemon=True)
         thread.start()
         try:
             def progress(fraction, stage):
-                update(progress=round(fraction, 3), stage=str(stage)[:100])
+                update(progress=round(fraction, 3), stage=str(stage)[:100], stage_started_at=time.time())
 
             with connection_scope(connections or current_connections()):
                 if cancelled():
@@ -124,12 +125,13 @@ class Jobs:
             thread.join()
             outcome = result.get('status') if isinstance(result, dict) else None
             status = outcome if outcome in {'failed', 'cancelled', 'interrupted'} else 'completed'
-            update(status=status, progress=1, result=result)
+            update(status=status, progress=1, result=result, finished_at=time.time())
         except Exception as exc:
             stop.set()
             thread.join()
             code = exc.code if isinstance(exc, AgentError) else type(exc).__name__
-            update(status="cancelled" if isinstance(exc, InterruptedError) else "failed", error=code)
+            update(status="cancelled" if isinstance(exc, InterruptedError) else "failed", error=code,
+                   finished_at=time.time())
         finally:
             marker.unlink(missing_ok=True)
 

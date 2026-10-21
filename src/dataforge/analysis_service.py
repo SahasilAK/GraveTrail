@@ -373,7 +373,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if not _stage_ready(store,workspace,unit,'project_lineage',execution):
                         return _pause(store,workspace,run_id,request,execution,counts,usage_known)
                     _set_inflight_callback(store, workspace, run_id, request, execution, counts, unit, 'project_lineage')
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Waiting for AI extraction response')
                     result = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Validating AI extraction response')
                     if result is None or result.outcome != 'validated' or result.result is None:
                         raise ValueError('incomplete_ai_response')
                     response, record_id = result.result, result.record_id or None
@@ -400,7 +402,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if not _stage_ready(store,workspace,unit,'lineage_review',execution):
                         return _pause(store,workspace,run_id,request,execution,counts,usage_known)
                     _set_inflight_callback(store,workspace,run_id,request,execution,counts,unit,'lineage_review')
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Waiting for AI review response')
                     review=invoke_analysis_unit(store,workspace,unit,'lineage_review',execution)
+                    update(.1 + .75 * index / max(1, len(plan.units)), 'Validating AI review response')
                     if review is None or review.outcome!='validated' or review.result is None:
                         raise ValueError('incomplete_ai_review')
                     usage_known &= review.usage_known

@@ -22,6 +22,7 @@ def test_worker_binds_only_initiating_session_and_journal_has_no_secret(tmp_path
         result = jobs.wait(run['job_id'], 'workspace', timeout=5)
         assert result['status'] == 'completed'
         assert result['stage'] == 'AI extraction'
+        assert result['created_at'] <= result['started_at'] <= result['stage_started_at'] <= result['finished_at']
         assert 'synthetic-session-secret' not in jobs.path(run['job_id']).read_text()
     finally:
         jobs.close()

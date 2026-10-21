@@ -106,3 +106,5 @@ Navigation uses a non-minimum custom budget to detect widget cleanup; Continue p
 - `test_archive_qualification.py` — Hash/inventory integrity, answer leakage prevention, grouped splits, failed-prediction omissions and insufficient-evidence gates. Evaluation tests preserve known metering for quarantined responses.
 
 - `test_ai_citations.py` — Immutable/dialect-bound expression IDs, absolute original coordinates, Unicode/comments, focused visibility, repeated UNION/SAS occurrence rejection, DML RHS, paged PROC SQL/SAS formats, sanitized transport quarantine and reference-only publication/reopen/offline reuse. Wire tests pin generated schema parity; default eight-assignment context remains unchanged.
+
+Timeout/progress regressions cover3600 acceptance/3601 rejection, remaining-run clamping, saved provider UI reopen, journal timer ordering, clock advancement/frozen completion, legacy status and extraction/review waiting-stage order.

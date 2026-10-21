@@ -106,3 +106,5 @@ Validator3 is owned by ai_validation and imported by analysis_service. Both unit
 
 - `ai_citations.py` — Bounded cached source-only projection/assignment locations, static PROC SQL pages/SAS formats, immutable/dialect-bound IDs and focused visibility. Used by prompt construction and wire decoding; supplies no dependency answers.
 Parser14/validator3 add exact projection/SAS assignment occurrence checks. Extraction wire3/prompt4 resolves optional expression references before canonical validation; review stays wire2/prompt3 and durable compact-v2 payloads remain compatible.
+
+Profile timeout cap is3600seconds; current run deadlines still clamp HTTP waits. analysis_service emits source-free waiting/validation stages around extraction/review. Existing saved/default profiles are unchanged.

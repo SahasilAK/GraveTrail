@@ -100,6 +100,8 @@ Large projects return **awaiting_continuation** at the execution limit. Complete
 
 Every extraction/review/retry/fallback attempt reserves its configured maximum output allocation before dispatch and rechecks current authorization, source identity, cancellation and remaining budget. Unknown usage keeps that conservative reservation. Reported token counts remain provider metadata; absent usage is unknown. No monetary estimate is invented.
 
+Provider profiles allow a request timeout of 1–3,600 seconds (one hour); existing saved/default values remain unchanged. Set it under Connections & AI → Advanced request options and save the profile. The progress panel refreshes every two seconds with total elapsed time and current extraction/review waiting time; completion freezes the timer. These timers indicate a pending request, not upstream model progress.
+
 The deadline starts when work enters execution, excluding queue time. HTTP timeouts are limited by remaining time; checks also run between received chunks, stages and immediately before publication. A blocked socket/parser cannot always be preempted exactly, so cancellation or deadline reporting may return later. An already sent request may have incurred usage.
 
 ## Oversized operations and large review sets

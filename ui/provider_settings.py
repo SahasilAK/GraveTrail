@@ -107,7 +107,8 @@ def render(store, workspace):
         st.caption(f'Output limit: {output_mode.capitalize()} · Source context limit: {context_mode.capitalize()}. Edit a number to make it Custom.')
         auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")), key=prefix + '_auth')
-        timeout = st.number_input("Request timeout (seconds)", 1, 180, int(config.get("timeout", 30)), key=prefix + '_timeout')
+        timeout = st.number_input("Request timeout (seconds)", 1, 3600, int(config.get("timeout", 30)),
+            key=prefix + '_timeout', help='Up to one hour per request. The AI analysis run budget may shorten this wait.')
         retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)), key=prefix + '_retries')
         max_tokens = st.number_input("Maximum output tokens", 64, 32000, key=prefix + '_max_tokens', on_change=customize_output)
         context = st.number_input("Profile source context character limit", 500, 200000, key=prefix + '_context', on_change=customize_context)
@@ -135,7 +136,8 @@ def render(store, workspace):
                 raise ValueError("Enable external requests in Connections & AI / Privacy first")
             resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
                 for k, v in LLMResourceSettings().model_dump().items()})
-            with request_slot(store.home, workspace, resources.llm_concurrency), Adapter(profile) as adapter:
+            with st.spinner('Waiting for connection response', show_time=True), request_slot(
+                    store.home, workspace, resources.llm_concurrency), Adapter(profile) as adapter:
                 if discover:
                     catalog = adapter.model_catalog()
                     models = [item.id for item in catalog]
@@ -187,7 +189,7 @@ def render(store, workspace):
         try:
             if not is_local(url) and not store.setting(workspace, 'external_llm', False):
                 raise ValueError('External requests are disabled')
-            with Adapter(profile) as adapter:
+            with st.spinner('Waiting for model limits', show_time=True), Adapter(profile) as adapter:
                 descriptor = adapter.model_details(model)
             saved_catalog = st.session_state.setdefault(models_key, {'signature': signature, 'models': []})
             saved_catalog.setdefault('capabilities', {})[model] = descriptor.capabilities.model_dump()

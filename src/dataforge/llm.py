@@ -71,7 +71,7 @@ class Profile(BaseModel):
     name: str = "Default"
     key_env: str = ""
     auth: Literal["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"] = "auto"
-    timeout: float = Field(default=30, ge=1, le=180)
+    timeout: float = Field(default=30, ge=1, le=3600)
     retries: int = Field(default=1, ge=0, le=2)
     max_tokens: int = Field(default=2048, ge=64, le=32000)
     context_chars: int = Field(default=16000, ge=500, le=200000)

@@ -86,3 +86,5 @@ TESTING documents supplied banking archive manifest agreement, offline/live comm
 AI_ANALYSIS includes the expression-reference restoration step/diagram and strict semantic boundary; PROMPT_ENGINEERING records extraction wire3/prompt4 versus review wire2/prompt3, legacy response/storage compatibility and full-envelope accounting. DATA_MODEL confirms no migration; TESTING distinguishes citation functionality from unqualified live accuracy and deferred independent labels.
 
 TESTING records the post-push Certifi lock fix and unresolved Streamlit/Pillow security constraint; audit stays enforced.
+
+LLM_INTEGRATION/AI_ANALYSIS explain the one-hour request limit, separate execution budget and elapsed/wait timer semantics; TESTING records the bounded best-coding browser check and its functionality-only scope.
