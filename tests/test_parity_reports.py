@@ -1,5 +1,6 @@
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -13,7 +14,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_reports_dictionary_schema_history_and_cli(tmp_path):
+def test_reports_dictionary_schema_history_and_cli(tmp_path: Path) -> None:
+    """Verify that reports dictionary schema history and cli.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('reports')
     Importer(store, w).files([('q.sql', b'create table raw.a (id integer);\ncreate table mart.x as select id from raw.a;')], {'.sql'})
@@ -42,7 +48,12 @@ def test_reports_dictionary_schema_history_and_cli(tmp_path):
     assert result.exit_code == 0 and json.loads(result.output)['counts']['source_files'] == 1
 
 
-def test_cli_search_matches_requires_source_permission(tmp_path):
+def test_cli_search_matches_requires_source_permission(tmp_path: Path) -> None:
+    """Verify that cli search matches requires source permission.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('search')
     Importer(store, w).files([('a.sql', b'select id from raw.a;')], {'.sql'})
@@ -52,7 +63,12 @@ def test_cli_search_matches_requires_source_permission(tmp_path):
     assert json.loads(result.output)['items'][0]['line'] == 1
 
 
-def test_configured_headless_import_capacity_exceeds_legacy_ten_thousand(tmp_path):
+def test_configured_headless_import_capacity_exceeds_legacy_ten_thousand(tmp_path: Path) -> None:
+    """Verify that configured headless import capacity exceeds legacy ten thousand.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import io
     from zipfile import ZipFile
 

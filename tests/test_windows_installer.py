@@ -7,7 +7,8 @@ import pytest
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows named mutex API")
-def test_windows_instance_mutex_exists_only_while_runtime_is_alive():
+def test_windows_instance_mutex_exists_only_while_runtime_is_alive() -> None:
+    """Verify that windows instance mutex exists only while runtime is alive."""
     from dataforge.launcher import windows_instance
 
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -21,7 +22,8 @@ def test_windows_instance_mutex_exists_only_while_runtime_is_alive():
     assert not kernel.OpenMutexW(0x00100000, False, "Local\\GraveTrail.Application")
 
 
-def test_installer_is_per_user_preserves_data_and_never_closes_live_owners():
+def test_installer_is_per_user_preserves_data_and_never_closes_live_owners() -> None:
+    """Verify that installer is per user preserves data and never closes live owners."""
     root = Path(__file__).resolve().parents[1]
     template = (root / "scripts/build/windows.iss").read_text()
     for required in ("PrivilegesRequired=lowest", "{localappdata}\\Programs\\GraveTrail",
@@ -33,7 +35,8 @@ def test_installer_is_per_user_preserves_data_and_never_closes_live_owners():
     assert "DataForge" not in template
 
 
-def test_production_signing_requires_identity_and_checks_timestamp():
+def test_production_signing_requires_identity_and_checks_timestamp() -> None:
+    """Verify that production signing requires identity and checks timestamp."""
     root = Path(__file__).resolve().parents[1]
     script = (root / "scripts/build/sign_windows.ps1").read_text()
     for required in ("WINDOWS_SIGNING_THUMBPRINT", "TimeStamperCertificate", "Get-AuthenticodeSignature",

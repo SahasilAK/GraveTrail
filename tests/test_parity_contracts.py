@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -10,7 +11,12 @@ from dataforge.cli import app
 from dataforge.store import Store
 
 
-def test_capabilities_cover_inventory(tmp_path):
+def test_capabilities_cover_inventory(tmp_path: Path) -> None:
+    """Verify that capabilities cover inventory.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     with_store = Store(tmp_path)
     service = AgentService(with_store)
     try:
@@ -38,7 +44,8 @@ def test_capabilities_cover_inventory(tmp_path):
     assert result.exit_code == 0, result.output
 
 
-def test_independent_permissions_and_scoped_admin():
+def test_independent_permissions_and_scoped_admin() -> None:
+    """Verify that independent permissions and scoped admin."""
     policy = AccessPolicy(allow_write=True)
     for operation in ('config', 'network', 'application', 'admin'):
         with pytest.raises(AgentError):

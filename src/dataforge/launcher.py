@@ -5,12 +5,13 @@ import argparse
 import os
 import shutil
 import sys
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 
 
 @contextmanager
-def windows_instance():
+def windows_instance() -> Iterator[None]:
     """Keep installer replacement blocked while any frozen UI/CLI/worker is alive."""
     if sys.platform != "win32":
         yield
@@ -31,11 +32,18 @@ def windows_instance():
 
 
 def application_root() -> Path:
+    """Resolve the application asset directory for source, wheel, or frozen execution."""
     packaged = Path(__file__).resolve().parent / "_app"
     return packaged if (packaged / "app.py").is_file() else Path(__file__).resolve().parents[2]
 
 
-def default_home(*, source: bool, platform: str | None = None, environ=None) -> Path:
+def default_home(
+    *,
+    source: bool,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> Path:
+    """Choose the app's persistent data directory from the platform and environment."""
     env = os.environ if environ is None else environ
     if env.get("DATAFORGE_HOME"):
         return Path(env["DATAFORGE_HOME"]).expanduser().resolve()
@@ -51,6 +59,7 @@ def default_home(*, source: bool, platform: str | None = None, environ=None) -> 
 
 
 def prepare_runtime(home: Path, assets: Path) -> Path:
+    """Create the runtime Streamlit configuration from packaged defaults if absent."""
     target = home / ".streamlit/config.toml"
     target.parent.mkdir(parents=True, exist_ok=True)
     if not target.exists():
@@ -64,6 +73,7 @@ def prepare_runtime(home: Path, assets: Path) -> Path:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Parse launcher arguments, initialize storage, and start the Streamlit app."""
     parser = argparse.ArgumentParser(description="Launch the GraveTrail engineering workspace")
     parser.add_argument("--home", type=Path, help="Persistent runtime data directory")
     parser.add_argument("--port", type=int, default=8501)

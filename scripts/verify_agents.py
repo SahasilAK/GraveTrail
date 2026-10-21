@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 from dataforge.agent.contracts import AccessPolicy, AgentError, compact
@@ -12,7 +13,15 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def verify(home):
+def verify(home: Path) -> dict[str, Any]:
+    """Measure agent lineage acceptance and compact response sizes for sample ZIPs.
+
+    Args:
+        home: Disposable storage home used for both sample workspaces.
+
+    Returns:
+        Per-language acceptance, lineage, and response-size measurements.
+    """
     store = Store(home)
     results = {}
     try:

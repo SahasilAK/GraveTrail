@@ -5,13 +5,14 @@ import re
 import subprocess
 import sys
 import threading
-from typing import Literal
+from typing import Any, Literal
 from xml.etree import ElementTree as ET
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from dataforge.configuration import VisualizationSettings
 from dataforge.exports import graph_data
+from dataforge.graph import LineageGraph
 
 MAX_NODES, MAX_EDGES = 1000, 5000
 MAX_DIMENSION, MAX_PIXELS = 8192, 16_000_000
@@ -21,6 +22,8 @@ RENDER_SLOTS = threading.BoundedSemaphore(2)
 
 
 class ImageOptions(BaseModel):
+    """Bounded rendering options accepted by SVG and PNG graph export."""
+
     model_config = ConfigDict(extra='forbid', strict=True)
     scale: Literal[1, 2] = 1
     background: Literal['light', 'dark', 'transparent'] = 'light'
@@ -28,7 +31,8 @@ class ImageOptions(BaseModel):
     legend: bool = True
 
 
-def png_available():
+def png_available() -> bool:
+    """Check whether the optional PNG renderer can be imported."""
     try:
         import resvg_py  # noqa: F401
         return True
@@ -36,20 +40,45 @@ def png_available():
         return False
 
 
-def safe_image_filename(workspace, asset, format):
-    def safe(value):
+def safe_image_filename(workspace: str, asset: str, format: str) -> str:
+    """Create a filesystem-safe image filename from workspace and asset labels."""
+
+    def safe(value: str) -> str:
+        """Normalize a label to a bounded filename component."""
         return re.sub(r'[^\w.-]+', '-', str(value), flags=re.UNICODE).strip('.-')[:70] or 'graph'
     return f'gravetrail-{safe(workspace)}-{safe(asset)}.{format}'
 
 
-def _text(value):
+def _text(value: object) -> str:
+    """Remove characters forbidden by XML 1.0 from text content."""
     # XML 1.0 excludes control characters and lone surrogates even inside escaped text.
     return ''.join(c for c in str(value) if c in '\t\n\r' or
                    0x20 <= ord(c) <= 0xD7FF or 0xE000 <= ord(c) <= 0xFFFD or 0x10000 <= ord(c) <= 0x10FFFF)
 
 
-def render_graph_image(graph, *, format='svg', appearance=None, options=None, scope=None):
-    """Return image bytes and bounded metadata; caller owns scope selection/authorization."""
+def render_graph_image(
+    graph: LineageGraph,
+    *,
+    format: str = 'svg',
+    appearance: VisualizationSettings | None = None,
+    options: ImageOptions | dict[str, Any] | None = None,
+    scope: dict[str, Any] | None = None,
+) -> tuple[bytes, dict[str, Any]]:
+    """Render a fitted graph as SVG or PNG and return bounded image metadata.
+
+    Args:
+        graph: Filtered graph to render.
+        format: Requested image format, either ``svg`` or ``png``.
+        appearance: Graph label, palette, and edge-width settings.
+        options: Validated image title, scale, background, and legend options.
+        scope: Optional selection and completeness metadata shown with the image.
+
+    Returns:
+        Rendered image bytes and metadata describing dimensions, counts, and warnings.
+
+    Raises:
+        ValueError: If the graph or output exceeds a rendering limit or PNG rendering fails.
+    """
     if format not in {'svg', 'png'}:
         raise ValueError('Choose SVG or PNG')
     options = options if isinstance(options, ImageOptions) else ImageOptions.model_validate(options or {})
@@ -86,7 +115,13 @@ def render_graph_image(graph, *, format='svg', appearance=None, options=None, sc
     text, border, edge = ('#edf2f9', '#7489a3', '#a8bdd2') if dark else ('#23334a', '#8d9cb1', '#607b96')
     fills = (['#303b48', '#4c3823', '#3b3354', '#203f3d', '#273d58'] if dark else
              ['#edf0f4', '#fff0d4', '#ece7f7', '#e0efeb', '#e3ecfb'])
-    def add(parent, tag, attrs=None, value=None):
+    def add(
+        parent: ET.Element,
+        tag: str,
+        attrs: dict[str, Any] | None = None,
+        value: object | None = None,
+    ) -> ET.Element:
+        """Append a safely escaped SVG element and optional text to its parent."""
         node = ET.SubElement(parent, tag, {k: str(v) for k, v in (attrs or {}).items()})
         if value is not None:
             node.text = _text(value)

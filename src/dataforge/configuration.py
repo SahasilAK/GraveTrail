@@ -1,13 +1,18 @@
 """Validated workspace identity and safe, versioned configuration portability."""
 import json
 import re
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlglot import Dialect
 
+if TYPE_CHECKING:
+    from dataforge.store import Store
+
 
 class ParsingSettings(BaseModel):
+    """Configure SQL and SAS dialects, namespaces, and bounded CSV parsing."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     dialect: str = ""
     dialect_by_folder: dict[str, str] = Field(default_factory=dict)
@@ -22,14 +27,16 @@ class ParsingSettings(BaseModel):
 
     @field_validator("default_job")
     @classmethod
-    def job_identifier(cls, value):
+    def job_identifier(cls, value: str) -> str:
+        """Require a job ID containing one to sixty-four safe identifier characters."""
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", value):
             raise ValueError("Job IDs require 1–64 letters, digits, dots, underscores or hyphens")
         return value
 
     @field_validator("job_by_folder")
     @classmethod
-    def folder_jobs(cls, value):
+    def folder_jobs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Validate relative folder prefixes and their associated job identifiers."""
         for prefix, job in value.items():
             if not prefix or prefix.startswith("/") or "\\" in prefix or ".." in prefix.split("/") or not prefix.endswith("/"):
                 raise ValueError("Job folder prefixes must be relative folders ending with /")
@@ -38,14 +45,16 @@ class ParsingSettings(BaseModel):
 
     @field_validator("dialect")
     @classmethod
-    def dialect_known(cls, value):
+    def dialect_known(cls, value: str) -> str:
+        """Require the default SQL dialect to be supported by SQLGlot."""
         if value not in Dialect.classes:
             raise ValueError("Unknown SQL dialect")
         return value
 
     @field_validator("dialect_by_folder")
     @classmethod
-    def folder_dialects_known(cls, value):
+    def folder_dialects_known(cls, value: dict[str, str]) -> dict[str, str]:
+        """Validate SQL dialects and safe relative folder prefixes."""
         if any(d not in Dialect.classes for d in value.values()):
             raise ValueError("Unknown SQL dialect in folder mappings")
         if any(not prefix or prefix.startswith('/') or '\\' in prefix or ':' in prefix
@@ -55,24 +64,30 @@ class ParsingSettings(BaseModel):
 
     @field_validator("dialect_by_extension")
     @classmethod
-    def extension_dialects_known(cls, value):
+    def extension_dialects_known(cls, value: dict[str, str]) -> dict[str, str]:
+        """Allow only supported SQL and SAS extension-to-dialect mappings."""
         if any(k not in {".sql", ".sas"} or v not in Dialect.classes for k, v in value.items()):
             raise ValueError("Extension dialects require .sql/.sas keys and known SQL dialects")
         return value
 
 
 class WorkspaceIdentity(BaseModel):
+    """Validate the display name and optional description of a workspace."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     name: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=2000)
 
     @field_validator("name", mode="before")
     @classmethod
-    def clean_name(cls, value):
+    def clean_name(cls, value: Any) -> Any:
+        """Strip surrounding whitespace from string names before field validation."""
         return value.strip() if isinstance(value, str) else value
 
 
 class VisualizationSettings(BaseModel):
+    """Configure graph traversal, labels, palettes, and source presentation."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     graph_direction: Literal["upstream", "downstream", "combined"] = "upstream"
     collapse_temporary: bool = True
@@ -83,18 +98,23 @@ class VisualizationSettings(BaseModel):
     source_line_numbers: bool = True
 
     @classmethod
-    def from_store(cls, store, workspace):
+    def from_store(cls, store: "Store", workspace: str) -> "VisualizationSettings":
+        """Load visualization settings using each field's declared default."""
         return cls.model_validate({key: store.setting(workspace, key, field.default)
                                    for key, field in cls.model_fields.items()})
 
 
 class LLMResourceSettings(BaseModel):
+    """Bound AI request concurrency and prompt chunk size."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     llm_concurrency: int = Field(default=1, ge=1, le=4)
     llm_chunk_chars: int = Field(default=4000, ge=500, le=100000)
 
 
 class AnalysisPreferences(BaseModel):
+    """Configure lineage confidence, inferred edges, diagnostics, and reanalysis."""
+
     model_config = ConfigDict(extra="forbid", strict=True)
     min_lineage_confidence: float = Field(default=0., ge=0, le=1)
     include_inferred: bool = True
@@ -113,11 +133,14 @@ class PortableSettings(ParsingSettings, VisualizationSettings, LLMResourceSettin
 
 
 class WorkspaceConfiguration(WorkspaceIdentity):
+    """Represent an importable workspace identity and allowlisted portable settings."""
+
     format: Literal["dataforge-metadata-v2"] = "dataforge-metadata-v2"
     settings: PortableSettings = Field(default_factory=PortableSettings)
 
 
-def export_workspace_configuration(store, workspace: str) -> str:
+def export_workspace_configuration(store: "Store", workspace: str) -> str:
+    """Export the workspace identity and explicitly portable settings as JSON."""
     with store.lock:
         identities = store.rows("SELECT name,description FROM workspaces WHERE workspace_id=?", [workspace])
         if not identities:
@@ -129,7 +152,8 @@ def export_workspace_configuration(store, workspace: str) -> str:
     return config.model_dump_json(indent=2)
 
 
-def import_workspace_configuration(store, payload: str | bytes) -> str:
+def import_workspace_configuration(store: "Store", payload: str | bytes) -> str:
+    """Validate a portable configuration and create a new workspace from it."""
     if len(payload) > 1024 * 1024:
         raise ValueError("Workspace configuration exceeds 1 MB")
     obj = json.loads(payload)

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
@@ -6,7 +7,12 @@ from dataforge.store import Store
 from dataforge.transformations import trace_columns
 
 
-def test_sas_trace_preserves_ordered_variable_versions_and_original_source(tmp_path):
+def test_sas_trace_preserves_ordered_variable_versions_and_original_source(tmp_path: Path) -> None:
+    """Verify that sas trace preserves ordered variable versions and original source.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     code = ('data mart.x; set raw.orders; amount=quantity * price; '
             'amount=amount * 2; keep amount; run;')
     store = Store(tmp_path)
@@ -32,7 +38,12 @@ def test_sas_trace_preserves_ordered_variable_versions_and_original_source(tmp_p
         store.close()
 
 
-def test_sas_transformation_trace_isolates_same_temporary_label_between_jobs(tmp_path):
+def test_sas_transformation_trace_isolates_same_temporary_label_between_jobs(tmp_path: Path) -> None:
+    """Verify that sas transformation trace isolates same temporary label between jobs.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     try:
         workspace = store.create_workspace('SAS job isolation')
@@ -54,7 +65,12 @@ def test_sas_transformation_trace_isolates_same_temporary_label_between_jobs(tmp
         store.close()
 
 
-def test_proc_sql_transformation_trace_preserves_exact_projection_and_operation_evidence(tmp_path):
+def test_proc_sql_transformation_trace_preserves_exact_projection_and_operation_evidence(tmp_path: Path) -> None:
+    """Verify that proc sql transformation trace preserves exact projection and operation evidence.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     statement = ('create table mart.x as\n select o.quantity /* audited */ * o.price as amount '
                  'format=comma18.2\n from raw.orders o;')
     code = 'proc sql;\n' + statement + '\nquit;'

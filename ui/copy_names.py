@@ -34,5 +34,11 @@ _COPY_NAMES = st.components.v2.component(
 )
 
 
-def copy_names(names, key):
+def copy_names(names: list[str], key: str) -> None:
+    """Render the copy-names component for a list of asset names.
+
+    Args:
+        names: Names presented by the component.
+        key: Unique Streamlit component key.
+    """
     _COPY_NAMES(data={"names": names}, key=key, height="content")

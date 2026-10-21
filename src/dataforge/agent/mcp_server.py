@@ -3,20 +3,35 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from dataforge.agent.contracts import AgentError, QueryOptions, compact
+from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions, compact
 from dataforge.agent.service import AgentService
 from dataforge.connections import current_connections
 
 
-def create_server(service: AgentService, host="127.0.0.1", port=8765):
+def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 8765) -> FastMCP:
+    """Build the MCP server and register its tools, resources, and prompts.
+
+    Args:
+        service: Agent service used to handle operations.
+        host: Host configured on the MCP server.
+        port: Port configured on the MCP server.
+
+    Returns:
+        The configured FastMCP server.
+
+    Raises:
+        AgentError: If this service was launched with local-admin permission.
+    """
     if service.policy.allow_admin:
         raise AgentError('requires_local_admin', 'MCP cannot use --allow-admin; use a local CLI invocation')
     server = FastMCP("GraveTrail", instructions=(
@@ -26,7 +41,19 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
         host=host, port=port, json_response=True, stateless_http=True,
         max_request_body_size=65536, max_sessions=32, log_level="WARNING")
 
-    def dispatch(action, workspace_id="", options=None, **arguments):
+    def dispatch(action: str, workspace_id: str = "", options: QueryOptions | None = None,
+                 **arguments: Any) -> CallToolResult:
+        """Dispatch an operation and convert expected or unexpected failures to MCP results.
+
+        Args:
+            action: Registered service operation name.
+            workspace_id: Workspace targeted by the operation, if any.
+            options: Optional bounded query options.
+            **arguments: Operation-specific arguments.
+
+        Returns:
+            Structured result, or a sanitized error result.
+        """
         try:
             result = service.call(action, workspace_id,
                                   options=options.model_dump(exclude_unset=True) if options else None, **arguments)
@@ -40,7 +67,19 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
             return CallToolResult(content=[TextContent(type="text", text=compact(result))],
                                   structuredContent=result, isError=True)
 
-    async def call(action, workspace_id="", options=None, **arguments):
+    async def call(action: str, workspace_id: str = "", options: QueryOptions | None = None,
+                   **arguments: Any) -> CallToolResult:
+        """Run a blocking service dispatch in a worker thread.
+
+        Args:
+            action: Registered service operation name.
+            workspace_id: Workspace targeted by the operation, if any.
+            options: Optional bounded query options.
+            **arguments: Operation-specific arguments.
+
+        Returns:
+            The MCP result produced by the dispatch.
+        """
         return await asyncio.to_thread(dispatch, action, workspace_id, options, **arguments)
 
     read = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
@@ -535,11 +574,25 @@ def create_server(service: AgentService, host="127.0.0.1", port=8765):
 
 class BearerGuard:
     """Pre-provisioned private-client bearer authentication; never accepts URL credentials."""
-    def __init__(self, app, token):
+
+    def __init__(self, app: ASGIApp, token: str) -> None:
+        """Wrap an ASGI app with constant-time bearer-token validation.
+
+        Args:
+            app: Downstream ASGI application.
+            token: Bearer token required for requests.
+        """
         self.app, self.token = app, token.encode()
         self.admission = asyncio.Semaphore(8)
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Authenticate an HTTP request and apply the concurrent admission limit.
+
+        Args:
+            scope: ASGI connection scope.
+            receive: ASGI receive callable.
+            send: ASGI send callable.
+        """
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         headers = dict(scope["headers"])
@@ -554,7 +607,23 @@ class BearerGuard:
             return await self.app(scope, receive, send)
 
 
-def http_app(server, policy, host="127.0.0.1", port=8765, public_url=None):
+def http_app(server: FastMCP, policy: AccessPolicy, host: str = "127.0.0.1", port: int = 8765,
+             public_url: str | None = None) -> BearerGuard:
+    """Create an authenticated MCP HTTP app with restricted remote-host settings.
+
+    Args:
+        server: Configured MCP server.
+        policy: Launch access policy.
+        host: Interface bound by the HTTP server.
+        port: HTTP server port.
+        public_url: HTTPS public URL used to configure remote transport security.
+
+    Returns:
+        The MCP ASGI app wrapped in bearer authentication.
+
+    Raises:
+        AgentError: If required token, workspace, or remote URL settings are invalid.
+    """
     token = current_connections().resolve('DATAFORGE_MCP_TOKEN')
     if not 32 <= len(token) <= 4096 or policy.workspaces is None or not policy.workspaces:
         raise AgentError("forbidden", "HTTP requires DATAFORGE_MCP_TOKEN (32+ characters) and explicit --allowed-workspace IDs")
@@ -569,7 +638,21 @@ def http_app(server, policy, host="127.0.0.1", port=8765, public_url=None):
     return BearerGuard(server.streamable_http_app(), token)
 
 
-def serve(home, policy, transport="stdio", host="127.0.0.1", port=8765, public_url=None):
+def serve(home: str | Path, policy: AccessPolicy, transport: str = "stdio", host: str = "127.0.0.1",
+          port: int = 8765, public_url: str | None = None) -> None:
+    """Start the MCP server over stdio or the configured streamable HTTP transport.
+
+    Args:
+        home: Runtime data home to open.
+        policy: Launch access policy for the server.
+        transport: Server transport, either ``stdio`` or ``streamable-http``.
+        host: Interface bound for HTTP transport.
+        port: HTTP server port.
+        public_url: HTTPS public URL used for remote HTTP transport.
+
+    Raises:
+        AgentError: If the transport or port is invalid.
+    """
     from dataforge.store import Store
     if transport not in {"stdio", "streamable-http"} or not 1 <= port <= 65535:
         raise AgentError("invalid_argument", "Use stdio or streamable-http and a valid port")

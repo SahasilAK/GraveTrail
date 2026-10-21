@@ -7,14 +7,18 @@ import re
 import stat
 import time
 import uuid
+from pathlib import Path
+from typing import Any
 
 from dataforge.maintenance import MAX_ARCHIVE_BYTES, _idle
 from dataforge.maintenance import _directory as _history_directory
+from dataforge.store import Store
 
 NAME = re.compile(r"[0-9a-f]{32}\.tmp")
 
 
-def _directory(store, workspace):
+def _directory(store: Store, workspace: str) -> Path:
+    """Resolve and validate the workspace-owned temporary recovery directory."""
     resolved = _history_directory(store, workspace)
     expected = store.home / "history-recovery" / workspace
     if resolved != expected:
@@ -27,15 +31,18 @@ def _directory(store, workspace):
     return expected
 
 
-def _identity(info):
+def _identity(info: os.stat_result) -> dict[str, int]:
+    """Return stable filesystem identity fields used to detect file replacement."""
     return {"size": info.st_size, "modified_ns": info.st_mtime_ns, "device": info.st_dev, "inode": info.st_ino}
 
 
-def _regular(info):
+def _regular(info: os.stat_result) -> bool:
+    """Check that a filesystem entry is a single-link, non-reparse regular file."""
     return stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and not getattr(info, "st_file_attributes", 0) & 0x400
 
 
-def _plan(store, workspace, age_hours):
+def _plan(store: Store, workspace: str, age_hours: int) -> dict[str, Any]:
+    """Build a bounded, identity-pinned preview of old eligible recovery files."""
     if type(age_hours) is not int or not 24 <= age_hours <= 8760:
         raise ValueError("Temporary files must be at least 24 hours old; maximum age setting is one year")
     directory = _directory(store, workspace)
@@ -61,12 +68,27 @@ def _plan(store, workspace, age_hours):
     return {"files": sorted(files, key=lambda row: row["name"]), "bytes": total, "truncated": truncated}
 
 
-def temporary_plan(store, workspace, age_hours=24):
+def temporary_plan(store: Store, workspace: str, age_hours: int = 24) -> dict[str, Any]:
+    """Return a preview of eligible temporary recovery files without deleting them."""
     with _idle(store):
         return _plan(store, workspace, age_hours)
 
 
-def cleanup_temporary(store, workspace, preview, age_hours=24):
+def cleanup_temporary(store: Store, workspace: str, preview: list[dict[str, Any]], age_hours: int = 24) -> dict[str, Any]:
+    """Journal selected temporary files before removing them from the recovery directory.
+
+    Args:
+        store: Workspace store holding recovery records.
+        workspace: Workspace identifier owning the files.
+        preview: Selected file identities from a prior temporary plan.
+        age_hours: Minimum file age required for cleanup.
+
+    Returns:
+        Count of removed files and their recovery record IDs.
+
+    Raises:
+        ValueError: If the preview is invalid or a file changes during validation.
+    """
     if not isinstance(preview, list) or not 1 <= len(preview) <= 100:
         raise ValueError("Select between 1 and 100 previewed temporary files")
     with _idle(store):
@@ -103,12 +125,14 @@ def cleanup_temporary(store, workspace, preview, age_hours=24):
         return {"removed": len(recovery_ids), "recovery_ids": recovery_ids}
 
 
-def temporary_recoveries(store, workspace):
+def temporary_recoveries(store: Store, workspace: str) -> list[dict[str, Any]]:
+    """List the latest recovery records for temporary files in a workspace."""
     _directory(store, workspace)
     return store.rows("SELECT recovery_id,file_name,byte_count,created_at,restored_at FROM temporary_recovery WHERE workspace_id=? ORDER BY created_at DESC LIMIT 100", [workspace])
 
 
-def restore_temporary(store, workspace, recovery_id):
+def restore_temporary(store: Store, workspace: str, recovery_id: str) -> dict[str, Any]:
+    """Restore a journaled temporary file without overwriting an existing path."""
     if not isinstance(recovery_id, str) or not re.fullmatch(r"[0-9a-f]{32}", recovery_id):
         raise ValueError("Invalid temporary recovery identity")
     with _idle(store):

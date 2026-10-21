@@ -1,18 +1,39 @@
 """Lazy, bounded dependency branches; session state contains controls, never rendered trees."""
 import re
+from typing import Any
 
 import streamlit as st
 
+from dataforge.graph import LineageGraph
 from dataforge.models import stable_id
 from ui.common import asset_label
 
 
-def _text(value):
-    """Keep imported names literal inside Markdown labels."""
+def _text(value: object) -> str:
+    """Escape imported text for literal display inside Markdown labels.
+
+    Args:
+        value: Value converted to a display string.
+
+    Returns:
+        Escaped text with line breaks replaced by spaces.
+    """
     return re.sub(r"([\\`*_{}\[\]()<>#+.!|~-])", r"\\\1", str(value)).replace("\n", " ")
 
 
-def render_tree(graph, asset, direction, depth=5, limit=150, key="tree", default_expansion=1):
+def render_tree(graph: LineageGraph, asset: str, direction: str, depth: int = 5, limit: int = 150,
+                key: str = "tree", default_expansion: int = 1) -> None:
+    """Render bounded, expandable lineage branches around one selected asset.
+
+    Args:
+        graph: Lineage graph exposing nodes and predecessor/successor operations.
+        asset: Selected graph node ID.
+        direction: ``upstream`` or downstream traversal direction.
+        depth: Maximum number of levels to expand.
+        limit: Maximum number of visible dependency entries.
+        key: Session-state namespace for the tree controls.
+        default_expansion: Initial number of levels expanded.
+    """
     if asset not in graph.nodes:
         return
     # Scope tree styling to our container; source evidence expanders stay native.
@@ -47,7 +68,14 @@ def render_tree(graph, asset, direction, depth=5, limit=150, key="tree", default
     remaining = [limit]
     clipped = [False]
 
-    def branch(node, trail, level):
+    def branch(node: str, trail: tuple[str, ...], level: int) -> None:
+        """Render dependency neighbors recursively until a limit or boundary.
+
+        Args:
+            node: Current graph node ID.
+            trail: Node IDs already visited on this branch.
+            level: Current depth from the selected asset.
+        """
         neighbors = sorted(graph.graph.predecessors(node) if direction == "upstream"
                            else graph.graph.successors(node), key=lambda n: graph.nodes[n]["name"])
         for neighbor in neighbors:
@@ -93,7 +121,15 @@ def render_tree(graph, asset, direction, depth=5, limit=150, key="tree", default
         st.caption("No dependencies in this direction.")
 
 
-def relationship_details(attrs, count, evidence):
+def relationship_details(attrs: dict[str, Any], count: int,
+                          evidence: list[dict[str, Any]]) -> None:
+    """Render relationship kind, evidence status, and minimum confidence.
+
+    Args:
+        attrs: Attributes for the related graph node.
+        count: Number of dependencies connected to the node.
+        evidence: Evidence records supporting the displayed relationship.
+    """
     st.caption(f"{_text(attrs.get('kind', 'asset'))} · {count} dependencies · {len(evidence)} evidence records")
     st.caption(", ".join(dict.fromkeys(
         _text(e.get("kind", "Reference")) + " [" + _text(e.get("status", "unknown")) + "]"

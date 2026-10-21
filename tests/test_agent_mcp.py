@@ -3,6 +3,7 @@ import json
 import os
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 import httpx
 import pytest
@@ -18,7 +19,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_mcp_service_parity_resources_prompts_and_errors(tmp_path):
+def test_mcp_service_parity_resources_prompts_and_errors(tmp_path: Path) -> None:
+    """Verify that mcp service parity resources prompts and errors.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace("MCP")
     Importer(store, w).files([("a.sql", b"create table pub.x as select id from raw.x;")], {".sql"})
@@ -27,7 +33,8 @@ def test_mcp_service_parity_resources_prompts_and_errors(tmp_path):
     server = create_server(service)
     assert server.name == "GraveTrail"
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         names = {t.name for t in await server.list_tools()}
         assert {"get_lineage", "get_source_evidence", "get_job_status", "export_results"} <= names
         result = await server.call_tool("get_lineage", {"workspace_id": w, "asset": "pub.x"})
@@ -53,8 +60,14 @@ def test_mcp_service_parity_resources_prompts_and_errors(tmp_path):
         store.close()
 
 
-def test_stdio_real_client_without_streamlit(tmp_path):
-    async def check():
+def test_stdio_real_client_without_streamlit(tmp_path: Path) -> None:
+    """Verify that stdio real client without streamlit.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
+    async def check() -> None:
+        """Handle check for the test scenario."""
         params = StdioServerParameters(command=sys.executable, args=["-m", "dataforge.cli", "--home", str(tmp_path), "mcp"],
                                       env={**os.environ})
         async with stdio_client(params) as (read, write):
@@ -67,7 +80,13 @@ def test_stdio_real_client_without_streamlit(tmp_path):
     asyncio.run(check())
 
 
-def test_http_requires_token_scope_and_secure_remote_configuration(tmp_path, monkeypatch):
+def test_http_requires_token_scope_and_secure_remote_configuration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that http requires token scope and secure remote configuration.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     store = Store(tmp_path)
     w = store.create_workspace("HTTP")
     service = AgentService(store, AccessPolicy(workspaces=(w,)))
@@ -82,7 +101,8 @@ def test_http_requires_token_scope_and_secure_remote_configuration(tmp_path, mon
         http_app(server, service.policy, host="0.0.0.0", public_url="http://example.com/mcp")
     application = http_app(server, service.policy)
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         async with server.session_manager.run():
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), base_url="http://127.0.0.1:8765") as client:
                 for method in ("get", "post", "delete"):
@@ -110,7 +130,12 @@ def test_http_requires_token_scope_and_secure_remote_configuration(tmp_path, mon
         store.close()
 
 
-def test_mcp_polling_remains_responsive_while_another_query_waits(tmp_path):
+def test_mcp_polling_remains_responsive_while_another_query_waits(tmp_path: Path) -> None:
+    """Verify that mcp polling remains responsive while another query waits.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     import threading
 
     store = Store(tmp_path)
@@ -121,7 +146,8 @@ def test_mcp_polling_remains_responsive_while_another_query_waits(tmp_path):
     record = service.jobs.create(w, "ingest")
     entered, release = threading.Event(), threading.Event()
 
-    def transaction():
+    def transaction() -> None:
+        """Handle transaction for the test scenario."""
         with store.transaction():
             entered.set()
             release.wait(5)
@@ -132,7 +158,8 @@ def test_mcp_polling_remains_responsive_while_another_query_waits(tmp_path):
     timer = threading.Timer(1, release.set)
     timer.start()
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         waiting = asyncio.create_task(server.call_tool("search_assets", {"workspace_id": w}))
         await asyncio.sleep(.05)
         try:

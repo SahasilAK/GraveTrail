@@ -6,22 +6,34 @@ from pathlib import Path
 
 import streamlit as st
 
+from dataforge.store import Store
 from dataforge.theme_configuration import PALETTES, hover_accent, on_accent
 
 ICON_PATH = Path(__file__).with_name("icon.png")
 
 
 @lru_cache(maxsize=1)
-def _icon_uri():
+def _icon_uri() -> str:
+    """Return the app icon as an inline PNG data URI.
+
+    Returns:
+        Base64 data URI for the app icon.
+    """
     return "data:image/png;base64," + b64encode(ICON_PATH.read_bytes()).decode("ascii")
 
 
-def brand_title():
+def brand_title() -> str:
+    """Build the theme-aware branded title displayed in the sidebar.
+
+    Returns:
+        Streamlit Markdown for the app icon and title.
+    """
     color = st.get_option("theme.linkColor") or st.get_option("theme.primaryColor") or "currentColor"
     return f'![GraveTrail icon]({_icon_uri()}) Grave:color[Trail]{{foreground="{color}"}}'
 
 
-def apply_style():
+def apply_style() -> None:
+    """Apply theme-derived CSS variables and the shared presentation stylesheet."""
     from ui.themes import _loaded_preset
 
     colors = {name: st.get_option("theme." + option) for name, option in {
@@ -44,24 +56,51 @@ def apply_style():
     st.html("<style>:root{" + tokens + "}" + Path(__file__).with_name("style.css").read_text() + extra + "</style>")
 
 
-def eyebrow(text):
+def eyebrow(text: str) -> None:
+    """Render a small escaped eyebrow label.
+
+    Args:
+        text: Label text displayed above a section.
+    """
     st.html(f'<div class="gt-eyebrow">{escape(text)}</div>')
 
 
-def empty_state(title, description, icon=":material/folder_open:"):
+def empty_state(title: str, description: str, icon: str = ":material/folder_open:") -> None:
+    """Render a bordered empty-state panel.
+
+    Args:
+        title: Empty-state heading.
+        description: Supporting explanation or next step.
+        icon: Streamlit Material icon name for the heading.
+    """
     with st.container(border=True, key="empty_state"):
         st.subheader(title, icon=icon)
         st.write(description)
 
 
-def section(label, options, key, default=None):
-    """Short local selectors persist within the session; all bodies are conditional."""
+def section(label: str, options: list[str], key: str, default: str | None = None) -> str | None:
+    """Render a small session-persisted selector for locally switching view bodies.
+
+    Args:
+        label: Accessible selector label.
+        options: Choices shown to the user.
+        key: Unique Streamlit widget key.
+        default: Initially selected choice, if supplied.
+
+    Returns:
+        The selected option, or ``None`` when the control has no selection.
+    """
     return st.segmented_control(label, options, default=default or options[0], key=key,
                                 persist_state="session", selection_mode="single")
 
 
-def sync_context(store, workspace):
-    """Drop transient evidence and unsafe previews when their owning context changes."""
+def sync_context(store: Store, workspace: str) -> None:
+    """Drop transient evidence and previews when workspace or source versions change.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Active workspace identifier.
+    """
     revisions = store.rows("SELECT file_id,content_hash FROM source_files WHERE workspace_id=? ORDER BY file_id",
                            [workspace])
     signature = (str(store.home), workspace, tuple((r["file_id"], r["content_hash"]) for r in revisions))

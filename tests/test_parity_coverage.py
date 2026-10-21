@@ -13,7 +13,12 @@ from dataforge.cli import app
 from dataforge.store import Store
 
 
-def test_checked_capabilities_resolve_to_actual_cli_and_mcp(tmp_path):
+def test_checked_capabilities_resolve_to_actual_cli_and_mcp(tmp_path: Path) -> None:
+    """Verify that checked capabilities resolve to actual cli and mcp.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     expected = json.loads(Path('tests/fixtures/parity_capabilities.json').read_text(encoding='utf-8'))
     store = Store(tmp_path)
     service = AgentService(store)
@@ -41,13 +46,19 @@ def test_checked_capabilities_resolve_to_actual_cli_and_mcp(tmp_path):
         store.close()
 
 
-def test_every_mutation_and_network_mcp_tool_denies_read_only_launch(tmp_path):
+def test_every_mutation_and_network_mcp_tool_denies_read_only_launch(tmp_path: Path) -> None:
+    """Verify that every mutation and network mcp tool denies read only launch.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path)
     w = store.create_workspace('read only')
     service = AgentService(store, AccessPolicy(workspaces=(w,)))
     server = create_server(service)
 
-    async def check():
+    async def check() -> None:
+        """Handle check for the test scenario."""
         for tool in await server.list_tools():
             if tool.annotations.readOnlyHint:
                 continue

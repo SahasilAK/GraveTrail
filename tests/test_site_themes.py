@@ -8,7 +8,8 @@ from dataforge.theme_configuration import PALETTES, PRESETS
 from scripts.docs.hooks import on_config
 
 
-def test_site_publishes_eleven_palettes_with_native_persistence():
+def test_site_publishes_eleven_palettes_with_native_persistence() -> None:
+    """Verify that site publishes eleven palettes with native persistence."""
     config = on_config(pytest.importorskip('mkdocs.config').load_config('mkdocs.yml'))
     schemes = [palette['scheme'] for palette in config.theme['palette']]
     assert schemes == ['obsidian-ember', 'celadon', 'slate', 'arctic-mint', 'amethyst-terminal',
@@ -18,7 +19,8 @@ def test_site_publishes_eleven_palettes_with_native_persistence():
     assert 'assets/javascripts/themes.js' in config.extra['public_assets']
 
 
-def test_published_new_theme_tokens_match_app_and_sidebar_roles():
+def test_published_new_theme_tokens_match_app_and_sidebar_roles() -> None:
+    """Verify that published new theme tokens match app and sidebar roles."""
     config = on_config(pytest.importorskip('mkdocs.config').load_config('mkdocs.yml'))
     css = config.extra['palette_css']
     for entry in config.theme['palette']:

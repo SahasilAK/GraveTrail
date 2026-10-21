@@ -1,9 +1,16 @@
 from pathlib import Path
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 
-def test_agent_settings_permissions_examples_and_connection(tmp_path, monkeypatch):
+def test_agent_settings_permissions_examples_and_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that agent settings permissions examples and connection.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/settings.py").run()

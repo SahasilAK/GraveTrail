@@ -6,6 +6,7 @@ import html
 import io
 import json
 import zipfile
+from typing import TYPE_CHECKING, Any
 
 import networkx as nx
 
@@ -14,9 +15,13 @@ from dataforge.configuration import VisualizationSettings
 from dataforge.excel_exports import lineage_xlsx as lineage_xlsx
 from dataforge.ingestion import safe_relative
 
+if TYPE_CHECKING:
+    from dataforge.graph import LineageGraph
+    from dataforge.store import Store
 
-def path_rows(report):
-    """One ordered CSV row per path/step/evidence, retaining incomplete-path markers."""
+
+def path_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten a lineage report into rows while preserving path and evidence markers."""
     rows = []
     for path in report["paths"]:
         common = {"path_id": path["path_id"], "path": " -> ".join(path["nodes"]),
@@ -173,7 +178,13 @@ function mountGraph(root, data, notify, navigate) {
 GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
 
 
-def graph_data(graph, appearance: VisualizationSettings | None = None, *, theme: str | None = None) -> dict:
+def graph_data(
+    graph: LineageGraph,
+    appearance: VisualizationSettings | None = None,
+    *,
+    theme: str | None = None,
+) -> dict[str, Any]:
+    """Build the positioned, serializable node and edge scene used by graph views."""
     appearance = appearance or VisualizationSettings()
     condensed = nx.condensation(graph.graph)
     groups = list(nx.topological_generations(condensed))
@@ -209,7 +220,8 @@ def graph_data(graph, appearance: VisualizationSettings | None = None, *, theme:
     return scene
 
 
-def graph_html(graph, appearance: VisualizationSettings | None = None) -> str:
+def graph_html(graph: LineageGraph, appearance: VisualizationSettings | None = None) -> str:
+    """Create a self-contained HTML document for an interactive lineage graph."""
     data = json.dumps(graph_data(graph, appearance), default=str).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>GraveTrail lineage</title><style>body{margin:20px}' + GRAPH_CSS + '</style></head><body>'
@@ -217,7 +229,8 @@ def graph_html(graph, appearance: VisualizationSettings | None = None) -> str:
             + GRAPH_BODY + '<script>' + GRAPH_JS + '\nmountGraph(document.body,' + data + ',null);</script></body></html>')
 
 
-def report_csv(rows: list[dict]) -> str:
+def report_csv(rows: list[dict[str, Any]]) -> str:
+    """Serialize report rows as CSV while prefixing spreadsheet formula-like values."""
     if not rows:
         return ""
     stream = io.StringIO(newline="")
@@ -228,13 +241,28 @@ def report_csv(rows: list[dict]) -> str:
     return stream.getvalue()
 
 
-def report_html(rows: list[dict]) -> str:
+def report_html(rows: list[dict[str, Any]]) -> str:
+    """Render report rows as an HTML table with escaped headers and cell values."""
     header = "".join(f"<th>{html.escape(k)}</th>" for k in (rows[0] if rows else []))
     body = "".join("<tr>" + "".join(f"<td>{html.escape(str(v))}</td>" for v in r.values()) + "</tr>" for r in rows)
     return '<!doctype html><html lang="en"><meta charset="utf-8"><title>GraveTrail report</title><style>body{font:14px system-ui;margin:24px}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ccd;text-align:left;white-space:pre-wrap}</style><h1>GraveTrail report</h1><table><thead><tr>' + header + '</tr></thead><tbody>' + body + '</tbody></table></html>'
 
 
-def source_bundle(store, file_ids: list[str], versions: dict | None = None) -> bytes:
+def source_bundle(
+    store: Store,
+    file_ids: list[str],
+    versions: dict[str, str | list[str]] | None = None,
+) -> bytes:
+    """Package selected original source versions in a ZIP archive.
+
+    Args:
+        store: Workspace store used to retrieve source records and original content.
+        file_ids: File IDs to include; repeated IDs are included once.
+        versions: Optional per-file digest or digest list selecting archived versions.
+
+    Returns:
+        ZIP archive bytes containing the selected original files.
+    """
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for fid in dict.fromkeys(file_ids):

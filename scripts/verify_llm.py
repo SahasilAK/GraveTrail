@@ -11,7 +11,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def main():
+def main() -> int:
+    """Run opt-in provider and synthetic SQL/SAS assistance checks.
+
+    Returns:
+        Zero when checks pass, otherwise one.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", default="OmniRoute")
     parser.add_argument("--base-url", default="http://localhost:20128/v1")

@@ -1,11 +1,18 @@
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 from dataforge.store import Store
 
 
-def test_workspace_edit_preserves_identity_inventory_and_other_workspaces(tmp_path):
+def test_workspace_edit_preserves_identity_inventory_and_other_workspaces(tmp_path: Path) -> None:
+    """Verify that workspace edit preserves identity inventory and other workspaces.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.ingestion import Importer
 
     store = Store(tmp_path)
@@ -32,7 +39,12 @@ def test_workspace_edit_preserves_identity_inventory_and_other_workspaces(tmp_pa
         reopened.close()
 
 
-def test_safe_configuration_round_trip_preserves_supported_settings(tmp_path):
+def test_safe_configuration_round_trip_preserves_supported_settings(tmp_path: Path) -> None:
+    """Verify that safe configuration round trip preserves supported settings.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.configuration import export_workspace_configuration, import_workspace_configuration
 
     store = Store(tmp_path)
@@ -72,7 +84,13 @@ def test_safe_configuration_round_trip_preserves_supported_settings(tmp_path):
                                      {"collapse_temporary": "false"}, {"source_line_numbers": 1},
                                      {"source_view_mode": "execute"}, {"llm_concurrency": 0},
                                      {"llm_concurrency": 5}, {"llm_chunk_chars": 499}])
-def test_invalid_configuration_cannot_create_a_partial_workspace(tmp_path, settings):
+def test_invalid_configuration_cannot_create_a_partial_workspace(tmp_path: Path, settings: dict[str, Any]) -> None:
+    """Verify that invalid configuration cannot create a partial workspace.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        settings: Settings values supplied to the test case.
+    """
     from dataforge.configuration import import_workspace_configuration
 
     store = Store(tmp_path)
@@ -85,7 +103,12 @@ def test_invalid_configuration_cannot_create_a_partial_workspace(tmp_path, setti
         store.close()
 
 
-def test_v1_configuration_ignores_legacy_private_settings(tmp_path):
+def test_v1_configuration_ignores_legacy_private_settings(tmp_path: Path) -> None:
+    """Verify that v1 configuration ignores legacy private settings.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.configuration import import_workspace_configuration
 
     store = Store(tmp_path)
@@ -101,12 +124,29 @@ def test_v1_configuration_ignores_legacy_private_settings(tmp_path):
         store.close()
 
 
-def test_configuration_creation_rolls_back_after_storage_failure(tmp_path, monkeypatch):
+def test_configuration_creation_rolls_back_after_storage_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that configuration creation rolls back after storage failure.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        RuntimeError: Raised by the test helper.
+    """
     from dataforge.configuration import import_workspace_configuration
 
     store = Store(tmp_path)
     try:
-        def fail_setting(*args):
+        def fail_setting(*args: Any) -> None:
+            """Handle fail setting for the test scenario.
+
+            Args:
+                args: Positional arguments forwarded to the operation.
+
+            Raises:
+                RuntimeError: Raised by the test helper.
+            """
             raise RuntimeError("Injected storage failure")
         monkeypatch.setattr(store, "set_setting", fail_setting)
         with pytest.raises(RuntimeError, match="Injected"):

@@ -1,7 +1,9 @@
 """Provider setup works before saving a profile or choosing a model."""
 import json
+from collections.abc import Iterator
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -12,7 +14,13 @@ from ui.common import get_store
 
 
 @pytest.fixture
-def setup_app(tmp_path, monkeypatch):
+def setup_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """Handle setup app for the test scenario.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', '')
     view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
@@ -23,11 +31,25 @@ def setup_app(tmp_path, monkeypatch):
     get_store.clear(str(tmp_path))
 
 
-def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(setup_app, monkeypatch):
+def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(setup_app: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that unsaved provider setup sets key tests endpoint and saves fetched model.
+
+    Args:
+        setup_app: Setup app value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     view, store = setup_app
     calls = []
 
-    def handler(request):
+    def handler(request: pytest.FixtureRequest) -> Any:
+        """Handle handler for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         calls.append((request.method, str(request.url)))
         assert request.headers['Authorization'] == 'Bearer test-key'
         return httpx.Response(200, json={'data': [{'id': 'auto/best-reasoning', 'context_length': 128000}, {'id': 'other-model'}]})
@@ -58,11 +80,25 @@ def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(
     assert 'test-key' not in str(view.session_state.to_dict())
 
 
-def test_endpoint_changes_drop_fetched_models_and_manual_entry_remains_available(setup_app, monkeypatch):
+def test_endpoint_changes_drop_fetched_models_and_manual_entry_remains_available(setup_app: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that endpoint changes drop fetched models and manual entry remains available.
+
+    Args:
+        setup_app: Setup app value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     view, store = setup_app
     monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', 'test-key')
 
-    def handler(request):
+    def handler(request: pytest.FixtureRequest) -> Any:
+        """Handle handler for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         if request.url.port == 20129:
             return httpx.Response(401, json={'error': 'test-key'})
         return httpx.Response(200, json={'data': [{'id': 'old-endpoint-model'}]})
@@ -83,7 +119,13 @@ def test_endpoint_changes_drop_fetched_models_and_manual_entry_remains_available
     assert config['model'] == 'manual-model' and config['base_url'] == 'http://localhost:20129/v1'
 
 
-def test_unsaved_remote_connection_obeys_privacy_before_sending(setup_app, monkeypatch):
+def test_unsaved_remote_connection_obeys_privacy_before_sending(setup_app: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that unsaved remote connection obeys privacy before sending.
+
+    Args:
+        setup_app: Setup app value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     view, _ = setup_app
     calls = []
     monkeypatch.setattr('ui.provider_settings.Adapter.models', lambda self: calls.append('sent') or ['model'])
@@ -93,7 +135,13 @@ def test_unsaved_remote_connection_obeys_privacy_before_sending(setup_app, monke
     assert not calls
 
 
-def test_fetched_model_choices_ignore_non_identifier_values(setup_app, monkeypatch):
+def test_fetched_model_choices_ignore_non_identifier_values(setup_app: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that fetched model choices ignore non identifier values.
+
+    Args:
+        setup_app: Setup app value used by the test case.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     view, _ = setup_app
     monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', 'test-key')
     transport = httpx.MockTransport(lambda request: httpx.Response(200, json={

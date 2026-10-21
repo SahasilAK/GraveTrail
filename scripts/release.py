@@ -8,17 +8,43 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from dataforge.build import verify_artifacts, write_manifest
 
 
 def validate_version(root: Path, requested: str) -> str:
+    """Require a release version to use numeric ``X.Y.Z`` syntax.
+
+    Args:
+        root: Repository path supplied by callers; validation does not read it.
+        requested: Candidate version string.
+
+    Returns:
+        The validated version unchanged.
+
+    Raises:
+        ValueError: If the version is not canonical ``X.Y.Z`` syntax.
+    """
     if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", requested):
         raise ValueError("Release version must be X.Y.Z, without a v prefix or leading zeroes")
     return requested
 
 
-def resolve_version(releases: list[dict], *, exact: str = "", bump: str = "patch") -> str:
+def resolve_version(releases: list[dict[str, Any]], *, exact: str = "", bump: str = "patch") -> str:
+    """Choose an exact version or increment the latest stable release version.
+
+    Args:
+        releases: GitHub release records with tag names and draft/prerelease flags.
+        exact: Explicit new version, or an empty string to calculate a bump.
+        bump: Version component to increment when ``exact`` is empty.
+
+    Returns:
+        The selected version in ``X.Y.Z`` form.
+
+    Raises:
+        ValueError: If the bump is unsupported or an exact version is not newer.
+    """
     if bump not in {"major", "minor", "patch"}:
         raise ValueError("Bump must be major, minor or patch")
     versions = []
@@ -44,7 +70,12 @@ def resolve_version(releases: list[dict], *, exact: str = "", bump: str = "patch
 
 
 def materialize_version(root: Path, version: str) -> None:
-    """Change only checkout metadata; uv retains locked dependency versions."""
+    """Update checkout version metadata without syncing dependencies.
+
+    Args:
+        root: Repository root whose version metadata is updated.
+        version: New numeric ``X.Y.Z`` version.
+    """
     validate_version(root, version)
     subprocess.run(["uv", "version", "--no-sync", version], cwd=root, check=True)
     subprocess.run(["uv", "lock", "--check"], cwd=root, check=True)
@@ -52,6 +83,20 @@ def materialize_version(root: Path, version: str) -> None:
 
 def stage_assets(downloads: Path, output: Path, version: str, *, windows_only: bool = False,
                  mode: str = "development", source_revision: str | None = None) -> None:
+    """Validate platform build artifacts and assemble a standalone release folder.
+
+    Args:
+        downloads: Directory containing platform build outputs.
+        output: New directory to create with release artifacts and manifest.
+        version: Expected release version.
+        windows_only: Whether to stage just the Windows artifacts.
+        mode: Release signing mode expected by Windows evidence.
+        source_revision: Optional commit identifier to require in Windows evidence.
+
+    Raises:
+        ValueError: If artifacts, version metadata, or signing evidence do not match.
+        FileExistsError: If the output directory already exists.
+    """
     selected = []
     windows = None
     platforms = [("Windows", "windows", ".zip")]
@@ -107,6 +152,16 @@ def stage_assets(downloads: Path, output: Path, version: str, *, windows_only: b
 
 
 def copilot_summary(github_notes: str, commits: str) -> str | None:
+    """Request bounded release highlights from Copilot, falling back when unavailable.
+
+    Args:
+        github_notes: Release notes supplied by GitHub.
+        commits: Commit history for the release.
+
+    Returns:
+        Generated Markdown highlights, or ``None`` when the request is unavailable
+        or its output does not meet the expected format and size.
+    """
     prompt = (
         "Write concise Markdown release highlights using only the change records below. "
         "Start with '## Highlights'. Group user-visible features, fixes and build changes. "
@@ -134,6 +189,17 @@ def copilot_summary(github_notes: str, commits: str) -> str | None:
 
 def release_notes(github_notes: str, commits: str, summary: str | None = None,
                   mode: str = "development") -> str:
+    """Assemble user-facing release notes and download/startup guidance.
+
+    Args:
+        github_notes: Notes from the GitHub release record.
+        commits: Commit history to include below the notes.
+        summary: Optional generated highlights to prepend.
+        mode: Release mode controlling the signing statement.
+
+    Returns:
+        Markdown release notes.
+    """
     highlights = f"{summary}\n\n*AI-generated highlights; see the change records below.*\n\n" if summary else ""
     return (
         f"{highlights}{github_notes.strip()}\n\n"
@@ -152,6 +218,7 @@ def release_notes(github_notes: str, commits: str, summary: str | None = None,
 
 
 def main() -> None:
+    """Parse a release subcommand and run its validation or assembly operation."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate")

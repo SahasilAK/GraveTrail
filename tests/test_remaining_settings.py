@@ -1,9 +1,15 @@
 import logging
+from pathlib import Path
 
 import pytest
 
 
-def test_extension_dialect_precedence_validation_and_sas_proc_sql(tmp_path):
+def test_extension_dialect_precedence_validation_and_sas_proc_sql(tmp_path: Path) -> None:
+    """Verify that extension dialect precedence validation and sas proc sql.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.configuration import (
         ParsingSettings,
         export_workspace_configuration,
@@ -34,7 +40,8 @@ def test_extension_dialect_precedence_validation_and_sas_proc_sql(tmp_path):
         store.close()
 
 
-def test_graph_filters_preserve_stored_facts_and_do_not_contract_hidden_edges():
+def test_graph_filters_preserve_stored_facts_and_do_not_contract_hidden_edges() -> None:
+    """Verify that graph filters preserve stored facts and do not contract hidden edges."""
     from dataforge.graph import LineageGraph
 
     assets = [{"asset_id": str(i), "name": str(i), "temporary": i == 1} for i in range(3)]
@@ -47,7 +54,8 @@ def test_graph_filters_preserve_stored_facts_and_do_not_contract_hidden_edges():
     assert len(edges) == 2
 
 
-def test_log_verbosity_is_validated_and_changes_safe_logger():
+def test_log_verbosity_is_validated_and_changes_safe_logger() -> None:
+    """Verify that log verbosity is validated and changes safe logger."""
     from dataforge.logging_config import configure_logging
 
     configure_logging("WARNING")
@@ -57,7 +65,13 @@ def test_log_verbosity_is_validated_and_changes_safe_logger():
     configure_logging("INFO")
 
 
-def test_selected_refresh_after_cache_version_or_settings_change_retains_other_facts(tmp_path, monkeypatch):
+def test_selected_refresh_after_cache_version_or_settings_change_retains_other_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that selected refresh after cache version or settings change retains other facts.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge import services
     from dataforge.ingestion import Importer
     from dataforge.store import Store
@@ -78,7 +92,13 @@ def test_selected_refresh_after_cache_version_or_settings_change_retains_other_f
         store.close()
 
 
-def test_settings_ui_persists_and_exports_preferences_atomically(tmp_path, monkeypatch):
+def test_settings_ui_persists_and_exports_preferences_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that settings ui persists and exports preferences atomically.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import json
     from pathlib import Path
 

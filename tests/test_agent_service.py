@@ -1,4 +1,7 @@
 import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -10,7 +13,12 @@ from dataforge.store import Store
 
 
 @pytest.fixture
-def engine(tmp_path):
+def engine(tmp_path: Path) -> Iterator[Any]:
+    """Provide the engine fixture used by the tests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path / "home")
     w = store.create_workspace("Agent fixture")
     Importer(store, w).files([
@@ -27,7 +35,13 @@ def engine(tmp_path):
     store.close()
 
 
-def test_lineage_columns_evidence_and_stored_reuse(engine, monkeypatch):
+def test_lineage_columns_evidence_and_stored_reuse(engine: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that lineage columns evidence and stored reuse.
+
+    Args:
+        engine: Engine instance exercised by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     service, store, w = engine
     monkeypatch.setattr("dataforge.services.analyze", lambda *a, **k: pytest.fail("query reparsed"))
     summary = service.call("lineage", w, asset="pub.all_kpis")
@@ -44,7 +58,12 @@ def test_lineage_columns_evidence_and_stored_reuse(engine, monkeypatch):
     assert evidence["items"][0]["code"]
 
 
-def test_pagination_depth_budget_and_ambiguity(engine):
+def test_pagination_depth_budget_and_ambiguity(engine: Any) -> None:
+    """Verify that pagination depth budget and ambiguity.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, _, w = engine
     first = service.call("assets", w, options={"limit": 2})
     second = service.call("assets", w, options={"limit": 2, "cursor": first["next_cursor"]})
@@ -61,7 +80,12 @@ def test_pagination_depth_budget_and_ambiguity(engine):
         QueryOptions(max_chars=1000001)
 
 
-def test_scope_permissions_and_cross_workspace_ids(engine):
+def test_scope_permissions_and_cross_workspace_ids(engine: Any) -> None:
+    """Verify that scope permissions and cross workspace ids.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     other = store.create_workspace("Other")
     restricted = AgentService(store, AccessPolicy(workspaces=(w,)))
@@ -79,7 +103,12 @@ def test_scope_permissions_and_cross_workspace_ids(engine):
     restricted.close()
 
 
-def test_jobs_cache_and_stale_queries(engine):
+def test_jobs_cache_and_stale_queries(engine: Any) -> None:
+    """Verify that jobs cache and stale queries.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     job = service.call("analyze", w)
     assert job["job_id"]
@@ -90,7 +119,13 @@ def test_jobs_cache_and_stale_queries(engine):
     assert not service.call("lineage", w, asset="pub.all_kpis")["analysis_current"]
 
 
-def test_export_and_import_path_restrictions(engine, tmp_path):
+def test_export_and_import_path_restrictions(engine: Any, tmp_path: Path) -> None:
+    """Verify that export and import path restrictions.
+
+    Args:
+        engine: Engine instance exercised by the test.
+        tmp_path: Temporary directory supplied by pytest.
+    """
     service, _, w = engine
     with pytest.raises(AgentError):
         service.call("ingest", w, path=str(tmp_path), extensions=["sql"])
@@ -101,7 +136,12 @@ def test_export_and_import_path_restrictions(engine, tmp_path):
         service.call("source", w, file_id="../secret", full=True)
 
 
-def test_settings_change_marks_analysis_stale_and_cursor_invalid(engine):
+def test_settings_change_marks_analysis_stale_and_cursor_invalid(engine: Any) -> None:
+    """Verify that settings change marks analysis stale and cursor invalid.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     first = service.call("assets", w, options={"limit": 1})
     store.set_setting(w, "case_sensitive", True)
@@ -111,7 +151,12 @@ def test_settings_change_marks_analysis_stale_and_cursor_invalid(engine):
         service.call("assets", w, options={"cursor": first["next_cursor"]})
 
 
-def test_source_opt_in_revocation_and_literal_search(engine):
+def test_source_opt_in_revocation_and_literal_search(engine: Any) -> None:
+    """Verify that source opt in revocation and literal search.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     fid = store.files(w)[0]["file_id"]
     with pytest.raises(AgentError, match="start_line"):
@@ -128,7 +173,13 @@ def test_source_opt_in_revocation_and_literal_search(engine):
             service.call(action, w, **arguments)
 
 
-def test_batch_aggregate_limits_and_compact_size(engine, monkeypatch):
+def test_batch_aggregate_limits_and_compact_size(engine: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that batch aggregate limits and compact size.
+
+    Args:
+        engine: Engine instance exercised by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     service, _, w = engine
     import socket
     monkeypatch.setattr(socket, "create_connection", lambda *a, **k: pytest.fail("unexpected network"))
@@ -140,7 +191,12 @@ def test_batch_aggregate_limits_and_compact_size(engine, monkeypatch):
     assert len(json.dumps(small)) < len(json.dumps(large)) / 2
 
 
-def test_job_failures_interruption_and_scope(engine):
+def test_job_failures_interruption_and_scope(engine: Any) -> None:
+    """Verify that job failures interruption and scope.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     service, store, w = engine
     job = service.jobs.start(w, "analyze", lambda _: (_ for _ in ()).throw(ValueError("sensitive detail")))
     result = service.jobs.wait(job["job_id"], w, 10)
@@ -153,7 +209,12 @@ def test_job_failures_interruption_and_scope(engine):
     assert service.jobs.read(record["job_id"], w)["status"] == "interrupted"
 
 
-def test_job_poll_does_not_wait_for_import_transaction_and_respects_revocation(engine):
+def test_job_poll_does_not_wait_for_import_transaction_and_respects_revocation(engine: Any) -> None:
+    """Verify that job poll does not wait for import transaction and respects revocation.
+
+    Args:
+        engine: Engine instance exercised by the test.
+    """
     import threading
     import time
 
@@ -163,7 +224,8 @@ def test_job_poll_does_not_wait_for_import_transaction_and_respects_revocation(e
     record = service.jobs.create(w, "ingest")
     entered, release = threading.Event(), threading.Event()
 
-    def transaction():
+    def transaction() -> None:
+        """Handle transaction for the test scenario."""
         with store.transaction():
             entered.set()
             release.wait(5)

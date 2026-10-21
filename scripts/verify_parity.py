@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 from mcp import ClientSession, StdioServerParameters
@@ -20,7 +21,18 @@ from dataforge.reporting import data_dictionary
 from dataforge.store import Store
 
 
-def verify(home):
+def verify(home: Path) -> dict[str, Any]:
+    """Compare CLI, service, MCP, and report results on sample archives.
+
+    Args:
+        home: New disposable storage directory; it must not already exist.
+
+    Returns:
+        Per-language parity measurements and evidence counts.
+
+    Raises:
+        ValueError: If the supplied home already exists.
+    """
     if home.exists():
         raise ValueError('Verification requires a new disposable home')
     runner = CliRunner()
@@ -28,7 +40,15 @@ def verify(home):
     base = ['--home', str(home), '--json', '--allow-write', '--allowed-root', str(root),
             '--max-depth', '30', '--max-chars', '100000', '--limit', '500', '--collapse-temporary']
 
-    def cli(*args):
+    def cli(*args: str) -> dict[str, Any]:
+        """Invoke one CLI command and decode its JSON response.
+
+        Args:
+            *args: CLI command arguments after shared verification options.
+
+        Returns:
+            Decoded JSON response from the command.
+        """
         result = runner.invoke(app, [*base, *args])
         if result.exit_code:
             raise AssertionError(result.output)
@@ -86,7 +106,8 @@ def verify(home):
             store.close()
         assert cli('lineage', 'upstream', 'pub.all_kpis', '-w', workspace) == direct
 
-    async def stdio_check():
+    async def stdio_check() -> None:
+        """Verify capabilities through the application's MCP stdio transport."""
         params = StdioServerParameters(command=sys.executable, args=['-m', 'dataforge.cli', '--home', str(home), 'mcp'])
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:

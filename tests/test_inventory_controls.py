@@ -13,7 +13,12 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_csv_sample_setting_is_bounded_portable_and_invalidates_cached_preview(tmp_path):
+def test_csv_sample_setting_is_bounded_portable_and_invalidates_cached_preview(tmp_path: Path) -> None:
+    """Verify that csv sample setting is bounded portable and invalidates cached preview.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     for invalid in [-1, 101]:
         with pytest.raises(ValueError):
             ParsingSettings(csv_sample_rows=invalid)
@@ -36,7 +41,13 @@ def test_csv_sample_setting_is_bounded_portable_and_invalidates_cached_preview(t
         store.close()
 
 
-def test_builder_analysis_refreshes_inventory_summary_immediately(tmp_path, monkeypatch):
+def test_builder_analysis_refreshes_inventory_summary_immediately(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that builder analysis refreshes inventory summary immediately.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from streamlit.testing.v1 import AppTest
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))

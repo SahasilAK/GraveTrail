@@ -11,12 +11,22 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from dataforge.build import build_environment
 
 
 async def render_session(port: int) -> None:
+    """Connect to Streamlit's websocket and require a successful rendered page.
+
+    Args:
+        port: Local port where the smoke-test UI is listening.
+
+    Raises:
+        RuntimeError: If the session closes, fails to compile, or renders no page.
+        asyncio.TimeoutError: If Streamlit does not respond within the session timeout.
+    """
     from streamlit.proto.BackMsg_pb2 import BackMsg
     from streamlit.proto.ForwardMsg_pb2 import ForwardMsg
     from websockets.asyncio.client import connect
@@ -56,6 +66,16 @@ async def render_session(port: int) -> None:
 
 
 async def check_mcp(command: list[str], cwd: Path, env: dict[str, str]) -> None:
+    """Start an MCP stdio server and verify its workspace listing tool.
+
+    Args:
+        command: Executable and arguments used to start the application.
+        cwd: Working directory for the server process.
+        env: Environment passed to the server process.
+
+    Raises:
+        RuntimeError: If the server identity or workspace tool check fails.
+    """
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
@@ -75,6 +95,7 @@ async def check_mcp(command: list[str], cwd: Path, env: dict[str, str]) -> None:
 
 
 def main() -> None:
+    """Exercise a built Python entry point or executable in disposable storage."""
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--python", type=Path)
@@ -95,7 +116,15 @@ def main() -> None:
         (inputs / "flow.sql").write_text("create table pub.kpi as select id from raw.orders;", encoding="utf-8")
         flags = ["--json", "--allow-write", "--allowed-root", str(inputs)]
 
-        def run(*arguments):
+        def run(*arguments: str) -> dict[str, Any]:
+            """Run one JSON CLI command in the disposable distribution home.
+
+            Args:
+                *arguments: CLI subcommand and arguments passed after common flags.
+
+            Returns:
+                Decoded JSON response from the command.
+            """
             process = subprocess.run([*cli, *flags, *arguments], cwd=cwd, env=env,
                                      capture_output=True, text=True, timeout=90, check=True)
             return json.loads(process.stdout)

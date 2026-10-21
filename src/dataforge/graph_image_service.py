@@ -1,15 +1,47 @@
 """Snapshot and disclose the same filtered graph for UI and automation images."""
 import hashlib
 import json
+from typing import Any
 
 from dataforge.configuration import VisualizationSettings
 from dataforge.graph import LineageGraph
 from dataforge.graph_images import render_graph_image, safe_image_filename
+from dataforge.store import Store
 
 
-def export_graph_image(store, workspace, asset='', *, direction='upstream', max_depth=15,
-                       max_nodes=2000, collapse_temporary=None, format='svg', options=None, appearance=None):
-    """Return bytes and scope metadata without raw source text; callers authorize export."""
+def export_graph_image(
+    store: Store,
+    workspace: str,
+    asset: str = '',
+    *,
+    direction: str = 'upstream',
+    max_depth: int = 15,
+    max_nodes: int = 2000,
+    collapse_temporary: bool | None = None,
+    format: str = 'svg',
+    options: Any = None,
+    appearance: VisualizationSettings | None = None,
+) -> tuple[bytes, dict[str, Any]]:
+    """Render a filtered workspace graph and return its image and scope summary.
+
+    Args:
+        store: Workspace store used to load graph data and settings.
+        workspace: Workspace identifier to render.
+        asset: Optional exact asset ID to focus the graph on.
+        direction: Traversal direction when an asset is selected.
+        max_depth: Maximum traversal depth for a focused graph.
+        max_nodes: Maximum number of graph nodes to include.
+        collapse_temporary: Whether temporary assets are collapsed; defaults to appearance settings.
+        format: Image format passed to the renderer.
+        options: Optional renderer-specific image options.
+        appearance: Optional visualization settings; defaults to stored settings.
+
+    Returns:
+        Image bytes and metadata describing the rendered scope and completeness.
+
+    Raises:
+        ValueError: If the selection, graph bounds, or direction are invalid.
+    """
     from dataforge.services import analysis_is_current
 
     if direction not in {'upstream', 'downstream', 'combined'}:

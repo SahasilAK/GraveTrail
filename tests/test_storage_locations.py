@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 
-def test_storage_choices_are_bounded_explicit_paths_and_selection_is_validated(tmp_path):
+def test_storage_choices_are_bounded_explicit_paths_and_selection_is_validated(tmp_path: Path) -> None:
+    """Verify that storage choices are bounded explicit paths and selection is validated.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.storage_locations import allowed_homes, validate_home
 
     first, second = tmp_path / "first", tmp_path / "second"
@@ -20,7 +25,13 @@ def test_storage_choices_are_bounded_explicit_paths_and_selection_is_validated(t
     assert not first.exists() and not second.exists()  # preview does not create stores
 
 
-def test_ui_switches_independent_storage_and_preserves_other_sessions(tmp_path, monkeypatch):
+def test_ui_switches_independent_storage_and_preserves_other_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that ui switches independent storage and preserves other sessions.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from streamlit.testing.v1 import AppTest
 
     from dataforge.ingestion import Importer
@@ -56,7 +67,13 @@ def test_ui_switches_independent_storage_and_preserves_other_sessions(tmp_path, 
         store.close()
 
 
-def test_ui_failed_storage_open_retains_current_workspace(tmp_path, monkeypatch):
+def test_ui_failed_storage_open_retains_current_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that ui failed storage open retains current workspace.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from streamlit.testing.v1 import AppTest
 
     first, invalid = tmp_path / "first", tmp_path / "file"

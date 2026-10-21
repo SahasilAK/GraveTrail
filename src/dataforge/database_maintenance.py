@@ -8,8 +8,10 @@ import stat
 import tempfile
 import uuid
 import zipfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 import duckdb
 
@@ -29,12 +31,29 @@ MANAGED_FILE = re.compile(
 )
 
 
-def inspect_database(store):
+def inspect_database(store: Any) -> dict[str, Any]:
+    """Inspect schema, relational integrity, blobs, and database size.
+
+    Args:
+        store: Open database store whose lock protects inspection.
+
+    Returns:
+        Integrity summary with schema versions, record counts, and missing blobs.
+    """
     with store.lock:
         return _inspect_database(store.home, store.rows)
 
 
-def _inspect_database(home, rows):
+def _inspect_database(home: Path, rows: Any) -> dict[str, Any]:
+    """Inspect database records and content-addressed blobs.
+
+    Args:
+        home: Runtime home containing the database and blobs.
+        rows: Callable that executes a query and returns mapping rows.
+
+    Returns:
+        Integrity summary for supported schema versions.
+    """
     versions = [r['version'] for r in rows('SELECT version FROM schema_migrations ORDER BY version')]
     workspace_tables = tuple(t for t in WORKSPACE_TABLES
         if (7 in versions or t not in AI_SNAPSHOT_TABLES) and (5 in versions or t not in COLUMN_TABLES) and (6 in versions or t not in AI_ANALYSIS_TABLES))
@@ -96,14 +115,31 @@ def _inspect_database(home, rows):
             'missing_or_invalid_blobs': missing, 'database_bytes': (home / 'dataforge.duckdb').stat().st_size}
 
 
-def checkpoint(store):
+def checkpoint(store: Any) -> dict[str, str]:
+    """Flush the database write-ahead log under the maintenance lock.
+
+    Args:
+        store: Open database store.
+
+    Returns:
+        Checkpoint status and a note about physical database size.
+    """
     with maintenance_guard(store):
         store.execute('CHECKPOINT')
     return {'checkpoint': 'completed', 'note': 'DuckDB checkpoint flushes the WAL; physical shrinkage is not guaranteed.'}
 
 
 @contextmanager
-def _database_snapshot(store, directory):
+def _database_snapshot(store: Any, directory: Path) -> Iterator[Path]:
+    """Create a temporary DuckDB snapshot and remove it after use.
+
+    Args:
+        store: Open database store to snapshot.
+        directory: Directory in which to create the temporary database file.
+
+    Yields:
+        Path to the snapshot, available only within the context.
+    """
     store.execute('CHECKPOINT')
     snapshot = directory / (uuid.uuid4().hex + '.duckdb')
     checked_path(store.home, 'dataforge.duckdb')
@@ -120,7 +156,18 @@ def _database_snapshot(store, directory):
         snapshot.unlink(missing_ok=True)
 
 
-def _backup(store):
+def _backup(store: Any) -> Path:
+    """Create a backup archive without acquiring the maintenance lock.
+
+    Args:
+        store: Open database store.
+
+    Returns:
+        Path to the completed backup archive.
+
+    Raises:
+        ValueError: If integrity checks fail or backup limits are exceeded.
+    """
     if not inspect_database(store)['ok']:
         raise ValueError('Database integrity check failed; use an offline recovery copy before repair')
     directory = checked_path(store.home, 'backups')
@@ -129,7 +176,20 @@ def _backup(store):
         return _archive_snapshot(store, directory, snapshot)
 
 
-def _archive_snapshot(store, directory, snapshot):
+def _archive_snapshot(store: Any, directory: Path, snapshot: Path) -> Path:
+    """Archive a database snapshot and managed runtime files.
+
+    Args:
+        store: Open database store that owns the runtime home.
+        directory: Backup directory for the archive.
+        snapshot: Temporary database snapshot to include.
+
+    Returns:
+        Path to the completed backup archive.
+
+    Raises:
+        ValueError: If file count or total backup size exceeds configured limits.
+    """
     target = directory / (uuid.uuid4().hex + '.zip')
     temporary = target.with_suffix('.tmp')
     paths = [snapshot]
@@ -160,20 +220,51 @@ def _archive_snapshot(store, directory, snapshot):
     return target
 
 
-def backup(store):
+def backup(store: Any) -> Path:
+    """Create a consistent backup while holding the maintenance lock.
+
+    Args:
+        store: Open database store.
+
+    Returns:
+        Path to the completed backup archive.
+    """
     with maintenance_guard(store):
         return _backup(store)
 
 
-def restore_backup(archive_path, destination):
+def restore_backup(archive_path: str | Path, destination: str | Path) -> Path:
+    """Restore a validated backup to a new destination home.
+
+    Args:
+        archive_path: ZIP backup to validate and restore.
+        destination: New directory that will become the restored home.
+
+    Returns:
+        Absolute path to the restored home.
+
+    Raises:
+        ValueError: If the archive or its database is invalid.
+    """
     try:
         return _restore_backup(archive_path, destination)
     except (zipfile.BadZipFile, KeyError, TypeError, RuntimeError, NotImplementedError, duckdb.Error):
         raise ValueError('Invalid backup archive or database') from None
 
 
-def _restore_backup(archive_path, destination):
-    """Never overwrite an existing home. Validate/extract into a sibling staging directory."""
+def _restore_backup(archive_path: str | Path, destination: str | Path) -> Path:
+    """Validate and extract a backup into a sibling staging directory.
+
+    Args:
+        archive_path: ZIP backup to validate and restore.
+        destination: New directory that will receive the restored home.
+
+    Returns:
+        Absolute path to the restored home.
+
+    Raises:
+        ValueError: If paths, archive contents, checksums, or database integrity are invalid.
+    """
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink() or destination.resolve() != destination:
         raise ValueError('Restore requires a new, nonredirected destination directory')
@@ -229,7 +320,15 @@ def _restore_backup(archive_path, destination):
                 if (6,) not in versions and table in AI_ANALYSIS_TABLES:
                     continue
                 connection.execute(f'SELECT count(*) FROM {table}').fetchone()
-            def rows(sql):
+            def rows(sql: str) -> list[dict[str, Any]]:
+                """Execute a query and return its rows as dictionaries.
+
+                Args:
+                    sql: SQL query to execute against the restored database.
+
+                Returns:
+                    Query rows keyed by their column names.
+                """
                 cursor = connection.execute(sql)
                 names = [column[0] for column in cursor.description]
                 return [dict(zip(names, values)) for values in cursor.fetchall()]

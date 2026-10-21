@@ -1,6 +1,8 @@
 """Workbook semantics and inert OOXML content, read independently of the writer."""
 import io
 import zipfile
+from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -11,7 +13,16 @@ from dataforge.graph import LineageGraph
 NS = {'m': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
 
 
-def cells(data, sheet=1):
+def cells(data: Any, sheet: Any=1) -> tuple[Any, ...]:
+    """Handle cells for the test scenario.
+
+    Args:
+        data: Data value used by the test case.
+        sheet: Sheet value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         root = ET.fromstring(archive.read(f'xl/worksheets/sheet{sheet}.xml'))
         shared = []
@@ -30,13 +41,31 @@ def cells(data, sheet=1):
         return root, rows
 
 
-def table(data, sheet=1):
+def table(data: Any, sheet: Any=1) -> Any:
+    """Handle table for the test scenario.
+
+    Args:
+        data: Data value used by the test case.
+        sheet: Sheet value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     _, rows = cells(data, sheet)
     header = next(i for i, row in enumerate(rows) if row and row[0] in {'Path ID', 'Evidence ID'})
     return [dict(zip(rows[header], row)) for row in rows[header + 1:]]
 
 
-def graph(names, pairs):
+def graph(names: Any, pairs: Any) -> Any:
+    """Provide the graph fixture used by the tests.
+
+    Args:
+        names: Names value used by the test case.
+        pairs: Pairs value used by the test case.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     return LineageGraph([{'asset_id': n, 'name': n, 'kind': 'table'} for n in names], [
         {'edge_id': f'E{i}', 'source_id': s, 'target_id': t, 'kind': 'select',
          'status': 'verified', 'confidence': .9, 'source_hash': 'abc', 'file_id': 'file',
@@ -44,13 +73,25 @@ def graph(names, pairs):
         for i, (s, t) in enumerate(pairs)])
 
 
-def workbook(g, selected, direction='upstream', **kwargs):
+def workbook(g: Any, selected: Any, direction: str='upstream', **kwargs: Any) -> Any:
+    """Handle workbook for the test scenario.
+
+    Args:
+        g: G value used by the test case.
+        selected: Selected value used by the test case.
+        direction: Direction value used by the test case.
+        kwargs: Keyword arguments forwarded to the operation.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     report = g.path_report(selected, direction, depth=30)
     return exports.lineage_xlsx(report, g.nodes, {'workspace': 'Demo', 'revision': 'rev1',
         'selected_asset': selected, 'export_time': '2026-10-18T12:00:00+05:30'}, **kwargs)
 
 
-def test_upstream_chain_is_source_to_target_with_typed_counts_and_filters():
+def test_upstream_chain_is_source_to_target_with_typed_counts_and_filters() -> None:
+    """Verify that upstream chain is source to target with typed counts and filters."""
     g = graph(['raw.orders', 'staging.clean', 'mart.sales'],
               [('raw.orders', 'staging.clean'), ('staging.clean', 'mart.sales')])
     data, metadata = workbook(g, 'mart.sales')
@@ -72,7 +113,8 @@ def test_upstream_chain_is_source_to_target_with_typed_counts_and_filters():
         assert [s.get('name') for s in book.find('m:sheets', NS)] == ['Lineage Paths', 'Lineage Steps']
 
 
-def test_branches_and_multiple_citations_do_not_invent_relationships():
+def test_branches_and_multiple_citations_do_not_invent_relationships() -> None:
+    """Verify that branches and multiple citations do not invent relationships."""
     g = graph(['orders', 'customers', 'report'], [('orders', 'report'), ('customers', 'report'),
                                                ('orders', 'report')])
     data, metadata = workbook(g, 'report', include_evidence=True)
@@ -84,7 +126,8 @@ def test_branches_and_multiple_citations_do_not_invent_relationships():
     assert {r['Source content hash'] for r in evidence} == {'abc'}
 
 
-def test_wide_path_segments_overlap_and_steps_stay_unique():
+def test_wide_path_segments_overlap_and_steps_stay_unique() -> None:
+    """Verify that wide path segments overlap and steps stay unique."""
     names = [f'dataset_{i}' for i in range(12)]
     data, metadata = workbook(graph(names, list(zip(names, names[1:]))), names[-1])
     paths = table(data)
@@ -97,7 +140,12 @@ def test_wide_path_segments_overlap_and_steps_stay_unique():
 
 
 @pytest.mark.parametrize('label', ['=SUM(1,2)', '+cmd', '-1', '@name', 'https://example.org', '日本語_数据'])
-def test_imported_names_are_literal_text_without_formulas_or_external_links(label):
+def test_imported_names_are_literal_text_without_formulas_or_external_links(label: str) -> None:
+    """Verify that imported names are literal text without formulas or external links.
+
+    Args:
+        label: Label value used by the test case.
+    """
     data, _ = workbook(graph([label, 'target'], [(label, 'target')]), 'target')
     assert table(data)[0]['Step 1 - Starting dataset'] == label
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -108,7 +156,8 @@ def test_imported_names_are_literal_text_without_formulas_or_external_links(labe
                 assert root.find('.//m:f', NS) is None and root.find('.//m:hyperlink', NS) is None
 
 
-def test_isolated_and_cycle_paths_explain_coverage():
+def test_isolated_and_cycle_paths_explain_coverage() -> None:
+    """Verify that isolated and cycle paths explain coverage."""
     data, _ = workbook(graph(['alone'], []), 'alone')
     assert table(data)[0]['Dependency count'] == 0
     assert 'known' in table(data)[0]['Coverage']
@@ -116,7 +165,8 @@ def test_isolated_and_cycle_paths_explain_coverage():
     assert not metadata['complete'] and 'cycle' in table(cyclic)[0]['Coverage'].lower()
 
 
-def test_empty_selection_and_oversized_cells_fail_explicitly():
+def test_empty_selection_and_oversized_cells_fail_explicitly() -> None:
+    """Verify that empty selection and oversized cells fail explicitly."""
     with pytest.raises(ValueError, match='Select'):
         workbook(graph([], []), 'missing')
     long_name = 'x' * 33000
@@ -124,7 +174,8 @@ def test_empty_selection_and_oversized_cells_fail_explicitly():
         workbook(graph([long_name], []), long_name)
 
 
-def test_path_report_bounds_relationships_before_materializing_and_retains_selection():
+def test_path_report_bounds_relationships_before_materializing_and_retains_selection() -> None:
+    """Verify that path report bounds relationships before materializing and retains selection."""
     g = graph(['a', 'b', 'c', 'd'], [('a', 'b'), ('b', 'c'), ('c', 'd')])
     upstream = g.path_report('d', depth=30, max_relationships=2)
     assert upstream['truncated'] and upstream['paths'][0]['nodes'] == ['b', 'c', 'd']
@@ -135,7 +186,8 @@ def test_path_report_bounds_relationships_before_materializing_and_retains_selec
         g.path_report('d', max_evidence=1)
 
 
-def test_collapsed_job_scoped_names_keep_identities_and_all_citations():
+def test_collapsed_job_scoped_names_keep_identities_and_all_citations() -> None:
+    """Verify that collapsed job scoped names keep identities and all citations."""
     g = graph(['a', 't', 'b'], [('a', 't'), ('t', 'b')])
     g.nodes['t'].update(name='work.stage', temporary=True, metadata={'job_id': 'job-a'})
     data, metadata = workbook(g.simplified(), 'b', include_evidence=True)
@@ -146,7 +198,8 @@ def test_collapsed_job_scoped_names_keep_identities_and_all_citations():
     assert (steps[0]['Source asset ID'], steps[0]['Target asset ID']) == ('a', 'b')
 
 
-def test_collapsing_parallel_temporary_routes_preserves_separate_paths_and_bounds_evidence():
+def test_collapsing_parallel_temporary_routes_preserves_separate_paths_and_bounds_evidence() -> None:
+    """Verify that collapsing parallel temporary routes preserves separate paths and bounds evidence."""
     g = graph(['a', 't1', 't2', 'b'], [('a', 't1'), ('t1', 'b'), ('a', 't2'), ('t2', 'b')])
     for node in ['t1', 't2']:
         g.nodes[node]['temporary'] = True
@@ -158,7 +211,13 @@ def test_collapsing_parallel_temporary_routes_preserves_separate_paths_and_bound
         g.simplified(preserve_paths=True, evidence_limit=3)
 
 
-def test_failed_writer_cleans_its_temporary_directory(tmp_path, monkeypatch):
+def test_failed_writer_cleans_its_temporary_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that failed writer cleans its temporary directory.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import dataforge.excel_exports as excel
 
     monkeypatch.setattr(excel.tempfile, 'tempdir', str(tmp_path))
@@ -168,7 +227,13 @@ def test_failed_writer_cleans_its_temporary_directory(tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_timeout_during_streaming_closes_and_removes_temporary_output(tmp_path, monkeypatch):
+def test_timeout_during_streaming_closes_and_removes_temporary_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that timeout during streaming closes and removes temporary output.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import dataforge.excel_exports as excel
 
     ticks = iter([0] * 15 + [100] * 100)
@@ -179,7 +244,8 @@ def test_timeout_during_streaming_closes_and_removes_temporary_output(tmp_path, 
     assert list(tmp_path.iterdir()) == []
 
 
-def test_dense_branches_stop_at_global_relationship_budget_with_visible_omissions():
+def test_dense_branches_stop_at_global_relationship_budget_with_visible_omissions() -> None:
+    """Verify that dense branches stop at global relationship budget with visible omissions."""
     names = ['selected'] + [f'L{level}_{n}' for level in range(7) for n in range(6)]
     pairs = [(f'L0_{n}', 'selected') for n in range(6)]
     pairs += [(f'L{level}_{s}', f'L{level - 1}_{t}') for level in range(1, 7)
@@ -193,7 +259,8 @@ def test_dense_branches_stop_at_global_relationship_budget_with_visible_omission
     assert any('Relationship limit' in r['Coverage'] for r in table(data))
 
 
-def test_repeated_job_names_remain_distinct_and_unknown_confidence_is_blank():
+def test_repeated_job_names_remain_distinct_and_unknown_confidence_is_blank() -> None:
+    """Verify that repeated job names remain distinct and unknown confidence is blank."""
     g = graph(['left', 'right', 'target'], [('left', 'target'), ('right', 'target')])
     g.nodes['left'].update(name='work.stage', metadata={'job_id': 'one'})
     g.nodes['right'].update(name='work.stage', metadata={'job_id': 'two'})

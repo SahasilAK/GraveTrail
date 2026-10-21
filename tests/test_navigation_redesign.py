@@ -1,5 +1,7 @@
 """Focused routes must preserve context without performing work on navigation."""
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -10,7 +12,13 @@ from ui.common import get_store
 
 
 @pytest.fixture
-def workspace(tmp_path, monkeypatch):
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """Provide the workspace fixture used by the tests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     store = get_store(str(tmp_path))
     w = store.create_workspace("Navigation")
@@ -21,13 +29,36 @@ def workspace(tmp_path, monkeypatch):
     st.cache_resource.clear()
 
 
-def app():
+def app() -> Any:
+    """Handle app for the test scenario.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     return AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
 
 
-def test_sources_does_not_render_analysis_or_load_originals(workspace, monkeypatch):
+def test_sources_does_not_render_analysis_or_load_originals(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that sources does not render analysis or load originals.
+
+    Args:
+        workspace: Workspace used by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        AssertionError: Raised by the test helper.
+    """
     store, _ = workspace
-    def unexpected_original(*args, **kwargs):
+    def unexpected_original(*args: Any, **kwargs: Any) -> None:
+        """Handle unexpected original for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            AssertionError: Raised by the test helper.
+        """
         raise AssertionError("Original source loaded eagerly")
     monkeypatch.setattr(store, "original", unexpected_original)
     view = app().switch_page("ui/pages/builder.py").run()
@@ -37,7 +68,12 @@ def test_sources_does_not_render_analysis_or_load_originals(workspace, monkeypat
     assert not any(s.label == "Source file" for s in view.selectbox)
 
 
-def test_focused_routes_do_not_analyze_or_change_settings(workspace):
+def test_focused_routes_do_not_analyze_or_change_settings(workspace: Any) -> None:
+    """Verify that focused routes do not analyze or change settings.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     store, w = workspace
     before = len(store.runs(w))
     view = app()
@@ -51,7 +87,12 @@ def test_focused_routes_do_not_analyze_or_change_settings(workspace):
     assert store.setting(w, "external_llm", False) is False
 
 
-def test_lineage_selection_survives_navigation_and_new_workspace_is_clean(workspace):
+def test_lineage_selection_survives_navigation_and_new_workspace_is_clean(workspace: Any) -> None:
+    """Verify that lineage selection survives navigation and new workspace is clean.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     store, w = workspace
     view = app().switch_page("ui/pages/explorer.py").run()
     asset = next(a["asset_id"] for a in store.assets(w) if a["name"] == "raw.a")
@@ -72,7 +113,16 @@ def test_lineage_selection_survives_navigation_and_new_workspace_is_clean(worksp
     assert not view.code
 
 
-def test_analysis_selection_survives_sources_and_diagnostics_are_lazy(workspace, monkeypatch):
+def test_analysis_selection_survives_sources_and_diagnostics_are_lazy(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that analysis selection survives sources and diagnostics are lazy.
+
+    Args:
+        workspace: Workspace used by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        AssertionError: Raised by the test helper.
+    """
     store, w = workspace
     view = app().switch_page("ui/pages/analysis.py").run()
     fid = store.files(w)[0]["file_id"]
@@ -80,7 +130,16 @@ def test_analysis_selection_survives_sources_and_diagnostics_are_lazy(workspace,
     view.switch_page("ui/pages/builder.py").run()
     view.switch_page("ui/pages/analysis.py").run()
     assert next(s for s in view.multiselect if s.label.startswith("Files to analyze")).value == [fid]
-    def unexpected_source(*args, **kwargs):
+    def unexpected_source(*args: Any, **kwargs: Any) -> None:
+        """Handle unexpected source for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            AssertionError: Raised by the test helper.
+        """
         raise AssertionError("Hidden diagnostic source loaded")
     monkeypatch.setattr(store, "file", unexpected_source)
     view.segmented_control[0].set_value("Diagnostics").run()
@@ -88,7 +147,12 @@ def test_analysis_selection_survives_sources_and_diagnostics_are_lazy(workspace,
     assert not any(s.label == "Diagnostic to review" for s in view.selectbox)
 
 
-def test_reimport_discards_stale_source_selection_and_cleanup_preview(workspace):
+def test_reimport_discards_stale_source_selection_and_cleanup_preview(workspace: Any) -> None:
+    """Verify that reimport discards stale source selection and cleanup preview.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     store, w = workspace
     view = app().switch_page("ui/pages/builder.py").run()
     view.segmented_control[0].set_value("Inventory").run()
@@ -103,7 +167,12 @@ def test_reimport_discards_stale_source_selection_and_cleanup_preview(workspace)
     assert "cleanup_preview" not in view.session_state
 
 
-def test_existing_provider_selection_keeps_its_protocol(workspace):
+def test_existing_provider_selection_keeps_its_protocol(workspace: Any) -> None:
+    """Verify that existing provider selection keeps its protocol.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     import json
 
     from dataforge.llm import Profile
@@ -120,7 +189,12 @@ def test_existing_provider_selection_keeps_its_protocol(workspace):
     assert config["provider"] == "OpenAI" and config["model"] == "replacement-model"
 
 
-def test_pending_diagnostic_never_presents_new_source_as_old_evidence(workspace):
+def test_pending_diagnostic_never_presents_new_source_as_old_evidence(workspace: Any) -> None:
+    """Verify that pending diagnostic never presents new source as old evidence.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     store, w = workspace
     Importer(store, w).files([("q.sql", b"CREATE TABLE mart.x AS SELECT unknown.id FROM raw.a;")], {".sql"})
     analyze(store, w)
@@ -136,8 +210,26 @@ def test_pending_diagnostic_never_presents_new_source_as_old_evidence(workspace)
     assert any(panel.label == "Optional AI assistance" for panel in view.expander)
 
 
-def test_automation_discovery_stays_lazy(workspace, monkeypatch):
-    def unexpected_discovery(*args, **kwargs):
+def test_automation_discovery_stays_lazy(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that automation discovery stays lazy.
+
+    Args:
+        workspace: Workspace used by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        AssertionError: Raised by the test helper.
+    """
+    def unexpected_discovery(*args: Any, **kwargs: Any) -> None:
+        """Handle unexpected discovery for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            AssertionError: Raised by the test helper.
+        """
         raise AssertionError("Hidden automation tools discovered eagerly")
     monkeypatch.setattr("ui.agent_settings.create_server", unexpected_discovery)
     view = app().switch_page("ui/pages/automation.py").run()

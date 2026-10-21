@@ -13,9 +13,16 @@ from dataforge.llm_resources import request_slot
 from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
 from dataforge.provider_service import save_profile, save_routing
 from dataforge.settings_service import revision
+from dataforge.store import Store
 
 
-def render(store, workspace):
+def render(store: Store, workspace: str) -> None:
+    """Render provider profiles, connection checks, and task-specific routing.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     profiles = store.rows("SELECT * FROM llm_profiles WHERE workspace_id=? ORDER BY name", [workspace])
     names = {p["profile_id"]: p["name"] for p in profiles}
     selection = st.selectbox("Provider profile", ["New profile", *names], format_func=lambda x: names.get(x, x), key="provider_profile_" + workspace)
@@ -38,7 +45,8 @@ def render(store, workspace):
         secret_key = prefix + '_environment_secret_' + key_env
         notice_key = secret_key + '_notice'
 
-        def set_environment():
+        def set_environment() -> None:
+            """Set the entered credential in the process environment and clear cached models."""
             secret = st.session_state.pop(secret_key, '')
             try:
                 set_credential_environment(key_env, secret)
@@ -62,7 +70,8 @@ def render(store, workspace):
                 st.warning("Use a DATAFORGE_ variable name and a nonempty, single-line credential without null characters. Input cleared; environment unchanged.")
     st.caption("Credential status: " + ("available" if manager.resolve(key_env) else "disconnected / optional for local endpoints"))
     with st.expander("Session-only credential (optional)"):
-        def connect():
+        def connect() -> None:
+            """Register the entered credential for this browser session only."""
             try:
                 manager.register(key_env, st.session_state.pop('runtime_secret', ''))
                 st.session_state.pop(models_key, None)
@@ -126,7 +135,13 @@ def render(store, workspace):
         st.session_state.pop(models_key, None)
         st.session_state.pop(fetched_key, None)
 
-    def check_connection(model, discover):
+    def check_connection(model: str, discover: bool) -> None:
+        """Validate an endpoint and either discover models or test one model.
+
+        Args:
+            model: Model identifier used for a direct connection test.
+            discover: Whether to fetch and cache the available model identifiers.
+        """
         if discover:
             st.session_state.pop(models_key, None)
             st.session_state.pop(fetched_key, None)
@@ -168,7 +183,8 @@ def render(store, workspace):
     st.subheader("Model")
     models = st.session_state.get(models_key, {}).get('models', [])
     if models:
-        def select_model():
+        def select_model() -> None:
+            """Copy the selected discovered model into the model text field."""
             selected = st.session_state.get(fetched_key)
             if selected in models:
                 st.session_state[model_key] = selected

@@ -3,10 +3,17 @@ import streamlit as st
 
 from dataforge.ai_service import preview_ai_evidence
 from dataforge.llm import TASKS, assist_task
+from dataforge.store import Store
 from ui.assistance_result import render_result
 
 
-def render(store, workspace):
+def render(store: Store, workspace: str) -> None:
+    """Render the explicit, source-bounded AI assistance workflow.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     _saved_results(store, workspace)
     profiles = store.rows("SELECT profile_id FROM llm_profiles WHERE workspace_id=?", [workspace])
     if not profiles:
@@ -50,7 +57,13 @@ def render(store, workspace):
     st.dataframe(store.rows("SELECT created_at,task,provider,model,outcome,duration,usage FROM llm_records WHERE workspace_id=? ORDER BY created_at DESC LIMIT 50", [workspace]), hide_index=True)
 
 
-def _saved_results(store, workspace):
+def _saved_results(store: Store, workspace: str) -> None:
+    """Show saved AI results and pass the selected record to its renderer.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     saved = store.rows("SELECT record_id,task,created_at,outcome FROM llm_records WHERE workspace_id=? ORDER BY created_at DESC LIMIT 50", [workspace])
     if saved:
         labels = {r["record_id"]: f"{r['created_at']} · {r['task']} · {r['outcome']}" for r in saved}

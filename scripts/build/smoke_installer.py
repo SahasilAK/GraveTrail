@@ -8,12 +8,19 @@ import json
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 from dataforge.build import build_environment, write_manifest
 
 
 def smoke_installer(directory: Path, *, finalize: bool = False) -> None:
+    """Install, exercise, upgrade, and uninstall a Windows build in a disposable home.
+
+    Args:
+        directory: Folder containing installer and verification evidence.
+        finalize: Whether to mark lifecycle checks complete and refresh the manifest.
+    """
     evidence_path = directory / "windows-verification.json"
     evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
     installer = directory / evidence["installer"]
@@ -29,16 +36,41 @@ def smoke_installer(directory: Path, *, finalize: bool = False) -> None:
         (inputs / "flow.sql").write_text("create table pub.kpi as select id from raw.orders;")
         env = {**build_environment(), "DATAFORGE_HOME": str(home)}
 
-        def run(command, *, check=True, timeout=180, environment=env):
+        def run(command: Sequence[str | Path], *, check: bool = True, timeout: int = 180,
+                environment: dict[str, str] | None = env) -> subprocess.CompletedProcess[str]:
+            """Run a child process from the disposable installation directory.
+
+            Args:
+                command: Executable and arguments to run.
+                check: Whether a nonzero exit status raises an exception.
+                timeout: Maximum process duration in seconds.
+                environment: Environment mapping, or ``None`` to inherit it.
+
+            Returns:
+                Completed process result with captured text output.
+            """
             return subprocess.run(list(map(str, command)), cwd=base, env=environment,
                                   capture_output=True, text=True, encoding="utf-8", check=check,
                                   timeout=timeout, creationflags=subprocess.CREATE_NO_WINDOW)
 
-        def setup(*, check=True):
+        def setup(*, check: bool = True) -> subprocess.CompletedProcess[str]:
+            """Run the installer silently into the temporary install directory.
+
+            Args:
+                check: Whether a nonzero exit status raises an exception.
+
+            Returns:
+                Completed installer process result.
+            """
             return run([installer, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-",
                         f"/DIR={install}", "/TASKS=", f"/LOG={base / 'install.log'}"], check=check)
 
-        def verify_trust(path):
+        def verify_trust(path: Path) -> None:
+            """Verify a production-signed artifact when release evidence requires it.
+
+            Args:
+                path: Installer or executable to verify.
+            """
             if evidence["mode"] == "production":
                 run(["pwsh", "-NoProfile", "-File", script, "-Path", path, "-VerifyOnly"],
                     environment=None)

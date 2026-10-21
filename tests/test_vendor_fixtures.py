@@ -1,6 +1,7 @@
 """Labeled vendor examples prove these inputs, not universal dialect compatibility."""
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,14 @@ EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
 
 @pytest.mark.parametrize("dialect", EXPECTED)
 @pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["LF", "CRLF"])
-def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tmp_path, dialect, newline):
+def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tmp_path: Path, dialect: str, newline: Any) -> None:
+    """Verify that vendor edges direct columns temporary identity and original evidence.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        dialect: Dialect selected for the test case.
+        newline: Newline value used by the test case.
+    """
     expected = EXPECTED[dialect]
     path = FIXTURES / expected.get("file", dialect + ".sql")
     original = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)

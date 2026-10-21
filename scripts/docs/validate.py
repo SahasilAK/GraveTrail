@@ -10,13 +10,26 @@ from urllib.parse import unquote, urlsplit
 
 
 class Links(HTMLParser):
-    def __init__(self, source: str):
+    """Collect local URL attributes and anchor identifiers from rendered HTML."""
+
+    def __init__(self, source: str) -> None:
+        """Parse HTML and initialize the collected IDs and links.
+
+        Args:
+            source: Rendered HTML text to inspect.
+        """
         super().__init__(convert_charrefs=True)
         self.ids: set[str] = set()
         self.links: list[str] = []
         self.feed(source)
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        """Collect IDs, anchors, and resource URLs from one opening tag.
+
+        Args:
+            tag: HTML element name.
+            attrs: Attribute names and optional values reported by ``HTMLParser``.
+        """
         values = dict(attrs)
         if values.get("id"):
             self.ids.add(values["id"])
@@ -30,6 +43,15 @@ class Links(HTMLParser):
 
 
 def inspect_site(site: Path, prefix: str) -> list[str]:
+    """Check rendered HTML and CSS for broken local links and anchors.
+
+    Args:
+        site: Root directory containing the rendered site.
+        prefix: Expected URL path prefix for root-relative links.
+
+    Returns:
+        Human-readable errors found in site resources.
+    """
     pages = {path: Links(path.read_text(encoding="utf-8")) for path in site.rglob("*.html")}
     errors = []
     for page, parsed in pages.items():
@@ -65,6 +87,16 @@ def inspect_site(site: Path, prefix: str) -> list[str]:
 
 
 def inspect_inventory(site: Path, expected: set[str], optional: set[str] | None = None) -> list[str]:
+    """Compare generated files with the expected publication inventory.
+
+    Args:
+        site: Root directory containing generated files.
+        expected: Required relative paths.
+        optional: Additional permitted relative paths.
+
+    Returns:
+        Unexpected, missing, and symlinked path diagnostics.
+    """
     actual = {path.relative_to(site).as_posix() for path in site.rglob("*") if path.is_file()}
     errors = [f"Unexpected publication file: {name}" for name in sorted(actual - expected - (optional or set()))]
     errors += [f"Missing publication file: {name}" for name in sorted(expected - actual)]
@@ -73,6 +105,15 @@ def inspect_inventory(site: Path, expected: set[str], optional: set[str] | None 
 
 
 def validate(config_path: Path, site: Path) -> None:
+    """Validate the rendered site's inventory, links, search index, and repo links.
+
+    Args:
+        config_path: Path to the MkDocs configuration.
+        site: Path to the rendered output directory.
+
+    Raises:
+        SystemExit: If any documentation validation error is found.
+    """
     import material
     from mkdocs.config import load_config
 

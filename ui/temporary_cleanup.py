@@ -2,6 +2,7 @@
 import duckdb
 import streamlit as st
 
+from dataforge.store import Store
 from dataforge.temporary_cleanup import (
     cleanup_temporary,
     restore_temporary,
@@ -10,14 +11,26 @@ from dataforge.temporary_cleanup import (
 )
 
 
-def render(store, workspace):
+def render(store: Store, workspace: str) -> None:
+    """Render the collapsible temporary-file cleanup and recovery controls.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     panel = st.expander("Clean stale temporary files", on_change="rerun", key="temporary_cleanup_panel")
     if panel.open:
         with panel:
             _controls(store, workspace)
 
 
-def _controls(store, workspace):
+def _controls(store: Store, workspace: str) -> None:
+    """Render bounded cleanup previews, selected cleanup, and recovery actions.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     st.caption("Only application-created history staging files older than 24 hours are eligible. Original source files, database files, JSON history archives and other workspaces are excluded. A compressed database recovery copy is committed before removal. This clears staging files; retained recovery copies mean total disk space may not shrink.")
     key = "temporary_cleanup_" + workspace
     if notice := st.session_state.pop(key + "_notice", None):

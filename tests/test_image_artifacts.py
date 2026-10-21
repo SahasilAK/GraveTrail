@@ -2,6 +2,9 @@
 import asyncio
 import base64
 import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -17,7 +20,12 @@ from dataforge.store import Store
 
 
 @pytest.fixture
-def workspace(tmp_path):
+def workspace(tmp_path: Path) -> Iterator[Any]:
+    """Provide the workspace fixture used by the tests.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store = Store(tmp_path / 'home')
     w = store.create_workspace('Images / demo')
     Importer(store, w).files([('job.sql', b'create table stage.b as select id from raw.a; '
@@ -29,7 +37,17 @@ def workspace(tmp_path):
     store.close()
 
 
-def read(service, w, result):
+def read(service: Any, w: Any, result: Any) -> Any:
+    """Handle read for the test scenario.
+
+    Args:
+        service: Service value used by the test case.
+        w: Workspace identifier used by the test.
+        result: Result produced by the operation.
+
+    Returns:
+        Value produced for the test scenario.
+    """
     data, offset = b'', 0
     while offset < result['bytes']:
         chunk = service.call('artifact_read', w, artifact_id=result['artifact_id'], offset=offset)
@@ -38,7 +56,12 @@ def read(service, w, result):
     return data
 
 
-def test_shared_image_and_managed_artifact_have_identical_scope(workspace):
+def test_shared_image_and_managed_artifact_have_identical_scope(workspace: Any) -> None:
+    """Verify that shared image and managed artifact have identical scope.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     from dataforge.services import export_graph_image
 
     store, w, service = workspace
@@ -59,7 +82,12 @@ def test_shared_image_and_managed_artifact_have_identical_scope(workspace):
         read(service, w, result)
 
 
-def test_mcp_png_and_svg_options(workspace):
+def test_mcp_png_and_svg_options(workspace: Any) -> None:
+    """Verify that mcp png and svg options.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     _, w, service = workspace
     server = create_server(service)
     for format in ['svg', 'png']:
@@ -75,7 +103,12 @@ def test_mcp_png_and_svg_options(workspace):
             assert data.startswith(b'\x89PNG')
 
 
-def test_filters_collapsing_and_stale_revision(workspace):
+def test_filters_collapsing_and_stale_revision(workspace: Any) -> None:
+    """Verify that filters collapsing and stale revision.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     from dataforge.services import export_graph_image
 
     store, w, _ = workspace
@@ -95,7 +128,13 @@ def test_filters_collapsing_and_stale_revision(workspace):
     assert not stale['complete'] and 'not current' in str(stale['warnings'])
 
 
-def test_cli_output_and_invalid_destination_leave_no_new_artifact(workspace, tmp_path):
+def test_cli_output_and_invalid_destination_leave_no_new_artifact(workspace: Any, tmp_path: Path) -> None:
+    """Verify that cli output and invalid destination leave no new artifact.
+
+    Args:
+        workspace: Workspace used by the test.
+        tmp_path: Temporary directory supplied by pytest.
+    """
     store, w, service = workspace
     home = store.home
     service.close()
@@ -114,7 +153,13 @@ def test_cli_output_and_invalid_destination_leave_no_new_artifact(workspace, tmp
     assert list((home / 'agent/artifacts' / w).iterdir()) == files
 
 
-def test_explorer_image_download(tmp_path, monkeypatch):
+def test_explorer_image_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that explorer image download.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from pathlib import Path
 
     from streamlit.testing.v1 import AppTest
@@ -140,12 +185,30 @@ def test_explorer_image_download(tmp_path, monkeypatch):
         get_store.clear()
 
 
-def test_temporary_contraction_budget_and_failed_render_publish_nothing(workspace, monkeypatch):
+def test_temporary_contraction_budget_and_failed_render_publish_nothing(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that temporary contraction budget and failed render publish nothing.
+
+    Args:
+        workspace: Workspace used by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        ValueError: Raised by the test helper.
+    """
     from dataforge.graph import LineageGraph
 
     store, w, service = workspace
     original = LineageGraph.simplified
-    def bounded(self, *args, **kwargs):
+    def bounded(self, *args: Any, **kwargs: Any) -> Any:
+        """Handle bounded for the test scenario.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         assert kwargs.get('evidence_limit') == 20000
         return original(self, *args, **kwargs)
     monkeypatch.setattr(LineageGraph, 'simplified', bounded)
@@ -153,7 +216,16 @@ def test_temporary_contraction_budget_and_failed_render_publish_nothing(workspac
     assert result['node_count'] == 3
     directory = store.home / 'agent/artifacts' / w
     files = list(directory.iterdir())
-    def fail(*args, **kwargs):
+    def fail(*args: Any, **kwargs: Any) -> None:
+        """Raise the injected failure used by the test.
+
+        Args:
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Raises:
+            ValueError: Raised by the test helper.
+        """
         raise ValueError('PNG render time limit exceeded; narrow the graph')
     monkeypatch.setattr('dataforge.graph_image_service.render_graph_image', fail)
     with pytest.raises(AgentError, match='time limit'):
@@ -161,7 +233,12 @@ def test_temporary_contraction_budget_and_failed_render_publish_nothing(workspac
     assert list(directory.iterdir()) == files
 
 
-def test_temporary_cycle_export_retains_same_nodes_as_ui(workspace):
+def test_temporary_cycle_export_retains_same_nodes_as_ui(workspace: Any) -> None:
+    """Verify that temporary cycle export retains same nodes as ui.
+
+    Args:
+        workspace: Workspace used by the test.
+    """
     from dataforge.graph import LineageGraph
     from dataforge.services import export_graph_image
 
@@ -181,12 +258,34 @@ def test_temporary_cycle_export_retains_same_nodes_as_ui(workspace):
     assert actual == set(ui.nodes)
 
 
-def test_manifest_write_failure_cleans_binary(workspace, monkeypatch):
+def test_manifest_write_failure_cleans_binary(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that manifest write failure cleans binary.
+
+    Args:
+        workspace: Workspace used by the test.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+
+    Raises:
+        OSError: Raised by the test helper.
+    """
     from pathlib import Path
 
     store, w, service = workspace
     original = Path.open
-    def no_manifest(path, *args, **kwargs):
+    def no_manifest(path: Any, *args: Any, **kwargs: Any) -> Any:
+        """Handle no manifest for the test scenario.
+
+        Args:
+            path: Path value used by the test case.
+            args: Positional arguments forwarded to the operation.
+            kwargs: Keyword arguments forwarded to the operation.
+
+        Returns:
+            Value produced for the test scenario.
+
+        Raises:
+            OSError: Raised by the test helper.
+        """
         if path.suffix == '.json' and path.parent.name == w:
             raise OSError('Simulated full disk')
         return original(path, *args, **kwargs)

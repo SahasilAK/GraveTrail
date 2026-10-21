@@ -1,10 +1,18 @@
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
 
-def test_empty_dashboard_and_builder(tmp_path, monkeypatch):
+def test_empty_dashboard_and_builder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that empty dashboard and builder.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     assert not app.exception
@@ -15,7 +23,13 @@ def test_empty_dashboard_and_builder(tmp_path, monkeypatch):
     assert any("Import" in b.label for b in app.button)
 
 
-def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, monkeypatch):
+def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that theme picker saves native palette without changing workspace.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from ui.themes import PRESETS, current_preset
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "home"))
@@ -43,7 +57,13 @@ def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path, 
     assert any("Rose Circuit theme applied" in s.value for s in app.success)
 
 
-def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):
+def test_directory_import_analysis_and_pages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that directory import analysis and pages.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge.ingestion import Importer
     from dataforge.services import analyze
     from dataforge.store import Store
@@ -71,7 +91,13 @@ def test_directory_import_analysis_and_pages(tmp_path, monkeypatch):
     assert app.dataframe
 
 
-def test_provider_profile_form_and_settings_sections(tmp_path, monkeypatch):
+def test_provider_profile_form_and_settings_sections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that provider profile form and settings sections.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/settings.py").run()
@@ -89,7 +115,13 @@ def test_provider_profile_form_and_settings_sections(tmp_path, monkeypatch):
     assert any(s.label == "Default profile" for s in app.selectbox)
 
 
-def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path, monkeypatch):
+def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that workspace edit refreshes sidebar and preserves active identity.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from ui.common import get_store
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
@@ -112,7 +144,13 @@ def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path
     assert get_store(str(tmp_path)).workspaces()[0]["name"] == "Renamed workspace"
 
 
-def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp_path, monkeypatch):
+def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that schema expansion and declaration evidence in columns and dictionary.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge.ingestion import Importer
     from dataforge.services import analyze
     from dataforge.store import Store
@@ -146,7 +184,13 @@ def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp
     assert set(app.dataframe[0].value["provenance"]) == {"SQL DDL declaration"}
 
 
-def test_history_archive_and_restore_through_settings(tmp_path, monkeypatch):
+def test_history_archive_and_restore_through_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that history archive and restore through settings.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge.ingestion import Importer
     from dataforge.services import analyze
     from dataforge.store import Store
@@ -178,7 +222,13 @@ def test_history_archive_and_restore_through_settings(tmp_path, monkeypatch):
     assert len(get_store(str(tmp_path)).runs(w)) == 3
 
 
-def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(tmp_path, monkeypatch):
+def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that visualization preferences save and apply without cross workspace leak.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from dataforge.ingestion import Importer
     from dataforge.services import analyze
     from dataforge.store import Store
@@ -233,7 +283,13 @@ def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(t
     assert len(app.code) == 2 and all(c.proto.show_line_numbers for c in app.code)
 
 
-def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path, monkeypatch):
+def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that unresolved queue preview request and explicit inferred merge.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import json
 
     import httpx
@@ -256,7 +312,15 @@ def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path, 
     store.set_setting(w, "default_profile", "p")
     store.close()
     calls = []
-    def handler(request):
+    def handler(request: pytest.FixtureRequest) -> Any:
+        """Handle handler for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         calls.append(request)
         context = json.loads(json.loads(request.content)["messages"][1]["content"].split("\n", 1)[-1])
         return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps({"claims": [{
@@ -290,7 +354,8 @@ def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path, 
 
 
 @pytest.fixture(autouse=True)
-def clear_resources():
+def clear_resources() -> Iterator[None]:
+    """Clear cached resources before the test runs."""
     yield
     import streamlit as st
     st.cache_resource.clear()

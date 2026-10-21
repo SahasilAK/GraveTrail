@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
+from typing import Any
 
 import networkx as nx
 
@@ -9,7 +11,16 @@ from dataforge.asset_identity import asset_job, asset_label
 
 
 class LineageGraph:
-    def __init__(self, assets: list[dict], edges: list[dict], min_confidence=0., include_inferred=True):
+    """Represent filtered lineage nodes and evidence-bearing directed relationships."""
+
+    def __init__(
+        self,
+        assets: list[dict[str, Any]],
+        edges: list[dict[str, Any]],
+        min_confidence: float = 0.0,
+        include_inferred: bool = True,
+    ) -> None:
+        """Build a graph while retaining edges whose asset nodes are unresolved."""
         self.graph = nx.DiGraph()
         self.graph.graph["unresolved_edges"] = []
         self.truncated = False
@@ -33,24 +44,29 @@ class LineageGraph:
                 self.graph.add_edge(s, t, evidence=[e], intermediates=[])
 
     @property
-    def nodes(self):
+    def nodes(self) -> Any:
+        """Expose the underlying NetworkX node view and its asset attributes."""
         return self.graph.nodes
 
     @property
-    def unresolved_edges(self):
+    def unresolved_edges(self) -> list[dict[str, Any]]:
+        """Return filtered evidence edges whose source or target node is missing."""
         return self.graph.graph.get("unresolved_edges", [])
 
     @classmethod
-    def _from_graph(cls, graph, truncated=False):
+    def _from_graph(cls, graph: nx.DiGraph, truncated: bool = False) -> LineageGraph:
+        """Wrap an existing graph while preserving its traversal truncation state."""
         instance = cls([], [])
         instance.graph = graph
         instance.truncated = truncated
         return instance
 
-    def search(self, query: str) -> list[dict]:
+    def search(self, query: str) -> list[dict[str, Any]]:
+        """Return nodes whose names contain the case-insensitive query."""
         return [a for _, a in self.graph.nodes(data=True) if query.casefold() in a["name"].casefold()]
 
-    def focus(self, asset: str, direction="upstream", depth=5, limit=200):
+    def focus(self, asset: str, direction: str = "upstream", depth: int = 5, limit: int = 200) -> LineageGraph:
+        """Return the bounded neighborhood reachable from an asset in the chosen direction."""
         if asset not in self.graph:
             return self._from_graph(nx.DiGraph())
         seen = {asset}
@@ -89,10 +105,19 @@ class LineageGraph:
         return self._from_graph(graph, truncated)
 
     def cycles(self) -> list[list[str]]:
+        """List cyclic components, including nodes with a self-loop."""
         return [sorted(c) for c in nx.strongly_connected_components(self.graph)
                 if len(c) > 1 or self.graph.has_edge(next(iter(c)), next(iter(c)))]
 
-    def simplified(self, edge_limit=20000, keep=(), *, preserve_paths=False, evidence_limit=None):
+    def simplified(
+        self,
+        edge_limit: int = 20000,
+        keep: Iterable[str] = (),
+        *,
+        preserve_paths: bool = False,
+        evidence_limit: int | None = None,
+    ) -> LineageGraph:
+        """Contract eligible temporary nodes while retaining their evidence and intermediates."""
         evidence_count = sum(len(attrs['evidence']) for _, _, attrs in self.graph.edges(data=True))
         if evidence_limit is not None and evidence_count > evidence_limit:
             raise ValueError('Temporary-stage evidence limit exceeded; include temporary stages or narrow workspace')
@@ -132,7 +157,8 @@ class LineageGraph:
             graph.remove_node(node)
         return self._from_graph(graph, self.truncated)
 
-    def lineage_rows(self):
+    def lineage_rows(self) -> list[dict[str, Any]]:
+        """Flatten graph evidence into ordered rows with logical generation numbers."""
         components = list(nx.strongly_connected_components(self.graph))
         condensed = nx.condensation(self.graph, components)
         generations = {node: generation + 1 for generation, group in enumerate(nx.topological_generations(condensed)) for node in group}
@@ -161,7 +187,8 @@ class LineageGraph:
                 'file_id': evidence.get('file_id', ''), 'statement_id': evidence.get('statement_id', '')})
         return sorted(rows, key=lambda r: (r["logical_step"], r["source"], r["file"]))
 
-    def root_paths(self, target, limit=50, depth=15):
+    def root_paths(self, target: str, limit: int = 50, depth: int = 15) -> list[list[str]]:
+        """Find bounded upstream paths from roots to a target without revisiting nodes."""
         paths = []
         queue = deque([[target]])
         while queue and len(paths) < limit:
@@ -175,9 +202,34 @@ class LineageGraph:
                     queue.append([parent, *path])
         return paths
 
-    def path_report(self, asset, direction="upstream", limit=50, depth=15, *,
-                    max_relationships=None, max_evidence=None, include_code=False):
-        """Bounded ordered paths over this topology, with evidence and explicit boundaries."""
+    def path_report(
+        self,
+        asset: str,
+        direction: str = "upstream",
+        limit: int = 50,
+        depth: int = 15,
+        *,
+        max_relationships: int | None = None,
+        max_evidence: int | None = None,
+        include_code: bool = False,
+    ) -> dict[str, Any]:
+        """Return ordered paths with evidence and explicit traversal boundaries.
+
+        Args:
+            asset: Exact asset ID from which the path search starts.
+            direction: Whether to trace upstream roots or downstream terminals.
+            limit: Maximum number of paths to include.
+            depth: Maximum number of relationships per path.
+            max_relationships: Optional total relationship budget for the report.
+            max_evidence: Optional total evidence-row budget for the report.
+            include_code: Whether source code is included in evidence records.
+
+        Returns:
+            A report containing selected-asset metadata, path steps, and truncation status.
+
+        Raises:
+            ValueError: If direction, path bounds, or evidence limits are invalid.
+        """
         if direction not in {"upstream", "downstream"} or not 1 <= limit <= 500 or not 1 <= depth <= 30:
             raise ValueError("Use upstream/downstream, 1–500 paths and 1–30 depth")
         if any(value is not None and (type(value) is not int or value < 1)

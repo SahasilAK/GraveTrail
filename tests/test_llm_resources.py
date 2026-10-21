@@ -1,10 +1,13 @@
 import threading
+from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 
 
-def test_chunks_preserve_complete_statements_and_original_coordinates():
+def test_chunks_preserve_complete_statements_and_original_coordinates() -> None:
+    """Verify that chunks preserve complete statements and original coordinates."""
     from dataforge.llm_resources import context_chunks
 
     code = "-- preface\nselect 'semi;colon' from raw.a;\n\nselect id from raw.b;"
@@ -17,7 +20,8 @@ def test_chunks_preserve_complete_statements_and_original_coordinates():
         context_chunks(code, ".sql", 1, 4, 10)
 
 
-def test_sas_chunks_keep_data_and_macro_blocks_intact():
+def test_sas_chunks_keep_data_and_macro_blocks_intact() -> None:
+    """Verify that sas chunks keep data and macro blocks intact."""
     from dataforge.llm_resources import context_chunks
 
     first = "data work.x;\nset raw.a;\nkeep id;\nrun;"
@@ -27,7 +31,8 @@ def test_sas_chunks_keep_data_and_macro_blocks_intact():
     assert chunks[1]["first"] == 5
 
 
-def test_interactive_sas_procedure_is_not_split_at_run():
+def test_interactive_sas_procedure_is_not_split_at_run() -> None:
+    """Verify that interactive sas procedure is not split at run."""
     from dataforge.llm_resources import context_chunks
 
     code = "proc datasets library=work;\nmodify first;\nrename x=y;\nrun;\nmodify second;\nrename a=b;\nquit;"
@@ -36,13 +41,22 @@ def test_interactive_sas_procedure_is_not_split_at_run():
     assert context_chunks(code, ".sas", 1, 7, 150)[0]["code"] == code
 
 
-def test_request_slots_bound_parallelism_release_and_allow_other_workspaces(tmp_path):
+def test_request_slots_bound_parallelism_release_and_allow_other_workspaces(tmp_path: Path) -> None:
+    """Verify that request slots bound parallelism release and allow other workspaces.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+
+    Raises:
+        RuntimeError: Raised by the test helper.
+    """
     from dataforge.llm_resources import request_slot
 
     held = threading.Event()
     release = threading.Event()
 
-    def hold():
+    def hold() -> None:
+        """Handle hold for the test scenario."""
         with request_slot(tmp_path, "a", 1):
             held.set()
             assert release.wait(3)
@@ -66,7 +80,12 @@ def test_request_slots_bound_parallelism_release_and_allow_other_workspaces(tmp_
         pass
 
 
-def test_busy_or_cancelled_assistance_does_not_transmit(tmp_path):
+def test_busy_or_cancelled_assistance_does_not_transmit(tmp_path: Path) -> None:
+    """Verify that busy or cancelled assistance does not transmit.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+    """
     from dataforge.ingestion import Importer
     from dataforge.llm import Profile, assist
     from dataforge.llm_resources import request_slot
@@ -87,13 +106,22 @@ def test_busy_or_cancelled_assistance_does_not_transmit(tmp_path):
         store.close()
 
 
-def test_cancellation_stops_provider_retries():
+def test_cancellation_stops_provider_retries() -> None:
+    """Verify that cancellation stops provider retries."""
     from dataforge.llm import Adapter, Profile, ProviderError
 
     cancelled = threading.Event()
     calls = []
 
-    def handler(request):
+    def handler(request: pytest.FixtureRequest) -> Any:
+        """Handle handler for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         calls.append(request)
         cancelled.set()
         return httpx.Response(503)
@@ -105,7 +133,13 @@ def test_cancellation_stops_provider_retries():
     assert len(calls) == 1
 
 
-def test_chunk_ui_previews_offline_and_sends_only_selected_original_range(tmp_path, monkeypatch):
+def test_chunk_ui_previews_offline_and_sends_only_selected_original_range(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that chunk ui previews offline and sends only selected original range.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     import json
     from functools import partial
 
@@ -127,14 +161,28 @@ def test_chunk_ui_previews_offline_and_sends_only_selected_original_range(tmp_pa
     store.set_setting(workspace, "llm_chunk_chars", 500)
     calls = []
 
-    def handler(request):
+    def handler(request: pytest.FixtureRequest) -> Any:
+        """Handle handler for the test scenario.
+
+        Args:
+            request: Pytest fixture describing the active test request.
+
+        Returns:
+            Value produced for the test scenario.
+        """
         payload = json.loads(request.content)
         calls.append(json.loads(payload["messages"][1]["content"].split("\n", 1)[1]))
         return httpx.Response(200, json={"message": {"content": '{"claims":[]}'}})
 
     monkeypatch.setattr("ui.assistance.assist_task", partial(assist_task, transport=httpx.MockTransport(handler)))
 
-    def page(home, workspace):
+    def page(home: "Any", workspace: "Any") -> None:
+        """Handle page for the test scenario.
+
+        Args:
+            home: Home value used by the test case.
+            workspace: Workspace used by the test.
+        """
         from dataforge.store import Store
         from ui.assistance import render
 
@@ -159,7 +207,13 @@ def test_chunk_ui_previews_offline_and_sends_only_selected_original_range(tmp_pa
         store.close()
 
 
-def test_provider_connection_checks_share_request_admission(tmp_path, monkeypatch):
+def test_provider_connection_checks_share_request_admission(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that provider connection checks share request admission.
+
+    Args:
+        tmp_path: Temporary directory supplied by pytest.
+        monkeypatch: Pytest fixture for isolating environment and attribute changes.
+    """
     from streamlit.testing.v1 import AppTest
 
     from dataforge.llm import Profile
@@ -172,7 +226,13 @@ def test_provider_connection_checks_share_request_admission(tmp_path, monkeypatc
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["profile", w, "Local", profile.model_dump_json()])
     monkeypatch.setattr("ui.provider_settings.Adapter.complete", lambda *args: ('{"status":"connected"}', {}))
 
-    def page(home, workspace):
+    def page(home: "Any", workspace: "Any") -> None:
+        """Handle page for the test scenario.
+
+        Args:
+            home: Home value used by the test case.
+            workspace: Workspace used by the test.
+        """
         from dataforge.store import Store
         from ui.provider_settings import render
 

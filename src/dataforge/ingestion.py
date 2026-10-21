@@ -8,8 +8,10 @@ import re
 import stat
 import uuid
 import zipfile
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 from charset_normalizer import from_bytes
 
@@ -27,6 +29,8 @@ UPSERT_SOURCE = """INSERT INTO source_files(file_id,workspace_id,ingestion_id,fi
 
 @dataclass
 class Limits:
+    """Per-import ceilings for files, bytes, and archive compression."""
+
     max_files: int = 10000
     max_file_bytes: int = 20 * 1024 * 1024
     max_total_bytes: int = 200 * 1024 * 1024
@@ -36,6 +40,8 @@ class Limits:
 
 @dataclass
 class ImportReport:
+    """Counts and diagnostics collected during one source import."""
+
     discovered: int = 0
     accepted: int = 0
     skipped: int = 0
@@ -44,6 +50,17 @@ class ImportReport:
 
 
 def safe_relative(name: str) -> str:
+    """Validate and normalize an imported relative path.
+
+    Args:
+        name: Path supplied by an upload or archive entry.
+
+    Returns:
+        Normalized POSIX-style relative path.
+
+    Raises:
+        ValueError: If the path is absolute, traverses directories, or has an unsafe name.
+    """
     name = name.replace("\\", "/")
     p = PurePosixPath(name)
     if not name or p.is_absolute() or any(x in {"..", "."} for x in name.split("/")):
@@ -55,6 +72,17 @@ def safe_relative(name: str) -> str:
 
 
 def decode(data: bytes) -> tuple[str, str, str]:
+    """Decode supported text bytes and report any detected encoding warning.
+
+    Args:
+        data: Raw file contents.
+
+    Returns:
+        Decoded text, encoding name, and an optional warning string.
+
+    Raises:
+        ValueError: If the input appears binary or its text encoding cannot be detected.
+    """
     if data.startswith((b"\xff\xfe", b"\xfe\xff")):
         return data.decode("utf-16"), "utf-16", ""
     if b"\0" in data or (data and sum(c < 9 or 13 < c < 32 for c in data[:8192]) / min(len(data), 8192) > .05):
@@ -69,12 +97,37 @@ def decode(data: bytes) -> tuple[str, str, str]:
 
 
 class Importer:
-    def __init__(self, store, workspace: str, allowed_roots=(), limits: Limits | None = None):
+    """Import bounded source files into a workspace inventory."""
+
+    def __init__(self, store: Any, workspace: str, allowed_roots: Iterable[str | Path] = (), limits: Limits | None = None) -> None:
+        """Create an importer with workspace, root, and size constraints.
+
+        Args:
+            store: Persistence store used to record imported sources.
+            workspace: Workspace identifier receiving the sources.
+            allowed_roots: Filesystem roots permitted for directory imports.
+            limits: Optional import limits; defaults to the standard limits.
+        """
         self.store, self.workspace = store, workspace
         self.roots = [Path(r).resolve() for r in allowed_roots]
         self.limits = limits or Limits()
 
-    def zip(self, data: bytes, extensions: set[str], progress=None, cancelled=None):
+    def zip(self, data: bytes, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
+            cancelled: Callable[[], bool] | None = None) -> ImportReport:
+        """Import supported files from a ZIP upload.
+
+        Args:
+            data: Compressed archive bytes.
+            extensions: Lowercase extensions allowed for import.
+            progress: Optional callback invoked after each processed entry.
+            cancelled: Optional predicate checked between entries.
+
+        Returns:
+            Report of discovered, accepted, skipped, and duplicate files.
+
+        Raises:
+            ValueError: If archive or import size limits are exceeded.
+        """
         if len(data) > self.limits.max_archive_bytes:
             raise ValueError("Archive exceeds compressed size limit")
         with zipfile.ZipFile(io.BytesIO(data)) as z:
@@ -84,7 +137,15 @@ class Importer:
             if sum(e.file_size for e in entries) > self.limits.max_total_bytes:
                 raise ValueError("Archive exceeds decompressed size limit")
 
-            def read(e):
+            def read(e: zipfile.ZipInfo) -> bytes:
+                """Read and validate one archive entry.
+
+                Args:
+                    e: ZIP member metadata to validate and read.
+
+                Returns:
+                    Bounded uncompressed member bytes.
+                """
                 safe_relative(e.filename)
                 if stat.S_ISLNK(e.external_attr >> 16):
                     raise ValueError("Symbolic links are not imported")
@@ -98,7 +159,22 @@ class Importer:
             return self._import(((e.filename, lambda e=e: read(e)) for e in entries), extensions,
                                 "ZIP upload", progress, cancelled)
 
-    def directory(self, directory: str | Path, extensions: set[str], progress=None, cancelled=None):
+    def directory(self, directory: str | Path, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
+                  cancelled: Callable[[], bool] | None = None) -> ImportReport:
+        """Import supported files beneath an authorized directory.
+
+        Args:
+            directory: Directory to traverse under an allowed root.
+            extensions: Lowercase extensions allowed for import.
+            progress: Optional callback invoked after each processed file.
+            cancelled: Optional predicate checked between files.
+
+        Returns:
+            Import report for the traversed directory.
+
+        Raises:
+            ValueError: If the directory is unauthorized or import limits are exceeded.
+        """
         # Normalize without touching the requested path, then check a complete root
         # boundary before resolve/stat/walk. The trailing separator also admits the
         # root itself without admitting siblings such as "allowed-private".
@@ -115,13 +191,26 @@ class Importer:
         if not path.is_dir():
             raise ValueError("Directory does not exist")
 
-        def discover():
+        def discover() -> Iterator[tuple[str, Callable[[], bytes]]]:
+            """Yield safe relative paths and deferred file readers.
+
+                Yields:
+                    Discovered paths paired with callbacks that read their bytes.
+            """
             for parent, dirs, files in os.walk(path, followlinks=False):
                 dirs[:] = sorted(d for d in dirs if not (Path(parent) / d).is_symlink())
                 for name in sorted(files):
                     p = Path(parent) / name
 
-                    def read(p=p):
+                    def read(p: Path = p) -> bytes:
+                        """Read a discovered file after checking its path remains safe.
+
+                        Args:
+                            p: File path to validate and read.
+
+                        Returns:
+                            Bounded file bytes.
+                        """
                         if p.is_symlink() or not p.resolve().is_relative_to(path):
                             raise ValueError("Symbolic links are not imported")
                         with p.open("rb") as f:
@@ -131,11 +220,40 @@ class Importer:
 
         return self._import(discover(), extensions, str(path), progress, cancelled)
 
-    def files(self, entries, extensions: set[str], progress=None, cancelled=None):
+    def files(self, entries: Iterable[tuple[str, bytes]], extensions: set[str],
+              progress: Callable[[ImportReport], Any] | None = None,
+              cancelled: Callable[[], bool] | None = None) -> ImportReport:
+        """Import files supplied as browser upload entries.
+
+        Args:
+            entries: Relative file names paired with raw contents.
+            extensions: Lowercase extensions allowed for import.
+            progress: Optional callback invoked after each processed file.
+            cancelled: Optional predicate checked between files.
+
+        Returns:
+            Import report for the upload.
+        """
         return self._import(((name, lambda data=data: data) for name, data in entries), extensions,
                             "Browser upload", progress, cancelled)
 
-    def _import(self, entries, extensions, source, progress, cancelled):
+    def _import(self, entries: Iterable[tuple[str, Callable[[], bytes]]], extensions: set[str], source: str,
+                progress: Callable[[ImportReport], Any] | None, cancelled: Callable[[], bool] | None) -> ImportReport:
+        """Validate entries and record accepted source files transactionally.
+
+        Args:
+            entries: File names paired with deferred byte readers.
+            extensions: Lowercase extensions allowed for import.
+            source: Human-readable source label recorded in the inventory.
+            progress: Optional callback invoked after each processed entry.
+            cancelled: Optional predicate checked between entries.
+
+        Returns:
+            Counts and diagnostics from the completed import.
+
+        Raises:
+            ValueError: If extension selection or aggregate import limits are invalid.
+        """
         import json
 
         if not extensions <= {".sql", ".sas", ".csv"} or not extensions:

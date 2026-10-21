@@ -2,10 +2,17 @@
 import streamlit as st
 
 from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, request_review
+from dataforge.store import Store
 from ui.assistance_result import render_result
 
 
-def render(store, workspace):
+def render(store: Store, workspace: str) -> None:
+    """Render an explicit, source-bounded review of current parser diagnostics.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     queue = diagnostic_queue(store, workspace)
     if not queue["items"]:
         st.info("No current SQL/SAS warnings or errors to review. Analyze pending or reimported files first. Informational and CSV diagnostics are excluded.")

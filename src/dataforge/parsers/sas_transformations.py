@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
-from dataforge.models import Diagnostic
+from dataforge.models import Diagnostic, Operation
 
 NAME = r'[A-Za-z_]\w*'
 STRING = r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\""
@@ -16,8 +17,25 @@ SUPPORTED_FUNCTIONS = frozenset({
 })
 
 
-def derivation(table, column, expression, *, scope='', version='', inputs=None,
-               category='projection', coverage=None, ordinal=0):
+def derivation(table: str, column: str, expression: str, *, scope: str = '', version: str = '',
+               inputs: list[dict[str, str]] | None = None, category: str = 'projection',
+               coverage: list[str] | None = None, ordinal: int = 0) -> dict[str, Any]:
+    """Build one DATA-step derivation record with its status from coverage.
+
+    Args:
+        table: Target dataset name.
+        column: Target column name.
+        expression: Original SAS expression or statement evidence.
+        scope: Scope identifier for the generated variable version.
+        version: Target variable version identifier.
+        inputs: Source column dependencies.
+        category: Derivation category label.
+        coverage: Unresolved reasons attached to the record.
+        ordinal: Position of the record within the operation.
+
+    Returns:
+        Derivation mapping in the persisted parser result shape.
+    """
     coverage = coverage or []
     return {'target_table': table, 'target_column': column, 'scope': scope,
             'target_version': version, 'expression': expression, 'category': category,
@@ -25,11 +43,33 @@ def derivation(table, column, expression, *, scope='', version='', inputs=None,
             'coverage': coverage, 'branch': 0, 'ordinal': ordinal}
 
 
-def dependency(table, column, *, scope='', version=''):
+def dependency(table: str, column: str, *, scope: str = '', version: str = '') -> dict[str, str]:
+    """Build one source-column dependency record.
+
+    Args:
+        table: Source dataset name.
+        column: Source column name.
+        scope: Scope containing the source variable version.
+        version: Source variable version identifier.
+
+    Returns:
+        Dependency mapping with the value role.
+    """
     return {'table': table, 'column': column, 'role': 'value', 'scope': scope, 'version': version}
 
 
-def _names(value):
+def _names(value: str) -> list[str]:
+    """Parse and normalize a simple whitespace-separated SAS variable list.
+
+    Args:
+        value: List text from a KEEP or DROP option.
+
+    Returns:
+        Case-folded variable names.
+
+    Raises:
+        ValueError: If the list contains unsupported names or range syntax.
+    """
     names = value.strip().split()
     if not names or any(not re.fullmatch(NAME, name) or name.casefold() in {
             '_all_', '_numeric_', '_character_'} for name in names):
@@ -37,7 +77,18 @@ def _names(value):
     return [name.casefold() for name in names]
 
 
-def _renames(value):
+def _renames(value: str) -> dict[str, str]:
+    """Parse a plain SAS old-name to new-name mapping.
+
+    Args:
+        value: RENAME option text.
+
+    Returns:
+        Case-folded source-to-target column mapping.
+
+    Raises:
+        ValueError: If the mapping is empty, malformed, or conflicting.
+    """
     pairs = list(re.finditer(rf'({NAME})\s*=\s*({NAME})', value))
     remainder = re.sub(rf'{NAME}\s*=\s*{NAME}', '', value).strip()
     if not pairs or remainder:
@@ -48,8 +99,19 @@ def _renames(value):
     return mapping
 
 
-def _dataset(statement, keyword):
-    """Read one dataset with only the three tested column options."""
+def _dataset(statement: str, keyword: str) -> dict[str, list[str] | dict[str, str] | None]:
+    """Read one dataset and its supported KEEP, DROP, and RENAME options.
+
+    Args:
+        statement: DATA or SET statement to inspect.
+        keyword: Expected statement keyword.
+
+    Returns:
+        Parsed options mapping with ``keep``, ``drop``, and ``rename`` entries.
+
+    Raises:
+        ValueError: If the dataset or its options use unsupported syntax.
+    """
     match = re.fullmatch(rf'\s*{keyword}\s+({NAME}(?:\.{NAME})?)\s*(.*?)\s*;?', statement, re.I | re.S)
     if not match:
         raise ValueError('SAS column transformations require a single plain dataset')
@@ -79,7 +141,22 @@ def _dataset(statement, keyword):
     return options
 
 
-def _expression_inputs(expression, source, state, source_columns, known_source, unavailable):
+def _expression_inputs(expression: str, source: str, state: dict[str, dict[str, Any]],
+                       source_columns: dict[str, str], known_source: bool,
+                       unavailable: set[str]) -> tuple[list[dict[str, str]], list[str]]:
+    """Resolve referenced variables to known inputs or coverage diagnostics.
+
+    Args:
+        expression: SAS assignment expression.
+        source: Single source dataset name, if known.
+        state: Current DATA-step variable versions.
+        source_columns: Known output-to-source column mapping.
+        known_source: Whether the source schema is complete for this step.
+        unavailable: Names not available as pass-through source columns.
+
+    Returns:
+        Dependency records and unresolved coverage messages.
+    """
     stripped = re.sub(STRING, ' ', expression)
     # Date/time literals and hex/format notation need their own grammar; do not guess.
     if (re.search(rf'(?:{STRING})\s*[A-Za-z_]', expression) or re.search(r'[&%\[\]{}:]', stripped)
@@ -115,8 +192,16 @@ def _expression_inputs(expression, source, state, source_columns, known_source, 
     return list({tuple(i.items()): i for i in inputs}.values()), list(dict.fromkeys(coverage))
 
 
-def data_step_derivations(operation, block):
-    """Return ordered variable versions and final columns, without inventing a schema."""
+def data_step_derivations(operation: Operation, block: list[tuple[str, int, int, str, int, int]]) -> tuple[list[dict[str, Any]], list[Diagnostic]]:
+    """Build ordered DATA-step variable versions and final columns conservatively.
+
+    Args:
+        operation: Parsed SAS DATA operation to describe.
+        block: Buffered source statements with line and character offsets.
+
+    Returns:
+        Derivation records and diagnostics for unsupported or incomplete cases.
+    """
     targets = [t.name for t in operation.targets if t.kind == 'table']
     if not targets:
         return [], []
@@ -229,7 +314,15 @@ def data_step_derivations(operation, block):
     return steps, [Diagnostic(message, operation.start) for message in coverage]
 
 
-def proc_derivations(operation):
+def proc_derivations(operation: Operation) -> list[dict[str, Any]]:
+    """Mark PROC output transformations unsupported for each target dataset.
+
+    Args:
+        operation: Parsed PROC operation.
+
+    Returns:
+        Unresolved derivation records for the operation's targets.
+    """
     return [derivation(target.name, '', operation.code, category='unsupported',
                        coverage=[f'{operation.kind} column transformations are unsupported'])
             for target in operation.targets]

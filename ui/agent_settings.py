@@ -9,9 +9,16 @@ from dataforge.agent.contracts import AgentError, AgentSettings
 from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
 from dataforge.settings_service import save_ui_settings
+from dataforge.store import Store
 
 
-def render(store, workspace):
+def render(store: Store, workspace: str) -> None:
+    """Render the workspace's agent and automation access settings.
+
+    Args:
+        store: Workspace storage service.
+        workspace: Workspace identifier.
+    """
     st.subheader("Agent & Automation Access")
     st.markdown("Use GraveTrail from scripts or an AI assistant. Analysis runs locally; normal agent queries use stored results and do not call an LLM.")
     settings = AgentSettings.from_store(store, workspace)

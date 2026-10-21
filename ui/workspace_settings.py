@@ -11,10 +11,17 @@ from dataforge.configuration import (
     import_workspace_configuration,
 )
 from dataforge.settings_service import save_ui_settings
+from dataforge.store import Store
 from ui.common import allowed_roots, open_storage_home, storage_homes
 
 
-def render_parsing(store, w):
+def render_parsing(store: Store, w: str) -> None:
+    """Render SQL/SAS parsing, identity, and diagnostic display settings.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     if notice := st.session_state.pop("parsing_notice_" + w, None):
         st.success(notice)
     with st.form("parsing_settings_" + w):
@@ -66,7 +73,13 @@ def render_parsing(store, w):
                 st.error(str(exc))
 
 
-def render_resources(store, w):
+def render_resources(store: Store, w: str) -> None:
+    """Render per-workspace file, parser, and AI resource limits.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     with st.form("performance_" + w):
         max_file = st.number_input("Maximum file size (MB)", 1, 100, int(store.setting(w, "max_file_mb", 20)))
         max_files = st.number_input("Maximum files per import", 1, 100000, int(store.setting(w, "max_files", 10000)))
@@ -84,7 +97,13 @@ def render_resources(store, w):
     st.caption('Clear the shared parser cache with a preview and confirmation in Data management → Cleanup & recovery.')
 
 
-def render_appearance(store, w):
+def render_appearance(store: Store, w: str) -> None:
+    """Render graph appearance and source-view defaults.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     from ui.themes import render_theme_picker
     render_theme_picker()
     st.subheader("Graph and source defaults")
@@ -121,7 +140,13 @@ def render_appearance(store, w):
     st.caption("Defaults apply when opening Lineage. Graph appearance is included in offline HTML/JSON and safe workspace configuration transfers. Choose a light or dark theme preset above.")
 
 
-def render_privacy(store, w):
+def render_privacy(store: Store, w: str) -> None:
+    """Render application logging, allowed roots, and privacy permissions.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     from dataforge.logging_config import save_application_logging
     with st.form("application_logging"):
         levels = ["DEBUG", "INFO", "WARNING", "ERROR"]
@@ -150,7 +175,13 @@ def render_privacy(store, w):
             st.rerun()
 
 
-def render_storage(store, w):
+def render_storage(store: Store, w: str) -> None:
+    """Render storage location and workspace configuration controls.
+
+    Args:
+        store: Workspace storage service.
+        w: Workspace identifier.
+    """
     st.code(str(store.home), language=None)
     size = (store.home / "dataforge.duckdb").stat().st_size
     st.metric("Database size", f"{size / 1024 / 1024:.2f} MB")

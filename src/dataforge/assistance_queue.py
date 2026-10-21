@@ -1,5 +1,10 @@
 """Bounded, read-only diagnostic triage with explicit source-version-pinned AI requests."""
+from typing import Any
+
+import httpx
+
 from dataforge.llm import assist_task
+from dataforge.store import Store
 
 _ELIGIBLE = """FROM diagnostics d JOIN source_files f
     ON d.file_id=f.file_id AND d.workspace_id=f.workspace_id
@@ -8,19 +13,22 @@ _ELIGIBLE = """FROM diagnostics d JOIN source_files f
 _FIELDS = "d.*,f.relative_path,f.extension,f.content_hash"
 
 
-def diagnostic_queue(store, workspace):
+def diagnostic_queue(store: Store, workspace: str) -> dict[str, Any]:
+    """List up to one hundred current SQL and SAS diagnostics in severity order."""
     rows = store.rows(f"SELECT {_FIELDS} {_ELIGIBLE} ORDER BY CASE d.severity WHEN 'error' THEN 0 ELSE 1 END,f.relative_path,d.line,d.diagnostic_id LIMIT 101", [workspace])
     return {"items": rows[:100], "truncated": len(rows) > 100}
 
 
-def _item(store, workspace, diagnostic):
+def _item(store: Store, workspace: str, diagnostic: str) -> dict[str, Any]:
+    """Load a current workspace diagnostic or raise when it is no longer available."""
     rows = store.rows(f"SELECT {_FIELDS} {_ELIGIBLE} AND d.diagnostic_id=? LIMIT 1", [workspace, diagnostic])
     if not rows:
         raise ValueError("Diagnostic is not current; analyze the inventory and refresh this review")
     return rows[0]
 
 
-def diagnostic_context(store, workspace, diagnostic):
+def diagnostic_context(store: Store, workspace: str, diagnostic: str) -> dict[str, Any]:
+    """Build a source-version-checked, bounded preview around a diagnostic line."""
     item = _item(store, workspace, diagnostic)
     source = store.file(item["file_id"])
     if source["workspace_id"] != workspace or source["content_hash"] != item["content_hash"]:
@@ -43,7 +51,29 @@ def diagnostic_context(store, workspace, diagnostic):
             "task": "sql_lineage" if item["extension"] == ".sql" else "sas_lineage"}
 
 
-def request_review(store, workspace, diagnostic, content_hash, first, last, transport=None):
+def request_review(
+    store: Store,
+    workspace: str,
+    diagnostic: str,
+    content_hash: str,
+    first: int,
+    last: int,
+    transport: httpx.BaseTransport | None = None,
+) -> dict[str, Any]:
+    """Request AI review for a diagnostic only if its source version is still current.
+
+    Args:
+        store: Workspace store containing the diagnostic and source.
+        workspace: Workspace identifier.
+        diagnostic: Diagnostic identifier to review.
+        content_hash: Expected hash of the source version shown to the reviewer.
+        first: First source line to include.
+        last: Last source line to include.
+        transport: Optional provider transport passed through to the AI service.
+
+    Raises:
+        ValueError: If the diagnostic or source version is stale, or the line bounds are invalid.
+    """
     item = _item(store, workspace, diagnostic)
     if item["content_hash"] != content_hash:
         raise ValueError("Source changed; refresh the diagnostic preview")

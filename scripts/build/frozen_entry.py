@@ -6,7 +6,8 @@ import sys
 from dataforge.launcher import application_root, default_home, main, windows_instance
 
 
-def dispatch():
+def dispatch() -> None:
+    """Select and run the frozen UI, worker, image-renderer, or CLI entry point."""
     multiprocessing.freeze_support()
     if sys.argv[1:2] == ['--render-graph-image']:
         from dataforge.image_worker import main as render_image
