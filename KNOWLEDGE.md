@@ -80,3 +80,5 @@ Security compatibility: exactStreamlit1.66/Pillow13runtime pins plus temporaryex
 - `dependency-overrides.txt` — Exact temporary Pillow installer exception; keep synchronized with pyproject tool.uv/runtime pins, package with Python artifacts, remove only after tested stable upstream support.
 
 Resumable SQL/SAS/dbt AI analysis uses finite lifetime allowances, automatic bounded execution windows and request/item journals. Public walkthrough: [docs/user-guide/ai-analysis-flow.md](docs/user-guide/ai-analysis-flow.md).
+
+`.gitleaks.toml` narrowly allowlists exact synthetic redaction credentials and the exact positive/negative/ambiguous lookup-state vocabulary in the internal AI plan; full history/nested-fixture scans remain enabled.
