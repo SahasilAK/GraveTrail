@@ -78,7 +78,9 @@ class AIPlan:
         else:
             visible = unit.code
         names = {x.casefold() for x in re.findall(r'[A-Za-z_][\w.]*',visible)}
-        return [dict(entry) for name in sorted(names) for entry in self.context_index.get(name, ()) if entry['unit_id'] not in {unit.unit_id, unit.focus.parent_id if unit.focus else unit.unit_id} and
+        excluded = {unit.unit_id, unit.focus.parent_id if unit.focus else unit.unit_id,
+                    unit.source_focus.parent_id if unit.source_focus else unit.unit_id}
+        return [dict(entry) for name in sorted(names) for entry in self.context_index.get(name, ()) if entry['unit_id'] not in excluded and
                 (not entry.get('temporary') or entry['job_id'] == unit.job_id)]
 
 
@@ -164,7 +166,7 @@ def _unit_spans(code, extension):
         yield block_start,len(code.rstrip())
 
 
-def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source=False, progress=None):
+def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source=False, progress=None, adaptive=False):
     """Page complete units without the manual selector's 50-chunk limit."""
     if type(max_chars) is not int or not 1 <= max_chars <= 200000:
         raise ValueError('Invalid complete-unit budget')
@@ -195,7 +197,7 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
             blocked.append({'file_id':source.file_id,'reason':'complete_source_permission_required'})
         for start,end in spans:
             code = source.code[start:end]
-            if len(code) > max_chars:
+            if len(code) > max_chars and not adaptive:
                 blocked.append({'file_id':source.file_id,'start_offset':start,'reason':'indivisible_unit_exceeds_budget'})
                 continue
             unit = AnalysisUnit(unit_id=stable_id(prepared.workspace,source.file_id,source.content_hash,str(start),str(end)),

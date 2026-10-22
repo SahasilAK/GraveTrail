@@ -1,6 +1,7 @@
 """Pure conservative full-envelope allowances and bounded execution recommendations."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from math import ceil
 
@@ -49,9 +50,27 @@ class RequestAllowance:
     required_characters: int
     capacity_source: str
     dynamic: bool
+    source_characters: int
+    character_limit: int
 
 
-def request_allowance(profile, system, user, *, privacy_chars):
+def source_characters(user):
+    """Disclosed domain content; instructions/schema still count toward model capacity."""
+    try:
+        context = json.loads(user[user.index('{'):])
+        items = context.get('items', [context])
+        return sum(len(item.get('unit', {}).get('code', ''))
+            + sum(len(segment['code']) for segment in item.get('source_segments', []))
+            + sum(len(ref.get('name', '')) + len(ref.get('text', '')) for group in
+                  ('expression_references', 'partial_expression_references') for ref in item.get(group, []))
+            + len(json.dumps({k: item[k] for k in ('catalog', 'context_records', 'settings', 'resolution', 'candidates')
+                if k in item and not (k == 'candidates' and isinstance(item[k], str))},
+                ensure_ascii=False, separators=(',', ':'))) for item in items)
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def request_allowance(profile, system, user, *, privacy_chars, context_chars=None, reserved_source_chars=0):
     estimate = estimate_tokens(system, user)
     caps = profile.model_capabilities
     current = caps is not None and caps.current_for(profile)
@@ -70,11 +89,16 @@ def request_allowance(profile, system, user, *, privacy_chars):
         if input_limit is not None and estimate.upper_bound > input_limit:
             reasons.append('complete_prompt_exceeds_model_capacity')
     chars = len(system) + len(user)
-    if chars > min(profile.context_chars, privacy_chars):
-        reasons.append('complete_prompt_exceeds_context_budget')
+    source = source_characters(user)
+    if source is not None:
+        source += reserved_source_chars
+    limit = context_chars or min(profile.context_chars, privacy_chars)
+    if (chars if source is None else source) > limit:
+        reasons.append('complete_prompt_exceeds_context_budget' if source is None
+                       else 'source_context_exceeds_character_allowance')
     return RequestAllowance(not reasons, tuple(reasons), estimate.upper_bound, estimate.method, output,
         input_limit, headroom, chars, caps.source if current else 'configured; metadata stale or unavailable',
-        caps.dynamic if current else False)
+        caps.dynamic if current else False, chars if source is None else source, limit)
 
 
 def execution_budget(bundles, **overrides):
@@ -112,3 +136,34 @@ def project_profile(profile, unit):
         return profile
     allocation = min(profile.max_tokens, max(1024, 512 + 2 * len(unit.code.encode('utf-8'))))
     return profile.model_copy(update={'max_tokens': allocation})
+
+
+def file_sizing(preview):
+    """One sortable row per source, with worst planned request and all blockers."""
+    rows = {}
+    for source in preview.get('disclosure', []):
+        rows[source['path']] = {'File': source['path'], 'File characters': source['characters'],
+            'Planned tasks': 0, 'Maximum request characters': 0, 'Maximum source/context characters': 0,
+            'Source/context character allowance': None, 'Estimated input tokens (upper bound)': 0,
+            'Model input token allowance': None, 'Needs attention': ''}
+    units = {}
+    for allowance in preview.get('allowances', []):
+        path = allowance['path']
+        if path not in rows:
+            continue
+        row = rows[path]
+        units.setdefault(path, set()).add(allowance['unit_id'])
+        for column, field in [('Maximum request characters', 'required_characters'),
+                              ('Maximum source/context characters', 'source_characters'),
+                              ('Estimated input tokens (upper bound)', 'estimated_input')]:
+            row[column] = max(row[column], allowance[field])
+        for column, field in [('Source/context character allowance', 'character_limit'),
+                              ('Model input token allowance', 'input_limit')]:
+            value = allowance[field]
+            if value is not None:
+                row[column] = value if row[column] is None else min(row[column], value)
+        row['Needs attention'] = '; '.join(sorted(set(filter(None,
+            [*row['Needs attention'].split('; '), *allowance['reasons']]))))
+    for path, ids in units.items():
+        rows[path]['Planned tasks'] = len(ids)
+    return sorted(rows.values(), key=lambda row: (-row['Maximum request characters'], row['File']))

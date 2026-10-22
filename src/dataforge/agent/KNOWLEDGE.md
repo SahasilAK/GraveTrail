@@ -59,3 +59,5 @@ Project preview/start accept nullable automatic execution limits, pinned `resume
 Job journals add created_at/started_at/stage_started_at/finished_at epoch times. Heartbeats preserve stage timers; terminal completion freezes elapsed time. Legacy journals remain readable; no source/credential timer metadata.
 
 AI build/preview share nullable files/request and parallel maxima, auto continuation, lifetime attempts/output/seconds and existing execution/resume/retry fields across CLI/MCP/UI. Permissions remain source/network gated.
+
+Project build/preview also accept nullable max_context_chars (500–2,000,000), explicitly overriding saved source-character allowances per build; model capacity and permissions remain binding.

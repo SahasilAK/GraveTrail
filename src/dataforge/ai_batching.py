@@ -52,7 +52,8 @@ def pack_batch(pending, contexts, execution, profile, *, width, privacy_chars):
         system, user = batch_prompt(candidate, execution, contexts)
         sizing = profile.model_copy(update={'output_mode': 'automatic'})
         output = sum(project_profile(sizing, u).max_tokens for u in candidate)
-        if output > profile.max_tokens or not request_allowance(profile, system, user, privacy_chars=privacy_chars).valid:
+        if output > profile.max_tokens or not request_allowance(profile, system, user, privacy_chars=privacy_chars,
+                                                               context_chars=execution.request.max_context_chars).valid:
             break
         selected.append(unit)
         files.add(unit.file_id)

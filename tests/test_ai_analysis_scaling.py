@@ -6,6 +6,7 @@ from dataclasses import asdict
 import pytest
 
 from dataforge.ai_analysis_models import AnalysisRequest, AnalysisUnit
+from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
 
 
 def unit(code):
@@ -137,6 +138,7 @@ def test_full_envelope_splits_wide_operation_and_rejects_cross_focus_claim(tmp_p
     p = Profile(
         provider="Ollama", base_url="http://localhost:11434", model="m", retries=0, context_chars=11000
     )
+    p.model_capabilities = bind_capabilities(ModelCapabilities(input_tokens=11512, window='separate'), p)
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["p", w, "m", p.model_dump_json()])
     store.set_setting(w, "default_profile", "p")
     store.set_setting(w, "max_context_chars", 11000)
@@ -329,6 +331,7 @@ def test_wide_query_real_transport_preserves_every_projection_and_one_writer(tmp
         retries=0,
         context_chars=11000,
     )
+    profile.model_capabilities = bind_capabilities(ModelCapabilities(input_tokens=11512, window='separate'), profile)
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["p", w, "m", profile.model_dump_json()])
     store.set_setting(w, "default_profile", "p")
     store.set_setting(w, "max_context_chars", 11000)
@@ -398,7 +401,7 @@ def test_wide_query_real_transport_preserves_every_projection_and_one_writer(tmp
     assert store.rows("SELECT count(*) AS n FROM analysis_runs")[0]["n"] == 1
     assert result.usage_known
     assert store.rows("SELECT DISTINCT version FROM prompt_versions WHERE task='project_lineage'") == [
-        {"version": "4"}
+        {"version": "6"}
     ]
     store.close()
 

@@ -63,13 +63,20 @@ completion is idempotent within its run; this does not imply provider billing is
 
 ## Context, batching and reuse
 
-SQL and SAS retain complete lexical/semantic boundaries. dbt context uses safe
+SQL and SAS prefer complete lexical/semantic boundaries. Oversized source or context
+falls back to host-issued source/context views with exact ranges and bounded original
+anchors. These views are partial evidence, never reconstructed executable statements;
+every interval/context record remains assigned to a saved task. dbt context uses safe
 existing project/resource/artifact readers, preserving root, package, version and
 source/artifact origin. Prompts contain source declarations and supplied artifacts,
 never computed static lineage answers. Python/Jinja/hooks are inspected as data.
 
-Full system instructions, schema, unit code, expression references and context count
-toward capacity and disclosure checks. A versioned batch envelope wraps existing
+Full system instructions, schema, visible source, expression references, context and
+reserved output count toward model capacity. The source-character allowance measures
+source and disclosed project/settings context separately; protocol overhead cannot
+consume this allowance. `AnalysisRequest.max_context_chars` optionally replaces saved
+workspace/profile character allowances for one build; it cannot override model token
+limits or disclosure permissions. A versioned batch envelope wraps existing
 single-unit contracts, with at most eight items. Each item must use its own host ID
 and evidence. Good items survive missing/malformed siblings; truncated unparseable
 responses establish no partial success. Smaller fallbacks replan pending work.
@@ -79,6 +86,30 @@ validator and parser compatibility. The separate complete publication pin still
 rejects any stale inventory/configuration. Context lookup indexes avoid scanning
 the entire catalog for every unit. Dispatch checks use a compact inventory revision;
 final publication verifies immutable source bytes again.
+
+Planning also bounds expected expression slots and visible dependency names;
+repeated UNION branches cannot evade response limits merely by sharing names.
+Only source work is subdivided for output pressure. Context is divided when it
+contributes to a request-capacity failure, avoiding needless source/context
+combinations. An irreducible minimum-envelope probe stops before per-character
+expansion when the chosen model or explicit allowance cannot fit the protocol.
+
+Extraction wire4/prompt6 supports `fragment` derivations and partial expression
+references. Validated components retain identity, inputs and exact covered ranges
+in the existing unit checkpoint. Canonical local facts can exceed the wire's
+100-input/20,000-expression-character bounds; individual model responses retain
+those bounds. `ai_composition.py` requires complete range coverage, unions inputs
+and validates the full result against the original parent. This is host work;
+the prompt never receives the parser's calculated dependencies. Both normal and
+component validation use the same supported UPDATE/MERGE verifier.
+
+Review wire2/prompt4 addresses exact source references and one-input dependency
+components. Completed component decisions persist independently. Composed facts
+are rebuilt after review and never re-reviewed as a single oversized candidate.
+One original-parent reconciliation avoids repeatedly comparing the full parser
+result for every source view. Large exact expressions use immutable source spans
+in checkpoints, final reports and accepted snapshots, with bounds checked on
+rehydration. Existing stored inline expressions remain readable.
 
 ## Quotas and allowances
 

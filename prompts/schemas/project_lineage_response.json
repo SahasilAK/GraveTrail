@@ -130,10 +130,14 @@
           "type": "string"
         },
         "expression": {
-          "maxLength": 20000,
           "minLength": 1,
           "title": "Expression",
           "type": "string"
+        },
+        "fragment": {
+          "default": false,
+          "title": "Fragment",
+          "type": "boolean"
         },
         "category": {
           "maxLength": 100,
@@ -180,7 +184,6 @@
           "items": {
             "$ref": "#/$defs/DerivationInput"
           },
-          "maxItems": 100,
           "title": "Inputs",
           "type": "array"
         },
@@ -323,7 +326,6 @@
           "type": "integer"
         },
         "quote": {
-          "maxLength": 200000,
           "minLength": 1,
           "title": "Quote",
           "type": "string"

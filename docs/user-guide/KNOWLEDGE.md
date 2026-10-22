@@ -15,5 +15,5 @@ Screenshots and navigation reflect the redesigned Overview/Sources/Analysis/Line
 
 The hub leads with local parser/no-AI operation and presents hybrid as optional additional coverage, preserving evidence/omission/unresolved limits.
 
-- `ai-analysis-flow.md` — Complete SQL/SAS/dbt extraction→checkpoint→stored linking/resolution→publication flow.
-- `ai-analysis-controls-and-recovery.md` — Files/parallel maxima, project vs window budgets, provider quotas and explicit unknown/restart actions.
+- `ai-analysis-flow.md` — Complete SQL/SAS/dbt extraction→component checkpoint/review→validated expression composition→stored linking/resolution→publication flow.
+- `ai-analysis-controls-and-recovery.md` — Files/parallel maxima, optional character allowance, sortable sizing diagnostics, project vs window budgets, provider quotas and explicit unknown/restart actions.

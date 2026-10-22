@@ -197,7 +197,10 @@ def test_compaction_preserves_annotation_named_properties_and_context_ceiling(tm
     system,user,_=analysis_prompt(unit,'project_lineage',execution)
     assert len(code)<8000<len(system)+len(user)
     result=preview_analysis_routes(Store(),'w',[unit],execution)
-    assert not result['valid'] and result['blocked'][0]['reason']=='complete_prompt_exceeds_context_budget'
+    assert result['valid']  # Fixed protocol/schema overhead is not disclosed source.
+    execution.request = execution.request.model_copy(update={'max_context_chars': 2000})
+    result = preview_analysis_routes(Store(),'w',[unit],execution)
+    assert not result['valid'] and result['blocked'][0]['reason']=='source_context_exceeds_character_allowance'
 
 
 def test_schema_compaction_keeps_literal_values_and_dependency_property_names():

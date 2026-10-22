@@ -62,7 +62,8 @@ def controls(store, workspace, file_ids):
     refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
     base = dict(mode='hybrid' if compare else 'ai', file_ids=file_ids,
                 additional_ai_review=review, refresh_ai=refresh,
-                max_files_per_request=max_files, max_parallel_requests=max_parallel)
+                max_files_per_request=max_files, max_parallel_requests=max_parallel,
+                max_context_chars=st.session_state.get('ai_context_chars_' + workspace))
     status = st.status('Preparing AI analysis…', expanded=False)
     status.caption('Local preparation only. Model requests start when you choose Analyze.')
     activity = status.empty()
@@ -80,11 +81,18 @@ def controls(store, workspace, file_ids):
         base['auto_continue'] = st.checkbox('Automatically continue execution windows', value=True,
             key='ai_auto_continue_' + workspace)
         def reset():
+            st.session_state.pop('ai_context_chars_' + workspace, None)
             for suffix in ('attempts', 'output', 'seconds'):
                 st.session_state.pop('ai_custom_' + suffix + '_' + workspace, None)
                 st.session_state.pop('ai_custom_value_' + suffix + '_' + workspace, None)
             st.session_state['ai_budget_reset_' + workspace] = True
         st.button('Reset AI budgets to automatic', on_click=reset)
+        base['max_context_chars'] = st.number_input('Maximum source/context characters per request',
+            500, 2000000, value=None, placeholder='Auto', key='ai_context_chars_' + workspace,
+            help='Optional for this build. Replaces saved workspace/profile character allowances; '
+                 'model token limits and source permissions still apply. Auto splits work to fit.')
+        st.caption('Character allowances cover disclosed source and project context. Instructions, response schema '
+                   'and reserved output are checked separately against model capacity; you do not need to calculate them.')
         fields = [('attempts', 'max_provider_attempts', 'Maximum provider attempts', 1, 2000, 1),
                   ('output', 'max_output_tokens_total', 'Maximum reserved output tokens', 1000, 2000000, 1000),
                   ('seconds', 'max_seconds', 'Execution time budget (seconds)', 30, 14400, 1)]
@@ -123,6 +131,9 @@ def controls(store, workspace, file_ids):
                        'Includes bounded repair and resolution work; reservation is not billed usage.')
         if preview.get('semantic_pages'):
             st.caption(f"{preview['semantic_pages']} projection tasks retain original shared SQL context and validate against the complete source.")
+        if preview.get('source_context_pages'):
+            st.caption(f"{preview['source_context_pages']} bounded source/context views will be checkpointed and combined. "
+                       'Original evidence is preserved; unsupported or incomplete semantics remain explicit.')
         if preview.get('review_sizing_provisional'):
             st.caption('Review sizing is provisional until extraction produces candidates. Additional batches continue within the saved execution limits; completed batches are reused.')
         if preview['routes']:
@@ -146,19 +157,15 @@ def controls(store, workspace, file_ids):
             reasons = sorted({b['reason'] for b in preview['blocked']})
             status.warning('; '.join(r.replace('_', ' ') for r in reasons))
             st.warning('AI build needs attention: ' + '; '.join(r.replace('_', ' ') for r in reasons))
-            st.caption('Complete statements and validated projection groups preserve their required context. Model capacity, source disclosure allowance and execution limits are checked separately.')
-            affected = {b.get('unit_id') for b in preview['blocked'] if b.get('unit_id')}
-            if affected:
-                paths = {a['path'] for a in preview.get('allowances', []) if a['unit_id'] in affected}
-                with st.expander('Affected source files', expanded=False):
-                    st.caption('Affected source selection: ' + ', '.join(sorted(paths)))
-            required = max((a['required_characters'] for a in preview.get('allowances', []) if not a['valid']), default=0)
-            if 'complete_prompt_exceeds_context_budget' in reasons and 0 < required <= 100000:
-                if st.button(f'Apply calculated context allowance ({required:,} characters)'):
-                    from dataforge.analysis_service import apply_context_allowance
-                    from dataforge.settings_service import revision
-                    apply_context_allowance(store, workspace, request, required, revision(store, workspace))
-                    st.rerun()
+            st.caption('Requests adapt to source size and model capacity using complete statements, projection groups or exact source/context views. Saved components are combined and validated against the original before lineage is published.')
+        with st.expander('Source files and request sizes', expanded=False, on_change='rerun',
+                         key='ai_sizes_' + workspace) as sizes:
+            if sizes.open:
+                from dataforge.ai_budget import file_sizing
+                st.caption('Click any column heading to sort ascending or descending. Request characters include '
+                           'instructions and schema; the character allowance applies to source/context only. '
+                           'Blank model token allowances mean capacity is unknown. Values describe planned single-task requests.')
+                st.dataframe(file_sizing(preview), hide_index=True, alt='Source files, planned request sizes, allowances and blockers')
         with st.expander('Source disclosure preview', on_change='rerun', key='ai_disclosure_' + workspace) as panel:
             if panel.open:
                 st.dataframe(preview['disclosure'], hide_index=True, alt='Selected source files and immutable hashes to be disclosed')

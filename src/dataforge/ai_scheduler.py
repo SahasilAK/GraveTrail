@@ -288,7 +288,8 @@ def run_pending_requests(store, workspace, run_id, units, execution, *, contexts
                 else:
                     system, user = batch_prompt(batch, local, contexts)
                     prompt_hash = hashlib.sha256((system + user).encode()).hexdigest()
-                if not request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000)).valid:
+                if not request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000),
+                                         context_chars=execution.request.max_context_chars).valid:
                     if route_index + 1 < len(routes):
                         pending.append((remaining, route_index + 1, 0, 0.))
                         continue
@@ -309,7 +310,7 @@ def run_pending_requests(store, workspace, run_id, units, execution, *, contexts
                     bound, execution.transport, execution.cancelled), admissions, message)
                 inflight[future] = {'message': message, 'batch_id': batch_id, 'units': batch,
                     'profile': profile, 'route': route_index, 'retry': retry, 'slot': slot,
-                    'prompt_hash': prompt_hash, 'prompt_version': '5-batch1' if len(batch) > 1 else PROJECT_PROTOCOLS['project_lineage'][1],
+                    'prompt_hash': prompt_hash, 'prompt_version': PROJECT_PROTOCOLS['project_lineage'][1] + ('-batch1' if len(batch) > 1 else ''),
                     'started': time.monotonic(), 'user': user,
                     'estimated_input': estimate_tokens(system, user).upper_bound}
                 if len(batch) < len(remaining):

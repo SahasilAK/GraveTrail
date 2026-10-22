@@ -97,9 +97,11 @@ Accepted claim payloads also retain compact source references with original enco
 
 AI source tasks also retain a bounded `unit_spec` in planned/staged unit rows. It pins original coordinates and optional projection bounds/ordinals without copying source text. Validated checkpoints retain reviewed candidate IDs after each review batch. Clean continuation reconstructs the same source plan and skips completed batches; partial task publication is not allowed. This uses the existing migration 6/7 tables and needs no additional migration.
 
-Extraction protocol v3 expression references are transient model citations. The host resolves them to exact original expression text/coordinates before storing the existing compact canonical v2 payload; no new table or migration is required. Parser 14 / validator 3 and extraction prompt/schema hashes invalidate incompatible cached or paused work while preserving the previously published graph. Review remains protocol v2.
+Extraction protocol v4 expression references are transient model citations. The host resolves them to exact original expression text/coordinates before storing the existing compact canonical v2 payload; no new table or migration is required. Parser 14 / validator 4 and extraction prompt/schema hashes invalidate incompatible cached or paused work while preserving the previously published graph. Review remains protocol v2.
 
 
 ## Resumable AI analysis
 
 Migration 9 adds `ai_analysis_requests`, `ai_analysis_attempts`, `ai_context_dependencies` and `ai_link_checkpoints`. They store request/item membership, independent dispatch outcomes/reservations, relevant source dependencies and staged link reports. They are included in cleanup, integrity and whole-home backup/restore. See [AI persistence and ownership](architecture/ai-analysis-pipeline.md#durable-state).
+
+Adaptive source/context views extend unit_spec with an immutable source_focus range and indexed context interval. Validation checkpoints retain fragment identities, covered expression ranges, bounded inputs and reviewed component IDs. Compatible components are composed and validated against the complete original before becoming accepted facts. Large exact expression strings use checked _expression_source_span offsets in claim/checkpoint/snapshot JSON; legacy inline expressions remain readable. Typed support refresh hydrates those offsets, and detailed reports read each immutable source once. These additions reuse schema9 tables and require no migration.

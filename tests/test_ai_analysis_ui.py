@@ -117,7 +117,7 @@ def test_budget_defaults_are_automatic_editable_and_resettable(tmp_path, monkeyp
     st.cache_resource.clear()
 
 
-def test_calculated_context_action_updates_only_context_allowances(tmp_path, monkeypatch):
+def test_character_override_and_sortable_sizing_leave_saved_allowances_unchanged(tmp_path, monkeypatch):
     import json
 
     from dataforge.llm import Profile
@@ -131,12 +131,21 @@ def test_calculated_context_action_updates_only_context_allowances(tmp_path, mon
     view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
     view.switch_page('ui/pages/analysis.py').run()
     next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
-    assert next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
-    next(b for b in view.button if b.label.startswith('Apply calculated context allowance')).click().run()
+    limit = next(n for n in view.number_input if n.label == 'Maximum source/context characters per request')
+    assert limit.value is None
+    limit.set_value(24000).run()
     assert not view.exception
     assert not next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
     saved = json.loads(store.rows("SELECT config FROM llm_profiles WHERE profile_id='p'")[0]['config'])
-    assert saved['context_chars'] > 500 and saved['max_tokens'] == profile.max_tokens
+    assert saved['context_chars'] == 500 and saved['max_tokens'] == profile.max_tokens
+    assert store.setting(w, 'max_context_chars', 8000) == 8000
+    sizes = next(p for p in view.expander if p.label == 'Source files and request sizes')
+    assert sizes.proto.expanded is False
+    view.session_state['ai_sizes_' + w] = True
+    view.run()
+    sizes = next(p for p in view.expander if p.label == 'Source files and request sizes')
+    # Native dataframes expose sortable numeric columns without custom sorting code.
+    assert sizes.dataframe and 'Maximum request characters' in sizes.dataframe[0].value.columns
     for key in ('external_llm', 'allow_full_source', 'llm_history'):
         assert store.setting(w, key, False) is False
     import streamlit as st

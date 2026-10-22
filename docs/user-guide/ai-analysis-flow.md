@@ -17,7 +17,8 @@ flowchart TD
     I --> J[Save accepted item checkpoints]
     J --> K{Pending work?}
     K -->|Yes| F
-    K -->|No| L[Link saved table and column facts]
+    K -->|No| P[Compose validated expression components]
+    P --> L[Link saved table and column facts]
     J --> M[Bounded targeted resolution when needed]
     M --> I
     L --> N[Freshness and permission checks]
@@ -26,10 +27,15 @@ flowchart TD
 
 ## Plan complete units
 
-A unit is a complete SQL statement, a safe projection group retaining its parent
+A unit prefers a complete SQL statement, a safe projection group retaining its parent
 statement, a SAS DATA/PROC/macro block, or a dbt resource with project context.
-Arbitrary character chunks would lose scope and evidence. Indivisible code that
-cannot fit a model/disclosure allowance is reported before dispatch.
+When necessary, the planner creates bounded views of original source and indexed
+context. Every view retains exact coordinates and parent identity; omitted ranges
+belong to sibling tasks. A fragment never becomes a standalone executable statement.
+The full original remains local for validation and publication; fragment coverage is
+explicitly partial. More source creates more checkpointed work rather than requiring
+the user to calculate character counts. A model unable to fit the minimum protocol,
+or unsupported semantics, still requires attention.
 
 For dbt, project membership takes priority over the `.sql` extension. Preparation
 includes resource identity, root/package/version, relevant `ref`/`source` and macro
@@ -53,6 +59,12 @@ Validation checks identities, original evidence, scope and supported semantics.
 Accepted AI additions remain inferred. A model or reviewer cannot establish a
 schema merely by asserting one, or turn join/filter dependencies into values.
 
+An expression can itself exceed one request or contain more dependencies than a
+response can hold. In that case, each view can return a component: an original
+expression reference plus only the dependency inputs and roles visible in that
+view. The database stores the component, its exact covered ranges and review
+decisions. It does not treat the component as a complete column derivation.
+
 ## Save and continue
 
 A successful item is checkpointed independently. Missing or malformed items do
@@ -67,11 +79,23 @@ outcome needs explicit retry because the previous call may already have been bil
 
 ## Connect the saved facts
 
+First, the host groups compatible components by original expression, target,
+scope, branch, version and output ordinal. Their ranges must cover the complete
+expression. It combines their inputs, restores the original expression locally
+and checks the complete dependency set against supported source semantics.
+Missing coverage, unsupported semantics or an incorrect input set cannot produce
+a complete derivation. Optional review checks bounded components before this
+step; rejected components invalidate a previously composed result as well.
+
 The host reads validated checkpoints to connect scoped producers, consumers and
 column dependencies. It retains intermediate operations and expressions. It does
 not send the entire project to one final model request. Equal names in different
 dbt roots/packages/versions remain distinct; multiple writers without proven
 execution order remain unresolved. Cycles are reported with bounded graph work.
+Each original parent is reconciled once, preserving one writer across its views.
+Long expressions are saved as source offsets instead of repeated large JSON
+strings. Reopening or rebuilding reuses the source components and their review
+decisions without sending the composed expression back to the model.
 
 Targeted resolution revisits only an uncertain unit and its declared context,
 with at most two rounds and an early stop when no new supported fact appears.

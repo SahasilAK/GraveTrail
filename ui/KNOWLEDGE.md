@@ -43,7 +43,7 @@ GraveTrail presentation: app page/sidebar title and agent examples use the new n
 
 Asset/query/direction/depth/collapse and analysis file selections persist via native session state. A shared workspace-scoped asset bridges Lineage, Columns and Impact. Source control keys include evidence scope to avoid stale browser labels; file content/AI responses never enter navigation state. Graph source ZIPs and original downloads generate on click. Tree direction has a durable non-widget copy while its tabs are hidden. Provider protocol keys include the selected profile.
 
-`analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, explicit calculated context allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
+`analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, optional per-build source/context character allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
 
 Budget values have non-widget session storage so navigation cannot discard Custom ceilings; Continue inherits saved numeric limits unless Reset explicitly releases them. Manual chunk-size help distinguishes the automatic project planner.
 
@@ -53,4 +53,4 @@ Provider request timeout accepts1–3600seconds without changing saved/default v
 
 `analysis_ai.py` now exposes files/request and parallel maxima immediately after enabling AI, separate execution and lifetime budgets, quota/unknown-outcome recovery and dbt project disclosure. `provider_settings.py` adds a non-secret shared quota-group label.
 
-Blocked AI previews keep the affected source-file list in a collapsed native expander.
+AI previews expose a collapsed-by-default, lazy sortable Source files and request sizes table with original characters, maximum source/full-envelope request sizes, limits and blockers. Adaptive views/component composition are described alongside the controls.

@@ -56,7 +56,7 @@ PROJECT_TASKS = ["project_lineage", "lineage_review"]
 ROUTABLE_TASKS = MANUAL_TASKS + PROJECT_TASKS
 TASKS = MANUAL_TASKS  # Existing manual selectors must keep their five contracts.
 PROJECT_SCHEMAS = {"project_lineage": ProjectLineageResponse, "lineage_review": LineageReviewResponse}
-PROJECT_PROTOCOLS = {'project_lineage': ('3', '4'), 'lineage_review': ('2', '3')}
+PROJECT_PROTOCOLS = {'project_lineage': ('4', '6'), 'lineage_review': ('2', '4')}
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 if not PROMPTS.is_dir():
     PROMPTS = Path(__file__).resolve().parent / "prompts"
@@ -892,7 +892,7 @@ def _transmitted_schema(value: Any) -> Any:
 REVIEW_CONTEXT_CHARS = 2000
 
 
-def review_batches(facts: list[NormalizedFact]) -> list[list[dict[str, Any]]]:
+def review_batches(facts: list[NormalizedFact], *, unit=None, settings=None) -> list[list[dict[str, Any]]]:
     """Split normalized facts into deterministic pages bounded by review context size.
 
     Args:
@@ -901,9 +901,16 @@ def review_batches(facts: list[NormalizedFact]) -> list[list[dict[str, Any]]]:
     Returns:
         Ordered groups of serialized facts.
     """
+    references = {}
+    if unit is not None:
+        from dataforge.ai_citations import source_references
+        for reference in source_references(unit, settings, partial=True):
+            references.setdefault(reference['text'], []).append(reference['reference_id'])
     batches, current = [], []
     for fact in facts:
         candidate = fact.model_dump(exclude={'detail','evidence','unit_id','evidence_key','status','origin'}, exclude_defaults=True)
+        if candidate.get('expression') in references:
+            candidate['expression_references'] = references[candidate.pop('expression')]
         proposed = [*current,candidate]
         if current and (len(proposed)>100 or len(json.dumps(proposed,ensure_ascii=False,separators=(',',':')))>REVIEW_CONTEXT_CHARS):
             batches.append(current)
@@ -978,21 +985,43 @@ def analysis_prompt(unit: AnalysisUnit, task: str, execution: Any, *, reserve_re
         handler = PROMPTS / task / (unit.source_kind + '.md')
         if handler.exists():
             system += '\n' + handler.read_text(encoding='utf-8')
-    context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
+    from dataforge.ai_source_views import compact_catalog, context_records
+    context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':compact_catalog(execution.catalog),
                'schema':schema,'schema_version':PROJECT_PROTOCOLS[task][0]}
     if getattr(execution, 'resolution_context', None):
         system += '\n' + (PROMPTS / 'project_resolution' / 'system.md').read_text(encoding='utf-8')
         context['resolution'] = execution.resolution_context
-    if task == 'project_lineage':
+    if task in {'project_lineage', 'lineage_review'}:
         from dataforge.ai_citations import source_references
         context['expression_references'] = [
             {k: v for k, v in reference.items()
-             if k not in {'start_offset', 'end_offset'} and (k != 'text' or reference['kind'] != 'unit')}
-            for reference in source_references(unit, execution.settings)]
-    if unit.focus:
+             if k not in {'start_offset', 'end_offset', 'text'}}
+            for reference in source_references(unit, execution.settings, partial=task == 'lineage_review')]
+        if unit.source_focus and task == 'project_lineage':
+            context['partial_expression_references'] = [
+                {k: v for k, v in reference.items() if k != 'text'}
+                for reference in source_references(unit, execution.settings, partial=True) if reference.get('partial')]
+    if unit.focus or unit.source_focus:
         from dataforge.ai_semantic import source_view, unit_dialect
         context['unit'].pop('code')
         context['source_segments'] = source_view(unit, unit_dialect(unit, execution.settings))
+    if unit.source_focus:
+        f = unit.source_focus
+        records = context_records(execution.catalog, execution.settings)
+        if f.context_end > len(records):
+            raise ValueError('Source context index changed')
+        context['catalog'] = []
+        context['settings'] = {}
+        context['context_records'] = records[f.context_start:f.context_end]
+        context['partial_source_view'] = True
+        system += ('\nThis is a partial original-source/context view, never standalone executable code. '
+                   'context_records use JSON Pointer paths into catalog/settings; string slices retain offsets. '
+                   'Sibling tasks cover omitted ranges. Return only source-supported facts and mark coverage partial; '
+                   'report missing dependencies explicitly. Never infer semantics from an omitted range. '
+                   'For an expression spanning views, use partial_expression_references and set derivation.fragment=true. '
+                   'Report only dependency inputs visible in this view, preserving their full-expression roles/scope. '
+                   'The host combines components only after all original expression ranges are covered and validates '
+                   'the complete original derivation; a component is never a complete lineage fact.')
     context['evidence_reference'] = {'unit_id': unit.unit_id}
     if task == 'lineage_review':
         context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review and not execution.review_candidates else execution.review_candidates
@@ -1040,7 +1069,12 @@ def preview_analysis_routes(store: Store, workspace: str, units: list[AnalysisUn
             for unit in units:
                 system, user, _ = analysis_prompt(unit, task, execution, reserve_review=task == 'lineage_review')
                 allowance = request_allowance(profile, system, user,
-                    privacy_chars=store.setting(workspace, 'max_context_chars', 8000))
+                    privacy_chars=store.setting(workspace, 'max_context_chars', 8000),
+                    context_chars=execution.request.max_context_chars,
+                    reserved_source_chars=min(REVIEW_CONTEXT_CHARS,
+                        (execution.request.max_context_chars or min(profile.context_chars,
+                         store.setting(workspace, 'max_context_chars', 8000))) // 3)
+                        if task == 'lineage_review' and not execution.review_candidates else 0)
                 allowances.append({'task': task, 'unit_id': unit.unit_id, 'path': unit.path, 'profile_id': pid, **asdict(allowance)})
                 incompatible.extend({'task': task, 'unit_id': unit.unit_id, 'profile_id': pid,
                     'reason': reason, 'required_characters': allowance.required_characters} for reason in allowance.reasons)
@@ -1092,7 +1126,8 @@ def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task:
         if hasattr(manager, 'for_profile'):
             manager = manager.for_profile(pid, configured_profile)
         execution.check()
-        allowance = request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000))
+        allowance = request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000),
+                                      context_chars=execution.request.max_context_chars)
         if not allowance.valid:
             if pid != routes[0][0]:
                 continue

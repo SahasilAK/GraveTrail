@@ -148,7 +148,7 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
                                      additional_ai_review: bool = False, refresh_ai: bool = False,
                                      max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None,
                                      max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
-          max_files_per_request: int | None = None, max_parallel_requests: int | None = None,
+          max_files_per_request: int | None = None, max_parallel_requests: int | None = None, max_context_chars: int | None = None,
           auto_continue: bool = True, project_max_provider_attempts: int | None = None,
           project_max_output_tokens_total: int | None = None, project_max_seconds: int | None = None) -> CallToolResult:
         """Start explicit parser/AI/hybrid analysis. AI modes require source/network grants. Poll job_id."""
@@ -156,7 +156,7 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
             additional_ai_review=additional_ai_review, refresh_ai=refresh_ai,
             max_provider_attempts=max_provider_attempts, max_output_tokens_total=max_output_tokens_total,
             max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
-           max_files_per_request=max_files_per_request, max_parallel_requests=max_parallel_requests,
+           max_files_per_request=max_files_per_request, max_parallel_requests=max_parallel_requests, max_context_chars=max_context_chars,
            auto_continue=auto_continue, project_max_provider_attempts=project_max_provider_attempts,
            project_max_output_tokens_total=project_max_output_tokens_total, project_max_seconds=project_max_seconds)
 
@@ -165,14 +165,14 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
                                        file_ids: list[str] | None = None, additional_ai_review: bool = False,
                                        max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None,
                                        max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
-          max_files_per_request: int | None = None, max_parallel_requests: int | None = None,
+          max_files_per_request: int | None = None, max_parallel_requests: int | None = None, max_context_chars: int | None = None,
           auto_continue: bool = True, project_max_provider_attempts: int | None = None,
           project_max_output_tokens_total: int | None = None, project_max_seconds: int | None = None) -> CallToolResult:
         """Offline source disclosure/context/budget preview; no provider requests. Requires source access."""
         return await call('analysis_preview', workspace_id, mode=mode, file_ids=file_ids,
             additional_ai_review=additional_ai_review, max_provider_attempts=max_provider_attempts,
             max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
-           max_files_per_request=max_files_per_request, max_parallel_requests=max_parallel_requests,
+           max_files_per_request=max_files_per_request, max_parallel_requests=max_parallel_requests, max_context_chars=max_context_chars,
            auto_continue=auto_continue, project_max_provider_attempts=project_max_provider_attempts,
            project_max_output_tokens_total=project_max_output_tokens_total, project_max_seconds=project_max_seconds)
 

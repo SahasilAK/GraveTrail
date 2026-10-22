@@ -1,4 +1,4 @@
-"""Project protocol v3 expression references; strict legacy v2 payloads remain readable."""
+"""Project protocol v4 components/references; strict legacy responses remain readable."""
 from __future__ import annotations
 
 import json
@@ -11,6 +11,7 @@ from dataforge.ai_analysis_models import (
     AssetCandidate,
     ColumnCandidate,
     DerivationCandidate,
+    DerivationInput,
     EvidenceCitation,
     LineageReviewResponse,
     Name,
@@ -40,7 +41,8 @@ WireAsset = _wire_model(AssetCandidate, evidence=(EvidenceReference, ...))
 WireRelationship = _wire_model(TableRelationship, evidence=(EvidenceReference, ...))
 WireColumn = _wire_model(ColumnCandidate, evidence=(EvidenceReference, ...))
 WireDerivation = _wire_model(DerivationCandidate, evidence=(EvidenceReference, ...),
-    expression=(str, Field(default='', max_length=20000)), expression_reference=(Name | None, None))
+    expression=(str, Field(default='', max_length=20000)), expression_reference=(Name | None, None),
+    inputs=(list[DerivationInput], Field(default_factory=list, max_length=100)))
 WireDecision = _wire_model(ReviewDecision, evidence=(list[EvidenceReference], Field(default_factory=list, max_length=20)))
 WIRE_MODELS = {
     'project_lineage': _wire_model(ProjectLineageResponse,
@@ -73,17 +75,20 @@ def decode_project_result(task, payload, unit, *, settings=None):
         return citation.copy()
 
     if task == 'project_lineage':
-        references = None
+        references = {}
         for group in ('assets', 'relationships', 'columns', 'derivations'):
             for claim in values[group]:
                 claim['evidence'] = hydrate(claim['evidence'])
                 if group == 'derivations':
                     reference_id = claim.pop('expression_reference')
+                    partial = claim['fragment']
+                    if partial and not unit.source_focus:
+                        raise SourceCitationError('fragment_requires_source_view')
                     if reference_id is not None:
-                        if references is None:
+                        if partial not in references:
                             from dataforge.ai_citations import source_references
-                            references = {r['reference_id']: r for r in source_references(unit, settings)}
-                        reference = references.get(reference_id)
+                            references[partial] = {r['reference_id']: r for r in source_references(unit, settings, partial=partial)}
+                        reference = references[partial].get(reference_id)
                         if reference is None:
                             raise SourceCitationError('unknown_source_expression_reference')
                         for field, expected in [('expression', reference['text']),

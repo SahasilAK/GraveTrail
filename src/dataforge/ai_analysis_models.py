@@ -26,6 +26,7 @@ class AnalysisRequest(StrictModel):
     max_seconds: int | None = Field(default=None, ge=30, le=14400)
     max_files_per_request: int | None = Field(default=None, ge=1, le=100)
     max_parallel_requests: int | None = Field(default=None, ge=1, le=4)
+    max_context_chars: int | None = Field(default=None, ge=500, le=2000000)
     auto_continue: bool = True
     project_max_provider_attempts: int | None = Field(default=None, ge=1, le=100000000)
     project_max_output_tokens_total: int | None = Field(default=None, ge=1000, le=1000000000000)
@@ -52,6 +53,16 @@ class ProjectionFocus(StrictModel):
     ordinal_end: int = Field(ge=1)
 
 
+class SourceFocus(StrictModel):
+    """Host-owned source/context window; the immutable parent remains local."""
+    model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
+    parent_id: Name
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=1)
+    context_start: int = Field(ge=0)
+    context_end: int = Field(ge=0)
+
+
 class AnalysisUnit(StrictModel):
     model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
     unit_id: Name
@@ -65,8 +76,9 @@ class AnalysisUnit(StrictModel):
     last: int = Field(ge=1)
     start_offset: int = Field(ge=0)
     end_offset: int = Field(ge=1)
-    code: str = Field(min_length=1, max_length=200000)
+    code: str = Field(min_length=1)
     focus: ProjectionFocus | None = None
+    source_focus: SourceFocus | None = None
 
     @model_validator(mode='after')
     def ordered(self):
@@ -74,6 +86,10 @@ class AnalysisUnit(StrictModel):
             raise ValueError('Unit coordinates must delimit its exact code')
         if self.last - self.first != self.code.count('\n'):
             raise ValueError('Unit line coordinates must match code')
+        if self.source_focus:
+            f = self.source_focus
+            if not self.start_offset <= f.start_offset < f.end_offset <= self.end_offset or f.context_end < f.context_start:
+                raise ValueError('Invalid original source/context window')
         return self
 
 
@@ -85,7 +101,7 @@ class EvidenceCitation(StrictModel):
     end_line: int = Field(ge=1)
     start_offset: int = Field(ge=0)
     end_offset: int = Field(ge=1)
-    quote: str = Field(min_length=1, max_length=200000)
+    quote: str = Field(min_length=1)
 
     @model_validator(mode='after')
     def ordered(self):
@@ -143,13 +159,14 @@ class DerivationInput(StrictModel):
 class DerivationCandidate(StrictModel):
     target_table: Name
     target_column: Name
-    expression: str = Field(min_length=1, max_length=20000)
+    expression: str = Field(min_length=1)
+    fragment: bool = False
     category: str = Field(min_length=1, max_length=100)
     scope: str = Field(default='', max_length=500)
     branch: int = Field(default=0, ge=0, le=100000)
     version: Version = ''
     ordinal: int = Field(default=0, ge=0, le=100000)
-    inputs: list[DerivationInput] = Field(default_factory=list, max_length=100)
+    inputs: list[DerivationInput] = Field(default_factory=list)
     evidence: EvidenceCitation
     expression_start_offset: int | None = Field(default=None, ge=0)
     expression_end_offset: int | None = Field(default=None, ge=1)
@@ -240,7 +257,7 @@ class NormalizedFact(StrictModel):
     branch: int = 0
     version: Version = ''
     ordinal: int = 0
-    inputs: list[DerivationInput] = Field(default_factory=list,max_length=100)
+    inputs: list[DerivationInput] = Field(default_factory=list)
     operation: str = ''
     status: Literal['verified','inferred','unresolved'] = 'inferred'
     origin: Literal['parser','ai','both'] = 'ai'
@@ -263,6 +280,7 @@ class ValidationReport(StrictModel):
     reviewed_candidates: list[Name] = Field(default_factory=list)
     resolution_rounds: int = Field(default=0, ge=0, le=2)
     resolution_done: bool = False
+    fragments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ReconciliationReport(StrictModel):

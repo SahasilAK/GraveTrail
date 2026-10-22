@@ -211,7 +211,7 @@ def test_real_adapter_reference_only_response_publishes_and_reuses_without_netwo
             body = json.loads(request.content)
             text = body['messages'][-1]['content']
             context = json.loads(text[text.index('{'):])
-            assert context['schema_version'] == '3'
+            assert context['schema_version'] == '4'
             refs = [r for r in context['expression_references'] if r['kind'] == 'projection']
             assert len(refs) == 2
             calls.append(context['unit']['unit_id'])
@@ -226,7 +226,7 @@ def test_real_adapter_reference_only_response_publishes_and_reuses_without_netwo
         assert report.status == 'committed', report.reasons
         assert report.counts['accepted'] == 2
         details = json.loads(store.rows('SELECT details FROM llm_records')[0]['details'])
-        assert details['schema_version'] == '3' and details['prompt_version'] == '4'
+        assert details['schema_version'] == '4' and details['prompt_version'] == '6'
         store.close()
         store = Store(tmp_path)
         def forbidden(request):

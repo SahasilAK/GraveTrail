@@ -105,10 +105,10 @@ Accepted claim quotes are compact source refs on disk and hydrate only for sourc
 - `ai_semantic.py` — Exact-source SELECT projection partitions, allowlisted query clauses and AST/token span verification, scoped parser expressions, static PROC SQL spans and one-writer publication merging.
 Semantic continuation persists unit_spec in planned/staged rows and reviewed candidate IDs after each bounded review batch. Saved source/config/protocol pins are checked before hydration. Preview budgets paid stages and labels unknown review sizing provisional; eligible requests above 100 projections split for response cardinality. Root conditional focus instructions are hashed with the actual transmitted variant.
 
-Validator3 is owned by ai_validation and imported by analysis_service. Both unit-cache and protocol pins include validator/parser versions (parser14). Upgrade invalidates paused work before another call; committed graphs remain available.
+Validator4 is owned by ai_validation and imported by analysis_service. Both unit-cache and protocol pins include validator/parser versions (parser14). Upgrade invalidates paused work before another call; committed graphs remain available.
 
 - `ai_citations.py` — Bounded cached source-only projection/assignment locations, static PROC SQL pages/SAS formats, immutable/dialect-bound IDs and focused visibility. Used by prompt construction and wire decoding; supplies no dependency answers.
-Parser14/validator3 add exact projection/SAS assignment occurrence checks. Extraction wire3/prompt4 resolves optional expression references before canonical validation; review stays wire2/prompt3 and durable compact-v2 payloads remain compatible.
+Parser14/validator4 add exact projection/SAS assignment occurrence checks. Extraction wire4/prompt6 resolves optional expression references before canonical validation; review stays wire2/prompt4 and durable compact-v2 payloads remain compatible.
 
 Profile timeout cap is3600seconds; current run deadlines still clamp HTTP waits. analysis_service emits source-free waiting/validation stages around extraction/review. Existing saved/default profiles are unchanged.
 
@@ -122,3 +122,8 @@ Build Python artifacts now include dependency-overrides.txt in manifest alongsid
 - `ai_linking.py` — Stored-fact identity/field indexes, ambiguous writers/SCC reports and dbt publication composition.
 - `ai_resolution.py` — At most two source-bound follow-ups; stop without newly validated facts.
 `analysis_service.py` separates finite lifetime allowances from automatic execution windows, pins complete publication freshness, reuses relevant unit checkpoints and supports SQL/SAS/dbt. Static parser algorithms are unchanged. `ai_context.py` uses an indexed relevant catalog and compact inventory revision; dbt selection discloses project closure.
+
+## Adaptive source/context analysis
+- `ai_source_views.py` — Exact anchored source windows, compact catalog/indexed context slices, immutable range identities and quoted lexical visibility; no fabricated executable chunks.
+- `ai_composition.py` — Persisted original-backed dependency components, complete range/input validation, bounded component review and deterministic expression composition.
+`ai_budget.py` distinguishes disclosed domain characters from complete prompt token capacity and creates sortable per-file sizing rows. Nullable max_context_chars is shared across runtime/UI/CLI/MCP; resume pins the explicit override. Generic source parents reconcile once. Checkpoints/reports/snapshots reference large exact expressions by source offsets; support refresh hydrates them and reports cache one verified source per hash/encoding. Static parser algorithms are unchanged.

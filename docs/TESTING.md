@@ -336,3 +336,36 @@ Final remediation source verification: **859 passed, 2 existing Windows symlink-
 Resumable pipeline tests cover project/window separation, automatic rollover, request-level recovery, batch item isolation, owner-thread database access, mixed SQL/SAS/dbt table/column publication, scoped stored-fact linking and bounded resolution. `test_ai_pipeline_qualification.py` reproduces the screenshot task shape. Mock HTTP and synthetic scale evidence establish behavior only; live model precision and native release acceptance remain separate gates.
 
 Final local qualification for this pipeline: **940 passed, 2 existing Windows skips** (`python -m pytest -q`, 183.72 seconds, Python 3.11.16). `ruff check .` and the strict docs build pass (42 public pages). A fresh wheel installed to a separate target and exercised outside the checkout passed mixed SQL/SAS/dbt table+column publication, packaged dbt/resolution prompts and schema9 integrity with zero live calls. Native executable/container and live-provider accuracy were not rerun.
+
+
+## Adaptive AI context and expression components (2026-10-22)
+
+The final source suite passes **963 tests with 2 existing Windows skips** in
+248.62 seconds on Python 3.11.16. Ruff, lock validation and the strict Pages build
+pass. A fresh wheel built from sdist and installed to a separate target exercises
+the packaged extraction/review prompts, 301-dependency expression composition,
+additional component review and zero-network saved-result reuse.
+
+Regressions cover the actual 625-character banking statement under the default
+8,000-source-character allowance; SQL UNION, stateful SAS and large dbt context;
+nested source/projection identities; irreducible minimum capacity; response slot
+limits; quoted names; hidden-source attribution; checkpoint/reopen; and newly
+enabled review rejecting a previously composed expression. The host reconciles
+the original parent once. A real **17 MiB expression** remains below the existing
+JSON record limit through checked source-offset persistence. Support refresh
+preserves its provenance, and 100 same-source report claims require one blob read.
+
+`scripts/qualify_ai_context.py` imports the actual 2,114-script SQL banking archive
+and 86-script SQL project in an isolated temporary home. An offline full preview
+of all **2,200 files** fits the default 8,000-character source allowance and a
+16,384-token combined model window. One qualification snapshot planned 14,507
+tasks, with a maximum 6,811 disclosed source/context characters and 13,260 total
+request characters. Task counts depend on model limits, review settings and
+planning versions. The optional `--execute` mode uses mock HTTP and checks every
+physical envelope, unique task extraction and one publication.
+
+These are source fitting, composition, recovery and persistence checks. Mock
+responses supply known components or explicit partial outcomes; they do not
+establish live-model precision or complete semantic coverage. The user's Test
+workspace and providers are untouched. Static parser algorithms are unchanged;
+native executable and container release checks were not rerun.

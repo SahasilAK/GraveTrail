@@ -85,7 +85,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         if pin != {'manifest':prepared.manifest_hash,'revision':_state_revision(store,workspace),
                    'prior':prepared.prior_revision,'protocol':_protocol_hash()}:
             raise ValueError('source_or_configuration_changed')
-    plan = plan_ai_units(prepared, max_chars=200000, progress=preparation_progress)
+    plan = plan_ai_units(prepared, max_chars=200000, progress=preparation_progress, adaptive=True)
     execution = AIExecutionContext(request, connections=connections or current_connections(),
         cancelled=cancelled, transport=transport, settings=prepared.settings, authorize=authorize,
         source_hashes={s.file_id: s.content_hash for s in prepared.sources})
@@ -116,10 +116,37 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         def fit(unit):
             execution.catalog=plan.context_for(unit)
             trial=preview_analysis_routes(store,workspace,[unit],execution)
-            capacity={'complete_prompt_exceeds_context_budget','complete_prompt_exceeds_model_capacity'}
-            if (projection_count(unit,unit_dialect(unit,prepared.settings))>100
+            from dataforge.ai_citations import source_references
+            from dataforge.ai_semantic import source_view
+            from dataforge.ai_source_views import visible_names
+            names = visible_names(unit, source_view(unit, unit_dialect(unit, prepared.settings)))
+            output_pressure = ((len([name for name in names if '.' not in name]) > 64
+                or len(source_references(unit, prepared.settings, partial=True)) > 64)
+                and (not unit.source_focus or unit.source_focus.end_offset - unit.source_focus.start_offset > 64))
+            capacity={'complete_prompt_exceeds_context_budget','complete_prompt_exceeds_model_capacity',
+                      'source_context_exceeds_character_allowance'}
+            if (not unit.source_focus or unit.source_focus.context_end - unit.source_focus.context_start <= 1) and any(
+                    b['reason'] in capacity for b in trial['blocked']):
+                from dataforge.ai_source_views import minimum_source_view
+                span = None
+                if not unit.source_focus:
+                    from dataforge.ai_source_views import context_records
+                    records = context_records(execution.catalog, prepared.settings)
+                    if records:
+                        index = max(range(len(records)), key=lambda i: len(json.dumps(records[i], ensure_ascii=False).encode()))
+                        span = (index, index + 1)
+                probe = preview_analysis_routes(store, workspace, [minimum_source_view(unit,
+                    preserve_context=bool(unit.source_focus), context_span=span)], execution)
+                if any(b['reason'] in capacity for b in probe['blocked']):
+                    return [unit]
+            if (projection_count(unit,unit_dialect(unit,prepared.settings))>100 or output_pressure
                     or any(b['reason'] in capacity for b in trial['blocked'])):
-                parts=split_projection_unit(unit,unit_dialect(unit,prepared.settings)) or split_proc_sql_unit(unit)
+                parts = (() if unit.source_focus else
+                    split_projection_unit(unit,unit_dialect(unit,prepared.settings)) or split_proc_sql_unit(unit))
+                if not parts:
+                    from dataforge.ai_source_views import split_source_context
+                    parts = split_source_context(unit, execution.catalog, prepared.settings,
+                        source_only=output_pressure and not any(b['reason'] in capacity for b in trial['blocked']))
                 if parts:
                     return [page for part in parts for page in fit(part)]
             return [unit]
@@ -153,20 +180,22 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
             reusable += 1
         if request.additional_ai_review and not (checkpoint and checkpoint[1]):
             if checkpoint:
-                from dataforge.ai_analysis_models import ValidationContext
-                from dataforge.ai_reconciliation import reconcile_candidates
-                from dataforge.ai_semantic import unit_dialect
-                from dataforge.parsers.sas import parse_sas
-                from dataforge.parsers.sql import parse_sql
-                source=next(source for source in prepared.sources if source.file_id==unit.file_id)
-                settings={**prepared.settings,'dialect':unit_dialect(unit,prepared.settings)}
-                parsed=(parse_sql(source.code,settings['dialect']) if unit.extension=='.sql' else
-                    parse_sas(source.code,settings.get('library_mappings'),settings.get('macros'),settings['dialect']))
-                context=ValidationContext(unit=unit,workspace_id=workspace,source_text=source.code,
-                    settings=settings,catalog=execution.catalog,parser_result=parsed)
-                facts=[f for f in reconcile_candidates(parsed,checkpoint[0],request.mode,context=context).facts
-                    if f.origin=='ai' and f.candidate_id not in checkpoint[0].reviewed_candidates]
-                tasks.extend(('lineage_review',batch) for batch in review_batches(facts))
+                if unit.source_focus:
+                    from dataforge.ai_composition import review_facts
+                    facts = review_facts(checkpoint[0], unit)
+                else:
+                    from dataforge.ai_reconciliation import reconcile_candidates
+                    from dataforge.parsers.sas import parse_sas
+                    from dataforge.parsers.sql import parse_sql
+                    source=next(source for source in prepared.sources if source.file_id==unit.file_id)
+                    settings={**prepared.settings,'dialect':unit_dialect(unit,prepared.settings)}
+                    parsed=(parse_sql(source.code,settings['dialect']) if unit.extension=='.sql' else
+                        parse_sas(source.code,settings.get('library_mappings'),settings.get('macros'),settings['dialect']))
+                    context=ValidationContext(unit=unit,workspace_id=workspace,source_text=source.code,
+                        settings=settings,catalog=execution.catalog,parser_result=parsed)
+                    facts=[f for f in reconcile_candidates(parsed,checkpoint[0],request.mode,context=context).facts if f.origin=='ai']
+                facts = [f for f in facts if f.candidate_id not in checkpoint[0].reviewed_candidates]
+                tasks.extend(('lineage_review',batch) for batch in review_batches(facts, unit=unit, settings=prepared.settings))
             else:
                 tasks.append(('lineage_review',[]))
                 review_provisional = True
@@ -208,6 +237,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         'allowances':allowances,'excluded_routes':excluded,'reusable_units':reusable,**budget,
         'review_sizing_provisional':review_provisional,
         'semantic_pages':sum(u.focus is not None for u in plan.units),
+        'source_context_pages':sum(u.source_focus is not None for u in plan.units),
         'estimated_characters':plan.estimated_characters,'max_provider_attempts':budget['total_attempts'],
         'max_output_tokens_reserved':budget['total_output_tokens'],'manifest_hash':prepared.manifest_hash}
 
@@ -289,7 +319,9 @@ def _prior_checkpoint(store, workspace, unit, context_hash, request):
     checkpoint = load_validation_checkpoint(store, workspace, rows[0]['run_id'], unit, context_hash)
     if checkpoint:
         report, _, record, cache = checkpoint
-        reviewed = not request.additional_ai_review or all(f.candidate_id in report.reviewed_candidates for f in report.accepted)
+        from dataforge.ai_composition import review_facts
+        candidates = review_facts(report, unit) if unit.source_focus else report.accepted
+        reviewed = not request.additional_ai_review or all(f.candidate_id in report.reviewed_candidates for f in candidates)
         return report, reviewed, record, cache
 
 
@@ -419,6 +451,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         sources = {s.file_id: s for s in prepared.sources}
         counts['units'] = len(plan.units)
         claims = []
+        source_groups = {}
         original_indexes = {fid: {} for fid in selected}
         stage = 'extracting'
         save_run(store, workspace, run_id, mode=request.mode, status=stage)
@@ -459,9 +492,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         'reserved_output_tokens': execution.prior_reserved + execution.reserved_output_tokens},
                         'usage_known': usage_known})
             try:
-                run_pending_requests(store, workspace, run_id, pending, execution,
-                    contexts={u.unit_id: plan.context_for(u) for u in pending}, accept=accept_item,
-                    progress=progress, record_usage=record_usage)
+                if pending:
+                    run_pending_requests(store, workspace, run_id, pending, execution,
+                        contexts={u.unit_id: plan.context_for(u) for u in pending}, accept=accept_item,
+                        progress=progress, record_usage=record_usage)
             except TimeoutError as exc:
                 if str(exc) not in {'execution_budget_reached', 'project_allowance_reached'}:
                     raise
@@ -541,15 +575,25 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 _clear_inflight(store, workspace, run_id, request, execution, counts, usage_known)
                 resolution = plan_resolution(validated)
             execution.resolution_context = None
+            if unit.source_focus:
+                # Recompose every union after component review. A rejected component
+                # must invalidate a union saved by an earlier, unreviewed build.
+                validated.accepted = [f for f in validated.accepted if not f.detail.get('source_view_units')]
             parser_indexes = {id(op): i for i, op in enumerate(parser[unit.file_id].operations)}
             original_indexes[unit.file_id].update({key: parser_indexes[id(op)]
                 for op, _, _, key in operation_contexts(context, parser[unit.file_id], scoped=False)})
-            reconciled = reconcile_candidates(parser[unit.file_id], validated, request.mode, context=context)
+            # Generic views validate against the full original, but comparing every
+            # whole-block parser fact per view is quadratic. Reconcile each parent once below.
+            reconciled = reconcile_candidates([] if unit.source_focus else parser[unit.file_id], validated,
+                'ai' if unit.source_focus else request.mode, context=context)
             candidates = [f for f in reconciled.facts if f.origin == 'ai']
+            if unit.source_focus:
+                from dataforge.ai_composition import review_facts
+                candidates = review_facts(validated, unit)
             if request.additional_ai_review and candidates and not reviewed:
                 stage='reviewing'
                 remaining=[f for f in candidates if f.candidate_id not in validated.reviewed_candidates]
-                for batch in review_batches(remaining):
+                for batch in review_batches(remaining, unit=unit, settings=settings):
                     execution.review_candidates=batch
                     if not _stage_ready(store,workspace,unit,'lineage_review',execution):
                         return _pause(store,workspace,run_id,request,execution,counts,usage_known)
@@ -569,20 +613,28 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             validated.unresolved.append(ClaimDecision(candidate_id=decision.candidate_id,
                                 reason='additional_ai_review_insufficient',status='unresolved'))
                     validated.accepted=[f for f in validated.accepted if f.candidate_id not in rejected_ids]
+                    if unit.source_focus:
+                        from dataforge.ai_composition import retain_reviewed_fragments
+                        retain_reviewed_fragments(validated, rejected_ids)
                     validated.reviewed_candidates.extend(c['candidate_id'] for c in batch)
                     counts['review_batches'] += 1
                     save_validation_checkpoint(store,workspace,run_id,unit,context_hash,validated,
                         reviewed=False,record_id=record_id,cache=cache)
                     _clear_inflight(store,workspace,run_id,request,execution,counts,usage_known)
                 execution.review_candidates=[]
-                reconciled=reconcile_candidates(parser[unit.file_id],validated,request.mode,context=context)
+                reconciled=reconcile_candidates([] if unit.source_focus else parser[unit.file_id], validated,
+                    'ai' if unit.source_focus else request.mode, context=context)
             if not reviewed:
                 save_validation_checkpoint(store,workspace,run_id,unit,context_hash,validated,
                     reviewed=True,record_id=record_id,cache=cache)
                 _clear_inflight(store,workspace,run_id,request,execution,counts,usage_known)
+            if unit.source_focus:
+                source_groups.setdefault((unit.file_id, unit.source_focus.parent_id), []).append(
+                    (unit, context, validated, context_hash, record_id))
             output = rebuilt[unit.file_id]
-            output.operations.extend(reconciled.operations)
-            output.assets.extend(reconciled.assets)
+            if not unit.source_focus:
+                output.operations.extend(reconciled.operations)
+                output.assets.extend(reconciled.assets)
             counts['accepted'] += len(validated.accepted)
             counts['rejected'] += len(validated.rejected)
             counts['unresolved'] += len(validated.unresolved)
@@ -608,6 +660,43 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     'payload': {}, 'reasons': [decision.reason]})
             counts['processed'] += 1
             update(.1 + .75 * (index + 1) / max(1, len(plan.units)), 'AI extraction and evidence checks')
+        for (fid, parent_id), entries in source_groups.items():
+            from dataforge.ai_analysis_models import EvidenceCitation, ValidationReport
+            from dataforge.ai_composition import compose_fragments
+            first, context, validated, context_hash, record_id = min(entries, key=lambda item: (
+                item[0].source_focus.start_offset, item[0].source_focus.context_start, item[0].unit_id))
+            parent = first.model_copy(update={'unit_id': parent_id, 'source_focus': None})
+            original_context = context.model_copy(update={'unit': parent})
+            composed = compose_fragments([entry[2] for entry in entries], original_context)
+            existing = {fact.candidate_id for entry in entries for fact in entry[2].accepted}
+            added = [fact for fact in composed.accepted if fact.candidate_id not in existing]
+            for fact in added:
+                fact.unit_id = first.unit_id
+                fact.evidence = EvidenceCitation.from_unit(first)
+            validated.accepted.extend(added)
+            if request.additional_ai_review:
+                validated.reviewed_candidates.extend(f.candidate_id for f in added)
+            validated.rejected.extend(composed.rejected)
+            validated.unresolved.extend(composed.unresolved)
+            save_validation_checkpoint(store, workspace, run_id, first, context_hash, validated,
+                reviewed=True, record_id=record_id, cache=None)
+            combined = ValidationReport(accepted=[f for entry in entries for f in entry[2].accepted],
+                assets=[asset for entry in entries for asset in entry[2].assets])
+            final = reconcile_candidates(parser[fid], combined, request.mode, context=original_context)
+            rebuilt[fid].operations.extend(final.operations)
+            rebuilt[fid].assets.extend(final.assets)
+            counts['accepted'] += len(added)
+            counts['rejected'] += len(composed.rejected)
+            counts['unresolved'] += len(composed.unresolved)
+            for fact in added:
+                claims.append({'claim_id': fact.candidate_id, 'unit_id': first.unit_id, 'kind': fact.kind,
+                    'status': 'accepted', 'payload': fact.model_dump(exclude={'detail'}), 'record_id': record_id, 'reasons': []})
+            for name in ('agreed', 'parser_only', 'omissions'):
+                counts[name] += final.counts.get(name, 0)
+            for ordinal, fact in enumerate(final.parser_only):
+                claims.append({'claim_id': stable_id(parent_id, 'parser', str(ordinal)),
+                    'unit_id': first.unit_id, 'kind': fact.kind, 'status': 'parser_only',
+                    'payload': fact.model_dump(exclude={'detail'}), 'reasons': ['ai_omission']})
         from dataforge.ai_semantic import merge_publication_operations
         for output in rebuilt.values():
             output.operations = merge_publication_operations(output.operations)
@@ -703,7 +792,7 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
 
 def _protocol_hash():
     from dataforge.llm import PROMPTS
-    return _hash({'semantic_planning': 2, 'review_batching': 1,
+    return _hash({'semantic_planning': 4, 'component_composition': 2, 'review_batching': 3,
         'resolution': (PROMPTS / 'project_resolution' / 'system.md').read_text(encoding='utf-8'),
         'source_handlers': {kind: analysis_prompt_hash('project_lineage', source_kind=kind) for kind in ('sql', 'sas', 'dbt')},
         'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION,
@@ -765,27 +854,3 @@ def _pause(store, workspace, run_id, request, execution, counts, usage_known):
     save_run(store, workspace, run_id, mode=request.mode, status=report.status,
         summary={**report.model_dump(), 'active_seconds': execution.active_seconds})
     return report
-
-
-def apply_context_allowance(store, workspace, request, required, expected_revision):
-    """Explicit local action: raise only calculated disclosure/context caps, under CAS."""
-    from dataforge.llm import Profile
-    from dataforge.settings_service import check_revision
-    request = AnalysisRequest.model_validate(request)
-    with store.analysis_lock, store.transaction():
-        check_revision(store, workspace, expected_revision)
-        preview = preview_analysis(store, workspace, request)
-        actual = max((a['required_characters'] for a in preview.get('allowances', []) if not a['valid']), default=0)
-        if type(required) is not int or required != actual or not 500 <= required <= 100000:
-            raise ValueError('Calculated context allowance changed or exceeds the application limit')
-        store.set_setting(workspace, 'max_context_chars', max(required, store.setting(workspace, 'max_context_chars', 8000)))
-        profile_ids = {a['profile_id'] for a in preview['allowances']
-                       if 'complete_prompt_exceeds_context_budget' in a['reasons']}
-        for pid in profile_ids:
-            row = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [workspace, pid])[0]
-            profile = Profile.model_validate_json(row['config'])
-            profile.context_chars = max(required, profile.context_chars)
-            profile.context_mode = 'custom'
-            store.execute('UPDATE llm_profiles SET config=? WHERE workspace_id=? AND profile_id=?',
-                [profile.model_dump_json(), workspace, pid])
-    return preview_analysis(store, workspace, request)

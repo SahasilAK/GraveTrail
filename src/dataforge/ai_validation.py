@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, fields
+from functools import lru_cache
 
 import sqlglot
 from pydantic import ValidationError
@@ -20,7 +21,7 @@ from dataforge.models import canonical, stable_id
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql, table_name, target_table
 
-VALIDATOR_VERSION = "3"
+VALIDATOR_VERSION = "4"
 
 
 def _identity(value, context):
@@ -119,11 +120,15 @@ def _same_derivation(claim, record, context):
 
 def _bounded_dml(operation, context):
     """Prove one static UPDATE/MERGE assignment form; everything else explicitly abstains."""
-    if context.unit.extension != ".sql" or operation.kind not in {"UPDATE", "MERGE"}:
+    return _bounded_dml_records(operation.code, operation.kind, context.unit.extension, context.settings.get('dialect', ''))
+
+
+@lru_cache(maxsize=32)
+def _bounded_dml_records(code, kind, extension, dialect):
+    if extension != ".sql" or kind not in {"UPDATE", "MERGE"}:
         return []
-    dialect = context.settings.get("dialect", "")
     try:
-        tree = sqlglot.parse_one(operation.code, read=dialect or None)
+        tree = sqlglot.parse_one(code, read=dialect or None)
         target = target_table(tree)
         if target is None or not isinstance(target.this, exp.Identifier):
             return []
@@ -196,7 +201,7 @@ def _bounded_dml(operation, context):
                 raise ValueError("runtime function")
             for child in node.iter_expressions():
                 dependencies(child, role, inputs)
-        tokens = sqlglot.Dialect.get_or_raise(dialect or None).tokenize(operation.code)
+        tokens = sqlglot.Dialect.get_or_raise(dialect or None).tokenize(code)
         for ordinal, assignment in enumerate(assignments):
             if not isinstance(assignment, exp.EQ) or not isinstance(assignment.this, exp.Column):
                 return []
@@ -212,7 +217,7 @@ def _bounded_dml(operation, context):
                 return []
             first = equals + 1
             depth = 0
-            stop = len(operation.code)
+            stop = len(code)
             for token in tokens[first:]:
                 kind = token.token_type.name
                 if depth == 0 and kind in {"COMMA", "FROM", "WHERE", "WHEN", "SEMICOLON", "RETURNING"}:
@@ -220,7 +225,7 @@ def _bounded_dml(operation, context):
                     break
                 depth += (kind == "L_PAREN") - (kind == "R_PAREN")
             start = tokens[first].start
-            expression = operation.code[start:stop].strip()
+            expression = code[start:stop].strip()
             if expression_key(expression, dialect) != rhs.sql(normalize=True):
                 return []
             inputs = []
@@ -257,6 +262,16 @@ def validate_project_response(response, context):
         report.coverage = Coverage(status="unsupported", unsupported=["invalid_contract_or_original_evidence"])
         return report
     report.coverage = response.coverage.model_copy(deep=True)
+    visible = None
+    names = set()
+    if context.unit.source_focus:
+        from dataforge.ai_semantic import source_view, unit_dialect
+        visible = source_view(context.unit, unit_dialect(context.unit, context.settings))
+        from dataforge.ai_source_views import visible_names
+        names = visible_names(context.unit, visible)
+        report.coverage.status = 'partial'
+        report.coverage.unsupported = list(dict.fromkeys([
+            *report.coverage.unsupported, 'partitioned_source_or_context']))
     def norm(value):
         return _identity(value, context)
 
@@ -265,6 +280,25 @@ def validate_project_response(response, context):
     for kind, claim in claims:
         candidate_id = stable_id(context.workspace_id, context.unit.unit_id, kind,
                                  json.dumps(claim.model_dump(), sort_keys=True))
+        if kind == 'derivations' and claim.fragment:
+            from dataforge.ai_composition import validate_fragment
+            fragment = validate_fragment(claim, context, operations, visible, names)
+            if fragment:
+                report.fragments.append(fragment)
+            else:
+                report.rejected.append(ClaimDecision(candidate_id=candidate_id, reason='invalid_source_fragment', status='rejected'))
+            continue
+        required = ([claim.name] if kind == 'assets' else [claim.source, claim.target] if kind == 'relationships'
+                    else [claim.table, claim.column] if kind == 'columns' else [])
+        from dataforge.ai_source_views import identifier_name
+        if visible is not None and any(identifier_name(value) not in names for value in required):
+            report.rejected.append(ClaimDecision(candidate_id=candidate_id, reason='outside_source_view', status='rejected'))
+            continue
+        if visible is not None and kind == 'derivations' and not any(
+                s['start_offset'] <= claim.expression_start_offset < claim.expression_end_offset <= s['end_offset']
+                for s in visible):
+            report.rejected.append(ClaimDecision(candidate_id=candidate_id, reason='outside_source_view', status='rejected'))
+            continue
         if context.unit.focus and context.unit.focus.ordinal_start and kind in {'assets','relationships'}:
             report.rejected.append(ClaimDecision(candidate_id=candidate_id, reason='outside_projection_focus', status='rejected'))
             continue

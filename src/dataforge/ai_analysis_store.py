@@ -21,6 +21,36 @@ def _json(value):
     return encoded
 
 
+def _reference_expressions(value, source, base=0):
+    """Keep large exact expressions in the immutable blob, not each JSON record."""
+    if isinstance(value, list):
+        return [_reference_expressions(item, source, base) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {key: _reference_expressions(item, source, base) for key, item in value.items()}
+    expression = result.get('expression')
+    if isinstance(expression, str) and len(expression) > 4096:
+        start = source.find(expression)
+        if start >= 0:
+            result.pop('expression')
+            result['_expression_source_span'] = [base + start, base + start + len(expression)]
+    return result
+
+
+def _restore_expressions(value, source):
+    if isinstance(value, list):
+        for item in value:
+            _restore_expressions(item, source)
+    elif isinstance(value, dict):
+        if '_expression_source_span' in value:
+            start, end = value.pop('_expression_source_span')
+            if not 0 <= start < end <= len(source):
+                raise ValueError('Expression reference is outside original source')
+            value['expression'] = source[start:end]
+        for item in value.values():
+            _restore_expressions(item, source)
+
+
 def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None,
              configuration=None, summary=None, analysis_run_id=None, accepted_results=None):
     if mode not in {'ai', 'hybrid', 'parser'}:
@@ -49,7 +79,7 @@ def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None
                 if start < 0:
                     raise ValueError('Accepted operation differs from immutable original source')
                 operation['source_span'] = [start, start + len(code)]
-                _save_snapshot_part(store, workspace, run_id, metadata, index, operation)
+                _save_snapshot_part(store, workspace, run_id, metadata, index, _reference_expressions(operation, source))
     if old:
         updates = {'mode': mode, 'status': status}
         if manifest is not None:
@@ -124,6 +154,7 @@ def save_claim_decisions(store, workspace, run_id, claims, *, supports=()):
                 raise ValueError('Claim citation differs from immutable source')
             payload = {**payload, 'evidence': {k: v for k, v in evidence.items() if k != 'quote'},
                        '_evidence_reference_version': 2, '_source_encoding': encoding}
+            payload = _reference_expressions(payload, code)
         store.execute('''INSERT INTO ai_analysis_claims VALUES (?,?,?,?,?,?,?,?)
             ON CONFLICT(run_id,claim_id) DO UPDATE SET status=excluded.status,payload=excluded.payload,reasons=excluded.reasons''',
             [claim['claim_id'], workspace, run_id, claim.get('unit_id', ''), claim.get('kind', ''),
@@ -226,6 +257,7 @@ def attach_published_support(store, workspace, run_id, results, claims):
             if operation.evidence_key:
                 operations[(metadata['file_id'], operation.evidence_key)] = (metadata, parsed, index, operation)
     supports = []
+    source_cache = {}
     for claim in claims:
         if claim.get('status') != 'accepted':
             continue
@@ -237,6 +269,10 @@ def attach_published_support(store, workspace, run_id, results, claims):
         if match is None:
             continue
         metadata, parsed, index, operation = match
+        if '_expression_source_span' in payload:
+            if metadata['file_id'] not in source_cache:
+                source_cache[metadata['file_id']] = store.snapshot_content(metadata)
+            _restore_expressions(payload, source_cache[metadata['file_id']])
         _, oid = operation_ids(workspace, metadata, index, operation)
         kind = payload.get('kind')
         matches = []
@@ -310,7 +346,7 @@ def load_analysis_report(store, workspace, run_id=None, *, include_source=True):
         result[key] = json.loads(result[key])
     result['units'] = store.rows('SELECT * EXCLUDE(result) FROM ai_analysis_units WHERE workspace_id=? AND run_id=?', [workspace, row['run_id']])
     result['claims'] = store.rows("SELECT * FROM ai_analysis_claims WHERE workspace_id=? AND run_id=? AND kind != 'checkpoint'", [workspace, row['run_id']])
-    quotes = {}
+    quotes, sources = {}, {}
     for claim in result['claims']:
         claim['reasons'] = json.loads(claim['reasons'])
         if not include_source:
@@ -322,12 +358,15 @@ def load_analysis_report(store, workspace, run_id=None, *, include_source=True):
             encoding = payload.pop('_source_encoding')
             evidence = payload['evidence']
             key = (evidence['content_hash'], encoding, evidence['start_offset'], evidence['end_offset'])
+            if key[:2] not in sources:
+                sources[key[:2]] = store.snapshot_content({'content_hash': key[0], 'encoding': encoding})
+            source = sources[key[:2]]
             if key not in quotes:
-                source = store.snapshot_content({'content_hash': key[0], 'encoding': encoding})
                 if not 0 <= key[2] < key[3] <= len(source):
                     raise ValueError('Claim reference is outside original source')
                 quotes[key] = source[key[2]:key[3]]
             evidence['quote'] = quotes[key]
+            _restore_expressions(payload, source)
     return result
 
 
@@ -366,6 +405,7 @@ def _accepted_items(store, workspace, run, *, hydrate=True, file_id=None):
             if not 0 <= start < end <= len(source):
                 raise ValueError('Invalid accepted operation reference')
             payload['code'] = source[start:end]
+            _restore_expressions(payload, source)
             current['result']['operations'].append(payload)
         else:
             raise ValueError('Incomplete accepted file snapshot')
@@ -389,6 +429,7 @@ def save_validation_checkpoint(store, workspace, run_id, unit, context_hash, val
             payload = fact.model_dump()
             payload['evidence'] = {'unit_id': unit.unit_id}
             _compact_host(payload['detail'])
+            payload = _reference_expressions(payload, unit.code, unit.start_offset)
             accepted_ids.append(fact.candidate_id)
             save_claim_decisions(store, workspace, run_id, [{'claim_id': 'stage:' + fact.candidate_id,
                 'unit_id': unit.unit_id, 'kind': 'checkpoint', 'status': 'staged', 'payload': payload}])
@@ -434,6 +475,7 @@ def load_validation_checkpoint(store, workspace, run_id, unit, context_hash):
     for cid in header['accepted_ids']:
         payload = claims[cid]
         payload['evidence'] = EvidenceCitation.from_unit(unit).model_dump()
+        _restore_expressions(payload, source)
         hydrate(payload['detail'])
         accepted.append(payload)
     validated = ValidationReport.model_validate({k: v for k, v in header.items()
