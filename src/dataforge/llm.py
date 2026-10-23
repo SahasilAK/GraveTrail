@@ -1,13 +1,14 @@
 """Provider-specific HTTP adapters and strictly grounded, privacy-gated assistance."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import ipaddress
 import json
 import re
 import time
 import uuid
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Self
 from urllib.parse import quote, urlparse
@@ -76,6 +77,9 @@ class Profile(BaseModel):
     key_env: str = ""
     auth: Literal["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"] = "auto"
     timeout: float = Field(default=30, ge=1, le=3600)
+    connect_timeout: float = Field(default=5, ge=.05, le=60)
+    read_timeout: float | None = Field(default=None, ge=.05, le=3600)
+    unknown_retries: int = Field(default=0, ge=0, le=2)
     retries: int = Field(default=1, ge=0, le=2)
     max_tokens: int = Field(default=2048, ge=64, le=2147483647)
     context_chars: int = Field(default=16000, ge=500, le=200000)
@@ -213,7 +217,7 @@ def response_object(text: str) -> dict[str, Any]:
 class Adapter:
     """Send non-streaming requests to a configured model provider."""
 
-    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True) -> None:
+    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True, attempt_observer=None) -> None:
         """Create an HTTP client for the profile and current cancellation source.
 
         Args:
@@ -231,7 +235,9 @@ class Adapter:
         self.response_observer = response_observer
         self.wait = wait or self._wait
         self.retry_unknown_transports = retry_unknown_transports
-        self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
+        self.attempt_observer = attempt_observer
+        self._transport = transport
+        self.client = httpx.Client(timeout=self._timeouts(), follow_redirects=False, trust_env=False, transport=transport)
 
     def __enter__(self) -> Adapter:
         """Return this adapter for use as a context manager."""
@@ -266,6 +272,54 @@ class Adapter:
             headers["anthropic-version"] = "2023-06-01"
         return headers
 
+    def _timeouts(self, read_override=None):
+        return httpx.Timeout(read_override or self.profile.read_timeout or self.profile.timeout,
+            connect=self.profile.connect_timeout, write=self.profile.timeout, pool=self.profile.connect_timeout)
+
+    def _guard(self):
+        if self.check:
+            self.check()
+        if self.cancelled and self.cancelled():
+            raise ProviderError('AI request cancelled; no further retries')
+
+    @contextmanager
+    def _stream(self, method, url, **kwargs):
+        if self._transport is not None or not (self.check or self.cancelled):
+            with self.client.stream(method, url, **kwargs) as response:
+                yield response
+            return
+        # Buffer ordinary JSON over cancellable HTTPX I/O. No model SSE protocol.
+        async def receive():
+            async with httpx.AsyncClient(follow_redirects=False, trust_env=False) as client:
+                async with client.stream(method, url, **kwargs) as response:
+                    self._http_status = response.status_code
+                    chunks, total = [], 0
+                    async for chunk in response.aiter_bytes():
+                        total += len(chunk)
+                        if total > 2 * 1024 * 1024:
+                            raise ProviderError('Provider response exceeds 2 MB limit')
+                        chunks.append(chunk)
+                    headers = {k: v for k, v in response.headers.items()
+                               if k.lower() not in {'content-encoding', 'content-length'}}
+                    return httpx.Response(response.status_code, headers=headers, content=b''.join(chunks))
+        async def monitored():
+            task = asyncio.create_task(receive())
+            try:
+                while not task.done():
+                    self._guard()
+                    await asyncio.wait({task}, timeout=.1)
+                self._guard()
+                return await task
+            finally:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        response = asyncio.run(monitored())
+        try:
+            yield response
+        finally:
+            response.close()
+
     def _request(self, method: str, path: str, payload: dict[str, Any] | None=None) -> dict[str, Any]:
         """Send one bounded JSON request and sanitize its response.
 
@@ -279,19 +333,36 @@ class Adapter:
 
         Raises:
             ProviderError: If the request fails, is cancelled, or returns invalid or oversized content."""
+        unknowns = 0
         for attempt in range(self.profile.retries + 1):
-            if self.cancelled and self.cancelled():
-                raise ProviderError("AI request cancelled; no further retries")
+            self._guard()
+            started, sent, recorded = time.monotonic(), False, False
+            self._http_status = None
+            timeout = self._timeouts()
+            def record(category, unknown, retry):
+                nonlocal recorded
+                recorded = True
+                detail = {'failure_category': category, 'attempt_number': attempt + 1,
+                        'elapsed_seconds': max(0., time.monotonic() - started), 'timeouts': timeout.as_dict(),
+                        'outcome': 'unknown' if unknown else 'known', 'retry_scheduled': retry,
+                        'allowance_exhausted': not retry and (attempt >= self.profile.retries or
+                            (unknown and unknowns > self.profile.unknown_retries)), 'http_status': self._http_status}
+                if self.attempt_observer:
+                    self.attempt_observer(detail)
+                return detail['retry_scheduled']
             try:
-                timeout = self.before_attempt(self.profile) if self.before_attempt else self.profile.timeout
+                override = self.before_attempt(self.profile) if self.before_attempt else None
+                timeout = self._timeouts(override)
                 if self.check:
                     self.check()
                 # Admission can wait: resolve credentials only at the disclosure boundary.
                 headers = self._headers()
                 request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
                     if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
-                with self.client.stream(method, self.profile.base_url + path, headers=headers, json=payload,
-                                        timeout=timeout or self.profile.timeout) as response:
+                sent = True
+                with self._stream(method, self.profile.base_url + path, headers=headers, json=payload,
+                                  timeout=timeout) as response:
+                    self._http_status = response.status_code
                     if self.response_observer:
                         from dataforge.ai_rate_limits import normalize_rate_limits
                         self.response_observer(response.status_code,
@@ -316,13 +387,17 @@ class Adapter:
                         except (ValueError, TypeError, AttributeError):
                             pass
                     if category:
+                        record(category, False, False)
                         raise ProviderError(category)
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < self.profile.retries:
+                            if not record('http_failure', False, True):
+                                raise ProviderError('Batch retry allowance exhausted')
                             from dataforge.ai_rate_limits import retry_delay
                             self.wait(retry_delay(attempt, dict(response.headers), now=time.time()))
                             continue
                     if response.status_code >= 300:
+                        record('authentication' if response.status_code in {401, 403} else 'http_failure', False, False)
                         raise ProviderError(f"Provider request failed (HTTP {response.status_code})",
                                             response.status_code == 429 or response.status_code >= 500)
                     chunks, total = [], 0
@@ -342,12 +417,31 @@ class Adapter:
                         return self.connections.sanitize(data, request_secrets)
                     except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
-            except httpx.TransportError:
-                if not self.retry_unknown_transports:
-                    raise ProviderError('Provider response outcome is unknown', unknown=True) from None
-                if attempt >= self.profile.retries:
-                    raise ProviderError("Provider connection failed or timed out", True) from None
+            except httpx.TransportError as exc:
+                pre_send = isinstance(exc, (httpx.ConnectTimeout, httpx.PoolTimeout, httpx.ConnectError))
+                explicit = self._http_status is not None and self._http_status >= 300
+                unknown = not pre_send and not explicit
+                unknowns += int(unknown)
+                retry = attempt < self.profile.retries and (pre_send or
+                    (explicit and (self._http_status == 429 or self._http_status >= 500)) or
+                    (unknown and self.retry_unknown_transports and unknowns <= self.profile.unknown_retries))
+                retry = record('pre_send' if pre_send else 'authentication' if self._http_status in {401, 403}
+                               else 'http_failure' if explicit else 'transport_unknown', unknown, retry)
+                if not retry:
+                    raise ProviderError('Provider response outcome is unknown' if unknown else 'Provider connection failed',
+                                        retryable=pre_send, unknown=unknown) from None
                 self.wait(min(60, 2 ** attempt))
+            except ProviderError:
+                if not recorded:
+                    cancelled = bool(self.cancelled and self.cancelled())
+                    record('cancelled' if cancelled else 'invalid_response', sent and cancelled, False)
+                raise
+            except (InterruptedError, TimeoutError, ValueError) as exc:
+                if not recorded:
+                    record('cancelled' if isinstance(exc, InterruptedError) else
+                           'run_limit' if isinstance(exc, TimeoutError) else 'configuration',
+                           sent and not (self._http_status is not None and self._http_status >= 300), False)
+                raise
         raise ProviderError("Provider request failed")
 
     def _wait(self, seconds):

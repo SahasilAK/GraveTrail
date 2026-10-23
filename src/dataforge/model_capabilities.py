@@ -51,6 +51,9 @@ def execution_profile(profile):
     """Observation timestamps/provenance do not change the executable configuration."""
     values = profile if isinstance(profile, dict) else profile.model_dump()
     values = dict(values)
+    for key, default in {'connect_timeout': 5, 'read_timeout': None, 'unknown_retries': 0}.items():
+        if values.get(key) == default:
+            values.pop(key, None)
     if values.get('model_capabilities'):
         values['model_capabilities'] = {k: v for k, v in values['model_capabilities'].items()
                                       if k not in {'observed_at', 'source'}}

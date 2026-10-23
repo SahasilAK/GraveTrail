@@ -75,6 +75,8 @@ def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(
     config = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
     assert config['model'] == 'auto/best-reasoning'
     assert config['key_env'] == 'DATAFORGE_OMNIROUTE_API_KEY'
+    assert config['read_timeout'] == 300 and config['connect_timeout'] == 5
+    assert config['unknown_retries'] == config['retries'] == 2
     assert config['model_capabilities']['context_tokens'] == 128000
     assert config['model_capabilities']['dynamic'] is True
     assert 'test-key' not in str(view.session_state.to_dict())

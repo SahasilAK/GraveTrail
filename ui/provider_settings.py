@@ -116,9 +116,18 @@ def render(store: Store, workspace: str) -> None:
         st.caption(f'Output limit: {output_mode.capitalize()} · Source context limit: {context_mode.capitalize()}. Edit a number to make it Custom.')
         auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")), key=prefix + '_auth')
-        timeout = st.number_input("Request timeout (seconds)", 1, 3600, int(config.get("timeout", 30)),
-            key=prefix + '_timeout', help='Up to one hour per request. The AI analysis run budget may shorten this wait.')
-        retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)), key=prefix + '_retries')
+        new_gateway = not existing and provider == 'OmniRoute'
+        timeout = config.get('timeout', 30)  # Preserve the saved legacy/write timeout.
+        read_timeout = st.number_input('Response inactivity timeout (seconds)', .05, 3600.,
+            float(config.get('read_timeout') or config.get('timeout', 300 if new_gateway else 30)),
+            key=prefix + '_timeout', help='Allow upstream fallback plus generation time. This is the wait for response data, not a total request deadline. Run limits and cancellation still apply.')
+        connect_timeout = st.number_input('Connection timeout (seconds)', .05, 60.,
+            float(config.get('connect_timeout', 5)), key=prefix + '_connect_timeout')
+        retries = st.number_input('Shared retries per batch', 0, 2, int(config.get('retries', 2 if new_gateway else 1)),
+            key=prefix + '_retries', help='Excludes the initial attempt. HTTP, pre-send and unknown-outcome retries share this finite budget, including after restart.')
+        unknown_retries = st.number_input('Automatic retries of unknown outcomes', 0, 2,
+            int(config.get('unknown_retries', 2 if new_gateway else 0)), key=prefix + '_unknown_retries',
+            help='Zero requires manual acknowledgement. This also uses the shared retry budget. A lost response may have been processed upstream; retries can duplicate processing or charges.')
         max_tokens = st.number_input("Maximum output tokens", 64, 2147483647, key=prefix + '_max_tokens', on_change=customize_output)
         context = st.number_input("Profile source context character limit", 500, 200000, key=prefix + '_context', on_change=customize_context)
         temperature_enabled = st.checkbox("Send temperature parameter", value=config.get("temperature") is not None, key=prefix + '_send_temperature')
@@ -127,6 +136,7 @@ def render(store: Store, workspace: str) -> None:
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
         quota_group = config.get('quota_group', '')  # Historical profile round-trip only.
     values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
+                  read_timeout=read_timeout, connect_timeout=connect_timeout, unknown_retries=unknown_retries,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
                   context_mode=context_mode, output_mode=output_mode,
                   temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version,

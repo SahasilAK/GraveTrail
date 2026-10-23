@@ -72,10 +72,17 @@ def attempt_totals(store, workspace, run_id):
 
 def recover_pipeline(store, workspace, run_id):
     _run(store, workspace, run_id)
-    return {'unknown': store.rows("""SELECT a.* FROM ai_analysis_attempts a JOIN ai_analysis_requests r
+    rows = store.rows("""SELECT a.* FROM ai_analysis_attempts a JOIN ai_analysis_requests r
         ON a.batch_id=r.batch_id AND a.run_id=r.run_id AND a.workspace_id=r.workspace_id
-        WHERE a.workspace_id=? AND a.run_id=? AND (a.status IN ('dispatched','unknown')
-        OR (a.status='received' AND r.status='planned'))""", [workspace, run_id])}
+        WHERE a.workspace_id=? AND a.run_id=? AND r.status<>'processed' AND (a.status IN ('dispatched','unknown')
+        OR (a.status='received' AND r.status='planned'))""", [workspace, run_id])
+    return {'unknown': [r for r in rows if not json.loads(r['details']).get('retry_authorized')]}
+
+
+def batch_attempts(store, workspace, run_id, batch_id):
+    rows = store.rows('SELECT * FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=? AND batch_id=?',
+                     [workspace, run_id, batch_id])
+    return sorted(rows, key=lambda r: (json.loads(r['details']).get('attempt_number', 0), r['attempt_id']))
 
 
 def save_context_dependencies(store, workspace, run_id, unit_id, dependencies):

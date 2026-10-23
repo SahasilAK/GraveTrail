@@ -29,6 +29,7 @@ from dataforge.ai_context import inventory_revision, plan_file_parts, prepare_an
 from dataforge.ai_context_index import build_context_index, context_for_part, plan_context_completion
 from dataforge.ai_pipeline_store import (
     attempt_totals,
+    batch_attempts,
     begin_attempt,
     finish_attempt,
     recover_pipeline,
@@ -52,6 +53,30 @@ from dataforge.settings_service import revision
 
 def _hash(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def recovery_message(summary):
+    """Explain observed connection state without speculating about upstreams."""
+    detail = summary.get('last_failure', {})
+    category = detail.get('failure_category')
+    if summary.get('status') == 'committed' or summary.get('reasons') == ['semantic_coverage_not_proven']:
+        return 'Published AI lineage remains inferred; semantic completeness is not proven.'
+    if any(r.startswith('run_') and r.endswith('_reached') for r in summary.get('reasons', [])):
+        return 'The run limit was reached. Saved progress is retained; continuation does not reset the limit.'
+    message = {'transport_unknown': 'The gateway connection ended before a complete response arrived; processing or charges may have occurred.',
+        'pre_send': 'The connection could not be established; the inference request was not sent.',
+        'authentication': 'The provider rejected authentication. Check the configured credentials.',
+        'http_failure': 'The gateway returned an HTTP error.',
+        'cancelled': 'AI analysis was cancelled. Saved progress is retained.',
+        'invalid_response': 'The provider returned an invalid response.',
+        'process_interrupted': 'The app stopped before it checkpointed a complete response; the outcome is unknown.'}.get(category)
+    if not message:
+        return 'AI analysis paused with saved progress. Review the report before continuing.'
+    if detail.get('retry_scheduled'):
+        message += f" Retrying batch {detail.get('batch_number', 1)}, attempt {detail.get('cycle_attempt', detail.get('attempt_number', 1)) + 1} of {detail.get('attempt_limit', 1)}."
+    elif detail.get('allowance_exhausted'):
+        message += ' The automatic retry allowance is exhausted. Manual acknowledgement is required to retry.'
+    return message
 
 
 def _state_revision(store, workspace):
@@ -174,6 +199,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         request, summary = _resume_request(store, workspace, request)
         prior_seconds = summary.get('active_seconds', 0.)
         counts.update(summary.get('counts', {}))
+        usage_known = summary.get('usage_known', True)
         if request.mode == 'parser':
             result = analyze(store, workspace, request.file_ids, request.force_parser, progress=progress, cancelled=cancelled)
             return AnalysisReport(run_id=result['run_id'], mode='parser', status='committed', complete=True,
@@ -194,15 +220,49 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             if request.resume_run_id and summary.get('pin') != pin:
                 raise ValueError('source_or_configuration_changed')
             if request.resume_run_id:
+                historical = store.rows('SELECT status,details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=?', [workspace, run_id])
+                if any(a['status'] in {'unknown', 'dispatched'} or json.loads(a['details']).get('usage_known') is False
+                       or json.loads(a['details']).get('uncheckpointed_response')
+                       for a in historical):
+                    usage_known = False
                 unknown = recover_pipeline(store, workspace, run_id)['unknown']
-                if unknown and not request.retry_unknown:
-                    return AnalysisReport(run_id=run_id, mode='ai', status='awaiting_continuation',
-                        reasons=['unknown_inflight_request_requires_explicit_retry'])
+                if unknown:
+                    usage_known = False
                 for attempt in unknown:
-                    store.execute("UPDATE ai_analysis_attempts SET status='retry_authorized' WHERE attempt_id=?", [attempt['attempt_id']])
+                    if attempt['status'] == 'dispatched':
+                        finish_attempt(store, workspace, run_id, attempt['attempt_id'], 'unknown',
+                            details={'failure_category': 'process_interrupted', 'outcome': 'unknown',
+                                     'elapsed_seconds': None, 'http_status': None, 'retry_scheduled': False,
+                                     'allowance_exhausted': False})
+                    elif attempt['status'] == 'received':
+                        details = {**json.loads(attempt['details']), 'uncheckpointed_response': True, 'usage_known': False}
+                        store.execute('UPDATE ai_analysis_attempts SET details=? WHERE attempt_id=?', [json.dumps(details), attempt['attempt_id']])
+                if unknown and not request.retry_unknown and not profile.unknown_retries:
+                    counts['requests'], counts['reserved_output_tokens'] = attempt_totals(store, workspace, run_id)
+                    save_run(store, workspace, run_id, mode='ai', status='awaiting_continuation',
+                             summary={**summary, 'counts': dict(counts), 'usage_known': False})
+                    return AnalysisReport(run_id=run_id, mode='ai', status='awaiting_continuation',
+                        counts=dict(counts), usage_known=False, reasons=['unknown_inflight_request_requires_explicit_retry'])
+                if request.retry_unknown:
+                    for row in store.rows('SELECT batch_id,details FROM ai_analysis_requests WHERE run_id=? AND workspace_id=? AND status<>?',
+                                          [run_id, workspace, 'processed']):
+                        details = {**json.loads(row['details']), 'manual_retry_baseline': len(batch_attempts(store, workspace, run_id, row['batch_id']))}
+                        store.execute('UPDATE ai_analysis_requests SET details=? WHERE batch_id=?', [json.dumps(details), row['batch_id']])
+                    for attempt in unknown:
+                        details = {**json.loads(attempt['details']), 'retry_authorized': True}
+                        store.execute('UPDATE ai_analysis_attempts SET details=? WHERE attempt_id=?', [json.dumps(details), attempt['attempt_id']])
+                elif summary.get('reasons') == ['missing_or_invalid_required_extraction']:
+                    # Explicit continuation after known received-but-invalid items
+                    # may start new semantic work. Automatic loops never renew it.
+                    for row in store.rows("SELECT batch_id,details FROM ai_analysis_requests WHERE workspace_id=? AND run_id=? AND status='processed'", [workspace, run_id]):
+                        history = batch_attempts(store, workspace, run_id, row['batch_id'])
+                        if history and history[-1]['status'] == 'received':
+                            details = {**json.loads(row['details']), 'manual_retry_baseline': len(history)}
+                            store.execute('UPDATE ai_analysis_requests SET details=? WHERE batch_id=?', [json.dumps(details), row['batch_id']])
                 parts = [FilePart.model_validate(p) for p in summary['parts']]
             counts['files'], counts['parts'] = len(prepared.sources), len(parts)
-            summary.update(protocol_version=5, request=request.model_dump(), pin=pin, parts=[p.model_dump() for p in parts])
+            summary.update(protocol_version=5, request=request.model_dump(), pin=pin, parts=[p.model_dump() for p in parts],
+                           retry_policy={'unknown_retries': profile.unknown_retries, 'shared_retries': profile.retries})
             save_run(store, workspace, run_id, mode='ai', status='extracting', manifest=prepared.manifest,
                      configuration=prepared.settings, summary=summary)
             registered = True
@@ -244,30 +304,74 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 scheduled = [p for p in pending if p.part_id in planned.part_ids]
                 batch_id = stable_id(run_id, planned.serialized_payload)
                 save_request(store, workspace, run_id, batch_id, list(planned.part_ids),
-                    details={'work_kind': scheduled[0].work_kind, 'budget': asdict(planned.budget)})
+                    details={'work_kind': scheduled[0].work_kind, 'budget': asdict(planned.budget),
+                             'batch_number': len(store.rows('SELECT batch_id FROM ai_analysis_requests WHERE workspace_id=? AND run_id=?', [workspace, run_id])) + 1})
                 ticket = None
+                physical_started = monotonic()
                 def before_attempt(_profile):
-                    nonlocal ticket
+                    nonlocal ticket, physical_started
                     update('Waiting for AI ' + scheduled[0].work_kind + ' response')
                     check()
                     from dataforge.ai_budget import request_budget
                     if not request_budget(profile, planned.serialized_payload, planned.reserved_output).fits:
                         raise ValueError('dispatch_budget_changed')
                     attempts, reserved = attempt_totals(store, workspace, run_id)
+                    def ceiling(reason):
+                        if summary.get('last_failure'):
+                            summary['last_failure'].update(retry_scheduled=False, allowance_exhausted=True)
+                        raise TimeoutError(reason)
                     if request.max_output_tokens_total is not None and reserved + planned.reserved_output > request.max_output_tokens_total:
-                        raise TimeoutError('run_output_ceiling_reached')
+                        ceiling('run_output_ceiling_reached')
                     if request.max_provider_attempts is not None and attempts >= request.max_provider_attempts:
-                        raise TimeoutError('run_attempt_ceiling_reached')
-                    ticket = begin_attempt(store, workspace, run_id, batch_id, planned.reserved_output)
-                    return profile.timeout
-                def observed(status, limits):
-                    if status >= 300 and ticket:
-                        finish_attempt(store, workspace, run_id, ticket, 'known_failure')
+                        ceiling('run_attempt_ceiling_reached')
+                    history = batch_attempts(store, workspace, run_id, batch_id)
+                    request_details = json.loads(store.rows('SELECT details FROM ai_analysis_requests WHERE batch_id=?', [batch_id])[0]['details'])
+                    baseline = request_details.get('manual_retry_baseline', 0)
+                    cycle = history[baseline:]
+                    if len(cycle) >= profile.retries + 1 or sum(a['status'] == 'unknown' or
+                        json.loads(a['details']).get('uncheckpointed_response', False) for a in cycle) > profile.unknown_retries:
+                        if summary.get('last_failure'):
+                            summary['last_failure'].update(retry_scheduled=False, allowance_exhausted=True)
+                        raise TimeoutError('batch_retry_allowance_exhausted')
+                    ticket = begin_attempt(store, workspace, run_id, batch_id, planned.reserved_output,
+                        details={'attempt_number': len(history) + 1, 'cycle_attempt': len(cycle) + 1,
+                                 'attempt_limit': profile.retries + 1, 'batch_number': request_details.get('batch_number', 1), 'timeouts': {
+                            'connect': profile.connect_timeout, 'read': profile.read_timeout or profile.timeout,
+                            'write': profile.timeout, 'pool': profile.connect_timeout}})
+                    physical_started = monotonic()
+                def observed_failure(detail):
+                    nonlocal usage_known
+                    if ticket:
+                        attempt = store.rows('SELECT status,details FROM ai_analysis_attempts WHERE attempt_id=?', [ticket])[0]
+                        if attempt['status'] != 'dispatched':
+                            return
+                        detail.update({k: v for k, v in json.loads(attempt['details']).items() if k != 'timeouts'})
+                        detail.setdefault('timeouts', json.loads(attempt['details'])['timeouts'])
+                        detail.setdefault('elapsed_seconds', max(0., monotonic() - physical_started))
+                        detail.setdefault('http_status', None)
+                        request_details = json.loads(store.rows('SELECT details FROM ai_analysis_requests WHERE batch_id=?', [batch_id])[0]['details'])
+                        baseline = request_details.get('manual_retry_baseline', 0)
+                        history = batch_attempts(store, workspace, run_id, batch_id)[baseline:]
+                        exhausted = len(history) >= profile.retries + 1 or (
+                            sum(a['status'] == 'unknown' or json.loads(a['details']).get('uncheckpointed_response', False)
+                                for a in history) + int(detail['outcome'] == 'unknown') > profile.unknown_retries)
+                        if exhausted:
+                            detail.update(retry_scheduled=False, allowance_exhausted=True)
+                        detail['usage_known'] = detail['failure_category'] in {
+                            'pre_send', 'authentication', 'provider_credits_exhausted', 'provider_daily_quota_exhausted'}
+                        finish_attempt(store, workspace, run_id, ticket,
+                            'unknown' if detail['outcome'] == 'unknown' else 'known_failure', details=detail)
+                        usage_known &= detail['usage_known']
+                        summary['last_failure'] = detail
+                        if detail['retry_scheduled']:
+                            update(recovery_message({'last_failure': detail}))
+                        checkpoint()
                 bound = manager.for_profile(pid, profile) if hasattr(manager, 'for_profile') else manager
                 try:
                     with connection_scope(bound), request_slot(store.home, workspace, 1), Adapter(profile,
                             transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
-                            response_observer=observed, retry_unknown_transports=False) as adapter:
+                            attempt_observer=observed_failure,
+                            retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
                         raw, usage = adapter.complete(planned.system, planned.user)
                         metadata = adapter.completion_metadata
                     if ticket:
@@ -277,17 +381,22 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     for key, aliases in {'input_tokens': ('input_tokens', 'prompt_tokens', 'promptTokenCount'),
                                          'output_tokens': ('output_tokens', 'completion_tokens', 'candidatesTokenCount')}.items():
                         counts[key] += next((usage[a] for a in aliases if type(usage.get(a)) is int), 0)
-                    if metadata.get('truncated'):
-                        truncated = True
-                        raise ValueError('truncated_extraction_response')
-                    valid, invalid = decode_extractions(raw, scheduled)
+                    try:
+                        if metadata.get('truncated'):
+                            truncated = True
+                            raise ValueError('truncated_extraction_response')
+                        valid, invalid = decode_extractions(raw, scheduled)
+                    except ValueError:
+                        valid, invalid = {}, {p.part_id: 'invalid_extraction_response' for p in scheduled}
                 except ProviderError as exc:
-                    if exc.unknown and ticket:
-                        finish_attempt(store, workspace, run_id, ticket, 'unknown')
+                    if ticket and store.rows('SELECT status FROM ai_analysis_attempts WHERE attempt_id=?', [ticket])[0]['status'] == 'dispatched':
+                        observed_failure({'failure_category': 'invalid_response', 'outcome': 'known',
+                                          'retry_scheduled': False, 'allowance_exhausted': False})
+                    if exc.unknown:
                         raise TimeoutError('unknown_inflight_request_requires_explicit_retry') from None
+                    if cancelled and cancelled():
+                        raise InterruptedError('cancelled') from None
                     raise TimeoutError(str(exc)) from None
-                except ValueError:
-                    valid, invalid = {}, {p.part_id: 'invalid_extraction_response' for p in scheduled}
                 for part in scheduled:
                     item = valid.get(part.part_id)
                     if item is not None:
@@ -428,7 +537,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                   else 'awaiting_continuation' if isinstance(exc, TimeoutError) and registered else 'failed' if registered else 'blocked')
         if registered:
             counts['requests'], counts['reserved_output_tokens'] = attempt_totals(store, workspace, run_id)
-        report = AnalysisReport(run_id=run_id, mode=request.mode, status=status, counts=dict(counts), reasons=[reason])
+            if summary.get('last_failure'):
+                summary['last_failure']['retry_scheduled'] = False
+        report = AnalysisReport(run_id=run_id, mode=request.mode, status=status, counts=dict(counts), reasons=[reason], usage_known=usage_known)
         if registered or status == 'stale':
             summary['active_seconds'] = prior_seconds + monotonic() - started
             save_run(store, workspace, run_id, mode='ai', status=status,

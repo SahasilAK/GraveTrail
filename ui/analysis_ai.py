@@ -7,7 +7,7 @@ import streamlit as st
 
 from dataforge.agent.jobs import TERMINAL, Jobs
 from dataforge.ai_analysis_models import AnalysisRequest
-from dataforge.analysis_service import analysis_report, preview_analysis, run_analysis
+from dataforge.analysis_service import analysis_report, preview_analysis, recovery_message, run_analysis
 from dataforge.connections import current_connections
 
 
@@ -115,7 +115,7 @@ def progress(store, workspace):
     if result.get('status') == 'committed':
         st.success('AI analysis committed. Open lineage or inspect the validation report below.')
     elif result.get('status') == 'awaiting_continuation':
-        st.info('Analysis paused with saved progress. Continue below; the current graph remains available.')
+        st.info(recovery_message(result))
     else:
         st.warning('AI analysis did not publish a new graph: ' + ', '.join(result.get('reasons', [record['status']])))
     if result.get('run_id'):
@@ -149,10 +149,12 @@ def report(store, workspace):
     if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
         from dataforge.ai_pipeline_store import recover_pipeline
         unknown = bool(result['summary'].get('inflight') or recover_pipeline(store, workspace, selected)['unknown'])
-        retry = st.checkbox('Retry the unknown in-flight request (may incur a duplicate charge)', key='ai_retry_' + selected) if unknown else False
+        exhausted = summary.get('last_failure', {}).get('allowance_exhausted') or 'batch_retry_allowance_exhausted' in summary.get('reasons', [])
+        needs_ack = exhausted or (unknown and not summary.get('retry_policy', {}).get('unknown_retries', 0))
+        retry = st.checkbox('Retry the unfinished batch (may incur a duplicate charge; renews the bounded retry allowance)', key='ai_retry_' + selected) if needs_ack else False
         if summary.get('protocol_version') != 5:
             st.info('This historical run uses an incompatible protocol. Start a new build.')
-        elif st.button('Continue AI analysis', disabled=unknown and not retry):
+        elif st.button('Continue AI analysis', disabled=needs_ack and not retry):
             request = AnalysisRequest.model_validate({**summary['request'], 'resume_run_id': selected, 'retry_unknown': retry})
             start(store, workspace, request)
             st.rerun()
@@ -166,7 +168,10 @@ def report(store, workspace):
     st.caption(f"Processed parts: {counts.get('processed', 0)} · Files: {counts.get('files', 0)} · "
                f"Incomplete coverage: {counts.get('coverage_gaps', 0)} · Stage: {summary.get('stage', result['status'])}")
     if summary.get('reasons'):
-        st.warning('; '.join(summary['reasons']))
+        st.warning(recovery_message(summary))
+    if summary.get('last_failure'):
+        with st.expander('Connection diagnostics'):
+            st.json(summary['last_failure'])
     st.dataframe([{'Claim': c['claim_id'], 'Kind': c['kind'], 'Outcome': c['status'],
                    'Reasons': ', '.join(c['reasons'])} for c in result['claims']],
                  hide_index=True, alt='Source validation outcomes for AI candidates')

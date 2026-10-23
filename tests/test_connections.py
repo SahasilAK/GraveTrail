@@ -229,16 +229,16 @@ def test_provider_ui_saves_and_reopens_hour_timeout(tmp_path: Path, monkeypatch:
     view.switch_page('ui/pages/connections.py').run()
     next(s for s in view.selectbox if s.label == 'Provider').select('OmniRoute').run()
     next(t for t in view.text_input if t.label == 'Model or deployment identifier').set_value('auto/best-coding')
-    timeout = next(n for n in view.number_input if n.label == 'Request timeout (seconds)')
+    timeout = next(n for n in view.number_input if n.label == 'Response inactivity timeout (seconds)')
     assert timeout.proto.max == 3600
     timeout.set_value(3600)
     next(b for b in view.button if b.label == 'Save provider profile').click().run()
     assert not view.exception
     store = get_store(str(tmp_path))
     profile = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
-    assert profile['timeout'] == 3600 and profile['model'] == 'auto/best-coding'
+    assert profile['read_timeout'] == 3600 and profile['timeout'] == 30 and profile['model'] == 'auto/best-coding'
     next(s for s in view.selectbox if s.label == 'Provider profile').select_index(1).run()
-    assert next(n for n in view.number_input if n.label == 'Request timeout (seconds)').value == 3600
+    assert next(n for n in view.number_input if n.label == 'Response inactivity timeout (seconds)').value == 3600
     st.cache_resource.clear()
 
 
