@@ -371,6 +371,11 @@ class Adapter:
                 raise ProviderError('AI request cancelled; no further retries')
             time.sleep(min(.2, max(0, until - time.monotonic())))
 
+    @staticmethod
+    def completion_request(p, system, user):
+        """Return the actual provider request body used for sizing and dispatch."""
+        return _completion_request(p, system, user)
+
     def complete(self, system: str, user: str) -> tuple[str, dict]:
         """Submit a system and user prompt using the provider's chat protocol.
 
@@ -384,41 +389,7 @@ class Adapter:
         Raises:
             ProviderError: If the provider response has an unsupported shape."""
         p = self.profile
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        if p.provider == "Anthropic":
-            path = "/messages"
-            payload = {"model": p.model, "system": system, "messages": messages[1:], "max_tokens": p.max_tokens}
-        elif p.provider == "Ollama":
-            path = "/api/chat"
-            payload = {"model": p.model, "messages": messages, "stream": False, "options": {"num_predict": p.max_tokens}}
-            if p.structured:
-                payload["format"] = "json"
-            if p.temperature is not None:
-                payload["options"]["temperature"] = p.temperature
-        elif p.provider == "Gemini":
-            path = "/models/" + quote(p.model.removeprefix("models/"), safe="-._") + ":generateContent"
-            payload = {"systemInstruction": {"parts": [{"text": system}]},
-                       "contents": [{"role": "user", "parts": [{"text": user}]}],
-                       "generationConfig": {"maxOutputTokens": p.max_tokens}}
-            if p.structured:
-                payload["generationConfig"]["responseMimeType"] = "application/json"
-            if p.temperature is not None:
-                payload["generationConfig"]["temperature"] = p.temperature
-        else:
-            path = "/chat/completions"
-            payload = {"model": p.model, "messages": messages,
-                       "max_completion_tokens" if p.provider == "OpenAI" else "max_tokens": p.max_tokens,
-                       "stream": False}
-            if p.provider == "Databricks":
-                path = "/serving-endpoints/" + quote(p.model, safe="-._") + "/invocations"
-                payload.pop("model")
-            elif p.provider == "Azure OpenAI":
-                path = "/openai/deployments/" + quote(p.model, safe="-._") + "/chat/completions?api-version=" + quote(p.api_version, safe="-")
-                payload.pop("model")
-            if p.structured and p.provider != "Databricks":
-                payload["response_format"] = {"type": "json_object"}
-        if p.temperature is not None and p.provider not in {"Gemini", "Ollama"}:
-            payload["temperature"] = p.temperature
+        path, payload = self.completion_request(p, system, user)
         data = self._request("POST", path, payload)
         finish = None
         envelope_key = 'candidates' if p.provider == 'Gemini' else 'choices'
@@ -1230,3 +1201,42 @@ def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task:
 def _observe_quota(profile, limits):
     from dataforge.ai_rate_limits import QUOTAS, quota_scope
     QUOTAS.observe(quota_scope(profile), limits)
+
+
+def _completion_request(p, system, user):
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    if p.provider == "Anthropic":
+        path = "/messages"
+        payload = {"model": p.model, "system": system, "messages": messages[1:], "max_tokens": p.max_tokens}
+    elif p.provider == "Ollama":
+        path = "/api/chat"
+        payload = {"model": p.model, "messages": messages, "stream": False, "options": {"num_predict": p.max_tokens}}
+        if p.structured:
+            payload["format"] = "json"
+        if p.temperature is not None:
+            payload["options"]["temperature"] = p.temperature
+    elif p.provider == "Gemini":
+        path = "/models/" + quote(p.model.removeprefix("models/"), safe="-._") + ":generateContent"
+        payload = {"systemInstruction": {"parts": [{"text": system}]},
+                   "contents": [{"role": "user", "parts": [{"text": user}]}],
+                   "generationConfig": {"maxOutputTokens": p.max_tokens}}
+        if p.structured:
+            payload["generationConfig"]["responseMimeType"] = "application/json"
+        if p.temperature is not None:
+            payload["generationConfig"]["temperature"] = p.temperature
+    else:
+        path = "/chat/completions"
+        payload = {"model": p.model, "messages": messages,
+                   "max_completion_tokens" if p.provider == "OpenAI" else "max_tokens": p.max_tokens,
+                   "stream": False}
+        if p.provider == "Databricks":
+            path = "/serving-endpoints/" + quote(p.model, safe="-._") + "/invocations"
+            payload.pop("model")
+        elif p.provider == "Azure OpenAI":
+            path = "/openai/deployments/" + quote(p.model, safe="-._") + "/chat/completions?api-version=" + quote(p.api_version, safe="-")
+            payload.pop("model")
+        if p.structured and p.provider != "Databricks":
+            payload["response_format"] = {"type": "json_object"}
+    if p.temperature is not None and p.provider not in {"Gemini", "Ollama"}:
+        payload["temperature"] = p.temperature
+    return path, payload

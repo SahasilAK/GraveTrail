@@ -317,3 +317,128 @@ class AnalysisReport(StrictModel):
     counts: dict[str,int] = Field(default_factory=dict)
     usage_known: bool = False
     reasons: list[str] = Field(default_factory=list)
+
+
+# Protocol 5: independently inferred file extraction. Legacy contracts above
+# remain readable for historical runs and manual assistance.
+EXTRACTION_VERSION = 5
+
+
+class SourceReference(StrictModel):
+    file_id: Name
+    content_hash: Name
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=0)
+
+    @model_validator(mode='after')
+    def ordered(self):
+        if self.end_offset < self.start_offset:
+            raise ValueError('Reversed source reference')
+        return self
+
+
+class FilePart(SourceReference):
+    part_id: Name
+    source_kind: Literal['sql', 'sas', 'dbt']
+    part_index: int = Field(ge=0)
+    scope: str = ''
+    context_ids: list[str] = Field(default_factory=list)
+    context_hashes: list[str] = Field(default_factory=list)
+    overlap: list[SourceReference] = Field(default_factory=list)
+    work_kind: Literal['extraction', 'context_completion', 'consolidation'] = 'extraction'
+
+
+class ResourceReference(StrictModel):
+    name: Name
+    identity: str = ''
+    scope: str = ''
+    version: Version = ''
+    temporary: bool = False
+
+
+class ExtractedUsage(StrictModel):
+    table: Name
+    column: str
+    context: Role = 'value'
+    scope: str = ''
+    evidence: list[SourceReference]
+
+
+class ExtractedDerivation(StrictModel):
+    fact_id: Name
+    target_table: Name
+    target_column: Name
+    inputs: list[DerivationInput] = Field(default_factory=list)
+    expression: SourceReference | None = None
+    evidence: list[SourceReference]
+    category: str = 'unknown'
+    scope: str = ''
+    branch: int = Field(default=0, ge=0)
+    version: Version = ''
+    ordinal: int = Field(default=0, ge=0)
+
+
+class OperationRecord(StrictModel):
+    operation_id: Name
+    kind: Name
+    evidence: list[SourceReference]
+    reads: list[ResourceReference] = Field(default_factory=list)
+    writes: list[ResourceReference] = Field(default_factory=list)
+    usages: list[ExtractedUsage] = Field(default_factory=list)
+    derivations: list[ExtractedDerivation] = Field(default_factory=list)
+    scope: str = ''
+    order: int | None = Field(default=None, ge=0)
+    limitations: list[str] = Field(default_factory=list)
+    context_ids: list[str] = Field(default_factory=list)
+    status: Literal['inferred'] = 'inferred'
+
+
+class ContextEntry(StrictModel):
+    entry_id: Name
+    symbol: Name
+    kind: str = 'resource'
+    scope: str = ''
+    source_kind: Literal['sql', 'sas', 'dbt']
+    evidence: list[SourceReference]
+    origin: Literal['source_declared', 'artifact_declared', 'ai_inferred']
+    revision: int = Field(default=0, ge=0)
+    available: bool = True
+
+
+class MissingContext(StrictModel):
+    symbol: Name
+    kind: str = 'resource'
+    scope: str = ''
+    operation_id: str = ''
+    reason: str = 'missing_definition'
+    evidence: list[SourceReference] = Field(default_factory=list)
+    status: str = 'unresolved'
+    consumed_fingerprint: str = ''
+
+
+class PartExtraction(StrictModel):
+    part_id: Name
+    operations: list[OperationRecord] = Field(default_factory=list)
+    assets: list[ResourceReference] = Field(default_factory=list)
+    definitions: list[ContextEntry] = Field(default_factory=list)
+    missing_context: list[MissingContext] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+    coverage: Literal['complete', 'partial', 'unsupported', 'no_operations'] = 'partial'
+    omitted: bool = False
+    superseded_fact_ids: list[str] = Field(default_factory=list)
+    revision: int = Field(default=0, ge=0)
+    protocol_version: Literal[5] = EXTRACTION_VERSION
+
+
+class FileExtraction(StrictModel):
+    file_id: Name
+    content_hash: Name
+    source_kind: Literal['sql', 'sas', 'dbt']
+    part_ids: list[str]
+    operations: list[OperationRecord] = Field(default_factory=list)
+    assets: list[ResourceReference] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+    processed: bool = True
+    semantic_coverage: str = 'partial'
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    protocol_version: Literal[5] = EXTRACTION_VERSION

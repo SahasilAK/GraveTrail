@@ -30,6 +30,33 @@ class SourceCitationError(ValueError):
     """A fixed host code, safe to retain without source text or provider input."""
 
 
+def decode_extractions(payload, expected_parts):
+    from dataforge.ai_analysis_models import PartExtraction
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    if not isinstance(payload, dict) or set(payload) != {'items'} or not isinstance(payload['items'], list):
+        raise ValueError('invalid_extraction_envelope')
+    expected = {p.part_id for p in expected_parts}
+    valid, errors, seen = {}, {}, set()
+    for item in payload['items']:
+        pid = item.get('part_id') if isinstance(item, dict) else None
+        if not isinstance(pid, str) or pid not in expected:
+            errors[str(pid)] = 'unknown_response_part'
+            continue
+        if pid in seen:
+            valid.pop(pid, None)
+            errors[pid] = 'duplicate_response_part'
+            continue
+        seen.add(pid)
+        try:
+            valid[pid] = PartExtraction.model_validate(item)
+        except ValueError:
+            errors[pid] = 'invalid_extraction_item'
+    for pid in expected - valid.keys():
+        errors.setdefault(pid, 'missing_extraction_item')
+    return valid, errors
+
+
 def _wire_model(model, **overrides):
     # Copy field constraints, not canonical validators that need hydrated source text.
     fields = {name: (field.annotation, deepcopy(field)) for name, field in model.model_fields.items()}

@@ -26,6 +26,47 @@ class SourceSnapshot:
     context_json: str = '{}'
 
 
+def plan_file_parts(source, context, limits):
+    """Prefer whole files; split exact contiguous ranges, never semantic products."""
+    from dataforge.ai_analysis_models import FilePart
+    from dataforge.ai_batching import pack_request
+    if source.source_kind not in {'sql', 'sas', 'dbt'}:
+        return []
+    def part(start, end, index):
+        return FilePart(part_id=stable_id('extraction5', source.file_id, source.content_hash, str(start), str(end)),
+            file_id=source.file_id, content_hash=source.content_hash, source_kind=source.source_kind,
+            start_offset=start, end_offset=end, part_index=index, scope=source.job_id)
+    # Fail fixed protocol/configuration errors before trying source subdivisions.
+    probe = part(0, 0, 0)
+    pack_request([probe], limits, {'sources': {source.file_id: source}})
+    result, start = [], 0
+    boundaries = [end for _, end in _unit_spans(source.code, source.extension)]
+    while start < len(source.code) or not result:
+        end = len(source.code)
+        candidate = part(start, end, len(result))
+        try:
+            pack_request([candidate], limits, {'sources': {source.file_id: source}})
+        except ValueError:
+            low, high, fitting = start + 1, end, start
+            while low <= high:
+                mid = (low + high) // 2
+                try:
+                    pack_request([part(start, mid, len(result))], limits, {'sources': {source.file_id: source}})
+                    fitting, low = mid, mid + 1
+                except ValueError:
+                    high = mid - 1
+            if fitting == start:
+                raise ValueError('minimum_source_part_exceeds_budget') from None
+            natural = [b for b in boundaries if start < b <= fitting]
+            end = max(natural) if natural else fitting
+            candidate = part(start, end, len(result))
+        result.append(candidate)
+        start = candidate.end_offset
+        if start == len(source.code):
+            break
+    return result
+
+
 @dataclass(frozen=True)
 class PreparedAnalysis:
     workspace: str
