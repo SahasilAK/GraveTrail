@@ -112,3 +112,25 @@ Remaining limitations: `ExtractedUsage` has no version field. A usage may resolv
 Local implementation commit: `ac442b6` — preserve column and version ownership. No push was performed during this follow-up.
 
 Final full-suite command: `.venv/Scripts/python.exe -m pytest -q` — **996 passed, 2 skipped**, 223.38 seconds, exit 0. This run includes the final case-insensitive role correction. The two skips remain the Windows symlink-privilege cases. All requested findings are addressed by reproducing regressions and persisted-output checks; the four preceding fixes remain covered. Lint and strict documentation integration also passed as recorded above.
+
+## Follow-up: persisted column traversal and final publication counters — 2026-10-23
+
+Both findings were verified before implementation. The regression command produced **5 failed, 1 passed**: three persisted producer/dependency ID mismatches (same-file, cross-file and scoped explicit-version chains) and two final-counter omissions. The passing clean-selected case protects exclusion of retained uncertain files.
+
+- **Column traversal:** resolved `ai-project` resource references now key persisted columns by the resolved resource asset and case-aware column key. Resource identities already encode scope/version, so the current statement must not split those references. Static parser references, local expression/CTE scopes and unresolved resource identities keep the previous statement-local behavior. Tests compare actual producer target IDs to dependency IDs, traverse all three operations, and repeat traversal after reopening the store. Separate versions, resource scopes, case-sensitive columns and conflicting unresolved writers retain different IDs.
+- **Final counters:** capture the analyzed files' publication metadata and unresolved column ownership identities before adding retained results. Sets deduplicate affected file IDs and graph/publication resource boundaries. `incomplete_files` is the unique affected-file count; `coverage_gaps` is that count plus distinct unresolved resource boundaries; `unresolved` includes those boundaries and the existing extraction messages. Public AI documentation clarifies these counters. Persisted report summaries retain the same final values after reopening. A successful commit still reports `complete=False` and does not prove model accuracy.
+
+New coverage lives in `tests/test_ai_traversal_counters.py`: seven cases covering three persisted chains, selected-run publication-only/extraction-plus-publication/clean counters, and case/scope/unresolved identity separation. The run tests use deterministic HTTP mock responses; no live provider is involved.
+
+Verification with repository `.venv/Scripts/python.exe`:
+
+- `-m pytest tests/test_ai_traversal_counters.py -q`: **7 passed**, 3.54 seconds, exit 0.
+- `-m pytest tests/test_ai_traversal_counters.py tests/test_ai_version_publication.py tests/test_ai_saved_publication.py tests/test_ai_linking_review.py tests/test_ai_operation_graph.py tests/test_ai_consolidation_review.py tests/test_ai_resumable_files.py tests/test_transformations.py tests/test_sql_transformations.py tests/test_sas_transformations.py tests/test_transformation_sas_integration.py tests/test_column_qol.py -q`: **150 passed**, 17.68 seconds, exit 0.
+- `-m ruff check src ui tests scripts`: all checks passed.
+- `git diff --check`: clean.
+
+Limitations: previously materialized AI column rows require reanalysis/republication to acquire the corrected IDs; no automatic historical-data migration is introduced. Unresolved identities remain conservative boundaries. These tests demonstrate deterministic persistence/traversal and truthful bookkeeping, not live-model semantic accuracy. No paid/live provider calls, dependencies, framework, database or generation feature were introduced.
+
+Final verification: `.venv/Scripts/python.exe -m pytest -q` — **1003 passed, 2 skipped**, 214.17 seconds, exit 0. Both skips remain the Windows symlink-privilege tests. `scripts/docs/build.py` passed strict validation of 42 public pages, 8 assets, local links/anchors, search and publication inventory (236 search entries). Lint and diff checks passed. No requested finding or validation remains incomplete.
+
+Local implementation commit: `e585825` — link saved columns and count coverage. No push was performed.

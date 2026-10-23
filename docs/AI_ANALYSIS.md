@@ -65,6 +65,14 @@ relationship was extracted. A valid quote/range proves traceability, not semanti
 correctness. Model-reported completeness is a signal and never a runtime accuracy
 oracle. Missing, ambiguous, cyclic and dynamic semantics stay explicit.
 
+Final counters include uncertainty found while adapting results for publication.
+`incomplete_files` counts each analyzed file once, even when extraction, linking
+and column publication all identify gaps. `coverage_gaps` adds distinct unresolved
+resource boundaries from linking and publication to that file count; it is not a
+count of files alone. `unresolved` counts those resource boundaries plus extraction
+messages. Retained results from files outside this run do not inflate these counts.
+Successful publication does not establish semantic completeness.
+
 The operation graph preserves evidence, scopes, versions and dependency roles.
 Duplicate writers do not establish filename-based execution order. SAS stateful
 constructs retain their original details or explicit limitations. Targeted upstream
