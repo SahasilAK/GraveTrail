@@ -58,3 +58,23 @@ def test_unknown_compatible_model_never_loads_openai_tokenizer(monkeypatch):
     import sys
     monkeypatch.setitem(sys.modules, 'tiktoken', None)
     assert request_budget(model(), 'source', 8000).count_method == 'utf8_bytes_plus_estimated_framing'
+
+
+def test_reasoning_reservation_is_subtracted_only_when_separately_accounted():
+    included = model(reasoning_tokens=2000, reasoning_accounting='included_output')
+    separate = model(reasoning_tokens=2000, reasoning_accounting='shared_context')
+    assert request_budget(included, '{}', 8000).input_limit == 58500
+    assert request_budget(separate, '{}', 8000).input_limit == 56500
+
+
+def test_matching_optional_tokenizer_works_offline_with_pinned_asset(monkeypatch):
+    pytest.importorskip('tiktoken')
+    import requests
+    monkeypatch.setattr(requests, 'get', lambda *a, **k: pytest.fail('Encoding downloaded during preview'))
+    profile = Profile(provider='OpenAI', base_url='https://api.openai.com/v1', model='gpt-4o',
+                      max_tokens=8000, source_limit_policy='token_capacity')
+    profile.model_capabilities = bind_capabilities(ModelCapabilities(context_tokens=70000, source='manual'), profile)
+    budget = request_budget(profile, 'hello world ' * 100, 8000)
+    assert budget.fits
+    assert budget.count_method == 'tiktoken_text_plus_estimated_framing'
+    assert budget.input_count < len(('hello world ' * 100).encode())

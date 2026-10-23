@@ -8,8 +8,6 @@ import re
 import time
 import uuid
 from contextlib import ExitStack
-from dataclasses import asdict
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Self
 from urllib.parse import quote, urlparse
@@ -17,16 +15,8 @@ from urllib.parse import quote, urlparse
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from dataforge.ai_analysis_models import (
-    AnalysisUnit,
-    LineageReviewResponse,
-    NormalizedFact,
-    ProjectLineageResponse,
-    UnitAttemptResult,
-)
-from dataforge.ai_budget import project_profile, request_allowance
+from dataforge.ai_analysis_models import ExtractionEnvelope
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
-from dataforge.ai_wire import SourceCitationError
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
 from dataforge.connections import connection_scope, current_connections
@@ -36,7 +26,6 @@ from dataforge.model_capabilities import (
     ModelDescriptor,
     bind_capabilities,
     capability_identity,
-    execution_profile,
     merge_descriptors,
     normalize_model,
 )
@@ -52,11 +41,10 @@ PROVIDERS = {"OpenAI": "https://api.openai.com/v1", "Anthropic": "https://api.an
     "Databricks": "https://your-workspace.cloud.databricks.com", "Azure OpenAI": "https://your-resource.openai.azure.com",
     "Gemini": "https://generativelanguage.googleapis.com/v1beta", "OpenRouter": "https://openrouter.ai/api/v1"}
 MANUAL_TASKS = ["sas_lineage", "sql_lineage", "lineage_validation", "column_usage", "code_explanation"]
-PROJECT_TASKS = ["project_lineage", "lineage_review"]
+PROJECT_TASKS = ["project_lineage"]
 ROUTABLE_TASKS = MANUAL_TASKS + PROJECT_TASKS
 TASKS = MANUAL_TASKS  # Existing manual selectors must keep their five contracts.
-PROJECT_SCHEMAS = {"project_lineage": ProjectLineageResponse, "lineage_review": LineageReviewResponse}
-PROJECT_PROTOCOLS = {'project_lineage': ('4', '6'), 'lineage_review': ('2', '4')}
+PROJECT_SCHEMAS = {"project_lineage": ExtractionEnvelope}
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 if not PROMPTS.is_dir():
     PROMPTS = Path(__file__).resolve().parent / "prompts"
@@ -89,7 +77,7 @@ class Profile(BaseModel):
     auth: Literal["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"] = "auto"
     timeout: float = Field(default=30, ge=1, le=3600)
     retries: int = Field(default=1, ge=0, le=2)
-    max_tokens: int = Field(default=2048, ge=64, le=32000)
+    max_tokens: int = Field(default=2048, ge=64, le=2147483647)
     context_chars: int = Field(default=16000, ge=500, le=200000)
     temperature: float | None = Field(default=None, ge=0, le=2)
     structured: bool = True
@@ -863,344 +851,6 @@ def _transmitted_schema(value: Any) -> Any:
 
 
 REVIEW_CONTEXT_CHARS = 2000
-
-
-def review_batches(facts: list[NormalizedFact], *, unit=None, settings=None) -> list[list[dict[str, Any]]]:
-    """Split normalized facts into deterministic pages bounded by review context size.
-
-    Args:
-        facts: Normalized facts to serialize for review.
-
-    Returns:
-        Ordered groups of serialized facts.
-    """
-    references = {}
-    if unit is not None:
-        from dataforge.ai_citations import source_references
-        for reference in source_references(unit, settings, partial=True):
-            references.setdefault(reference['text'], []).append(reference['reference_id'])
-    batches, current = [], []
-    for fact in facts:
-        candidate = fact.model_dump(exclude={'detail','evidence','unit_id','evidence_key','status','origin'}, exclude_defaults=True)
-        if candidate.get('expression') in references:
-            candidate['expression_references'] = references[candidate.pop('expression')]
-        proposed = [*current,candidate]
-        if current and (len(proposed)>100 or len(json.dumps(proposed,ensure_ascii=False,separators=(',',':')))>REVIEW_CONTEXT_CHARS):
-            batches.append(current)
-            current=[]
-        current.append(candidate)
-    if current:
-        batches.append(current)
-    return batches
-
-
-@lru_cache(maxsize=2)
-def _analysis_schema_text(task: str) -> str:
-    """Serialize the validation schema sent for a project analysis task.
-
-    Args:
-        task: Project analysis task whose wire schema is required.
-
-    Returns:
-        Compact JSON for the transmitted schema.
-    """
-    from dataforge.ai_wire import wire_schema
-    return json.dumps(_transmitted_schema(wire_schema(task)), sort_keys=True, separators=(',', ':'))
-
-
-def analysis_prompt_hash(task: str, *, focused: bool=False, source_kind: str='sql') -> str:
-    """Hash the system prompt, focus instructions, and transmitted schema.
-
-    Args:
-        task: Project analysis task.
-        focused: Whether unit-specific focus instructions are included.
-
-    Returns:
-        SHA-256 prompt identity.
-    """
-    system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
-    template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
-    focus_path = PROMPTS/task/'focus.md'
-    if focused and focus_path.exists():
-        system += '\n' + focus_path.read_text(encoding='utf-8')
-    if task == 'project_lineage':
-        handler = PROMPTS / task / (source_kind + '.md')
-        if handler.exists():
-            system += '\n' + handler.read_text(encoding='utf-8')
-    return hashlib.sha256((system + template + _analysis_schema_text(task)).encode()).hexdigest()
-
-
-def analysis_prompt(unit: AnalysisUnit, task: str, execution: Any, *, reserve_review: bool=False) -> tuple[str, str, str]:
-    """Build the system prompt, bounded JSON user context, and prompt identity.
-
-    Args:
-        unit: Analysis unit whose source and evidence are under review.
-        task: Project analysis task.
-        execution: Current analysis context and privacy settings.
-        reserve_review: Whether to reserve maximum review candidate space.
-
-    Returns:
-        System prompt, serialized user prompt, and prompt hash.
-
-    Raises:
-        ValueError: If the requested task is not a supported project task.
-    """
-    if task not in PROJECT_SCHEMAS:
-        raise ValueError('Unknown project task')
-    system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
-    template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
-    schema_text = _analysis_schema_text(task)
-    schema = json.loads(schema_text)
-    digest = analysis_prompt_hash(task, focused=bool(unit.focus), source_kind=unit.source_kind)
-    if unit.focus and (PROMPTS/task/'focus.md').exists():
-        system += '\n' + (PROMPTS/task/'focus.md').read_text(encoding='utf-8')
-    if task == 'project_lineage':
-        handler = PROMPTS / task / (unit.source_kind + '.md')
-        if handler.exists():
-            system += '\n' + handler.read_text(encoding='utf-8')
-    from dataforge.ai_source_views import compact_catalog, context_records
-    context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':compact_catalog(execution.catalog),
-               'schema':schema,'schema_version':PROJECT_PROTOCOLS[task][0]}
-    if getattr(execution, 'resolution_context', None):
-        system += '\n' + (PROMPTS / 'project_resolution' / 'system.md').read_text(encoding='utf-8')
-        context['resolution'] = execution.resolution_context
-    if task in {'project_lineage', 'lineage_review'}:
-        from dataforge.ai_citations import source_references
-        context['expression_references'] = [
-            {k: v for k, v in reference.items()
-             if k not in {'start_offset', 'end_offset', 'text'}}
-            for reference in source_references(unit, execution.settings, partial=task == 'lineage_review')]
-        if unit.source_focus and task == 'project_lineage':
-            context['partial_expression_references'] = [
-                {k: v for k, v in reference.items() if k != 'text'}
-                for reference in source_references(unit, execution.settings, partial=True) if reference.get('partial')]
-    if unit.focus or unit.source_focus:
-        from dataforge.ai_semantic import source_view, unit_dialect
-        context['unit'].pop('code')
-        context['source_segments'] = source_view(unit, unit_dialect(unit, execution.settings))
-    if unit.source_focus:
-        f = unit.source_focus
-        records = context_records(execution.catalog, execution.settings)
-        if f.context_end > len(records):
-            raise ValueError('Source context index changed')
-        context['catalog'] = []
-        context['settings'] = {}
-        context['context_records'] = records[f.context_start:f.context_end]
-        context['partial_source_view'] = True
-        system += ('\nThis is a partial original-source/context view, never standalone executable code. '
-                   'context_records use JSON Pointer paths into catalog/settings; string slices retain offsets. '
-                   'Sibling tasks cover omitted ranges. Return only source-supported facts and mark coverage partial; '
-                   'report missing dependencies explicitly. Never infer semantics from an omitted range. '
-                   'For an expression spanning views, use partial_expression_references and set derivation.fragment=true. '
-                   'Report only dependency inputs visible in this view, preserving their full-expression roles/scope. '
-                   'The host combines components only after all original expression ranges are covered and validates '
-                   'the complete original derivation; a component is never a complete lineage fact.')
-    context['evidence_reference'] = {'unit_id': unit.unit_id}
-    if task == 'lineage_review':
-        context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review and not execution.review_candidates else execution.review_candidates
-    user = template.replace('{{context}}',json.dumps(context,ensure_ascii=False,separators=(',',':')))
-    return system,user,digest
-
-
-def preview_analysis_routes(store: Store, workspace: str, units: list[AnalysisUnit], execution: Any,
-                            *, tasks: list[str] | None=None) -> dict[str, Any]:
-    """Check routes, full-envelope budgets, credentials, and disclosure permissions offline.
-
-    Args:
-        store: Workspace store used to read profiles and privacy settings.
-        workspace: Workspace identifier.
-        units: Analysis units to include in the capacity preview.
-        execution: Current execution context and configured resource limits.
-        tasks: Optional ordered task list to preview.
-
-    Returns:
-        Route availability, blocked reasons, allowances, and budget totals.
-    """
-    blocked, routes, excluded, allowances = [], {}, [], []
-    tasks = tasks or ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
-    for task in tasks:
-        try:
-            selected = analysis_routes(store, workspace, task)
-        except ValueError as exc:
-            blocked.append({'task': task, 'reason': str(exc)})
-            continue
-        routes[task] = []
-        for index, (pid, profile) in enumerate(selected):
-            configured_profile = profile
-            if len(units) == 1:
-                profile = project_profile(profile, units[0])
-            manager = execution.connections or current_connections()
-            if hasattr(manager, 'for_profile'):
-                manager = manager.for_profile(pid, configured_profile)
-            if profile.key_env and not manager.resolve(profile.key_env):
-                blocked.append({'task': task, 'profile_id': pid, 'reason': 'credential_unavailable'})
-            if not is_local(profile.base_url) and not store.setting(workspace, 'external_llm', False):
-                blocked.append({'task': task, 'profile_id': pid, 'reason': 'external_requests_disabled'})
-            if not is_local(profile.base_url) and not store.setting(workspace, 'allow_full_source', False):
-                blocked.append({'task': task, 'profile_id': pid, 'reason': 'complete_source_permission_required'})
-            incompatible = []
-            for unit in units:
-                system, user, _ = analysis_prompt(unit, task, execution, reserve_review=task == 'lineage_review')
-                allowance = request_allowance(profile, system, user,
-                    privacy_chars=store.setting(workspace, 'max_context_chars', 8000),
-                    context_chars=execution.request.max_context_chars,
-                    reserved_source_chars=min(REVIEW_CONTEXT_CHARS,
-                        (execution.request.max_context_chars or min(profile.context_chars,
-                         store.setting(workspace, 'max_context_chars', 8000))) // 3)
-                        if task == 'lineage_review' and not execution.review_candidates else 0)
-                allowances.append({'task': task, 'unit_id': unit.unit_id, 'path': unit.path, 'profile_id': pid, **asdict(allowance)})
-                incompatible.extend({'task': task, 'unit_id': unit.unit_id, 'profile_id': pid,
-                    'reason': reason, 'required_characters': allowance.required_characters} for reason in allowance.reasons)
-            if incompatible and index:
-                excluded.extend(incompatible)
-                continue
-            blocked.extend(incompatible)
-            routes[task].append({'profile_id': pid, 'provider': profile.provider, 'model': profile.model,
-                'base_url': profile.base_url, 'max_tokens': profile.max_tokens,
-                'timeout': profile.timeout, 'attempts_per_unit': profile.retries + 1})
-    ceiling = sum(p['attempts_per_unit'] for rr in routes.values() for p in rr) * len(units)
-    tokens = sum(p['max_tokens'] * p['attempts_per_unit'] for rr in routes.values() for p in rr) * len(units)
-    if ceiling > execution.request.max_provider_attempts:
-        blocked.append({'reason': 'worst_case_provider_attempt_budget'})
-    if tokens > execution.request.max_output_tokens_total:
-        blocked.append({'reason': 'worst_case_output_reservation_budget'})
-    return {'routes': routes, 'blocked': blocked, 'excluded_routes': excluded, 'allowances': allowances,
-            'valid': not blocked, 'max_provider_attempts': ceiling, 'max_output_tokens_reserved': tokens}
-
-
-def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task: str,
-                         execution: Any) -> UnitAttemptResult | None:
-    """Run routed project extraction with each provider attempt reauthorized and reserved.
-
-    Args:
-        store: Workspace store for immutable source and result records.
-        workspace: Workspace identifier.
-        unit: Analysis unit to submit.
-        task: Project analysis task.
-        execution: Current execution state, permissions, and resource reservations.
-
-    Returns:
-        The final recorded attempt result, if a route was available.
-
-    Raises:
-        ValueError: If budgets, source identity, settings, or provider output are invalid.
-    """
-    execution.check()
-    schema_version, prompt_version = PROJECT_PROTOCOLS[task]
-    routes = analysis_routes(store,workspace,task)
-    system,user,prompt_hash = analysis_prompt(unit,task,execution)
-    manager = execution.connections or current_connections()
-    result = None
-    invocation_start = execution.attempts
-    for pid,profile in routes:
-        configured_profile = profile
-        profile = project_profile(profile, unit)
-        manager = execution.connections or current_connections()
-        if hasattr(manager, 'for_profile'):
-            manager = manager.for_profile(pid, configured_profile)
-        execution.check()
-        allowance = request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000),
-                                      context_chars=execution.request.max_context_chars)
-        if not allowance.valid:
-            if pid != routes[0][0]:
-                continue
-            raise ValueError(', '.join(allowance.reasons))
-        started,attempt_start = time.perf_counter(),execution.attempts
-        usage,raw,validated,metadata = {},'',None,{}
-        outcome,reason,retryable = 'validated','',False
-
-        def before_attempt(active_profile):
-            execution.check()
-            source = store.file(unit.file_id)
-            settings = {k:store.setting(workspace,k,v) for k,v in ParsingSettings().model_dump().items()}
-            if source['workspace_id'] != workspace or source['content_hash'] != unit.content_hash or source_job(source,settings) != unit.job_id:
-                raise ValueError('Source identity changed before provider attempt')
-            if source['raw_content'][unit.start_offset:unit.end_offset] != unit.code:
-                raise ValueError('Unit code differs from the immutable original')
-            current_routes = dict(analysis_routes(store,workspace,task))
-            if pid not in current_routes or execution_profile(project_profile(current_routes[pid], unit)) != execution_profile(active_profile):
-                raise ValueError('Provider route changed before provider attempt')
-            if execution.settings and any(execution.settings.get(k) != v for k,v in settings.items()):
-                raise ValueError('Analysis settings changed before provider attempt')
-            for fid,digest in execution.source_hashes.items():
-                context_source = store.file(fid)
-                if context_source['workspace_id'] != workspace or context_source['content_hash'] != digest:
-                    raise ValueError('Declaration context changed before provider attempt')
-            if not is_local(active_profile.base_url):
-                if not store.setting(workspace,'external_llm',False):
-                    raise ValueError('External LLM requests are disabled')
-                if not store.setting(workspace,'allow_full_source',False):
-                    raise ValueError('Complete source transmission is disabled')
-            from dataforge.ai_rate_limits import QUOTAS, quota_scope
-            wait_until = QUOTAS.admit(quota_scope(active_profile), estimated_input=allowance.estimated_input,
-                reserved_output=active_profile.max_tokens, now=time.time())
-            if wait_until > time.time():
-                execution.wait_provider(wait_until - time.time())
-            return execution.before_attempt(active_profile)
-
-        try:
-            resources = LLMResourceSettings.model_validate({k:store.setting(workspace,k,v)
-                for k,v in LLMResourceSettings().model_dump().items()})
-            with connection_scope(manager), request_slot(store.home,workspace,resources.llm_concurrency), Adapter(
-                    profile,execution.transport,cancelled=execution.cancelled,before_attempt=before_attempt,check=execution.check,
-                    wait=execution.wait_provider, retry_unknown_transports=False,
-                    response_observer=lambda status, limits: _observe_quota(profile, limits)) as adapter:
-                send_user = manager.redact(user) if store.setting(workspace,'redact_secrets',True) else user
-                raw,usage = adapter.complete(system,send_user)
-                metadata = adapter.completion_metadata
-                if execution.attempt_log:
-                    execution.attempt_log[-1].update(outcome='response_received',usage_known=metadata.get('usage_known',False))
-                if execution.attempts - invocation_start > 1:
-                    metadata = {**metadata,'usage_known':False}
-                execution.check()
-                if metadata.get('truncated'):
-                    raise ValueError('Provider output truncated')
-                if len(raw) > 1024*1024:
-                    raise ValueError('Model content exceeds response budget')
-                from dataforge.ai_wire import decode_project_result
-                validated = decode_project_result(task, response_object(raw), unit, settings=execution.settings)
-                if task == 'project_lineage':
-                    validated.assert_unit(unit)
-                else:
-                    validated.assert_candidates({c['candidate_id'] for c in execution.review_candidates})
-                    for decision in validated.decisions:
-                        for citation in decision.evidence:
-                            citation.assert_unit(unit)
-        except (ValueError,ProviderError) as exc:
-            # Pydantic errors include rejected input values; retain only host error codes.
-            outcome = 'quarantined'
-            reason = str(exc)[:500] if isinstance(exc, ProviderError) else 'project_response_contract_invalid'
-            if isinstance(exc, SourceCitationError):
-                reason = str(exc)
-            retryable = isinstance(exc, ProviderError) and exc.retryable
-        record_id = uuid.uuid4().hex
-        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':schema_version,'prompt_version':prompt_version,
-                   'reason':reason,'attempts':execution.attempts-attempt_start,'requested_model':profile.model,
-                   'resolved_model':metadata.get('resolved_model'),'finish_reason':metadata.get('finish_reason'),
-                   'usage_known':metadata.get('usage_known',False),'result':None,
-                   'physical_attempts':execution.attempt_log[attempt_start:]}
-        # Minimal evidence belongs to staged claims; full provider bodies are privacy-opt-in.
-        if store.setting(workspace,'llm_history',False):
-            details.update(context=user,response=raw)
-        safe_details,safe_usage = manager.sanitize(details),manager.sanitize(usage)
-        with store.transaction():
-            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,prompt_version])
-            store.execute('INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                [record_id,workspace,pid,task,unit.file_id,unit.first,prompt_hash,profile.provider,profile.model,
-                 outcome,time.perf_counter()-started,json.dumps(safe_usage),json.dumps(safe_details)])
-        result = UnitAttemptResult(unit_id=unit.unit_id,task=task,result=validated if outcome == 'validated' else None,
-            record_id=record_id,outcome=outcome,reason=manager.redact(reason),usage=safe_usage,usage_known=metadata.get('usage_known',False),
-            attempts=execution.attempts-invocation_start,requested_model=profile.model,resolved_model=metadata.get('resolved_model'),
-            finish_reason=metadata.get('finish_reason'),prompt_hash=prompt_hash)
-        expire_ai_history(store, workspace)
-        if not retryable:
-            return result
-    return result
-
-
-def _observe_quota(profile, limits):
-    from dataforge.ai_rate_limits import QUOTAS, quota_scope
-    QUOTAS.observe(quota_scope(profile), limits)
 
 
 def _completion_request(p, system, user):

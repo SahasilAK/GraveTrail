@@ -1,12 +1,12 @@
 import json
 
 import pytest
+from test_ai_token_budget import model
 
 from dataforge.ai_analysis_models import PartExtraction
 from dataforge.ai_batching import pack_request
 from dataforge.ai_context import SourceSnapshot, plan_file_parts
 from dataforge.ai_wire import decode_extractions
-from test_ai_token_budget import model
 
 
 def source(code, extension='.sql'):

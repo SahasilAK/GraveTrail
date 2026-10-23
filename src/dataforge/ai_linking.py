@@ -17,7 +17,9 @@ def _resource_key(resource, file):
     if resource.identity:
         return resource.identity
     scope = resource.scope or (file.file_id if resource.temporary or name.startswith(('work.', '#')) else '')
-    return file.source_kind + ':' + scope + ':' + name
+    if file.source_kind == 'dbt':
+        return 'dbt:' + scope + ':' + name
+    return name + ('\x1fjob\x1f' + scope if scope else '')
 
 
 def build_operation_graph(file_extractions):
@@ -27,7 +29,8 @@ def build_operation_graph(file_extractions):
         for op in file.operations:
             oid = 'operation:' + op.operation_id
             graph.add_node(oid, kind='operation', operation_id=op.operation_id, file_id=file.file_id,
-                           evidence=[r.model_dump() for r in op.evidence], limitations=op.limitations, order=op.order)
+                           evidence=[r.model_dump() for r in op.evidence], limitations=op.limitations, order=op.order,
+                           unresolved=any(d.status == 'unresolved' for d in op.derivations))
             for resource in op.writes:
                 writers[_resource_key(resource, file)].append((file, op, resource))
     for key, entries in writers.items():
@@ -45,11 +48,16 @@ def build_operation_graph(file_extractions):
             from dataforge.ai_analysis_models import ResourceReference
             for derivation in op.derivations:
                 for dependency in derivation.inputs:
-                    if not any(r.name == dependency.table and str(r.version) == str(dependency.version) for r in reads):
+                    if not any(r.name == dependency.table and r.scope == dependency.scope and str(r.version) == str(dependency.version) for r in reads):
                         reads.append(ResourceReference(name=dependency.table, scope=dependency.scope, version=dependency.version))
             for resource in reads:
                 key = _resource_key(resource, file)
                 entries = [e for e in writers.get(key, []) if e[1].operation_id != op.operation_id]
+                future_only = False
+                if resource.version == '' and op.order is not None:
+                    prior = [e for e in entries if e[0].file_id != file.file_id or e[1].order is None or e[1].order < op.order]
+                    future_only = bool(entries) and not prior
+                    entries = prior
                 if resource.version != '':
                     entries = [e for e in entries if str(e[2].version) == str(resource.version)]
                 if len(entries) > 1 and op.order is not None:
@@ -63,11 +71,11 @@ def build_operation_graph(file_extractions):
                     version = str(output.version) if output.version != '' else (producer.operation_id if len(writers[key]) > 1 else '')
                     rid = key + ('@' + version if version else '')
                 else:
-                    rid = key + ('@unresolved:' + op.operation_id if ambiguous else ('@' + str(resource.version) if resource.version != '' else ''))
+                    rid = key + ('@unresolved:' + op.operation_id if ambiguous else '@external-before:' + op.operation_id if future_only else ('@' + str(resource.version) if resource.version != '' else ''))
                     graph.add_node(rid, kind='resource', name=resource.name, identity=key, version=str(resource.version),
                         external=not ambiguous, unresolved=ambiguous, evidence=[r.model_dump() for r in op.evidence])
                 roles = [(i.role, d.fact_id, ordinal, i.column) for d in op.derivations for ordinal, i in enumerate(d.inputs)
-                         if i.table == resource.name and str(i.version) == str(resource.version)] or [('rowset', '', 0, '')]
+                         if i.table == resource.name and i.scope == resource.scope and str(i.version) == str(resource.version)] or [('rowset', '', 0, '')]
                 for role, fact_id, ordinal, column in roles:
                     graph.add_edge(rid, oid, role=role, fact_id=fact_id, ordinal=ordinal, column=column,
                                    evidence=[r.model_dump() for r in op.evidence])
@@ -153,7 +161,7 @@ def to_publication_results(linked, inventory):
                 derivations.append({'target_table': fact.target_table, 'target_column': fact.target_column,
                     'target_identity': by_name.get(fact.target_table, ''), 'target_version': fact.version,
                     'expression': text, 'category': fact.category, 'scope': fact.scope, 'branch': fact.branch,
-                    'ordinal': fact.ordinal, 'status': 'unresolved' if fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else 'inferred',
+                    'ordinal': fact.ordinal, 'status': 'unresolved' if fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else fact.status,
                     'coverage': [*record.limitations, *(['unknown_wildcard_schema'] if fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else [])],
                     'inputs': [{**i.model_dump(), 'table_identity': dependencies.get((fact.fact_id, j), by_name.get(i.table, ''))}
                                for j, i in enumerate(fact.inputs)]})

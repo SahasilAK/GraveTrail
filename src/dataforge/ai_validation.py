@@ -1,6 +1,26 @@
 """Deterministic project evidence checks over whole originals, never AI quote fragments."""
 from __future__ import annotations
 
+import json
+from dataclasses import asdict, fields
+from functools import lru_cache
+
+import sqlglot
+from pydantic import ValidationError
+from sqlglot import exp
+
+from dataforge.ai_analysis_models import (
+    ClaimDecision,
+    Coverage,
+    NormalizedFact,
+    ProjectLineageResponse,
+    ValidationContext,
+    ValidationReport,
+)
+from dataforge.models import canonical, stable_id
+from dataforge.parsers.sas import parse_sas
+from dataforge.parsers.sql import parse_sql, table_name, target_table
+
 
 def validate_extraction(item, part, source_snapshot):
     """Verify source integrity and internal consistency without semantic approval."""
@@ -9,13 +29,14 @@ def validate_extraction(item, part, source_snapshot):
     item = PartExtraction.model_validate(item).model_copy(deep=True)
     if item.part_id != part.part_id:
         raise ValueError('unexpected_extraction_part')
-    allowed = [part, *part.overlap, *part.context_references]
+    allowed = ([part, *part.overlap] if part.work_kind != 'consolidation' else []) + part.context_references
     def check(ref):
         source = source_snapshot.get(ref.file_id)
         if (source is None or source.content_hash != ref.content_hash or
                 not 0 <= ref.start_offset < ref.end_offset <= len(source.code) or not any(
                     a.file_id == ref.file_id and a.content_hash == ref.content_hash and
-                    a.start_offset <= ref.start_offset < ref.end_offset <= a.end_offset for a in allowed)):
+                    (ref == a if part.work_kind == 'consolidation' else
+                     a.start_offset <= ref.start_offset < ref.end_offset <= a.end_offset) for a in allowed)):
             raise ValueError('invalid_source_reference')
     def refs(values):
         if not values:
@@ -64,6 +85,10 @@ def validate_extraction(item, part, source_snapshot):
             value = fact.model_dump_json()
             if fact.fact_id in seen_facts and seen_facts[fact.fact_id] != value:
                 item.unresolved.append('conflicting_fact:' + fact.fact_id)
+                fact.status = 'unresolved'
+                for previous in op.derivations:
+                    if previous.fact_id == fact.fact_id:
+                        previous.status = 'unresolved'
             seen_facts[fact.fact_id] = value
         value = op.model_dump_json()
         if op.operation_id in operations and operations[op.operation_id].model_dump_json() != value:
@@ -81,25 +106,8 @@ def validate_extraction(item, part, source_snapshot):
         item.coverage = 'partial'
     return item
 
-import json
-from dataclasses import asdict, fields
-from functools import lru_cache
 
-import sqlglot
-from pydantic import ValidationError
-from sqlglot import exp
 
-from dataforge.ai_analysis_models import (
-    ClaimDecision,
-    Coverage,
-    NormalizedFact,
-    ProjectLineageResponse,
-    ValidationContext,
-    ValidationReport,
-)
-from dataforge.models import canonical, stable_id
-from dataforge.parsers.sas import parse_sas
-from dataforge.parsers.sql import parse_sql, table_name, target_table
 
 VALIDATOR_VERSION = "4"
 

@@ -139,12 +139,20 @@ def identifier_name(value):
     return '.'.join(unquote(part) for part in parts)
 
 
+def _visible_lexical_source(unit, segments):
+    masked = _masked_source(unit.code, unit.extension == '.sas')
+    return '\n'.join(masked[s['start_offset']-unit.start_offset:s['end_offset']-unit.start_offset] for s in segments)
+
+
+def visible_identifier_count(unit, segments):
+    # Repeated columns may contribute distinct value/filter/window roles.
+    return sum(1 for _ in _QUALIFIED_IDENTIFIER.finditer(_visible_lexical_source(unit, segments)))
+
+
 def visible_names(unit, segments):
     """Names in disclosed lexical source, excluding comments and string values."""
-    masked = _masked_source(unit.code, unit.extension == '.sas')
-    text = '\n'.join(masked[s['start_offset']-unit.start_offset:s['end_offset']-unit.start_offset] for s in segments)
     names = set()
-    for match in _QUALIFIED_IDENTIFIER.finditer(text):
+    for match in _QUALIFIED_IDENTIFIER.finditer(_visible_lexical_source(unit, segments)):
         names.add(identifier_name(match[0]))
         names.update(identifier_name(part) for part in re.findall(_IDENTIFIER, match[0]))
     return names

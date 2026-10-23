@@ -271,6 +271,40 @@ def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] |
         'cached': sum(j[3] is None for j in jobs) + dbt_counts['cached'], 'started': started, 'dbt_projects': dbt_projects}
 
 
+def retained_publication_results(store, workspace, selected, config, prior_revision):
+    """Read unselected saved publication without parsing or restoring superseded AI."""
+    from dataforge.ai_analysis_store import load_accepted_file_results
+    from dataforge.dbt.persistence import load_committed_dbt_results
+    selected = set(selected)
+    current_ai = store.rows("SELECT 1 FROM ai_analysis_runs WHERE workspace_id=? AND analysis_run_id=? AND status='committed'",
+                           [workspace, prior_revision])
+    parsing_config = {k: v for k, v in config.items() if k != 'dbt'}
+    accepted = load_accepted_file_results(store, workspace, parsing_config) if current_ai else {}
+    dbt = {m['file_id']: parsed for project in load_committed_dbt_results(store, workspace)
+           for m, parsed in project.file_results}
+    published_ids = {row['file_id'] for row in store.rows('SELECT DISTINCT file_id FROM statements WHERE workspace_id=?', [workspace])}
+    result = []
+    for metadata in store.files(workspace):
+        fid = metadata['file_id']
+        if fid in selected or (metadata['parsing_status'] == 'pending' and fid not in published_ids):
+            continue
+        if fid in accepted:
+            result.append(accepted[fid])
+            continue
+        from dataforge.dbt.service import is_dbt
+        if is_dbt(metadata):
+            if fid not in dbt:
+                raise ValueError('Unselected dbt publication changed; include its project for reanalysis')
+            result.append((metadata, dbt[fid]))
+            continue
+        key = stable_id(PARSER_VERSION, metadata['content_hash'], metadata['relative_path'], json.dumps(parsing_config, sort_keys=True))
+        cached = store.rows('SELECT result FROM parse_cache WHERE cache_key=?', [key])
+        if not cached:
+            raise ValueError('Unselected saved publication is incompatible; include affected files for reanalysis')
+        result.append((metadata, ParseResult.from_dict(json.loads(cached[0]['result']))))
+    return result
+
+
 def publish_analysis_results(store: Store, workspace: str, results: list[tuple[dict[str, Any], ParseResult]],
                              config: dict[str, Any], counts: dict[str, Any], *, run_id: str | None=None,
                              progress: Callable[[float, str], None] | None=None,

@@ -2,6 +2,7 @@ import json
 
 import httpx
 import pytest
+from test_ai_resumable_files import configured
 
 from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.ai_analysis_store import load_file_extractions
@@ -9,7 +10,6 @@ from dataforge.ai_linking import link_file_extractions, to_publication_results
 from dataforge.analysis_service import run_analysis
 from dataforge.ingestion import Importer
 from dataforge.store import Store
-from test_ai_resumable_files import configured
 
 
 @pytest.mark.parametrize('family', ['sql', 'sas', 'dbt'])

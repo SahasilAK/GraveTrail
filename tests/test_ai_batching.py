@@ -1,32 +1,22 @@
 import json
+from dataclasses import replace
 
-from dataforge.ai_analysis_models import AnalysisRequest
-from dataforge.ai_context import AIExecutionContext, plan_ai_units
-from dataforge.llm import Profile
-from tests.test_ai_analysis_context import prepared
+from test_ai_file_parts import source
+from test_ai_token_budget import model
 
-
-def test_batch_full_envelope_and_partial_response_identity():
-    from dataforge.ai_batching import batch_prompt, decode_batch_response, pack_batch
-    units = plan_ai_units(prepared('select 1; select 2; select 3;')).units
-    execution = AIExecutionContext(AnalysisRequest(mode='ai', max_files_per_request=1))
-    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', max_tokens=32000, context_chars=100000)
-    batch = pack_batch(units, {u.unit_id: [] for u in units}, execution, p, width=8, privacy_chars=100000)
-    assert len(batch) == 3
-    system, user = batch_prompt(batch, execution, {u.unit_id: [] for u in units})
-    assert all(u.unit_id in user for u in units)
-    assert 'schema' in user and len(system) > 100
-    raw = json.dumps({'items': [{'unit_id': units[0].unit_id, 'coverage': {'status': 'partial'}}]})
-    good, errors = decode_batch_response(raw, batch)
-    assert set(good) == {units[0].unit_id}
-    assert set(errors) == {u.unit_id for u in units[1:]}
-    raw = json.dumps({'items': [{'unit_id': units[0].unit_id}, {'unit_id': units[0].unit_id}]})
-    good, errors = decode_batch_response(raw, batch)
-    assert not good and units[0].unit_id in errors
+from dataforge.ai_batching import pack_request
+from dataforge.ai_context import plan_file_parts
+from dataforge.ai_wire import decode_extractions
 
 
-def test_auto_growth_and_size_failure():
-    from dataforge.ai_batching import next_batch_width
-    assert next_batch_width(1, clean_streak=2, outcome='clean') == 1
-    assert next_batch_width(1, clean_streak=3, outcome='clean') == 2
-    assert next_batch_width(8, clean_streak=9, outcome='size_failure') == 4
+def test_token_fit_supports_more_than_eight_files_and_preserves_partial_siblings():
+    profile = model(200000).model_copy(update={'max_tokens': 32000})
+    sources = [replace(source('select 1;'), file_id=str(i)) for i in range(12)]
+    parts = [part for item in sources for part in plan_file_parts(item, {}, profile)]
+    request = pack_request(parts, profile, {'sources': {s.file_id: s for s in sources}})
+    assert len(request.part_ids) == 12 and request.budget.fits
+    assert request.system.count('Item schema:') == 1
+    assert len(json.loads(request.user)['items']) == 12
+    good, errors = decode_extractions({'items': [{'part_id': parts[0].part_id}]}, parts)
+    assert set(good) == {parts[0].part_id}
+    assert len(errors) == 11

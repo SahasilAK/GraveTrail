@@ -15,7 +15,7 @@ def test_precision_recall_report_exact_counts_and_empty_predictions_are_unknown(
 
 
 def test_offline_default_never_loads_provider_and_reports_insufficient_live_evidence(monkeypatch):
-    monkeypatch.setattr("dataforge.llm.invoke_analysis_unit", lambda *a, **k: pytest.fail("offline called provider"))
+    monkeypatch.setattr("dataforge.llm.Adapter.complete", lambda *a, **k: pytest.fail("offline called provider"))
     report = evaluate()
     assert report["source"] == "parser_baseline" and report["requests"] == 0
     assert report["languages"]["sql"]["table_edges"]["tp"] > 0
@@ -89,52 +89,55 @@ def test_both_project_archives_keep_manifest_edges_roots_and_work_behavior():
     assert report["sas"]["work_tables"] == 16
 
 
-def test_live_harness_mock_receives_original_only_and_compares_three_modes(monkeypatch):
-    from dataforge.ai_analysis_models import Coverage, ProjectLineageResponse, UnitAttemptResult
-
-    monkeypatch.setenv("DATAFORGE_AI_BENCHMARK_LIVE", "1")
-    monkeypatch.setenv("DATAFORGE_OMNIROUTE_API_KEY", "synthetic-test-secret")
-
-    def fake(store, workspace, unit, task, execution):
-        assert task == "project_lineage" and "create table" in unit.code.lower()
-        assert "expected" not in unit.code and "value_inputs" not in unit.code
-        assert all("edges" not in entry and "derivations" not in entry for entry in execution.catalog)
-        execution.attempts += 1
-        return UnitAttemptResult(unit_id=unit.unit_id, task=task,
-            result=ProjectLineageResponse(unit_id=unit.unit_id, coverage=Coverage(status="partial")))
-
-    monkeypatch.setattr("dataforge.llm.invoke_analysis_unit", fake)
-    report = evaluate(live=True, case_ids=["constant"])
-    assert report["requests"] == 1 and report["input_tokens"] is None
-    assert set(report["mode_comparison"]) == {"parser", "ai", "hybrid"}
-    assert report["mode_comparison"]["hybrid"]["sql"]["table_edges"]["tp"] == 1
-    assert report["languages"]["sql"]["table_edges"]["precision"] is None
-    assert "synthetic-test-secret" not in json.dumps(report)
 
 
-def test_live_harness_two_cases_have_distinct_profile_identities(monkeypatch):
-    from dataforge.ai_analysis_models import ProjectLineageResponse, UnitAttemptResult
+
+
+
+def install_mock_benchmark(monkeypatch, *, truncated=False):
+    import httpx
+
+    from dataforge.llm import Adapter
     monkeypatch.setenv('DATAFORGE_AI_BENCHMARK_LIVE', '1')
+    monkeypatch.setenv('DATAFORGE_AI_BENCHMARK_CONTEXT_TOKENS', '70000')
     monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', 'synthetic-test-secret')
-    monkeypatch.setattr('dataforge.llm.invoke_analysis_unit', lambda store, workspace, unit, task, execution:
-        UnitAttemptResult(unit_id=unit.unit_id, task=task,
-                          result=ProjectLineageResponse(unit_id=unit.unit_id)))
+    seen = []
+    original = Adapter.__init__
+    def provider(request):
+        context = json.loads(json.loads(request.content)['messages'][-1]['content'])
+        assert 'expected' not in context and 'gold' not in context
+        for item in context['items']:
+            assert 'value_inputs' not in item['source']
+            seen.append(item['part']['part_id'])
+        result = {'items': [{'part_id': item['part']['part_id'], 'coverage': 'partial'} for item in context['items']]}
+        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(result)},
+            'finish_reason': 'length' if truncated else 'stop'}], 'usage': {'prompt_tokens': 11, 'completion_tokens': 23}})
+    def initialize(self, profile, *args, **kwargs):
+        kwargs['transport'] = httpx.MockTransport(provider)
+        original(self, profile, *args, **kwargs)
+    monkeypatch.setattr(Adapter, '__init__', initialize)
+    return seen
+
+
+def test_live_harness_uses_current_independent_pipeline_without_gold_disclosure(monkeypatch):
+    seen = install_mock_benchmark(monkeypatch)
+    report = evaluate(live=True, case_ids=['constant'])
+    assert report['requests'] == 1 and len(seen) == 1
+    assert set(report['mode_comparison']) == {'parser', 'ai'}
+    assert report['languages']['sql']['table_edges']['precision'] is None
+    assert 'synthetic-test-secret' not in json.dumps(report)
+
+
+def test_live_harness_two_cases_keep_distinct_source_identities(monkeypatch):
+    seen = install_mock_benchmark(monkeypatch)
     report = evaluate(live=True, case_ids=['constant', 'assignments'])
     assert report['case_coverage']['processed'] == 2
+    assert len(seen) == len(set(seen)) == 2
 
 
 def test_quarantined_response_keeps_known_metered_usage(monkeypatch):
-    from dataforge.ai_analysis_models import UnitAttemptResult
     from scripts.benchmark_ai_analysis import _cases, _live_predictions
-
-    monkeypatch.setenv('DATAFORGE_AI_BENCHMARK_LIVE', '1')
-    monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', 'synthetic-test-secret')
-    def truncated(store, workspace, unit, task, execution):
-        execution.attempts += 1
-        return UnitAttemptResult(unit_id=unit.unit_id, task=task, outcome='quarantined', attempts=1,
-                                 usage_known=True, usage={'prompt_tokens': 11, 'completion_tokens': 23},
-                                 finish_reason='length')
-    monkeypatch.setattr('dataforge.llm.invoke_analysis_unit', truncated)
+    install_mock_benchmark(monkeypatch, truncated=True)
     _, stats = _live_predictions(list(_cases())[:1], key_env='DATAFORGE_OMNIROUTE_API_KEY', max_attempts=1, max_seconds=60)
     assert stats['failed_cases'] == 1 and stats['requests'] == 1
     assert stats['usage_known'] is True

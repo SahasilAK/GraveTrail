@@ -345,6 +345,7 @@ class FilePart(SourceReference):
     context_ids: list[str] = Field(default_factory=list)
     context_hashes: list[str] = Field(default_factory=list)
     context_references: list[SourceReference] = Field(default_factory=list)
+    context_omissions: list[str] = Field(default_factory=list)
     overlap: list[SourceReference] = Field(default_factory=list)
     work_kind: Literal['extraction', 'context_completion', 'consolidation'] = 'extraction'
 
@@ -377,6 +378,7 @@ class ExtractedDerivation(StrictModel):
     branch: int = Field(default=0, ge=0)
     version: Version = ''
     ordinal: int = Field(default=0, ge=0)
+    status: Literal['inferred', 'unresolved'] = 'inferred'
 
 
 class OperationRecord(StrictModel):
@@ -427,6 +429,7 @@ class PartExtraction(StrictModel):
     coverage: Literal['complete', 'partial', 'unsupported', 'no_operations'] = 'partial'
     omitted: bool = False
     superseded_fact_ids: list[str] = Field(default_factory=list)
+    superseded_operation_ids: list[str] = Field(default_factory=list)
     revision: int = Field(default=0, ge=0)
     protocol_version: Literal[5] = EXTRACTION_VERSION
 
@@ -443,3 +446,7 @@ class FileExtraction(StrictModel):
     semantic_coverage: str = 'partial'
     provenance: dict[str, Any] = Field(default_factory=dict)
     protocol_version: Literal[5] = EXTRACTION_VERSION
+
+
+class ExtractionEnvelope(StrictModel):
+    items: list[PartExtraction]

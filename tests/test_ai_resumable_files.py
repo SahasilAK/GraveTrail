@@ -1,13 +1,13 @@
 import json
 
 import httpx
+from test_ai_token_budget import model
 
 from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.ai_analysis_store import load_file_extractions
 from dataforge.analysis_service import run_analysis
 from dataforge.ingestion import Importer
 from dataforge.store import Store
-from test_ai_token_budget import model
 
 
 def configured(store, workspace, profile=None):

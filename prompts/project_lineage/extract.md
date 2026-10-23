@@ -19,3 +19,5 @@ For context_completion, return only the affected part's updated extraction and
 explicit superseded_fact_ids. Preserve unaffected facts and record remaining gaps.
 For consolidation, reconcile saved file-local details and preserve all original
 facts, evidence IDs and dependency roles. Contradictory assignments stay unresolved.
+When merging operation fragments, list their saved host operation IDs in
+superseded_operation_ids. Only supersede supplied facts/operations; never invent IDs.

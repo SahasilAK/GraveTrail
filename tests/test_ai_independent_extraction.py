@@ -1,10 +1,10 @@
 import pytest
+from test_ai_file_parts import source
+from test_ai_token_budget import model
 
 from dataforge.ai_analysis_models import OperationRecord, PartExtraction, ResourceReference, SourceReference
 from dataforge.ai_context import plan_file_parts
 from dataforge.ai_validation import validate_extraction
-from test_ai_file_parts import source
-from test_ai_token_budget import model
 
 
 def test_valid_source_backed_inference_does_not_invoke_static_semantics(monkeypatch):

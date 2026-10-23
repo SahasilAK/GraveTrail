@@ -126,13 +126,14 @@ def test_profile_specific_credentials_never_cross_extraction_and_review(tmp_path
 
 
 def test_actual_mcp_http_sdk_previews_offline_and_builds_one_shared_path(tmp_path, monkeypatch):
-    import json
     from datetime import timedelta
+
     import httpx
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
-    from dataforge.agent.mcp_server import http_app
     from test_ai_resumable_files import configured, empty_provider
+
+    from dataforge.agent.mcp_server import http_app
     store = Store(tmp_path)
     w = store.create_workspace('SDK')
     Importer(store, w).files([('q.sql', b'select 1; select 2;')], {'.sql'})

@@ -21,3 +21,5 @@ CLI/MCP/UI reuse these readers; generated SQL has separate compiled_sql evidence
 
 - `ai_context.py` — Safe project/resource/YAML/macro/artifact prompt context, explicit context-only files, exact source/artifact units; no computed parser lineage answers or execution.
 Project AI/hybrid is supported; AI-only keeps validated facts and structural inventory. Unknown generated-to-original/Python/dynamic semantics remain partial.
+
+prepare_ai_dbt_inventory in service.py reuses safe discovery/resource readers and saved AI file results to publish dbt inventory/data relationships without calling static model lineage. AI part scopes retain project/package/resource identity.

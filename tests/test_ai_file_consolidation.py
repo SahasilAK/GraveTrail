@@ -1,8 +1,9 @@
+from test_ai_file_parts import source
+from test_ai_token_budget import model
+
 from dataforge.ai_analysis_models import OperationRecord, PartExtraction, ResourceReference, SourceReference
 from dataforge.ai_composition import assemble_file_extraction, plan_file_consolidation
 from dataforge.ai_context import plan_file_parts
-from test_ai_file_parts import source
-from test_ai_token_budget import model
 
 
 def test_consolidation_is_bounded_and_original_details_survive_overflow():

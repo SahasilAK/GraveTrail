@@ -114,16 +114,18 @@ Profile timeout cap is3600seconds; current run deadlines still clamp HTTP waits.
 
 Build Python artifacts now include dependency-overrides.txt in manifest alongside wheel/sdist; native locked export stays authoritative. Exact Streamlit/Pillow exception and installer/removal policy live in SECURITY.md.
 
-## Resumable AI pipeline
-- `ai_batching.py` — Full-envelope bounded groups and independent item decoding; adaptive width 1/2/4/8.
-- `ai_scheduler.py` — Owner-thread quota/slot admission and physical journals; HTTP-only workers, item checkpoint transactions, retries/fallback and unknown-response recovery.
-- `ai_pipeline_store.py` — Schema9 request/attempt/dependency/link records; conservative lifetime recovery counters.
-- `ai_rate_limits.py` — Sanitized Retry-After/reset normalization and shared endpoint/group request/token buckets.
-- `ai_linking.py` — Stored-fact identity/field indexes, ambiguous writers/SCC reports and dbt publication composition.
-- `ai_resolution.py` — At most two source-bound follow-ups; stop without newly validated facts.
-`analysis_service.py` separates finite lifetime allowances from automatic execution windows, pins complete publication freshness, reuses relevant unit checkpoints and supports SQL/SAS/dbt. Static parser algorithms are unchanged. `ai_context.py` uses an indexed relevant catalog and compact inventory revision; dbt selection discloses project closure.
+## File extraction protocol 5
+- `analysis_service.py` — Shared UI/CLI/MCP loop: pin, plan, dispatch, validate/save each item, freeze one completion wave, consolidate saved details, deterministic atomic publication. Durable run-wide ceilings and explicit unknown-outcome retry; no execution windows/workers/review branches.
+- `ai_context.py` — Immutable selected snapshots, family gate, exact contiguous whole-file/part planning against the final metadata/context/settings envelope.
+- `ai_context_index.py` — Run-local scoped definitions over authorized pinned sources and saved AI definitions. Quoted names, dbt resources/configuration, SAS macros/parameters/libraries; explicit ambiguity and budget omissions; one frozen completion wave.
+- `ai_analysis_models.py` — Versioned FilePart/PartExtraction/FileExtraction, operation/resource/role/evidence records and explicit fact/operation supersession. Older models are historical readers.
+- `ai_budget.py` — Bound manual/discovered token limits, complete serialized provider body, combined/separate/reasoning reserve, optional pinned offline tiktoken; unknown models use conservative UTF-8 bytes plus framing. Legacy character settings are only an explicit disclosure migration choice.
+- `ai_batching.py` — One stable instructions/schema prefix and items envelope; input and output budgets determine width without an eight-item policy.
+- `ai_validation.py` — New structural/source ownership/range/identity validation independent of parser approval. Remaining old semantic functions serve historical wire/store contracts.
+- `ai_composition.py` — Bounded saved-detail consolidation and validated supersession; original parts persist. Legacy fragment readers remain for historical records.
+- `ai_analysis_store.py`, `ai_pipeline_store.py` — Existing DuckDB run/unit/snapshot and migration-9 request/physical-attempt storage; no second graph database.
+- `ai_linking.py` — Versioned NetworkX MultiDiGraph, scoped identities, parallel dependency roles, future/ambiguous writers, cycles, selected upstream slices and publication adapter. No provider or generation calls.
+- `ai_semantic.py`, `ai_source_views.py`, `ai_citations.py`, `ai_wire.py` — Legacy source-reference/wire decoding helpers; outside the new planner/executor dependency chain except shared extraction envelope decoding.
+- `tokenizer_assets/` — Pinned o200k_base data for optional offline matching OpenAI text counting. See [tokenizer_assets/KNOWLEDGE.md](tokenizer_assets/KNOWLEDGE.md).
 
-## Adaptive source/context analysis
-- `ai_source_views.py` — Exact anchored source windows, compact catalog/indexed context slices, immutable range identities and quoted lexical visibility; no fabricated executable chunks.
-- `ai_composition.py` — Persisted original-backed dependency components, complete range/input validation, bounded component review and deterministic expression composition.
-`ai_budget.py` distinguishes disclosed domain characters from complete prompt token capacity and creates sortable per-file sizing rows. Nullable max_context_chars is shared across runtime/UI/CLI/MCP; resume pins the explicit override. Generic source parents reconcile once. Checkpoints/reports/snapshots reference large exact expressions by source offsets; support refresh hydrates them and reports cache one verified source per hash/encoding. Static parser algorithms are unchanged.
+Static builds use the static extractor even after AI publication. Selected AI rebuilds retain compatible unselected saved publication and manual merges without static re-extraction. Semantic completeness is never proven by a model's complete flag. SQL generation, SAS translation and optimization remain deferred.

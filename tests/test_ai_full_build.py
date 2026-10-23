@@ -1,82 +1,71 @@
 import json
 
 import httpx
+import pytest
+from test_ai_resumable_files import configured
 
 from dataforge.ai_analysis_models import AnalysisRequest
+from dataforge.ai_analysis_store import load_file_extractions
+from dataforge.ai_linking import link_file_extractions, to_publication_results
 from dataforge.analysis_service import run_analysis
-from dataforge.database_maintenance import inspect_database
 from dataforge.ingestion import Importer
-from dataforge.llm import Profile
 from dataforge.store import Store
 
 
-def configured(store, w):
-    p = Profile(provider='OpenAI compatible', base_url='http://localhost:1234', model='m',
-                retries=0, context_chars=100000, max_tokens=8192)
-    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', p.model_dump_json()])
-    for k, v in [('default_profile', 'p'), ('max_context_chars', 100000), ('llm_concurrency', 2)]:
-        store.set_setting(w, k, v)
-
-
-def test_single_start_builds_mixed_sources_with_real_batch_transport(tmp_path):
+@pytest.mark.parametrize('family', ['sql', 'sas', 'dbt'])
+def test_independent_three_file_chain_publishes_and_relinks_without_provider(tmp_path, monkeypatch, family):
     store = Store(tmp_path)
-    w = store.create_workspace('mixed pipeline')
-    configured(store, w)
-    Importer(store, w).files([('q.sql', b'create table mart.out as select id from raw.a;'),
-                              ('q.sas', b'data work.out; set raw.sas; run;')], {'.sql', '.sas'})
-    Importer(store, w).files([('dbt_project.yml', b'name: shop'),
-        ('models/base.sql', b'select 1 as id'),
-        ('models/use.sql', b"select id from {{ ref('base') }}")], set(), source_kind='dbt')
-    seen = []
+    workspace = store.create_workspace(family)
+    configured(store, workspace)
+    fixtures = {}
+    for i in range(3):
+        source, target = ('raw.input' if i == 0 else f't{i-1}'), f't{i}'
+        code = (f'data {target}; set {source}; id=id; run;' if family == 'sas' else
+                f'create table {target} as select id from {source};')
+        if family == 'dbt':
+            code = 'select id from ' + ("{{ source('raw', 'input') }}" if i == 0 else "{{ ref('t" + str(i-1) + "') }}")
+        path = ('models/' if family == 'dbt' else '') + target + ('.sas' if family == 'sas' else '.sql')
+        fixtures[path] = (source, target, code)
+    files = [(path, code.encode()) for path, (_, _, code) in fixtures.items()]
+    if family == 'dbt':
+        files += [('dbt_project.yml', b'name: shop\nversion: 1.0'),
+                  ('models/schema.yml', b'version: 2\nsources:\n  - name: raw\n    tables:\n      - name: input')]
+    Importer(store, workspace).files(files, {'.sql', '.sas'} if family != 'dbt' else set(), source_kind='dbt' if family == 'dbt' else 'files')
     def provider(request):
-        body = json.loads(request.content)
-        text = body['messages'][1]['content']
-        ctx = json.loads(text[text.find('{'):])
-        contexts = ctx.get('items', [ctx])
-        results = []
-        for context in contexts:
-            u = context['unit']
-            seen.append(u['unit_id'])
-            result = {'unit_id': u['unit_id'], 'coverage': {'status': 'partial'}}
-            target = 'mart.out' if u['path'] == 'q.sql' else 'use' if u['path'].endswith('/use.sql') else None
-            if target:
-                source = 'raw.a' if target == 'mart.out' else 'base'
-                operation = 'CREATE' if target == 'mart.out' else 'DBT_MODEL_READ'
-                result.update(relationships=[{'source': source, 'target': target, 'operation': operation,
-                    'evidence': {'unit_id': u['unit_id']}}], derivations=[{
-                    'target_table': target, 'target_column': 'id', 'expression': 'id', 'category': 'direct',
-                    'inputs': [{'table': source, 'column': 'id'}], 'evidence': {'unit_id': u['unit_id']}}])
-            results.append(result)
-        payload = {'items': results} if 'items' in ctx else results[0]
-        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(payload)}, 'finish_reason': 'stop'}],
-                                       'usage': {'prompt_tokens': 10, 'completion_tokens': 10}})
-    result = run_analysis(store, w, AnalysisRequest(mode='ai', max_files_per_request=2, max_parallel_requests=2),
-                          transport=httpx.MockTransport(provider))
+        context = json.loads(json.loads(request.content)['messages'][-1]['content'])
+        items = []
+        for item in context['items']:
+            part, path = item['part'], item['path']
+            result = {'part_id': part['part_id'], 'coverage': 'complete'}
+            if path in fixtures:
+                source, target, code = fixtures[path]
+                ref = {k: part[k] for k in ('file_id', 'content_hash', 'start_offset', 'end_offset')}
+                expr = {**ref, 'start_offset': code.index('id'), 'end_offset': code.index('id') + 2}
+                result['operations'] = [{'operation_id': target, 'kind': 'CREATE', 'evidence': [ref],
+                    'reads': [{'name': source}], 'writes': [{'name': target}],
+                    'derivations': [{'fact_id': target + ':id', 'target_table': target, 'target_column': 'id',
+                        'inputs': [{'table': source, 'column': 'id', 'role': 'value'},
+                                   {'table': source, 'column': 'id', 'role': 'row_filter'}],
+                        'evidence': [ref], 'expression': expr}]}]
+            items.append(result)
+        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps({'items': items})}, 'finish_reason': 'stop'}]})
+    monkeypatch.setattr('dataforge.services.prepare_analysis_results', lambda *a, **k: pytest.fail('Static parser preparation called'))
+    result = run_analysis(store, workspace, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
     assert result.status == 'committed', result.reasons
-    assert len(seen) == len(set(seen)) == 4
-    assert len(store.edges(w)) == 2
-    assert store.rows('SELECT count(*) AS n FROM column_derivations')[0]['n'] == 2
-    assert inspect_database(store)['ok']
-    assert store.rows('SELECT count(*) AS n FROM ai_link_checkpoints')[0]['n'] == 1
-    store.close()
-
-
-def test_parallel_unknown_response_needs_explicit_retry_after_reopen(tmp_path):
-    store = Store(tmp_path)
-    w = store.create_workspace('unknown parallel')
-    configured(store, w)
-    Importer(store, w).files([('a.sql', b'select 1;'), ('b.sql', b'select 2;')], {'.sql'})
-    calls = []
-    def lost(request):
-        calls.append(1)
-        raise httpx.ReadTimeout('synthetic loss')
-    result = run_analysis(store, w, AnalysisRequest(mode='ai', max_parallel_requests=2),
-                          transport=httpx.MockTransport(lost))
-    assert result.status == 'awaiting_continuation'
+    assert len(store.edges(workspace)) == 3
+    actual = {(r['source'], r['target']) for r in store.rows('''SELECT a.name AS source,b.name AS target
+        FROM edges e JOIN assets a ON e.source_id=a.asset_id JOIN assets b ON e.target_id=b.asset_id
+        WHERE e.workspace_id=?''', [workspace])}
+    assert actual == {('raw.input', 't0'), ('t0', 't1'), ('t1', 't2')}
+    assert store.rows('SELECT count(*) AS n FROM column_derivations')[0]['n'] == 3
+    assert store.rows('SELECT count(*) AS n FROM column_dependencies')[0]['n'] == 6
+    if family == 'dbt':
+        assert store.rows('SELECT count(*) AS n FROM dbt_resources')[0]['n'] >= 4
+    saved = load_file_extractions(store, workspace, result.run_id)
+    inventory = {f['file_id']: {**f, 'source_text': store.snapshot_content(f)} for f in store.files(workspace)}
+    before = [p.to_dict() for _, p in to_publication_results(link_file_extractions(saved, {}), inventory)]
     store.close()
     store = Store(tmp_path)
-    resumed = run_analysis(store, w, AnalysisRequest(mode='ai', resume_run_id=result.run_id),
-                           transport=httpx.MockTransport(lost))
-    assert resumed.reasons == ['unknown_inflight_request_requires_explicit_retry']
-    assert len(calls) == 2
+    after = [p.to_dict() for _, p in to_publication_results(link_file_extractions(load_file_extractions(store, workspace, result.run_id), {}), inventory)]
+    assert before == after
     store.close()

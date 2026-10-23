@@ -11,22 +11,33 @@ def test_retry_after_seconds_date_and_bad_values():
     assert retry_delay(0, {'retry-after': 'nan'}, now=100, jitter=0) == 1
 
 
-def test_input_output_and_request_buckets_gate_independently():
-    from dataforge.ai_rate_limits import QuotaRegistry, normalize_rate_limits
-    registry = QuotaRegistry()
-    snapshot = normalize_rate_limits('Anthropic', {
-        'anthropic-ratelimit-requests-remaining': '10',
-        'anthropic-ratelimit-input-tokens-remaining': '5',
-        'anthropic-ratelimit-input-tokens-reset': '1970-01-01T00:02:00Z',
-    }, now=100)
-    registry.observe('shared', snapshot)
-    assert registry.admit('shared', estimated_input=10, reserved_output=1, now=100) == 120
-    assert registry.admit('shared', estimated_input=10, reserved_output=1, now=121) == 121
+def test_retry_and_credit_exhaustion_use_durable_attempts(tmp_path, monkeypatch):
+    import httpx
+    from test_ai_resumable_files import configured, empty_provider
+    from test_ai_token_budget import model
 
-
-def test_quota_group_coordinates_profiles_without_secret_identity():
-    from dataforge.ai_rate_limits import quota_scope
-    from dataforge.llm import Profile
-    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='a')
-    assert quota_scope(p) == quota_scope(p.model_copy(update={'model': 'b', 'key_env': 'DATAFORGE_OTHER'}))
-    assert quota_scope(p.model_copy(update={'quota_group': 'team'})) == 'group:team'
+    from dataforge.ai_analysis_models import AnalysisRequest
+    from dataforge.analysis_service import run_analysis
+    from dataforge.ingestion import Importer
+    from dataforge.store import Store
+    store = Store(tmp_path)
+    workspace = store.create_workspace('rate feedback')
+    configured(store, workspace, model().model_copy(update={'retries': 1}))
+    Importer(store, workspace).files([('a.sql', b'select 1;')], {'.sql'})
+    calls, waits = [], []
+    good = empty_provider([])
+    def throttled(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={'retry-after': '3'})
+        return good(request)
+    monkeypatch.setattr('dataforge.llm.Adapter._wait', lambda self, seconds: waits.append(seconds))
+    result = run_analysis(store, workspace, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(throttled))
+    assert result.status == 'committed'
+    assert result.counts['requests'] == 2 and waits == [3]
+    credits = run_analysis(store, workspace, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(
+        lambda request: httpx.Response(429, json={'error': {'code': 'insufficient_quota'}})))
+    assert credits.status == 'awaiting_continuation'
+    assert credits.reasons == ['provider_credits_exhausted']
+    assert credits.counts['requests'] == 1
+    store.close()

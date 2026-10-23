@@ -75,6 +75,9 @@ def controls(store, workspace, file_ids):
     except ValueError as exc:
         status.warning(str(exc))
         return request, False
+    except Exception:
+        status.error('Could not prepare AI analysis. Review source selection and provider settings.')
+        return request, False
 
 
 def start(store, workspace, request):

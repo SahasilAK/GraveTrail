@@ -1,6 +1,20 @@
 """Source-backed expression components; only complete, validated unions become facts."""
 from __future__ import annotations
 
+import json
+from collections import defaultdict
+from dataclasses import dataclass
+
+from dataforge.ai_analysis_models import (
+    DerivationCandidate,
+    DerivationInput,
+    EvidenceCitation,
+    NormalizedFact,
+    ProjectLineageResponse,
+    ValidationReport,
+)
+from dataforge.models import stable_id
+
 
 def merge_extraction_revision(original, replacement):
     """Retain original facts unless explicitly superseded; conflicts stay visible."""
@@ -10,6 +24,10 @@ def merge_extraction_revision(original, replacement):
     superseded = set(replacement.superseded_fact_ids)
     if superseded - known:
         raise ValueError('unknown_superseded_fact')
+    retired = set(replacement.superseded_operation_ids)
+    if retired - {op.operation_id for op in result.operations}:
+        raise ValueError('unknown_superseded_operation')
+    result.operations = [op for op in result.operations if op.operation_id not in retired]
     result.revision += 1
     result.superseded_fact_ids = sorted(set(result.superseded_fact_ids) | superseded)
     result.definitions.extend(replacement.definitions)
@@ -29,6 +47,10 @@ def merge_extraction_revision(original, replacement):
                 if value not in values:
                     if name == 'derivations' and any(d.fact_id == value.fact_id for d in values):
                         result.unresolved.append('conflicting_replacement:' + value.fact_id)
+                        for previous in values:
+                            if previous.fact_id == value.fact_id:
+                                previous.status = 'unresolved'
+                        value = value.model_copy(update={'status': 'unresolved'})
                     values.append(value)
     result.operations = list(by_id.values())
     result.omitted |= replacement.omitted
@@ -36,7 +58,6 @@ def merge_extraction_revision(original, replacement):
     return result
 
 
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -47,8 +68,8 @@ class ConsolidationWork:
 
 
 def plan_file_consolidation(parts, limits):
-    from dataforge.ai_budget import request_budget
     from dataforge.ai_batching import extraction_instructions
+    from dataforge.ai_budget import request_budget
     from dataforge.llm import Adapter
     from dataforge.models import stable_id
     if len(parts) < 2:
@@ -62,7 +83,9 @@ def plan_file_consolidation(parts, limits):
         if len({p.part_id for p, _ in entries}) < 2:
             continue
         base = entries[0][0]
-        evidence = [r for _, op in entries for r in op.evidence]
+        evidence = [r for _, op in entries for r in [*op.evidence,
+            *[r for usage in op.usages for r in usage.evidence],
+            *[r for d in op.derivations for r in [*d.evidence, *([d.expression] if d.expression else [])]]]]
         part = base.model_copy(update={'part_id': stable_id('consolidation5', base.file_id, base.content_hash, scope),
             'work_kind': 'consolidation', 'scope': scope,
             'start_offset': min(p.start_offset for p, _ in entries),
@@ -82,29 +105,19 @@ def assemble_file_extraction(source, parts, consolidations, *, provenance):
     from dataforge.ai_analysis_models import FileExtraction, PartExtraction
     combined = PartExtraction(part_id='combined')
     for _, item in parts:
-        combined = merge_extraction_revision(combined, item)
+        combined = merge_extraction_revision(combined, item.model_copy(update={'superseded_fact_ids': [], 'superseded_operation_ids': []}))
     for item in consolidations:
         combined = merge_extraction_revision(combined, item)
     return FileExtraction(file_id=source.file_id, content_hash=source.content_hash, source_kind=source.source_kind,
         part_ids=[p.part_id for p, _ in parts], operations=combined.operations,
         assets=[a for _, result in parts for a in result.assets],
-        unresolved=[*combined.unresolved, *[m.reason + ':' + m.symbol for _, r in parts for m in r.missing_context]],
+        unresolved=[*combined.unresolved, *[m.reason + ':' + m.symbol for _, r in parts for m in r.missing_context],
+                    *['context_not_supplied:' + entry for p, _ in parts for entry in p.context_omissions]],
         semantic_coverage='partial' if combined.unresolved or combined.omitted or any(
             r.coverage not in {'complete', 'no_operations'} or r.missing_context for _, r in parts) else 'model_reported_complete',
         provenance=provenance)
 
-import json
-from collections import defaultdict
 
-from dataforge.ai_analysis_models import (
-    DerivationCandidate,
-    DerivationInput,
-    EvidenceCitation,
-    NormalizedFact,
-    ProjectLineageResponse,
-    ValidationReport,
-)
-from dataforge.models import stable_id
 
 
 def validate_fragment(claim, context, operations, visible, names):

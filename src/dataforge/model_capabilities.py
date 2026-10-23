@@ -20,6 +20,8 @@ class ModelCapabilities(BaseModel):
     output_tokens: TokenLimit | None = None
     window: Literal['combined', 'separate'] = 'combined'
     dynamic: bool = False
+    reasoning_tokens: int = Field(default=0, ge=0)
+    reasoning_accounting: Literal['included_output', 'shared_context'] = 'included_output'
     source: Literal['catalog', 'native', 'runtime', 'manual'] = 'catalog'
     observed_at: float = Field(default_factory=time.time, ge=0)
     identity: str = Field(default='', max_length=64)

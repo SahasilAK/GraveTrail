@@ -1,43 +1,37 @@
-from dataforge.ai_analysis_models import (
-    AnalysisRequest,
-    EvidenceCitation,
-    ProjectLineageResponse,
-    TableRelationship,
-    UnitAttemptResult,
-)
+import json
+
+import httpx
+from test_ai_resumable_files import configured
+
+from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.analysis_service import run_analysis
 from dataforge.ingestion import Importer
-from dataforge.llm import Profile
+from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_dbt_ai_publishes_only_validated_ai_table_facts(tmp_path, monkeypatch):
+def test_dbt_ai_omission_stays_absent_and_explicit_static_build_uses_static_results(tmp_path):
     store = Store(tmp_path)
-    w = store.create_workspace('dbt ai publication')
-    Importer(store, w).files([
-        ('dbt_project.yml', b'name: shop'), ('models/base.sql', b'select 1 as id'),
-        ('models/use.sql', b"select id from {{ ref('base') }}"),
-        ('models/ignored.sql', b"select id from {{ ref('base') }}"),
-    ], set(), source_kind='dbt')
-    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', retries=0, context_chars=100000)
-    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', p.model_dump_json()])
-    store.set_setting(w, 'default_profile', 'p')
-    store.set_setting(w, 'max_context_chars', 100000)
-    def extract(s, w, u, t, e):
-        response = ProjectLineageResponse(unit_id=u.unit_id)
-        if u.path.endswith('use.sql'):
-            response.relationships.append(TableRelationship(source='base', target='use', operation='DBT_MODEL_READ',
-                evidence=EvidenceCitation.from_unit(u)))
-        return UnitAttemptResult(unit_id=u.unit_id, task=t, result=response)
-    monkeypatch.setattr('dataforge.analysis_service.invoke_analysis_unit', extract)
-    report = run_analysis(store, w, AnalysisRequest(mode='ai', max_files_per_request=1, max_parallel_requests=1))
-    assert report.status == 'committed', report.reasons
-    edges = store.edges(w)
-    assert len(edges) == 1
-    assert edges[0]['method'] == 'ai-project'
-    assert store.rows('SELECT count(*) AS n FROM dbt_resources')[0]['n'] == 3
-    # Reopening/parser refresh must not restore withheld static edges.
-    from dataforge.services import analyze
-    analyze(store, w)
+    w = store.create_workspace('dbt extraction choice')
+    configured(store, w)
+    Importer(store, w).files([('dbt_project.yml', b'name: shop'), ('models/base.sql', b'select 1 as id'),
+        ('models/use.sql', b"select id from {{ ref('base') }}"), ('models/ignored.sql', b"select id from {{ ref('base') }}")], set(), source_kind='dbt')
+    def provider(request):
+        context = json.loads(json.loads(request.content)['messages'][-1]['content'])
+        items = []
+        for item in context['items']:
+            part = item['part']
+            result = {'part_id': part['part_id'], 'coverage': 'partial'}
+            if item['path'].endswith('use.sql'):
+                ref = {k: part[k] for k in ('file_id', 'content_hash', 'start_offset', 'end_offset')}
+                result['operations'] = [{'operation_id': 'use', 'kind': 'DBT_MODEL_READ', 'evidence': [ref],
+                    'reads': [{'name': 'base'}], 'writes': [{'name': 'use'}]}]
+            items.append(result)
+        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps({'items': items})}}]})
+    result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
+    assert result.status == 'committed' and not result.complete
     assert len(store.edges(w)) == 1
+    assert store.rows('SELECT count(*) AS n FROM dbt_resources')[0]['n'] == 3
+    analyze(store, w, force=True)
+    assert len(store.edges(w)) == 2
     store.close()

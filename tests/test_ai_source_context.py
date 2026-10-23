@@ -1,9 +1,10 @@
 from dataclasses import replace
 
-from dataforge.ai_context import SourceSnapshot, plan_file_parts
-from dataforge.ai_context_index import build_context_index, context_for_part
 from test_ai_context_index import prepared
 from test_ai_token_budget import model
+
+from dataforge.ai_context import SourceSnapshot, plan_file_parts
+from dataforge.ai_context_index import build_context_index, context_for_part
 
 
 def test_unrelated_source_does_not_change_relevant_context_but_definition_does():

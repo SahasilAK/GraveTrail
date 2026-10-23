@@ -254,14 +254,16 @@ def test_v7_file_snapshots_remove_aggregate_limit_and_preserve_legacy_read(tmp_p
 
 
 def test_durable_final_claims_reference_source_instead_of_repeating_quotes(tmp_path, monkeypatch):
+    from legacy_ai_fixtures import legacy_units
+
     from dataforge.ai_analysis_models import AnalysisRequest, EvidenceCitation
     from dataforge.ai_analysis_store import load_analysis_report, save_claim_decisions, save_run
-    from dataforge.ai_context import plan_ai_units, prepare_analysis
+    from dataforge.ai_context import prepare_analysis
     store = Store(tmp_path)
     w = store.create_workspace('compact final claims')
     code = 'select 1 /*' + 'x' * 50000 + '*/;'
     Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
-    unit = plan_ai_units(prepare_analysis(store, w, AnalysisRequest(mode='hybrid'))).units[0]
+    unit = legacy_units(prepare_analysis(store, w, AnalysisRequest(mode='hybrid'))).units[0]
     save_run(store, w, 'r', mode='hybrid')
     payload = {'evidence': EvidenceCitation.from_unit(unit).model_dump(), 'kind': 'table_edge', 'source': 'a',
         'expression': code, 'detail': {'derivation': {'expression': code}}}
@@ -285,6 +287,8 @@ def test_durable_final_claims_reference_source_instead_of_repeating_quotes(tmp_p
 
 
 def test_large_expressions_reference_original_in_checkpoints_and_snapshots(tmp_path):
+    from legacy_ai_fixtures import legacy_units
+
     from dataforge.ai_analysis_models import (
         AnalysisRequest,
         EvidenceCitation,
@@ -297,14 +301,14 @@ def test_large_expressions_reference_original_in_checkpoints_and_snapshots(tmp_p
         save_run,
         save_validation_checkpoint,
     )
-    from dataforge.ai_context import plan_ai_units, prepare_analysis
+    from dataforge.ai_context import prepare_analysis
     from dataforge.models import Operation, ParseResult
     store = Store(tmp_path)
     w = store.create_workspace('large original expression')
     expression = "'" + 'x' * (17 * 1024 * 1024) + "'"
     code = 'SELECT ' + expression + ' AS x;'
     Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
-    unit = plan_ai_units(prepare_analysis(store, w, AnalysisRequest(mode='ai')), adaptive=True).units[0]
+    unit = legacy_units(prepare_analysis(store, w, AnalysisRequest(mode='ai')), adaptive=True).units[0]
     save_run(store, w, 'r', mode='ai')
     report = ValidationReport(accepted=[NormalizedFact(kind='derivation', unit_id=unit.unit_id, evidence_key='k',
         candidate_id='c', evidence=EvidenceCitation.from_unit(unit), expression=expression,
@@ -325,6 +329,8 @@ def test_large_expressions_reference_original_in_checkpoints_and_snapshots(tmp_p
 
 
 def test_large_expression_provenance_survives_support_refresh(tmp_path):
+    from legacy_ai_fixtures import legacy_units
+
     from dataforge.ai_analysis_models import AnalysisRequest, EvidenceCitation
     from dataforge.ai_analysis_store import (
         attach_published_support,
@@ -332,13 +338,13 @@ def test_large_expression_provenance_survives_support_refresh(tmp_path):
         save_claim_decisions,
         save_run,
     )
-    from dataforge.ai_context import plan_ai_units, prepare_analysis
+    from dataforge.ai_context import prepare_analysis
     from dataforge.services import prepare_analysis_results, publish_analysis_results
     store = Store(tmp_path)
     w = store.create_workspace('source reference support')
     code = "CREATE TABLE b AS SELECT '" + 'x' * 5000 + "' AS x;"
     Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
-    unit = plan_ai_units(prepare_analysis(store, w, AnalysisRequest(mode='ai'))).units[0]
+    unit = legacy_units(prepare_analysis(store, w, AnalysisRequest(mode='ai'))).units[0]
     results, config, counts = prepare_analysis_results(store, w)
     op = results[0][1].operations[0]
     op.evidence_key = 'original'

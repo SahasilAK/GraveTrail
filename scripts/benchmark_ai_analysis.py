@@ -7,7 +7,6 @@ import json
 import math
 import os
 import re
-import sys
 import tempfile
 import time
 from collections import defaultdict
@@ -16,7 +15,7 @@ from zipfile import ZipFile
 
 from dataforge.ai_analysis_models import AnalysisRequest, AnalysisUnit, ValidationContext
 from dataforge.ai_reconciliation import normalize_parser_facts
-from dataforge.ai_validation import expression_key, validate_project_response
+from dataforge.ai_validation import expression_key
 from dataforge.models import canonical, stable_id
 from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
@@ -99,28 +98,29 @@ def prediction_from_facts(facts, *, abstain=False):
     return result
 
 
+
+
 def _live_predictions(cases, *, key_env, max_attempts, max_seconds, max_tokens=4096):
-    """Fixed synthetic inputs and one fixed loopback route, with the normal runtime policy/budget gates."""
+    """Explicitly authorized synthetic evaluation through current file extraction."""
     if os.environ.get('DATAFORGE_AI_BENCHMARK_LIVE') != '1':
         raise ValueError('Set DATAFORGE_AI_BENCHMARK_LIVE=1 and pass --live to authorize synthetic calls')
     if not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', key_env):
         raise ValueError('Live benchmark requires an application-prefixed credential reference')
-    from dataforge.ai_context import AIExecutionContext, plan_ai_units, prepare_analysis
-    from dataforge.ai_reconciliation import reconcile_candidates
+    context_tokens = int(os.environ.get('DATAFORGE_AI_BENCHMARK_CONTEXT_TOKENS', '0'))
+    if context_tokens < 1024:
+        raise ValueError('Configure DATAFORGE_AI_BENCHMARK_CONTEXT_TOKENS from the actual gateway limit')
+    from dataforge.ai_analysis_store import load_file_extractions
+    from dataforge.analysis_service import run_analysis
     from dataforge.connections import RuntimeConnections
     from dataforge.ingestion import Importer
-    from dataforge.llm import Profile, invoke_analysis_unit
+    from dataforge.llm import Profile
+    from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
     from dataforge.store import Store
-
     connections = RuntimeConnections()
     if not connections.resolve(key_env):
         raise ValueError('Configured benchmark credential is unavailable')
-    predictions, completed, processed_units, requests, usage_known, failures = {}, 0, 0, 0, True, 0
-    input_tokens, output_tokens = 0, 0
-    hybrid_predictions = {}
-    failures_by_case = {}
-    resolved_models = set()
-    receipts = []
+    predictions, receipts, failures = {}, [], {}
+    requests, processed_units = 0, 0
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='gravetrail-ai-gold-') as directory:
         store = Store(directory)
@@ -129,97 +129,57 @@ def _live_predictions(cases, *, key_env, max_attempts, max_seconds, max_tokens=4
                 remaining = max_seconds - (time.monotonic() - started)
                 if requests >= max_attempts or remaining < 30:
                     break
-                from sqlglot import Dialect
-                if case.get('dialect', '') not in Dialect.classes:
-                    failures += 1
-                    failures_by_case[case['id']] = 'unsupported_dialect'
-                    continue
                 workspace = store.create_workspace('Synthetic semantic benchmark')
                 Importer(store, workspace).files([(case['source'], case['code'].encode())], {'.sql', '.sas'})
                 profile = Profile(provider='OmniRoute', base_url='http://localhost:20128/v1',
-                    model='auto/best-reasoning', key_env=key_env, retries=0, timeout=min(90, remaining),
-                    max_tokens=max_tokens, context_chars=200000)
+                    model=os.environ.get('DATAFORGE_AI_BENCHMARK_MODEL', 'auto/best-reasoning'), key_env=key_env,
+                    retries=0, timeout=min(90, remaining), max_tokens=max_tokens, source_limit_policy='token_capacity')
+                profile.model_capabilities = bind_capabilities(ModelCapabilities(context_tokens=context_tokens,
+                    output_tokens=max_tokens, source='manual', dynamic=profile.model.startswith('auto/')), profile)
                 profile_id = stable_id(workspace, 'benchmark')
-                store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)',
-                              [profile_id, workspace, 'Synthetic benchmark', profile.model_dump_json()])
-                for setting, value in [('default_profile', profile_id), ('llm_chunk_chars', 100000),
-                                       ('max_context_chars', 100000), ('default_job', case['job'])]:
+                store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', [profile_id, workspace, 'Synthetic benchmark', profile.model_dump_json()])
+                for setting, value in [('default_profile', profile_id), ('default_job', case['job']), ('dialect', case.get('dialect', ''))]:
                     store.set_setting(workspace, setting, value)
-                store.set_setting(workspace, 'dialect', case.get('dialect', ''))
-                request = AnalysisRequest(mode='ai', max_provider_attempts=max_attempts - requests,
-                                          max_seconds=max(30, min(14400, int(remaining))))
-                prepared = prepare_analysis(store, workspace, request)
-                plan = plan_ai_units(prepared, max_chars=100000)
-                execution = AIExecutionContext(request, connections=connections, settings=prepared.settings,
-                    source_hashes={s.file_id: s.content_hash for s in prepared.sources})
-                facts, hybrid_facts, abstain, failed = [], [], False, False
-                try:
-                    if plan.blocked:
-                        raise ValueError('Synthetic benchmark plan blocked')
-                    parsed = _context(case).parser_result
-                    for unit in plan.units:
-                        if time.monotonic() - started >= max_seconds:
-                            raise TimeoutError('benchmark_deadline')
-                        execution.catalog = plan.context_for(unit)
-                        attempt = invoke_analysis_unit(store, workspace, unit, 'project_lineage', execution)
-                        if attempt is not None:
-                            receipts.append({'case_id': case['id'], 'unit_id': unit.unit_id,
-                                'outcome': attempt.outcome, 'reason': attempt.reason,
-                                'finish_reason': attempt.finish_reason, 'usage_known': attempt.usage_known,
-                                'usage': attempt.usage, 'attempts': attempt.attempts,
-                                'requested_model': attempt.requested_model, 'resolved_model': attempt.resolved_model,
-                                'prompt_hash': attempt.prompt_hash})
-                            if attempt.resolved_model:
-                                resolved_models.add(attempt.resolved_model)
-                        if attempt is None or attempt.outcome != 'validated' or attempt.result is None:
-                            failures_by_case[case['id']] = 'no_route' if attempt is None else attempt.outcome
-                            failed = True
-                            break
-                        context = ValidationContext(unit=unit, workspace_id=workspace,
-                            source_text=case['code'], settings=prepared.settings, parser_result=parsed)
-                        validated = validate_project_response(attempt.result, context)
-                        facts.extend(validated.accepted)
-                        hybrid_facts.extend(reconcile_candidates(parsed, validated, 'hybrid', context=context).facts)
-                        processed_units += 1
-                        abstain |= bool(validated.unresolved or validated.rejected
-                                        or validated.coverage.status in {'partial', 'unsupported'})
-                except (ValueError, OSError, TimeoutError) as exc:
-                    failures_by_case[case['id']] = type(exc).__name__
-                    failed = True
-                requests += execution.attempts
-                if failed:
-                    failures += 1
-                    usage_known = False
+                result = run_analysis(store, workspace, AnalysisRequest(mode='ai', max_provider_attempts=max_attempts-requests,
+                    max_seconds=max(30, min(14400, int(remaining)))), connections=connections)
+                attempts = store.rows('SELECT status,details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=?', [workspace, result.run_id])
+                requests += len(attempts)
+                receipts.extend({'case_id': case['id'], 'outcome': row['status'], **json.loads(row['details'])} for row in attempts)
+                if result.status != 'committed':
+                    failures[case['id']] = result.status
                     continue
-                predictions[case['id']] = prediction_from_facts(facts, abstain=abstain)
-                hybrid_predictions[case['id']] = prediction_from_facts(hybrid_facts, abstain=abstain)
-                completed += 1
-                print(json.dumps({'benchmark_completed': completed, 'requests': requests,
-                                  'failed_cases': failures}), file=sys.stderr, flush=True)
+                prediction = {metric: [] for metric in METRICS}
+                prediction['abstain'] = bool(result.counts.get('coverage_gaps'))
+                for file in load_file_extractions(store, workspace, result.run_id):
+                    processed_units += len(file.part_ids)
+                    for operation in file.operations:
+                        start = min(r.start_offset for r in operation.evidence if r.file_id == file.file_id)
+                        prediction['table_edges'].extend([start, canonical(r.name), canonical(w.name)] for r in operation.reads for w in operation.writes)
+                        for usage in operation.usages:
+                            context = {'value': 'SELECT', 'row_filter': 'WHERE', 'join': 'JOIN', 'order': 'ORDER BY', 'partition': 'PARTITION BY'}.get(usage.context, usage.context.upper())
+                            prediction['direct_usages'].append([start, canonical(usage.table), canonical(usage.column), context])
+                        for fact in operation.derivations:
+                            target = [start, canonical(fact.target_table), canonical(fact.target_column), fact.scope,
+                                      str(fact.version), fact.branch, fact.ordinal]
+                            expression = case['code'][fact.expression.start_offset:fact.expression.end_offset] if fact.expression else ''
+                            prediction['derivations'].append([*target, expression_key(expression), fact.category])
+                            for item in fact.inputs:
+                                metric = 'value_dependencies' if item.role == 'value' else 'row_dependencies'
+                                prediction[metric].append([*target, canonical(item.table), canonical(item.column), item.scope, str(item.version), item.role])
+                predictions[case['id']] = prediction
         finally:
             store.close()
-    # Quarantine affects quality, not metering. Every physical call needs one known receipt.
-    usage_known = bool(requests) and sum(r['attempts'] for r in receipts) == requests
-    input_tokens, output_tokens = 0, 0
-    for receipt in receipts:
-        usage_known &= receipt['usage_known'] and receipt['attempts'] == 1
-        for name, aliases in [('input_tokens', ('input_tokens', 'prompt_tokens', 'promptTokenCount')),
-                              ('output_tokens', ('output_tokens', 'completion_tokens', 'candidatesTokenCount'))]:
-            value = next((receipt['usage'][k] for k in aliases
-                          if type(receipt['usage'].get(k)) is int and receipt['usage'][k] >= 0), None)
-            if value is None:
-                usage_known = False
-            elif name == 'input_tokens':
-                input_tokens += value
-            else:
-                output_tokens += value
-    return predictions, {'processed': completed, 'processed_units': processed_units, 'requests': requests,
-                         'usage_known': usage_known and bool(requests), 'failed_cases': failures,
-                         'hybrid_predictions': hybrid_predictions,
-                         'failures_by_case': failures_by_case, 'resolved_models': sorted(resolved_models),
-                         'receipts': receipts,
-                         'input_tokens': input_tokens if usage_known and requests else None,
-                         'output_tokens': output_tokens if usage_known and requests else None}
+    usage_known = bool(receipts) and all(r.get('usage_known') for r in receipts)
+    totals = {}
+    for name, aliases in [('input_tokens', ('input_tokens', 'prompt_tokens', 'promptTokenCount')),
+                           ('output_tokens', ('output_tokens', 'completion_tokens', 'candidatesTokenCount'))]:
+        values = [next((r.get('usage', {}).get(k) for k in aliases if type(r.get('usage', {}).get(k)) is int), None) for r in receipts]
+        usage_known &= all(v is not None for v in values)
+        totals[name] = sum(v for v in values if v is not None)
+    return predictions, {'processed': len(predictions), 'processed_units': processed_units, 'requests': requests,
+        'usage_known': usage_known, 'failed_cases': len(failures), 'failures_by_case': failures,
+        'resolved_models': sorted({r['resolved_model'] for r in receipts if r.get('resolved_model')}),
+        'receipts': receipts, **{k: v if usage_known else None for k, v in totals.items()}}
 
 
 def _wilson(successes, total):
@@ -304,8 +264,7 @@ def evaluate(*, predictions=None, live=False, key_env='DATAFORGE_OMNIROUTE_API_K
     if live:
         report['mode_comparison'] = {
             'parser': evaluate(case_ids=case_ids)['languages'],
-            'ai': languages,
-            'hybrid': evaluate(case_ids=case_ids, predictions={'predictions': stats['hybrid_predictions']})['languages']}
+            'ai': languages}
         report['comparison_requests_shared'] = True
     return report
 
@@ -353,100 +312,17 @@ def evaluate_projects():
 
 
 def evaluate_scale(units=1000, *, files=1, max_files_per_request=None, max_parallel_requests=None, scenario='scale'):
-    """Real transport/storage lifecycle, synthetic units only; no provider/network dependency."""
-    import tracemalloc
+    """Nonempty golden transport qualification; units now means semantic files."""
+    from scripts.qualify_ai_context import evaluate as qualify
+    if max_files_per_request is not None or max_parallel_requests is not None or scenario == 'mixed':
+        raise ValueError('Legacy mixed/worker/width qualification is superseded by single-family token-bounded fixtures')
+    return {family: qualify(family=family, files=units, interrupt=scenario == 'recovery') for family in ('sql', 'sas', 'dbt')}
 
-    import httpx
-
-    from dataforge.analysis_service import preview_analysis, run_analysis
-    from dataforge.ingestion import Importer
-    from dataforge.llm import Profile
-    from dataforge.store import Store
-    if not 1 <= files <= units <= 200000:
-        raise ValueError('Scale qualification requires 1,000Ã¢â‚¬â€œ5,000 synthetic units')
-    seen = []
-    def respond(request):
-        body = json.loads(request.content)
-        text = body['messages'][-1]['content']
-        context = json.loads(text[text.index('{'):])
-        items = context.get('items', [context])
-        if scenario == 'rate-limit' and not getattr(respond, 'throttled', False):
-            respond.throttled = True
-            return httpx.Response(429, headers={'Retry-After': '0'})
-        results = []
-        for item in items:
-            seen.append(item['unit']['unit_id'])
-            results.append({'unit_id': item['unit']['unit_id'], 'coverage': {'status': 'no_operations'}})
-        payload = {'items': results} if 'items' in context else results[0]
-        return httpx.Response(200, json={'message': {'content': json.dumps(payload)},
-            'done_reason': 'stop', 'prompt_eval_count': 1, 'eval_count': 1})
-    started = time.perf_counter()
-    tracemalloc.start()
-    executions = 0
-    with tempfile.TemporaryDirectory(prefix='gravetrail-ai-scale-') as directory:
-        store = Store(directory)
-        try:
-            workspace = store.create_workspace('Synthetic continuation qualification')
-            entries = [(f'scale/{i}.sql', ''.join(f'select {j};\n' for j in range(i, units, files)).encode())
-                       for i in range(files)]
-            if scenario == 'mixed':
-                if files < 3:
-                    raise ValueError('Mixed qualification requires at least three source files')
-                entries = []
-                for i in range(files - 1):
-                    statements = [j for j in range(i, units - 1, files - 1)]
-                    code = ''.join(f'proc sql; select {j}; quit;\n' if i == 0 else f'select {j};\n' for j in statements)
-                    entries.append((f'scale/{i}.sas' if i == 0 else f'scale/{i}.sql', code.encode()))
-                Importer(store, workspace).files(entries, {'.sql', '.sas'})
-                Importer(store, workspace).files([('dbt/dbt_project.yml', b'name: benchmark'),
-                    ('dbt/models/base.sql', b'select 1 as id')], set(), source_kind='dbt')
-            else:
-                Importer(store, workspace).files(entries, {'.sql'})
-            profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock', retries=1 if scenario == 'rate-limit' else 0, context_chars=100000, max_tokens=64 if scenario == 'scale' else 8192)
-            store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', workspace, 'mock', profile.model_dump_json()])
-            store.set_setting(workspace, 'default_profile', 'p')
-            store.set_setting(workspace, 'max_context_chars', 100000)
-            store.set_setting(workspace, 'llm_concurrency', 4)
-            request = AnalysisRequest(mode='hybrid', max_provider_attempts=100 if scenario == 'recovery' else 2000,
-                auto_continue=scenario != 'recovery', max_files_per_request=max_files_per_request,
-                max_parallel_requests=max_parallel_requests)
-            preview = preview_analysis(store, workspace, request)
-            while True:
-                report = run_analysis(store, workspace, request, transport=httpx.MockTransport(respond))
-                executions += 1
-                print(json.dumps({'scale_execution': executions, 'processed': report.counts.get('processed', 0),
-                    'requests': len(seen), 'status': report.status}), file=sys.stderr, flush=True)
-                if report.status == 'committed':
-                    break
-                if report.status != 'awaiting_continuation' or executions > (units // 100) + 1:
-                    raise ValueError('Scale continuation did not finish')
-                if store.rows('SELECT * FROM analysis_runs'):
-                    raise ValueError('Partial graph published before completion')
-                # Reopen the actual durable store between bounded executions.
-                store.close()
-                store = Store(directory)
-                request = request.model_copy(update={'resume_run_id': report.run_id})
-            _, peak = tracemalloc.get_traced_memory()
-            max_record = store.rows('SELECT max(octet_length(encode(result))) AS n FROM ai_analysis_units')[0]['n']
-            if not (len(seen) == len(set(seen)) == units == report.counts['processed']):
-                raise ValueError('Scale unit coverage mismatch or repeated request')
-            if peak > 512 * 1024 * 1024 or max_record > 16 * 1024 * 1024:
-                raise ValueError('Scale qualification exceeded its measured memory or record bound')
-            return {'synthetic_units': units, 'source_files': files, 'scenario': scenario, 'executions': executions, 'requests': report.counts['requests'],
-                'unique_requested_units': len(set(seen)), 'processed': report.counts['processed'],
-                'initial_selected_units': preview['selected_units'], 'final_status': report.status,
-                'publication_count': len(store.rows('SELECT * FROM analysis_runs')),
-                'max_unit_record_bytes': max_record, 'python_peak_bytes': peak,
-                'elapsed_seconds': round(time.perf_counter() - started, 3), 'live_provider_calls': 0,
-                'exact_coverage': len(seen) == len(set(seen)) == units == report.counts['processed']}
-        finally:
-            store.close()
-            tracemalloc.stop()
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true')
-    parser.add_argument('--scenario', choices=['existing', 'mixed', 'rate-limit', 'recovery', 'scale'], default='existing')
+    parser.add_argument('--scenario', choices=['existing', 'recovery', 'scale'], default='existing')
     parser.add_argument('--files', type=int, default=1)
     parser.add_argument('--units', type=int)
     parser.add_argument('--max-files-per-request', type=int)

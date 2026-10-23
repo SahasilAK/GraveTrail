@@ -119,14 +119,13 @@ def render(store: Store, workspace: str) -> None:
         timeout = st.number_input("Request timeout (seconds)", 1, 3600, int(config.get("timeout", 30)),
             key=prefix + '_timeout', help='Up to one hour per request. The AI analysis run budget may shorten this wait.')
         retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)), key=prefix + '_retries')
-        max_tokens = st.number_input("Maximum output tokens", 64, 32000, key=prefix + '_max_tokens', on_change=customize_output)
+        max_tokens = st.number_input("Maximum output tokens", 64, 2147483647, key=prefix + '_max_tokens', on_change=customize_output)
         context = st.number_input("Profile source context character limit", 500, 200000, key=prefix + '_context', on_change=customize_context)
         temperature_enabled = st.checkbox("Send temperature parameter", value=config.get("temperature") is not None, key=prefix + '_send_temperature')
         temperature = st.number_input("Temperature", 0., 2., float(config.get("temperature") or 0.), step=.1, key=prefix + '_temperature')
         structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True), key=prefix + '_structured')
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
-        quota_group = st.text_input('Shared provider quota group', config.get('quota_group', ''), key=prefix + '_quota_group',
-            help='Optional non-secret account/project label shared by profiles using the same quota. Empty groups coordinate conservatively by endpoint.')
+        quota_group = config.get('quota_group', '')  # Historical profile round-trip only.
     values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
                   context_mode=context_mode, output_mode=output_mode,
@@ -235,10 +234,15 @@ def render(store: Store, workspace: str) -> None:
             output_tokens = st.number_input('Model output limit', 64, 2147483647,
                 value=(capabilities.output_tokens if capabilities else None) or int(max_tokens))
             separate = st.checkbox('Separate input and output windows', value=bool(capabilities and capabilities.window == 'separate'))
+            reasoning_separate = st.checkbox('Reasoning uses a separate shared-context reserve',
+                value=bool(capabilities and capabilities.reasoning_accounting == 'shared_context'))
+            reasoning = st.number_input('Separate reasoning tokens', 0, 2147483647,
+                value=capabilities.reasoning_tokens if capabilities else 0) if reasoning_separate else 0
             if profile:
                 capabilities = bind_capabilities(ModelCapabilities(context_tokens=int(context_tokens),
                     input_tokens=int(input_tokens) if input_tokens else None, output_tokens=int(output_tokens),
-                    window='separate' if separate else 'combined', source='manual'), profile)
+                    window='separate' if separate else 'combined', source='manual', reasoning_tokens=reasoning,
+                    reasoning_accounting='shared_context' if reasoning_separate else 'included_output'), profile)
         policies = ['unconfirmed', 'token_capacity', 'explicit']
         source_policy = st.selectbox('Source disclosure limit policy', policies,
             index=policies.index(config.get('source_limit_policy', 'unconfirmed')),

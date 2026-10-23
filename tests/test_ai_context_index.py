@@ -1,9 +1,10 @@
 import json
 
+from test_ai_token_budget import model
+
 from dataforge.ai_analysis_models import ContextEntry, PartExtraction, SourceReference
 from dataforge.ai_context import PreparedAnalysis, SourceSnapshot, plan_file_parts
 from dataforge.ai_context_index import build_context_index, context_for_part
-from test_ai_token_budget import model
 
 
 def prepared(*sources):
@@ -37,3 +38,23 @@ def test_inferred_definition_cannot_disclose_an_unselected_source():
     assert not selection.entries
     assert index.denied == ['denied']
     assert 'unselected' not in json.dumps(selection.wire)
+
+
+def test_quoted_names_preserve_case_and_comments_do_not_declare_symbols():
+    consumer = SourceSnapshot('c', 'hc', 'c.sql', '.sql', '', 'select * from "Raw"."A";', 'sql')
+    declared = SourceSnapshot('d', 'hd', 'd.sql', '.sql', '', 'create table "Raw"."A"(id int);', 'sql')
+    fake = SourceSnapshot('f', 'hf', 'f.sql', '.sql', '', '-- create table "Raw"."A"(forged int);\nselect 1;', 'sql')
+    selection = context_for_part(build_context_index(prepared(consumer, declared, fake), []),
+                                 plan_file_parts(consumer, {}, model())[0], 10000)
+    assert [e.evidence[0].file_id for e in selection.entries] == ['d']
+
+
+def test_dbt_context_index_supplies_relevant_project_definition():
+    definition = SourceSnapshot('d', 'hd', 'models/base.sql', '.sql', 'project', 'select 1 as id', 'dbt')
+    resource = {'resource_id': 'base-resource', 'name': 'base', 'package_name': 'pkg',
+                'project_id': 'project', 'resource_type': 'model', 'definition': {'source': {'file_id': 'd'}}}
+    consumer = SourceSnapshot('c', 'hc', 'models/use.sql', '.sql', 'project', "select * from {{ ref('base') }}", 'dbt',
+                               json.dumps({'resources': [resource], 'project_id': 'project'}))
+    selection = context_for_part(build_context_index(prepared(consumer, definition), []),
+                                 plan_file_parts(consumer, {}, model())[0], 10000)
+    assert [e.entry_id for e in selection.entries] == ['base-resource']
