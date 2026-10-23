@@ -51,7 +51,7 @@ def test_prepare_sparse_publish_and_offline_rehydration(tmp_path):
     save_run(store, w, 'saved', mode='ai', status='committed', configuration=config, accepted_results=results)
     assert metadata['file_id'] in load_accepted_file_results(store, w, config)
     analyze(store, w)
-    assert len(store.edges(w)) == 2
+    assert len(store.edges(w)) == 1  # Explicit Static selects static results.
     store.set_setting(w, 'case_sensitive', True)
     assert load_accepted_file_results(store, w, config | {'case_sensitive': True}) == {}
     store.close()

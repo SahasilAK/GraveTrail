@@ -15,14 +15,14 @@ def test_preview_report_and_ai_start_have_independent_permissions(tmp_path):
     Importer(store, w).files([('q.sql', b'create table x as select id from a;')], {'.sql'})
     service = AgentService(store, AccessPolicy(allow_write=True))
     try:
-        preview = service.call('analysis_preview', w, mode='hybrid')
+        preview = service.call('analysis_preview', w, mode='ai')
         assert not preview['valid']
         with pytest.raises(AgentError) as error:
-            service.call('analyze', w, mode='hybrid')
+            service.call('analyze', w, mode='ai')
         assert error.value.code == 'network_not_allowed'
         store.set_setting(w, 'agent_access', {'allow_source': False})
         with pytest.raises(AgentError):
-            service.call('analysis_preview', w, mode='hybrid')
+            service.call('analysis_preview', w, mode='ai')
     finally:
         service.close()
         store.close()
@@ -37,7 +37,7 @@ def test_mcp_project_tools_are_registered_and_preview_stays_offline(tmp_path):
     async def check():
         names = {tool.name for tool in await server.list_tools()}
         assert {'preview_project_analysis', 'get_project_analysis_report', 'cancel_job'} <= names
-        result = await server.call_tool('preview_project_analysis', {'workspace_id': w, 'mode': 'hybrid'})
+        result = await server.call_tool('preview_project_analysis', {'workspace_id': w, 'mode': 'ai'})
         assert not result.isError
 
     try:
@@ -55,8 +55,8 @@ def test_background_operation_preserves_ai_mode_instead_of_silently_parsing(tmp_
     monkeypatch.setattr(service, '_run_project_analysis', lambda workspace, request, **kwargs:
                         seen.append(request.mode) or {'status': 'committed'}, raising=False)
     try:
-        service.run_operation(w, 'analyze', {'mode': 'hybrid'})
-        assert seen == ['hybrid']
+        service.run_operation(w, 'analyze', {'mode': 'ai'})
+        assert seen == ['ai']
         assert not store.runs(w)
     finally:
         service.close()
@@ -75,7 +75,7 @@ def test_detached_cli_journal_keeps_grants_but_no_credentials(tmp_path, monkeypa
     monkeypatch.setattr('subprocess.Popen', lambda *a, **kwargs: None)
     result = CliRunner().invoke(app, ['--home', str(tmp_path), '--json', '--allow-write', '--allow-llm',
         '--allowed-llm-origin', 'http://localhost:20128', 'lineage', 'build', '-w', w,
-        '--mode', 'hybrid', '--background'])
+        '--mode', 'ai', '--background'])
     assert result.exit_code == 0, result.output
     job = json.loads(next((tmp_path / 'agent/jobs').glob('*.json')).read_text())
     assert job['request']['policy']['allow_llm'] is True
@@ -125,63 +125,45 @@ def test_profile_specific_credentials_never_cross_extraction_and_review(tmp_path
         store.close()
 
 
-def test_actual_mcp_http_sdk_auto_budget_and_continuation(tmp_path, monkeypatch):
+def test_actual_mcp_http_sdk_previews_offline_and_builds_one_shared_path(tmp_path, monkeypatch):
     import json
     from datetime import timedelta
-
     import httpx
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
-
     from dataforge.agent.mcp_server import http_app
-    from dataforge.llm import Profile
+    from test_ai_resumable_files import configured, empty_provider
     store = Store(tmp_path)
-    w = store.create_workspace('SDK continuation')
+    w = store.create_workspace('SDK')
     Importer(store, w).files([('q.sql', b'select 1; select 2;')], {'.sql'})
-    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock', retries=0, context_chars=100000)
-    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'mock', p.model_dump_json()])
-    store.set_setting(w, 'default_profile', 'p')
-    store.set_setting(w, 'max_context_chars', 100000)
+    configured(store, w)
     service = AgentService(store, AccessPolicy(workspaces=(w,), allow_write=True, allow_llm=True,
-        allowed_llm_origins=('http://localhost:11434',)))
+        allowed_llm_origins=('http://localhost:1234',)))
     calls = []
-    def respond(request):
-        text = json.loads(request.content)['messages'][-1]['content']
-        unit = json.loads(text[text.index('{'):])['unit']
-        calls.append(unit['unit_id'])
-        return httpx.Response(200, json={'message': {'content': json.dumps({'unit_id': unit['unit_id'],
-            'coverage': {'status': 'no_operations'}})}, 'done_reason': 'stop'})
-    service.provider_transport = httpx.MockTransport(respond)
-    monkeypatch.setenv('DATAFORGE_MCP_TOKEN', 'synthetic-sdk-token-' + 'x' * 40)
+    service.provider_transport = httpx.MockTransport(empty_provider(calls))
+    token = 'synthetic-sdk-token-' + 'x' * 40
+    monkeypatch.setenv('DATAFORGE_MCP_TOKEN', token)
     server = create_server(service)
     application = http_app(server, service.policy)
     async def check():
         async with server.session_manager.run():
-            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application),
-                    headers={'Authorization': 'Bearer ' + 'synthetic-sdk-token-' + 'x' * 40}) as client:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=application), headers={'Authorization': 'Bearer ' + token}) as client:
                 async with streamable_http_client('http://127.0.0.1:8765/mcp', http_client=client) as (read, write, _):
                     async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=20)) as session:
                         await session.initialize()
-                        preview = await session.call_tool('preview_project_analysis', {'workspace_id': w,
-                            'max_provider_attempts': None, 'max_output_tokens_total': None, 'max_seconds': None})
+                        preview = await session.call_tool('preview_project_analysis', {'workspace_id': w})
                         assert not preview.isError
-                        assert preview.structuredContent['recommended']['max_provider_attempts'] == 2
+                        assert preview.structuredContent['estimated_requests'] == 1
                         assert not calls
-                        run_id = ''
-                        for expected in ('awaiting_continuation', 'committed'):
-                            job = await session.call_tool('start_lineage_analysis', {'workspace_id': w,
-                                'mode': 'hybrid', 'auto_continue': False, 'max_provider_attempts': 1, 'resume_run_id': run_id})
-                            assert not job.isError, job
-                            for _ in range(100):
-                                status = await session.call_tool('get_job_status', {'workspace_id': w,
-                                    'job_id': job.structuredContent['job_id']})
-                                if status.structuredContent['status'] in {'completed', 'failed'}:
-                                    break
-                                await asyncio.sleep(.02)
-                            result = status.structuredContent['result']
-                            assert result['status'] == expected, result
-                            run_id = result['run_id']
-        assert len(calls) == len(set(calls)) == 2
+                        job = await session.call_tool('start_lineage_analysis', {'workspace_id': w, 'mode': 'ai'})
+                        assert not job.isError
+                        for _ in range(100):
+                            status = await session.call_tool('get_job_status', {'workspace_id': w, 'job_id': job.structuredContent['job_id']})
+                            if status.structuredContent['status'] in {'completed', 'failed'}:
+                                break
+                            await asyncio.sleep(.02)
+                        assert status.structuredContent['result']['status'] == 'committed', status
+        assert len(calls) == 1
     try:
         asyncio.run(check())
     finally:

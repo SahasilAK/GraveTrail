@@ -1,20 +1,26 @@
 from dataclasses import replace
 
-from dataforge.ai_analysis_models import AnalysisRequest
-from dataforge.ai_context import AIExecutionContext, PreparedAnalysis, SourceSnapshot, plan_ai_units
-from dataforge.analysis_service import _unit_context_hash
+from dataforge.ai_context import SourceSnapshot, plan_file_parts
+from dataforge.ai_context_index import build_context_index, context_for_part
+from test_ai_context_index import prepared
+from test_ai_token_budget import model
 
 
-def test_unrelated_source_does_not_invalidate_unit_but_new_schema_does():
-    source = SourceSnapshot('f', 'h', 'a.sql', '.sql', 'w', 'select * from a;')
-    prepared = PreparedAnalysis('w', AnalysisRequest(mode='ai'), (source,), '{}')
-    execution = AIExecutionContext(prepared.request)
-    plan = plan_ai_units(prepared)
-    unit = plan.units[0]
-    first = _unit_context_hash(prepared, plan, execution, unit, 'old')
-    other = SourceSnapshot('o', 'new', 'o.sql', '.sql', 'w', 'select x from unrelated;')
-    updated = replace(prepared, sources=(source, other), manifest_hash='changed')
-    assert _unit_context_hash(updated, plan_ai_units(updated), execution, unit, 'new') == first
-    definition = replace(other, code='create table a (id int);')
-    updated = replace(updated, sources=(source, definition))
-    assert _unit_context_hash(updated, plan_ai_units(updated), execution, unit, 'new') != first
+def test_unrelated_source_does_not_change_relevant_context_but_definition_does():
+    query = SourceSnapshot('q', 'h', 'q.sql', '.sql', 'w', 'select id from raw.a;', 'sql')
+    definition = SourceSnapshot('d', 'hd', 'd.sql', '.sql', 'w', 'create table raw.a(id int);', 'sql')
+    part = plan_file_parts(query, {}, model())[0]
+    original = context_for_part(build_context_index(prepared(query, definition), []), part, 10000)
+    unrelated = replace(query, file_id='other', code='select * from irrelevant;')
+    assert context_for_part(build_context_index(prepared(query, definition, unrelated), []), part, 10000).fingerprint == original.fingerprint
+    changed = replace(definition, content_hash='new', code='create table raw.a(id int, name text);')
+    assert context_for_part(build_context_index(prepared(query, changed), []), part, 10000).fingerprint != original.fingerprint
+
+
+def test_repeated_read_sites_do_not_duplicate_disclosed_definitions():
+    query = SourceSnapshot('q', 'h', 'q.sql', '.sql', 'w', 'select id from raw.a; ' * 200, 'sql')
+    definition = SourceSnapshot('d', 'hd', 'd.sql', '.sql', 'w', 'create table raw.a(id int);', 'sql')
+    part = plan_file_parts(query, {}, model())[0]
+    selection = context_for_part(build_context_index(prepared(query, definition), []), part, 10000)
+    assert len(selection.entries) == 1
+    assert selection.wire[0]['source'] == definition.code
