@@ -89,3 +89,26 @@ Local code commits: `761e1ab` (findings 1–3), `be379cb` (finding 4). Nothing p
 Documentation integration: `scripts/docs/build.py` passed its strict build and validation of 42 public pages, 8 assets, rendered links/anchors, search and publication inventory (236 search entries).
 
 Remaining limits: an intact connected operation/dependency component that cannot fit either input or expected output remains explicitly unresolved with all original details retained. There is no recursive consolidation, pipeline redesign or new infrastructure. Runtime model semantics remain inferred; passing mock tests do not establish live-model accuracy. No paid/live provider calls were made. No requested finding remains unaddressed.
+
+## Follow-up: column publication and explicit-version ownership — 2026-10-23
+
+Both remaining findings were reproduced before fixes: the initial new regression run returned **7 failed, 1 passed**. Failures demonstrated input usages bound to an output version, scoped-name collisions, ambiguity published as inferred, and distinct writers claiming one explicit version without an unresolved boundary. Additional repeated-record publication coverage also failed before its fix.
+
+- **Column identities:** publication resolves source usages and dependency inputs against read bindings, and targets against write bindings. Matching respects case/quoting, resource scope and explicit version information already present in the contract. Exact fact/ordinal bindings preserve correct dependency roles. Ambiguous ownership produces an explicit unresolved asset identity, status, diagnostics and partial publication metadata; it never falls back to dictionary insertion order. Scoped persisted column dependencies now honor an explicit resource identity before the legacy local-expression anchor.
+- **Explicit-version ownership:** a resource/version retains all distinct producer IDs and the union of their evidence. Multiple logical writers claiming the same explicit version remain unresolved even with source order; consumers retain that conflicting resource boundary. Publication and linked/run coverage reflect the uncertainty. Repeated records for one logical operation merge evidence/details and publish once. Valid successive versions and the four preceding review fixes remain covered.
+
+New coverage: `tests/test_ai_version_publication.py`, **12 tests**, including adapter and persisted column usages/dependencies for implicit/explicit in-place versions, scoped resources, sensitive names and ambiguous ownership; duplicate explicit versions within/across files and downstream consumers; repeated logical writers; store reopen and graph/publication rebuilding with no provider. A final case-insensitive explicit-read regression failed with only a `rowset` edge before correction, then passed with the original `value` and `row_filter` dependency roles preserved.
+
+Verification uses repository `.venv/Scripts/python.exe`:
+
+- `-m pytest tests/test_ai_version_publication.py -q`: **12 passed**, 3.11 seconds, exit 0.
+- `-m pytest tests/test_ai_version_publication.py tests/test_ai_linking.py tests/test_ai_operation_graph.py tests/test_ai_linking_review.py tests/test_ai_saved_publication.py tests/test_ai_consolidation_review.py tests/test_ai_file_consolidation.py tests/test_ai_resumable_files.py tests/test_ai_review_regressions.py -q`: **49 passed**, 7.79 seconds, exit 0.
+- `-m ruff check src ui tests scripts`: all checks passed.
+- `scripts/docs/build.py`: strict build passed; 42 public pages, 8 assets, links/anchors/search and 236 search entries validated.
+- `git diff --check`: clean.
+
+Remaining limitations: `ExtractedUsage` has no version field. A usage may resolve through its operation's unique read binding, but multiple compatible read versions remain explicitly unresolved; no version is invented. Unsupported multi-writer interpretations remain unresolved. No dependency, framework, storage schema or pipeline redesign was introduced. These deterministic/offline results do not establish live-model accuracy; no paid/live provider calls were made.
+
+Local implementation commit: `ac442b6` — preserve column and version ownership. No push was performed during this follow-up.
+
+Final full-suite command: `.venv/Scripts/python.exe -m pytest -q` — **996 passed, 2 skipped**, 223.38 seconds, exit 0. This run includes the final case-insensitive role correction. The two skips remain the Windows symlink-privilege cases. All requested findings are addressed by reproducing regressions and persisted-output checks; the four preceding fixes remain covered. Lint and strict documentation integration also passed as recorded above.

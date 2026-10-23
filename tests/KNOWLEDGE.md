@@ -131,3 +131,4 @@ Historical/manual validation, wire, citation and snapshot tests remain distinct 
 
 - `test_ai_linking_review.py` — Case policy/quoting/scopes and publication identity, in-place before/after versions, successive writes, source-order constraints and conflicts.
 - `test_ai_consolidation_review.py` — Bounded shared-scope partitioning, intact dependency/evidence membership, dispatch-budget parity, stable IDs and cancellation/reopen without duplicate completed calls.
+- `test_ai_version_publication.py` — Read/write identity separation in usages and persisted column dependencies; scoped/case/version ambiguity, conflicting explicit writers, repeated logical records and offline saved-result rebuilding.
