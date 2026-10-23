@@ -55,13 +55,10 @@ def controls(store, workspace, file_ids):
     max_parallel = st.number_input('Maximum parallel requests', 1, 4, value=None,
         placeholder='Auto', key='ai_parallel_requests_' + workspace,
         help='Further limited by workspace concurrency, shared provider quotas and available request slots.')
-    compare = st.checkbox('Compare with parser', value=True, key='ai_compare_' + workspace)
-    review = st.checkbox('Additional AI review', key='ai_review_' + workspace)
-    if not compare:
-        st.warning('AI-generated mode is experimental. Unsupported claims remain unresolved; parser-only relationships are omitted.')
+    st.caption('AI extracts source-backed details independently. Results remain inferred and may be incomplete.')
     refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
-    base = dict(mode='hybrid' if compare else 'ai', file_ids=file_ids,
-                additional_ai_review=review, refresh_ai=refresh,
+    base = dict(mode='ai', file_ids=file_ids,
+                refresh_ai=refresh,
                 max_files_per_request=max_files, max_parallel_requests=max_parallel,
                 max_context_chars=st.session_state.get('ai_context_chars_' + workspace))
     status = st.status('Preparing AI analysis…', expanded=False)

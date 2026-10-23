@@ -80,8 +80,9 @@ class AIPlan:
         names = {x.casefold() for x in re.findall(r'[A-Za-z_][\w.]*',visible)}
         excluded = {unit.unit_id, unit.focus.parent_id if unit.focus else unit.unit_id,
                     unit.source_focus.parent_id if unit.source_focus else unit.unit_id}
-        return [dict(entry) for name in sorted(names) for entry in self.context_index.get(name, ()) if entry['unit_id'] not in excluded and
-                (not entry.get('temporary') or entry['job_id'] == unit.job_id)]
+        from dataforge.ai_source_views import compact_catalog
+        return compact_catalog([entry for name in sorted(names) for entry in self.context_index.get(name, ())
+            if entry['unit_id'] not in excluded and (not entry.get('temporary') or entry['job_id'] == unit.job_id)])
 
 
 def prepare_analysis(store, workspace, request, *, progress=None):
@@ -110,6 +111,9 @@ def prepare_analysis(store, workspace, request, *, progress=None):
                 if progress:
                     progress('Reading selected files', len(sources), len(selected))
         sources = tuple(sources)
+        families = {s.source_kind for s in sources if s.source_kind in {'sql', 'sas', 'dbt'}}
+        if len(families) > 1:
+            raise ValueError('Select one analysis family per build: SQL, SAS, or dbt')
         manifest = [{'file_id':f['file_id'],'content_hash':f['content_hash'],'path':f['relative_path'],
                      'extension':f['extension'],'job_id':source_job(f,settings)} for f in inventory]
         if dbt_contexts:

@@ -398,7 +398,7 @@ def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
 
 
 @lineage_app.command('preview')
-def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'hybrid',
+def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'ai',
                   file_id: list[str] = typer.Option(None), additional_ai_review: bool = False,
                   max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
           max_files_per_request: int | None = None, max_parallel_requests: int | None = None, max_context_chars: int | None = None,

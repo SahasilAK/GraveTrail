@@ -161,7 +161,7 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
            project_max_output_tokens_total=project_max_output_tokens_total, project_max_seconds=project_max_seconds)
 
     @server.tool(annotations=read)
-    async def preview_project_analysis(workspace_id: str, mode: Literal['hybrid', 'ai'] = 'hybrid',
+    async def preview_project_analysis(workspace_id: str, mode: Literal['hybrid', 'ai'] = 'ai',
                                        file_ids: list[str] | None = None, additional_ai_review: bool = False,
                                        max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None,
                                        max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,

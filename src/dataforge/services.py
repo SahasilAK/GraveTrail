@@ -198,7 +198,7 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
             _collect_jobs(store, jobs, results, progress, cancelled)
         analyzed = sum(job[3] is not None for job in jobs) + dbt_counts['analyzed']
         cached = sum(job[3] is None for job in jobs) + dbt_counts['cached']
-        _restore_ai_results(store, workspace, results, config)
+        restore_manual_ai_results(store, workspace, results, config)
         with store.transaction():
             current_files = {m['file_id']: m['content_hash'] for m in store.files(workspace) if is_dbt(m)}
             if dbt_projects and (current_files != {m['file_id']: m['content_hash'] for m in files if is_dbt(m)}

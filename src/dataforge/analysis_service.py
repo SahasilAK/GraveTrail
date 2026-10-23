@@ -118,9 +118,8 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
             trial=preview_analysis_routes(store,workspace,[unit],execution)
             from dataforge.ai_citations import source_references
             from dataforge.ai_semantic import source_view
-            from dataforge.ai_source_views import visible_names
-            names = visible_names(unit, source_view(unit, unit_dialect(unit, prepared.settings)))
-            output_pressure = ((len([name for name in names if '.' not in name]) > 64
+            from dataforge.ai_source_views import visible_identifier_count
+            output_pressure = ((visible_identifier_count(unit, source_view(unit, unit_dialect(unit, prepared.settings))) > 64
                 or len(source_references(unit, prepared.settings, partial=True)) > 64)
                 and (not unit.source_focus or unit.source_focus.end_offset - unit.source_focus.start_offset > 64))
             capacity={'complete_prompt_exceeds_context_budget','complete_prompt_exceeds_model_capacity',
@@ -330,6 +329,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
     """Run only under an explicit user action; failures retain the prior graph."""
     request = AnalysisRequest.model_validate(request)
     manager = connections or current_connections()
+    if request.mode == 'hybrid' or request.additional_ai_review:
+        return AnalysisReport(mode=request.mode, status='blocked',
+            reasons=['Hybrid comparison and additional review are no longer supported; choose parser or ai'])
     try:
         request = _resume_request(store, workspace, request)
     except ValueError as exc:
@@ -792,7 +794,7 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
 
 def _protocol_hash():
     from dataforge.llm import PROMPTS
-    return _hash({'semantic_planning': 4, 'component_composition': 2, 'review_batching': 3,
+    return _hash({'semantic_planning': 5, 'component_composition': 2, 'review_batching': 3,
         'resolution': (PROMPTS / 'project_resolution' / 'system.md').read_text(encoding='utf-8'),
         'source_handlers': {kind: analysis_prompt_hash('project_lineage', source_kind=kind) for kind in ('sql', 'sas', 'dbt')},
         'validator': VALIDATOR_VERSION, 'parser': PARSER_VERSION,
