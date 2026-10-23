@@ -229,7 +229,7 @@ def test_rejected_wire_input_never_leaks_into_default_history(tmp_path):
         payload = {'unit_id': context['unit']['unit_id'], 'relationships': [{'source': 'a', 'target': 'b',
             'operation': 'CREATE', 'evidence': {'unit_id': context['unit']['unit_id'], 'quote': marker}}]}
         return httpx.Response(200, json={'message': {'content': json.dumps(payload)}})
-    result = run_analysis(store, w, AnalysisRequest(mode='hybrid'), transport=httpx.MockTransport(respond))
+    result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(respond))
     assert result.status == 'failed'
     assert marker not in str(store.rows('SELECT details FROM llm_records'))
     store.close()

@@ -9,6 +9,79 @@ HARD_LIMITS = {'max_provider_attempts': 2000, 'max_output_tokens_total': 2000000
 MIN_LIMITS = {'max_provider_attempts': 1, 'max_output_tokens_total': 1000, 'max_seconds': 30}
 
 
+@dataclass(frozen=True)
+class ModelLimits:
+    context_tokens: int | None
+    input_tokens: int | None
+    output_tokens: int
+    window: str
+    source: str
+    dynamic: bool = False
+
+
+@dataclass(frozen=True)
+class RequestBudget:
+    input_count: int
+    count_method: str
+    input_limit: int | None
+    output_limit: int
+    reserved_output: int
+    headroom: int
+    fits: bool
+    reasons: tuple[str, ...]
+
+
+def effective_limits(profile):
+    caps = profile.model_capabilities
+    if caps is None or not caps.current_for(profile):
+        return ModelLimits(None, None, profile.max_tokens, 'combined', 'unknown')
+    return ModelLimits(caps.context_tokens, caps.input_tokens,
+        min(profile.max_tokens, caps.output_tokens or profile.max_tokens), caps.window, caps.source, caps.dynamic)
+
+
+def count_request_tokens(serialized_request, profile):
+    # Only use already loaded matching encodings. Preview must never download assets.
+    known = {'gpt-4o': 'o200k_base', 'gpt-4o-mini': 'o200k_base', 'gpt-4.1': 'o200k_base'}
+    if profile.provider == 'OpenAI' and profile.model in known:
+        try:
+            import tiktoken.registry
+            encoding = tiktoken.registry.ENCODINGS.get(known[profile.model])
+            if encoding is not None:
+                return len(encoding.encode(serialized_request, disallowed_special=())) + 256, 'tiktoken_text_plus_estimated_framing'
+        except ImportError:
+            pass
+    return len(serialized_request.encode('utf-8')) + 256, 'utf8_bytes_plus_estimated_framing'
+
+
+def request_budget(profile, serialized_request, reserved_output, *, disclosed_characters=0):
+    """Count the complete provider body, with conservative framing and model headroom."""
+    limits = effective_limits(profile)
+    count, method = count_request_tokens(serialized_request, profile)
+    headroom = max(512, ceil((limits.context_tokens or limits.input_tokens or 0) * .05))
+    allowance = limits.input_tokens
+    reasons = []
+    if limits.window == 'combined' and limits.context_tokens:
+        shared = max(0, limits.context_tokens - reserved_output - headroom)
+        allowance = min(allowance, shared) if allowance else shared
+    elif allowance:
+        allowance = max(0, allowance - headroom)
+    else:
+        reasons.append('model_token_capacity_required')
+    if allowance is not None and count > allowance:
+        reasons.append('complete_request_exceeds_input_budget')
+    if reserved_output > limits.output_tokens or reserved_output < 1:
+        reasons.append('reserved_output_exceeds_model_limit')
+    if profile.source_limit_policy == 'unconfirmed':
+        reasons.append('legacy_source_limit_choice_required')
+    elif profile.source_limit_policy == 'explicit':
+        if profile.source_disclosure_chars is None:
+            reasons.append('explicit_disclosure_limit_required')
+        elif disclosed_characters > profile.source_disclosure_chars:
+            reasons.append('explicit_disclosure_limit_exceeded')
+    return RequestBudget(count, method, allowance, limits.output_tokens, reserved_output,
+                         headroom, not reasons, tuple(reasons))
+
+
 def resolve_project_allowance(bundles, request):
     """Freeze a batch-independent lifetime allowance, separate from execution caps.
 

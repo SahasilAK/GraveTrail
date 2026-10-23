@@ -27,6 +27,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ai-tokenizers = ["tiktoken>=0.12,<1"]
 dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
 build = ["pyinstaller>=6.22,<7"]
 

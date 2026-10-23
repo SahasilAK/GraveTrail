@@ -20,13 +20,13 @@ class ModelCapabilities(BaseModel):
     output_tokens: TokenLimit | None = None
     window: Literal['combined', 'separate'] = 'combined'
     dynamic: bool = False
-    source: Literal['catalog', 'native', 'runtime'] = 'catalog'
+    source: Literal['catalog', 'native', 'runtime', 'manual'] = 'catalog'
     observed_at: float = Field(default_factory=time.time, ge=0)
     identity: str = Field(default='', max_length=64)
 
     def current_for(self, profile, *, now=None):
         age = (time.time() if now is None else now) - self.observed_at
-        return self.identity == capability_identity(profile) and 0 <= age <= CAPABILITY_MAX_AGE
+        return self.identity == capability_identity(profile) and (self.source == 'manual' or 0 <= age <= CAPABILITY_MAX_AGE)
 
 
 class ModelDescriptor(BaseModel):

@@ -220,6 +220,34 @@ def render(store: Store, workspace: str) -> None:
                    f"input {capabilities.input_tokens or 'unknown'}; output {capabilities.output_tokens or 'unknown'}. "
                    f"Source: {capabilities.source}; observed {max(0, int(time.time() - capabilities.observed_at)) // 60} minutes ago. "
                    + ('Stale: configured limits apply until refreshed. ' if not capabilities.current_for(profile) else '') + ('Dynamic routing: upstream limits may differ.' if capabilities.dynamic else ''))
+    saved_manual = config.get('model_capabilities') or {}
+    if saved_manual.get('source') == 'manual' and profile:
+        prior_manual = Profile.model_validate({**config, **values, 'model': model or 'connection-check'}).model_capabilities
+        if prior_manual:
+            capabilities = prior_manual
+    with st.expander('AI build token capacity and disclosure', expanded=capabilities is None):
+        manual = st.checkbox('Override discovered token limits', value=bool(capabilities and capabilities.source == 'manual'))
+        if manual:
+            context_tokens = st.number_input('Context tokens', 1024, 2147483647,
+                value=(capabilities.context_tokens if capabilities else None) or 70000)
+            input_tokens = st.number_input('Separate input limit (optional)', 1, 2147483647,
+                value=capabilities.input_tokens if capabilities else None)
+            output_tokens = st.number_input('Model output limit', 64, 2147483647,
+                value=(capabilities.output_tokens if capabilities else None) or int(max_tokens))
+            separate = st.checkbox('Separate input and output windows', value=bool(capabilities and capabilities.window == 'separate'))
+            if profile:
+                capabilities = bind_capabilities(ModelCapabilities(context_tokens=int(context_tokens),
+                    input_tokens=int(input_tokens) if input_tokens else None, output_tokens=int(output_tokens),
+                    window='separate' if separate else 'combined', source='manual'), profile)
+        policies = ['unconfirmed', 'token_capacity', 'explicit']
+        source_policy = st.selectbox('Source disclosure limit policy', policies,
+            index=policies.index(config.get('source_limit_policy', 'unconfirmed')),
+            format_func=lambda p: {'unconfirmed': 'Choose how to migrate the legacy character setting',
+                'token_capacity': 'Use token capacity; preserve existing source/network grants',
+                'explicit': 'Keep an explicit source character restriction'}[p])
+        disclosure_chars = st.number_input('Explicit disclosure characters', 1, 2147483647,
+            value=config.get('source_disclosure_chars') or int(context)) if source_policy == 'explicit' else None
+        values.update(source_limit_policy=source_policy, source_disclosure_chars=disclosure_chars)
     if st.button("Test model connection", disabled=not model):
         check_connection(model, False)
     name = st.text_input("Profile name", config.get("name", provider), key=prefix + '_name')
