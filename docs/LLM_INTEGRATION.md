@@ -139,8 +139,9 @@ share admission. Busy calls refuse rather than queue. The assistance chunk previ
 choose one complete statement/SAS block chunk and explicitly request it. No next chunk runs
 automatically. Unknown or interactive SAS procedures retain context through QUIT; oversized
 units require a larger budget or different selection. Source/profile budgets still apply.
-Cancellation callbacks stop retries and response processing cooperatively; blocking network
-waits finish within their configured timeout. There is no preemptive HTTP cancellation claim.
+Cancellation callbacks stop retries and response processing cooperatively. Project builds also
+monitor silent network waits; see [gateway waiting and recovery](#request-timeout-gateway-waiting-and-recovery).
+Local cancellation does not prove upstream processing stopped.
 
 Historical fixed-route verification on2026-10-15 passed with cx/gpt-5.6-luna-low, including
 grounded SQL/SAS inferred merge and restart; this does not establish current auto-route acceptance.
@@ -170,20 +171,55 @@ Current bounded acceptance on 2026-10-17 passed discovery (915 models), connecti
 
 Remote project builds require complete-source permission for cumulative chunk disclosure. Preview counts the entire system/JSON/catalog/schema envelope against profile and workspace context limits; the complete envelope can exceed configured allowances. Selected-model capability discovery, Automatic/Custom controls and explicit calculated context remedies are described in [AI project analysis](AI_ANALYSIS.md#token-capacity-and-disclosure). Compact transmitted schemas retain all validation rules; large projects automatically roll over bounded execution windows within a frozen finite project allowance, reusing completed extraction/review checkpoints. Oversized requests can use validated independent projection groups or static PROC SQL statement boundaries; host validation still uses original source. Review sizing is provisional before extraction and exact for saved pending batches. Larger indivisible source/catalog combinations may still need an explicit allowance change. Normal preview, settings reads, browsing and export send zero requests. Source-backed candidates still need deterministic semantic acceptance; reviewer agreement cannot promote unsupported claims. These project-build checks have mock transport evidence, not a qualified live precision result.
 
-## Request timeout and waiting time
+## Request timeout, gateway waiting and recovery
 
-Under **Connections & AI → Providers & routing → Advanced request options**, set **Request timeout (seconds)** from **1 to 3,600 seconds (one hour)** and choose **Save provider profile**. Existing saved values and the 30-second default remain unchanged. This controls the HTTP wait timeout; a provider or gateway may impose its own shorter limits.
+In **Connections & AI / Providers & routing / Advanced request options**, set
+**Connection timeout (seconds)** independently from **Response inactivity timeout (seconds)**.
+Connection wait defaults to 5 seconds (0.05-60 allowed). Read inactivity accepts
+0.05-3,600 seconds and measures the wait between response data, not a total deadline.
+Allow time for gateway fallback plus generation. A healthy app-to-gateway connection
+stays open during that wait. The app does not know which upstream is active.
+See [HTTPX timeouts](https://www.python-httpx.org/advanced/timeouts/).
 
-For project analysis, the separate execution time budget still bounds each request by the time remaining. Automatic planning includes the configured timeout; a Custom overall time budget can shorten the available wait. No timeout setting grants more provider attempts or source access.
+Existing profiles keep their saved `timeout` as the fallback read inactivity value
+(historical default 30 seconds) and write timeout. New `read_timeout` overrides the
+read wait without overwriting that legacy value. `connect_timeout` defaults to 5.
+Existing `unknown_retries` defaults to zero, preserving manual acknowledgement.
+New OmniRoute profiles default to read 300 seconds, connect 5 seconds, two shared
+retries and two permitted unknown retries. Explicit creation values take precedence.
+Existing OmniRoute users must set these controls explicitly and save. Profile changes
+invalidate paused-run pins: configure before a new build, or use the existing report's
+manual acknowledgement without changing its pinned profile.
 
-The Analysis progress panel refreshes every two seconds, showing total elapsed execution time and the elapsed **Waiting** time for an extraction/review response. Validation and publication have separate stage labels; queued work is labelled separately. Worker heartbeats keep a pending job live without resetting its timers. Completed, failed, cancelled or interrupted jobs stop counting elapsed time. Waiting indicates a pending request, not proof that an upstream model is making progress. Manual assistance, diagnostic review and connection/model checks also show native elapsed-time spinners.
+**Shared retries per batch** excludes the initial attempt: two means at most three
+physical sends for an identical unfinished batch in one automatic allowance. HTTP
+429/5xx, pre-send, item-validation and permitted unknown retries share it; unknown
+retries are a subset cap, not another loop. Restart does not renew it. Explicit manual
+retry, or continuation after known received-but-invalid items, can renew a bounded
+allowance. Run-wide attempt, reserved-output and elapsed-time ceilings never reset.
+Successfully checkpointed parts are not resent.
 
-Cancellation remains cooperative. A blocked HTTP wait can return later, and cancelling locally does not prove that upstream processing or billing stopped. Legacy job journals without start timestamps remain readable. No source or credentials are added to timer metadata.
+Only connection-establishment/pool failures with pre-send evidence are safe to retry.
+Read/write, remote protocol and proxy errors may already have been processed or billed;
+automatic recovery requires the configured unknown policy. Authentication and invalid
+provider-response failures do not enter a transient retry loop. Bounded Retry-After
+and backoff remain for retryable HTTP failures. No idempotency header or gateway
+request-status lookup support is assumed.
 
-Provider quota feedback, files/request and parallel-request controls are described in [AI controls and recovery](user-guide/ai-analysis-controls-and-recovery.md). Model context metadata and account/project RPM/token quotas remain separate. Optional provider quota groups coordinate profiles; credentials are never quota identifiers.
+Each physical attempt is journaled before dispatch with its output reservation.
+Unknown attempts remain unknown after later success, and unknown usage is never
+represented as proven zero. Safe diagnostics include category, durable attempt number,
+elapsed attempt time, effective timeouts, outcome, retry/exhaustion decision and HTTP
+status when available. Connection diagnostics contain no exception text, headers,
+credentials or source. App interruption can leave elapsed time unknown.
 
-Project-wide AI analysis automatically fits SQL/SAS/dbt using complete units, projection groups and exact source/context views. The optional per-build source/context character allowance is separate from complete-envelope model token capacity. Dependency components and their review decisions are checkpointed, composed and validated locally before graph linking; there is no final whole-project model call. The collapsed sizing table explains each file and maximum planned request. See [AI controls and recovery](user-guide/ai-analysis-controls-and-recovery.md) and the [complete flow](user-guide/ai-analysis-flow.md).
-
+Project builds monitor silent sockets through cancellable HTTPX I/O while buffering
+ordinary JSON; no model streaming/SSE is introduced. Cancellation, authorization,
+freshness and optional run-time limits are checked while waiting and during backoff.
+The active app-side request closes before another starts. That does not prove upstream
+generation or billing stopped. Callers without check/cancellation callbacks still use
+the configured HTTP timeouts. Worker progress refreshes every two seconds; report
+messages describe the gateway connection, never an unreported upstream provider switch.
 
 ## Protocol 5 file extraction (2026-10-23)
 

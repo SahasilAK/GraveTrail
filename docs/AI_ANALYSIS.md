@@ -53,10 +53,17 @@ attempt. Completed work is reused within the same compatible run. A new build
 extracts again. There are no execution windows or automatic allowance multipliers.
 
 Cancellation and transient failure retain saved parts. Unknown outcomes can have
-been billed and require explicit retry acknowledgement. Source, settings, model or
+been billed. Configured automatic recovery uses a durable shared retry allowance;
+disabled or exhausted recovery requires explicit manual acknowledgement. Source, settings, model or
 prompt changes make a paused run stale. Historical snapshots and migration-9 tables
 remain readable; old paused protocols require a new build. Explicit Static builds
 use static results instead of restoring prior project AI results.
+
+For slow gateways, configure separate connection and response inactivity timeouts.
+The latter must accommodate fallback plus generation; it is not a total deadline.
+Project cancellation and optional run-time limits are checked during silent waits.
+Every lost response remains an unknown attempt with its output reservation, even
+when a retry succeeds. See [timeout and gateway recovery settings](LLM_INTEGRATION.md#request-timeout-gateway-waiting-and-recovery).
 
 ## Evidence and semantic quality
 
