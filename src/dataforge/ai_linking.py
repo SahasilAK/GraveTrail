@@ -12,8 +12,12 @@ from dataforge.ai_analysis_store import _run, load_validation_checkpoint
 from dataforge.models import canonical
 
 
+def _name_key(name, case_sensitive=False):
+    return name.strip() if case_sensitive or any(q in name for q in '"`[') else canonical(name)
+
+
 def _resource_key(resource, file, case_sensitive=False):
-    name = resource.name.strip() if case_sensitive or any(q in resource.name for q in '"`[') else canonical(resource.name)
+    name = _name_key(resource.name, case_sensitive)
     if resource.identity:
         return resource.identity
     scope = resource.scope or (file.file_id if resource.temporary or name.lower().startswith(('work.', '#')) else '')
@@ -25,14 +29,22 @@ def _resource_key(resource, file, case_sensitive=False):
 def build_operation_graph(file_extractions, *, case_sensitive=False):
     """Versioned resources and operations, preserving parallel dependency roles."""
     graph, writers = nx.MultiDiGraph(), defaultdict(list)
+    graph.graph['case_sensitive'] = case_sensitive
+    def evidence_union(*groups):
+        refs = {json.dumps(r, sort_keys=True): r for group in groups for r in group}
+        return [refs[k] for k in sorted(refs)]
     for file in file_extractions:
         for op in file.operations:
             oid = 'operation:' + op.operation_id
+            old = graph.nodes[oid] if oid in graph else {}
             graph.add_node(oid, kind='operation', operation_id=op.operation_id, file_id=file.file_id,
-                           evidence=[r.model_dump() for r in op.evidence], limitations=op.limitations, order=op.order,
+                           evidence=evidence_union(old.get('evidence', []), [r.model_dump() for r in op.evidence]),
+                           limitations=sorted(set(old.get('limitations', [])) | set(op.limitations)), order=op.order,
                            unresolved=any(d.status == 'unresolved' for d in op.derivations))
             for resource in op.writes:
-                writers[_resource_key(resource, file, case_sensitive)].append((file, op, resource))
+                entries = writers[_resource_key(resource, file, case_sensitive)]
+                if not any(o.operation_id == op.operation_id and r == resource for _, o, r in entries):
+                    entries.append((file, op, resource))
     for key, entries in writers.items():
         ordered = (len({f.file_id for f, _, _ in entries}) == 1 and
                    all(o.order is not None for _, o, _ in entries) and
@@ -40,10 +52,16 @@ def build_operation_graph(file_extractions, *, case_sensitive=False):
         for file, op, resource in entries:
             version = str(resource.version) if resource.version != '' else (op.operation_id if len(entries) > 1 else '')
             rid = key + ('@' + version if version else '')
-            graph.add_node(rid, kind='resource', name=resource.name, identity=key, version=version,
-                           external=False, unresolved=len(entries) > 1 and not resource.version and not ordered,
+            old = graph.nodes[rid] if rid in graph else {}
+            owners = sorted(set(old.get('producer_ids', [])) | {op.operation_id})
+            duplicate_version = resource.version != '' and len(owners) > 1
+            graph.add_node(rid, kind='resource', name=min(old.get('name', resource.name), resource.name),
+                           identity=key, version=version, producer_ids=owners,
+                           external=False, unresolved=old.get('unresolved', False) or duplicate_version or
+                           (len(entries) > 1 and not resource.version and not ordered),
+                           evidence=evidence_union(old.get('evidence', []), graph.nodes['operation:' + op.operation_id]['evidence']))
+            graph.add_edge('operation:' + op.operation_id, rid, role='write', reference=resource.model_dump(),
                            evidence=[r.model_dump() for r in op.evidence])
-            graph.add_edge('operation:' + op.operation_id, rid, role='write', evidence=[r.model_dump() for r in op.evidence])
     for file in file_extractions:
         for op in file.operations:
             oid = 'operation:' + op.operation_id
@@ -51,7 +69,9 @@ def build_operation_graph(file_extractions, *, case_sensitive=False):
             from dataforge.ai_analysis_models import ResourceReference
             for derivation in op.derivations:
                 for dependency in derivation.inputs:
-                    if not any(r.name == dependency.table and r.scope == dependency.scope and str(r.version) == str(dependency.version) for r in reads):
+                    if not any(_name_key(r.name, case_sensitive) == _name_key(dependency.table, case_sensitive) and
+                               (not dependency.scope or r.scope == dependency.scope) and
+                               (dependency.version == '' or str(r.version) == str(dependency.version)) for r in reads):
                         reads.append(ResourceReference(name=dependency.table, scope=dependency.scope, version=dependency.version))
             for resource in reads:
                 key = _resource_key(resource, file, case_sensitive)
@@ -65,13 +85,16 @@ def build_operation_graph(file_extractions, *, case_sensitive=False):
                     entries = prior
                 if resource.version != '':
                     entries = [e for e in entries if str(e[2].version) == str(resource.version)]
-                if len(entries) > 1 and op.order is not None:
+                if len(entries) > 1 and op.order is not None and resource.version == '':
                     preceding = [e for e in entries if e[0].file_id == file.file_id and e[1].order is not None and e[1].order < op.order]
                     if preceding:
                         last = max(e[1].order for e in preceding)
                         entries = [e for e in preceding if e[1].order == last]
+                explicit_conflict = resource.version != '' and key + '@' + str(resource.version) in graph and graph.nodes[key + '@' + str(resource.version)].get('unresolved')
                 ambiguous = len(entries) > 1
-                if len(entries) == 1:
+                if explicit_conflict:
+                    rid = key + '@' + str(resource.version)
+                elif len(entries) == 1:
                     _, producer, output = entries[0]
                     version = str(output.version) if output.version != '' else (producer.operation_id if len(writers[key]) > 1 else '')
                     rid = key + ('@' + version if version else '')
@@ -82,9 +105,12 @@ def build_operation_graph(file_extractions, *, case_sensitive=False):
                         limitations=['unresolved_before_version'] if in_place else [],
                         evidence=[r.model_dump() for r in op.evidence])
                 roles = [(i.role, d.fact_id, ordinal, i.column) for d in op.derivations for ordinal, i in enumerate(d.inputs)
-                         if i.table == resource.name and i.scope == resource.scope and str(i.version) == str(resource.version)] or [('rowset', '', 0, '')]
+                         if _name_key(i.table, case_sensitive) == _name_key(resource.name, case_sensitive) and
+                         (not i.scope or i.scope == resource.scope) and
+                         (i.version == '' or str(i.version) == str(resource.version))] or [('rowset', '', 0, '')]
                 for role, fact_id, ordinal, column in roles:
                     graph.add_edge(rid, oid, role=role, fact_id=fact_id, ordinal=ordinal, column=column,
+                                   reference=resource.model_dump(),
                                    evidence=[r.model_dump() for r in op.evidence])
     return graph
 
@@ -140,19 +166,30 @@ class LinkedAnalysis:
 def link_file_extractions(files, settings):
     graph = build_operation_graph(files, case_sensitive=settings.get('case_sensitive', False))
     unresolved = sorted(n for n, data in graph.nodes(data=True) if data.get('unresolved'))
+    incomplete = {graph.nodes[op]['file_id'] for node in unresolved for op in
+                  [*graph.predecessors(node), *graph.successors(node)] if graph.nodes[op]['kind'] == 'operation'}
     return LinkedAnalysis(files, graph, unresolved, {'processed_files': len(files),
-        'semantic_incomplete': sum(f.semantic_coverage != 'model_reported_complete' for f in files)})
+        'semantic_incomplete': sum(f.semantic_coverage != 'model_reported_complete' or f.file_id in incomplete for f in files)})
 
 
 def to_publication_results(linked, inventory):
-    from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage
+    from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, stable_id
     output = []
     for file in linked.files:
         metadata = inventory[file.file_id]
         source = metadata['source_text']
         parsed = ParseResult(metadata={'ai_protocol': 5, 'source_kind': file.source_kind,
             'semantic_coverage': file.semantic_coverage, 'provenance': file.provenance})
+        records = {}
         for record in file.operations:
+            if record.operation_id not in records:
+                records[record.operation_id] = record.model_copy(deep=True)
+            else:
+                combined = records[record.operation_id]
+                for field in ('evidence', 'reads', 'writes', 'usages', 'derivations', 'limitations', 'context_ids'):
+                    values = getattr(combined, field)
+                    values.extend(v for v in getattr(record, field) if v not in values)
+        for record in records.values():
             own = [r for r in record.evidence if r.file_id == file.file_id]
             if not own:
                 raise ValueError('operation_missing_file_evidence')
@@ -160,30 +197,60 @@ def to_publication_results(linked, inventory):
             oid = 'operation:' + record.operation_id
             inputs = list(dict.fromkeys(n for n, _ in linked.graph.in_edges(oid)))
             outputs = list(dict.fromkeys(n for _, n in linked.graph.out_edges(oid)))
+            if any(linked.graph.nodes[n].get('unresolved') for n in [*inputs, *outputs]):
+                parsed.metadata['semantic_coverage'] = 'partial'
+                parsed.diagnostics.append(Diagnostic('Unresolved resource version ownership'))
             def asset(node):
                 data = linked.graph.nodes[node]
                 return AssetRef(data['name'], kind='unresolved' if data.get('unresolved') else 'table', identity=node)
-            by_name = {linked.graph.nodes[n]['name']: n for n in [*inputs, *outputs]}
-            dependencies = {(edge.get('fact_id'), edge.get('ordinal')): n
-                for n, _, edge in linked.graph.in_edges(oid, data=True) if edge.get('fact_id')}
+            sensitive = linked.graph.graph.get('case_sensitive', False)
+            def resolve_column(table, scope='', version='', *, output=False, fact_id=None, ordinal=None):
+                edges = ([(n, edge) for _, n, edge in linked.graph.out_edges(oid, data=True)] if output else
+                         [(n, edge) for n, _, edge in linked.graph.in_edges(oid, data=True)])
+                exact = [(n, e) for n, e in edges if fact_id and e.get('fact_id') == fact_id and e.get('ordinal') == ordinal]
+                matches = {n for n, e in exact or edges if
+                    _name_key(e['reference']['name'], sensitive) == _name_key(table, sensitive) and
+                    (not scope or e['reference']['scope'] == scope) and
+                    (version == '' or str(e['reference']['version']) == str(version))}
+                if len(matches) == 1:
+                    node = next(iter(matches))
+                    return node, linked.graph.nodes[node].get('unresolved', False)
+                # A blank identity would invoke the legacy name resolver and guess again.
+                identity = 'unresolved-column:' + stable_id(oid, table, scope, str(version), str(output))
+                ref = AssetRef(table, kind='unresolved', identity=identity)
+                if ref not in parsed.assets:
+                    parsed.assets.append(ref)
+                    parsed.diagnostics.append(Diagnostic('Unresolved column resource ownership', symbol=table))
+                parsed.metadata['semantic_coverage'] = 'partial'
+                return identity, True
             derivations = []
             for fact in record.derivations:
                 expression = fact.expression
                 text = inventory[expression.file_id]['source_text'][expression.start_offset:expression.end_offset] if expression else ''
+                target, uncertain = resolve_column(fact.target_table, fact.scope, fact.version, output=True)
+                dependency_inputs = []
+                for j, item in enumerate(fact.inputs):
+                    identity, unresolved = resolve_column(item.table, item.scope, item.version, fact_id=fact.fact_id, ordinal=j)
+                    uncertain |= unresolved
+                    dependency_inputs.append({**item.model_dump(), 'table_identity': identity})
                 derivations.append({'target_table': fact.target_table, 'target_column': fact.target_column,
-                    'target_identity': by_name.get(fact.target_table, ''), 'target_version': fact.version,
+                    'target_identity': target, 'target_version': fact.version,
                     'expression': text, 'category': fact.category, 'scope': fact.scope, 'branch': fact.branch,
-                    'ordinal': fact.ordinal, 'status': 'unresolved' if fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else fact.status,
-                    'coverage': [*record.limitations, *(['unknown_wildcard_schema'] if fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else [])],
-                    'inputs': [{**i.model_dump(), 'table_identity': dependencies.get((fact.fact_id, j), by_name.get(i.table, ''))}
-                               for j, i in enumerate(fact.inputs)]})
-            usages = [Usage(u.table, u.column, u.context, status='inferred', table_identity=by_name.get(u.table, '')) for u in record.usages]
+                    'ordinal': fact.ordinal, 'status': 'unresolved' if uncertain or fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else fact.status,
+                    'coverage': [*record.limitations, *(['unresolved_resource_ownership'] if uncertain else []),
+                        *(['unknown_wildcard_schema'] if fact.target_column == '*' or any(i.column == '*' for i in fact.inputs) else [])],
+                    'inputs': dependency_inputs})
+            usages = []
+            for usage in record.usages:
+                identity, uncertain = resolve_column(usage.table, usage.scope)
+                usages.append(Usage(usage.table, usage.column, usage.context,
+                    status='unresolved' if uncertain else 'inferred', table_identity=identity))
             parsed.operations.append(Operation(record.kind, [asset(n) for n in inputs], [asset(n) for n in outputs],
                 source[start:end], source.count('\n', 0, start) + 1, source.count('\n', 0, end) + 1,
                 method='ai-project', confidence=.8, evidence_key=record.operation_id, usages=usages,
                 derivations=derivations, warnings=record.limitations))
         parsed.diagnostics.extend(Diagnostic(reason) for reason in file.unresolved)
-        if file.semantic_coverage != 'model_reported_complete':
+        if parsed.metadata['semantic_coverage'] != 'model_reported_complete':
             parsed.diagnostics.append(Diagnostic('AI semantic coverage is incomplete'))
         output.append(({k: v for k, v in metadata.items() if k != 'source_text'}, parsed))
     return output

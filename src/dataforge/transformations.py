@@ -44,7 +44,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                        for t in op.targets}
 
             def reference(table, name, scope='', version='', output=False, identity=''):
-                if scope:
+                if scope and not identity:
                     # Scope records live under their output asset without polluting table lineage.
                     anchor = next(iter(outputs.values()), None)
                     if anchor is None:

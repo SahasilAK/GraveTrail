@@ -400,8 +400,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             dbt_projects.extend(p for p in load_committed_dbt_results(store, workspace) if p.snapshot.project_id not in selected_projects)
         counts['accepted'] = sum(len(f.operations) for f in files)
         counts['unresolved'] = len(linked.unresolved) + sum(len(f.unresolved) for f in files)
-        counts['incomplete_files'] = sum(f.semantic_coverage != 'model_reported_complete' for f in files)
-        counts['coverage_gaps'] = sum(f.semantic_coverage != 'model_reported_complete' for f in files) + len(linked.unresolved)
+        counts['incomplete_files'] = linked.coverage['semantic_incomplete']
+        counts['coverage_gaps'] = counts['incomplete_files'] + len(linked.unresolved)
         with store.analysis_lock, store.transaction():
             check()
             _current(store, workspace, prepared, expected, full=True)
