@@ -146,7 +146,7 @@ def prepare_analysis(store, workspace, request, *, progress=None):
         for f in inventory:
             if f['file_id'] in selected:
                 sources.append(SourceSnapshot(f['file_id'],f['content_hash'],f['relative_path'],f['extension'],
-                               source_job(f,settings),store.snapshot_content(f),
+                               dbt_contexts.get(f['file_id'], {}).get('project_id', source_job(f,settings)),store.snapshot_content(f),
                                'dbt' if f['file_id'] in dbt_contexts else f['extension'].lstrip('.'),
                                json.dumps(dbt_contexts.get(f['file_id'], {}), sort_keys=True)))
                 if progress:

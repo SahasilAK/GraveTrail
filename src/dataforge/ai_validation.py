@@ -32,6 +32,26 @@ def validate_extraction(item, part, source_snapshot):
         op.operation_id = stable_id('operation5', part.file_id, part.content_hash, op.kind, op.scope,
             str(op.order), str([(r.start_offset, r.end_offset) for r in op.evidence]))
         ids[old_id] = op.operation_id
+        for resource in [*op.reads, *op.writes]:
+            if resource.temporary or resource.name.lower().startswith(('work.', '#')):
+                resource.temporary = True
+                resource.scope = resource.scope or (part.scope if part.scope != 'workspace' else part.file_id)
+            if part.source_kind == 'dbt':
+                import json
+                definitions = {}
+                for source in source_snapshot.values():
+                    for entry in json.loads(source.context_json).get('resources', []):
+                        if entry.get('project_id') == part.scope:
+                            definitions[entry['resource_id']] = entry
+                candidates = [r for r in definitions.values() if r['name'] == resource.name and
+                    (not resource.scope or r.get('package_name') == resource.scope)]
+                if resource.identity:
+                    if resource.identity.removeprefix('dbt:') not in definitions:
+                        raise ValueError('unknown_dbt_resource_identity')
+                elif len(candidates) == 1:
+                    resource.identity = 'dbt:' + candidates[0]['resource_id']
+                else:
+                    resource.scope = part.scope
         for usage in op.usages:
             refs(usage.evidence)
         seen_facts = {}

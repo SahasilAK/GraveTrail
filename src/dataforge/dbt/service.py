@@ -85,6 +85,41 @@ def is_dbt(metadata):
     return json.loads(metadata.get('metadata') or '{}').get('source_kind') == 'dbt'
 
 
+def prepare_ai_dbt_inventory(prepared, results):
+    """Safe resource inventory and AI-derived data relationships; no static lineage."""
+    from dataforge.dbt.evidence import evidence
+    from dataforge.dbt.models import DbtProjectResult, DbtRelationship
+    from dataforge.dbt.resources import collect_resources
+    sources = {s.file_id: s for s in prepared.sources if s.source_kind == 'dbt'}
+    if not sources:
+        return []
+    files = [m for m, _ in results if m['file_id'] in sources]
+    snapshots = discover_dbt_snapshots(files, lambda ref: sources[ref.file_id].code,
+                                      prepared.settings.get('dbt', {}))
+    projects = []
+    for snapshot in snapshots:
+        resources, diagnostics = collect_resources(snapshot, lambda ref: sources[ref.file_id].code)
+        manifests = [s for s in snapshot.sources if s.relative_path.rsplit('/', 1)[-1] == 'manifest.json']
+        if manifests and snapshot.context.mode != 'source':
+            from dataforge.dbt.artifacts import manifest_resources, read_artifact
+            resources, _ = manifest_resources(read_artifact(manifests[0], sources[manifests[0].file_id].code), snapshot)
+        ids = {r.resource_id for r in resources}
+        selected = tuple((m, p) for m, p in results if m['file_id'] in {s.file_id for s in snapshot.sources})
+        relationships = []
+        for metadata, parsed in selected:
+            text = sources[metadata['file_id']].code
+            for operation in parsed.operations:
+                ref = evidence(metadata, text, origin='ai_inferred')
+                for source in operation.sources:
+                    for target in operation.targets:
+                        a, b = source.identity.removeprefix('dbt:'), target.identity.removeprefix('dbt:')
+                        if a in ids and b in ids:
+                            relationships.append(DbtRelationship(a, b, 'data_read', 'resolved', (ref,)))
+        projects.append(DbtProjectResult(snapshot, tuple(resources), tuple(relationships), file_results=selected,
+            coverage={'ai_mode': 'ai', 'columns': 'inferred', 'semantic_completeness': 'not_proven'}))
+    return projects
+
+
 def discover_dbt_snapshots(files, read_source, stored_settings):
     by_id = {m['file_id']: m for m in files}
     settings = DbtSettings.model_validate(stored_settings)

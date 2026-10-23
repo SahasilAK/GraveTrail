@@ -340,6 +340,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         linked = link_file_extractions(files, prepared.settings)
         inventory = {s.file_id: {**store.file(s.file_id), 'source_text': s.code} for s in prepared.sources}
         results = to_publication_results(linked, inventory)
+        from dataforge.dbt.service import prepare_ai_dbt_inventory
+        dbt_projects = prepare_ai_dbt_inventory(prepared, results)
         counts['accepted'] = sum(len(f.operations) for f in files)
         counts['unresolved'] = len(linked.unresolved)
         counts['coverage_gaps'] = sum(f.semantic_coverage != 'model_reported_complete' for f in files) + len(linked.unresolved)
@@ -347,7 +349,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             check()
             _current(store, workspace, prepared, expected, full=True)
             published = publish_analysis_results(store, workspace, results, prepared.settings,
-                {'analyzed': len(files), 'cached': 0}, cancelled=cancelled)
+                {'analyzed': len(files), 'cached': 0, 'dbt_projects': dbt_projects}, cancelled=cancelled)
             counts.update({k: published[k] for k in ('analyzed', 'cached', 'assets', 'edges')})
             report = AnalysisReport(run_id=run_id, mode='ai', status='committed', complete=not counts['coverage_gaps'],
                 counts=dict(counts), usage_known=usage_known,

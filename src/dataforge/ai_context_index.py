@@ -135,6 +135,9 @@ def plan_context_completion(extractions, frozen_index, *, completed=frozenset(),
         symbols = {m.symbol for m in item.missing_context if m.status == 'unresolved' and
                    (not m.scope or m.scope == part.scope)}
         selection = context_for_part(frozen_index, part, budget, symbols=symbols)
+        new_ids = {e.entry_id for e in selection.entries} - set(part.context_ids)
+        if not new_ids:
+            continue
         if not selection.entries or all(m.consumed_fingerprint == selection.fingerprint for m in item.missing_context):
             continue
         completion = part.model_copy(update={
