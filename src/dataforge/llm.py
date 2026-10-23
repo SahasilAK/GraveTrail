@@ -79,6 +79,7 @@ class Profile(BaseModel):
     timeout: float = Field(default=30, ge=1, le=3600)
     connect_timeout: float = Field(default=5, ge=.05, le=60)
     read_timeout: float | None = Field(default=None, ge=.05, le=3600)
+    wait_until_stopped: bool = False
     unknown_retries: int = Field(default=0, ge=0, le=2)
     retries: int = Field(default=1, ge=0, le=2)
     max_tokens: int = Field(default=2048, ge=64, le=2147483647)
@@ -273,7 +274,9 @@ class Adapter:
         return headers
 
     def _timeouts(self, read_override=None):
-        return httpx.Timeout(read_override or self.profile.read_timeout or self.profile.timeout,
+        # Setup/discovery without a Stop control must remain bounded.
+        unlimited = self.profile.wait_until_stopped and bool(self.check or self.cancelled)
+        return httpx.Timeout(None if unlimited else (read_override or self.profile.read_timeout or self.profile.timeout),
             connect=self.profile.connect_timeout, write=self.profile.timeout, pool=self.profile.connect_timeout)
 
     def _guard(self):
@@ -337,6 +340,7 @@ class Adapter:
         for attempt in range(self.profile.retries + 1):
             self._guard()
             started, sent, recorded = time.monotonic(), False, False
+            transport_error = None
             self._http_status = None
             timeout = self._timeouts()
             def record(category, unknown, retry):
@@ -345,6 +349,7 @@ class Adapter:
                 detail = {'failure_category': category, 'attempt_number': attempt + 1,
                         'elapsed_seconds': max(0., time.monotonic() - started), 'timeouts': timeout.as_dict(),
                         'outcome': 'unknown' if unknown else 'known', 'retry_scheduled': retry,
+                        'transport_error': transport_error,
                         'allowance_exhausted': not retry and (attempt >= self.profile.retries or
                             (unknown and unknowns > self.profile.unknown_retries)), 'http_status': self._http_status}
                 if self.attempt_observer:
@@ -418,6 +423,7 @@ class Adapter:
                     except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
             except httpx.TransportError as exc:
+                transport_error = type(exc).__name__
                 pre_send = isinstance(exc, (httpx.ConnectTimeout, httpx.PoolTimeout, httpx.ConnectError))
                 explicit = self._http_status is not None and self._http_status >= 300
                 unknown = not pre_send and not explicit

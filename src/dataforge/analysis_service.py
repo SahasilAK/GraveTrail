@@ -70,6 +70,8 @@ def recovery_message(summary):
         'cancelled': 'AI analysis was cancelled. Saved progress is retained.',
         'invalid_response': 'The provider returned an invalid response.',
         'process_interrupted': 'The app stopped before it checkpointed a complete response; the outcome is unknown.'}.get(category)
+    if category == 'transport_unknown' and detail.get('transport_error') == 'ReadTimeout':
+        message = 'The app timed out waiting for response data; processing or charges may have occurred.'
     if not message:
         return 'AI analysis paused with saved progress. Review the report before continuing.'
     if detail.get('retry_scheduled'):
@@ -336,7 +338,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     ticket = begin_attempt(store, workspace, run_id, batch_id, planned.reserved_output,
                         details={'attempt_number': len(history) + 1, 'cycle_attempt': len(cycle) + 1,
                                  'attempt_limit': profile.retries + 1, 'batch_number': request_details.get('batch_number', 1), 'timeouts': {
-                            'connect': profile.connect_timeout, 'read': profile.read_timeout or profile.timeout,
+                            'connect': profile.connect_timeout, 'read': None if profile.wait_until_stopped else (profile.read_timeout or profile.timeout),
                             'write': profile.timeout, 'pool': profile.connect_timeout}})
                     physical_started = monotonic()
                 def observed_failure(detail):

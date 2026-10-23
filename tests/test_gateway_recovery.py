@@ -53,6 +53,7 @@ def test_failure_retry_keeps_each_attempt_and_reservation(tmp_path, failure):
     assert detail['failure_category'] == ('pre_send' if safe else 'transport_unknown')
     assert detail['attempt_number'] == 1 and detail['retry_scheduled']
     assert detail['elapsed_seconds'] >= 0 and detail['timeouts']['read'] == 30
+    assert detail['transport_error'] == failure.__name__
     assert 'DO_NOT_PERSIST' not in json.dumps(attempts)
     assert not recover_pipeline(store, w, result.run_id)['unknown']
     assert len(store.rows('SELECT * FROM analysis_runs')) == 1
@@ -331,3 +332,21 @@ def test_invalid_model_item_cannot_multiply_the_automatic_network_budget(tmp_pat
     assert len(calls) == 3
     assert result.counts['reserved_output_tokens'] == 24000
     store.close()
+
+
+def test_wait_until_stopped_preserves_other_timeouts_and_old_profiles():
+    profile = Profile(provider='OmniRoute', base_url='http://localhost:20128/v1', model='m',
+                      timeout=83, read_timeout=90, wait_until_stopped=True)
+    with Adapter(profile, cancelled=lambda: False) as adapter:
+        assert adapter._timeouts(12).as_dict() == {'connect': 5, 'read': None, 'write': 83, 'pool': 5}
+    with Adapter(profile) as adapter:
+        assert adapter._timeouts().read == 90  # Setup/discovery has no Stop control.
+    assert Profile.model_validate(profile.model_dump()).wait_until_stopped
+
+
+def test_read_timeout_message_differs_from_disconnection():
+    from dataforge.analysis_service import recovery_message
+    summary = {'last_failure': {'failure_category': 'transport_unknown', 'transport_error': 'ReadTimeout'}}
+    assert 'app timed out' in recovery_message(summary)
+    summary['last_failure']['transport_error'] = 'RemoteProtocolError'
+    assert 'connection ended' in recovery_message(summary)

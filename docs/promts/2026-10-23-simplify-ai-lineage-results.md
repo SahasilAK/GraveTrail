@@ -161,3 +161,14 @@ Remaining limitations: no real OmniRoute failover or live-model accuracy was mea
 Final full-suite verification: `.venv/Scripts/python.exe -m pytest -q` — **1035 passed, 2 skipped**, 236.17 seconds, exit 0. Both skips remain unavailable Windows symlink privileges. All requested offline implementation and verification work is complete; real gateway behavior and live-model quality remain unmeasured.
 
 Local implementation commit: `a75e81c` — bound gateway waiting and recovery. Documentation and verification are recorded in the accompanying documentation commit. No push was performed.
+
+
+## Follow-up: optional wait-until-stopped � 2026-10-24
+
+Added one opt-in profile setting, `wait_until_stopped`, and an admin checkbox. Cancellable AI requests use an unlimited HTTP read timeout while retaining bounded connection/write/pool timeouts. Existing profiles retain their previous timeout behavior. Setup/discovery calls without a cancellation callback remain bounded. Cancel and configured run ceilings still interrupt silent HTTP I/O; actual disconnections retain the existing bounded retry policy. Transport diagnostics now retain the exception class (never its potentially sensitive message), distinguishing an app read timeout from a disconnected gateway.
+
+Socket regressions cover a response arriving beyond the configured inactivity timeout without a duplicate request, cancellation, run deadlines, and a real partial-response disconnect with retry. Profile tests cover round-trip and the bounded setup/discovery behavior.
+
+Authorized live test: enabled the setting on the existing OmniRoute profile in `new_test`, using the running app's already-available credential and `auto/best-coding`. The workspace contained 2,114 SQL files (225 estimated initial requests). Previous gateway logs showed 499 outcomes around 30 seconds; the new first batch stayed open beyond that interval and successfully checkpointed 14 extracted parts, reporting 9,339 input / 12,503 output tokens, then began the next request. No secret or source content was copied into this document. This is transport/checkpoint functionality evidence, not a semantic accuracy evaluation or proof that the entire build completed.
+
+Verification: full suite **1,042 passed, 2 skipped** in 297.39 seconds; the skips require Windows symlink privileges. The final bounded setup/discovery adjustment was independently checked by the final gateway/socket group (**39 passed** in 38.83 seconds). Provider/LLM/connection/resume group: **86 passed**. Ruff, diff checks, and strict documentation build passed. The user took over the ongoing live build after the first successful checkpoint; no full live-build completion is claimed.

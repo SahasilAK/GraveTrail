@@ -59,7 +59,7 @@ prompt changes make a paused run stale. Historical snapshots and migration-9 tab
 remain readable; old paused protocols require a new build. Explicit Static builds
 use static results instead of restoring prior project AI results.
 
-For slow gateways, configure separate connection and response inactivity timeouts.
+For slow gateways, enable **Wait until stopped** in the provider profile to disable the client response inactivity timeout, or configure separate connection and response inactivity timeouts. **Cancel AI analysis** closes the client request and prevents further retries; configured run limits still apply. Connection establishment and setup/discovery calls without a cancellation control remain bounded. A gateway can still disconnect or return an error, and closing the client does not guarantee upstream processing is cancelled.
 The latter must accommodate fallback plus generation; it is not a total deadline.
 Project cancellation and optional run-time limits are checked during silent waits.
 Every lost response remains an unknown attempt with its output reservation, even

@@ -118,9 +118,12 @@ def render(store: Store, workspace: str) -> None:
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")), key=prefix + '_auth')
         new_gateway = not existing and provider == 'OmniRoute'
         timeout = config.get('timeout', 30)  # Preserve the saved legacy/write timeout.
+        wait_until_stopped = st.checkbox('Wait until stopped', value=config.get('wait_until_stopped', False),
+            key=prefix + '_wait_until_stopped',
+            help='Disable response inactivity timeout. Cancel AI analysis stops waiting and retries. Configured run limits still apply; gateway disconnects can still occur.')
         read_timeout = st.number_input('Response inactivity timeout (seconds)', .05, 3600.,
             float(config.get('read_timeout') or config.get('timeout', 300 if new_gateway else 30)),
-            key=prefix + '_timeout', help='Allow upstream fallback plus generation time. This is the wait for response data, not a total request deadline. Run limits and cancellation still apply.')
+            key=prefix + '_timeout', disabled=wait_until_stopped, help='Allow upstream fallback plus generation time. This is the wait for response data, not a total request deadline. Run limits and cancellation still apply.')
         connect_timeout = st.number_input('Connection timeout (seconds)', .05, 60.,
             float(config.get('connect_timeout', 5)), key=prefix + '_connect_timeout')
         retries = st.number_input('Shared retries per batch', 0, 2, int(config.get('retries', 2 if new_gateway else 1)),
@@ -136,7 +139,7 @@ def render(store: Store, workspace: str) -> None:
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
         quota_group = config.get('quota_group', '')  # Historical profile round-trip only.
     values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
-                  read_timeout=read_timeout, connect_timeout=connect_timeout, unknown_retries=unknown_retries,
+                  read_timeout=read_timeout, wait_until_stopped=wait_until_stopped, connect_timeout=connect_timeout, unknown_retries=unknown_retries,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
                   context_mode=context_mode, output_mode=output_mode,
                   temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version,
