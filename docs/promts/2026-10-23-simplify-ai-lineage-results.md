@@ -66,3 +66,26 @@ All implementation tasks and offline acceptance checks were completed. Live-mode
 - `5ba6b5d` — final pipeline cleanup, recovery and review regressions.
 
 The accompanying documentation commit records the approved plan, this evidence and refreshed folder knowledge maps. All commits remain local on `codex/resumable-ai-lineage`.
+
+## Follow-up: four review findings — 2026-10-23
+
+All four findings were confirmed against the current branch. Before implementation, the initial regression command returned **7 failed, 3 passed**: sensitive-mode folding/publication identity, a standalone in-place self-cycle, successive unversioned writer uncertainty, source-order reversal, dependency/order contradiction, shared-scope consolidation overflow and missing actual-context budgeting. The final tests are split into `tests/test_ai_linking_review.py` and `tests/test_ai_consolidation_review.py`, with additional compatibility and recovery coverage.
+
+1. **Case policy:** propagate `case_sensitive` to graph normalization and use graph identities in publication. Quoted names, explicit identities, namespace/job scope and insensitive defaults remain covered.
+2. **In-place reads/writes:** separate an unknown before-version from the output instead of reusing the output as external input. A supported earlier producer supplies the previous version; uniquely ordered same-file writes retain successive operation versions. Unknown before-versions remain unresolved, while genuine cross-operation cycles remain cycles.
+3. **Execution order:** constrain the selected upstream slice with both dependency and established same-file source order before checking cycles, ambiguity and executable order. Identifier sorting does not establish execution evidence. Conflicting constraints yield no executable order; unrelated components stay excluded.
+4. **Consolidation:** group fragments and writer/consumer dependencies, then pack independent intact components using the dispatch `pack_request` function, including actual path/settings and expected output checks. Work IDs include stable sorted input membership/content. No evidence, facts or necessary connected context is clipped. Cancellation after a completed group, store reopening and resume reuse completed groups without duplicate calls or lost operations. Existing supersession regression tests remain passing.
+
+Verification (repository `.venv/Scripts/python.exe`; mocked transport only):
+
+- `-m pytest tests/test_ai_linking_review.py tests/test_ai_consolidation_review.py -q`: **13 passed**.
+- `-m pytest tests/test_ai_linking_review.py tests/test_ai_consolidation_review.py tests/test_ai_file_consolidation.py tests/test_ai_resumable_files.py tests/test_ai_operation_graph.py tests/test_ai_review_regressions.py tests/test_ai_linking.py tests/test_ai_full_build.py tests/test_dbt_ai_analysis.py tests/test_ai_analysis_persistence.py -q`: **52 passed**, 16.26 seconds, exit 0.
+- `-m pytest -q`: **984 passed, 2 skipped**, 198.85 seconds, exit 0. The same two Windows symlink-privilege skips remain. The final deterministic cycle-list sorting and test-module organization were followed by the focused command above.
+- `-m ruff check src ui tests scripts`: **all checks passed**.
+- `git diff --check`: clean.
+
+Local code commits: `761e1ab` (findings 1–3), `be379cb` (finding 4). Nothing pushed during this follow-up.
+
+Documentation integration: `scripts/docs/build.py` passed its strict build and validation of 42 public pages, 8 assets, rendered links/anchors, search and publication inventory (236 search entries).
+
+Remaining limits: an intact connected operation/dependency component that cannot fit either input or expected output remains explicitly unresolved with all original details retained. There is no recursive consolidation, pipeline redesign or new infrastructure. Runtime model semantics remain inferred; passing mock tests do not establish live-model accuracy. No paid/live provider calls were made. No requested finding remains unaddressed.

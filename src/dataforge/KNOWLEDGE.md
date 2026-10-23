@@ -129,3 +129,5 @@ Build Python artifacts now include dependency-overrides.txt in manifest alongsid
 - `tokenizer_assets/` — Pinned o200k_base data for optional offline matching OpenAI text counting. See [tokenizer_assets/KNOWLEDGE.md](tokenizer_assets/KNOWLEDGE.md).
 
 Static builds use the static extractor even after AI publication. Selected AI rebuilds retain compatible unselected saved publication and manual merges without static re-extraction. Semantic completeness is never proven by a model's complete flag. SQL generation, SAS translation and optimization remain deferred.
+
+Review fixes: `ai_linking` propagates case policy, separates unresolved before-versions for in-place writes, and constrains upstream execution by source order plus dependencies. `ai_composition.plan_file_consolidation` packs intact dependency components through the same `pack_request` context used by dispatch; stable content-based group IDs support resume, while irreducible overflow retains original details.

@@ -128,3 +128,6 @@ Timeout/progress regressions cover3600 acceptance/3601 rejection, remaining-run 
 - `legacy_ai_fixtures.py` — Historical wire/checkpoint unit fixtures without retaining the retired project planner.
 
 Historical/manual validation, wire, citation and snapshot tests remain distinct from new project execution. Removed scheduler/window/resolution tests are replaced by the behavior above.
+
+- `test_ai_linking_review.py` — Case policy/quoting/scopes and publication identity, in-place before/after versions, successive writes, source-order constraints and conflicts.
+- `test_ai_consolidation_review.py` — Bounded shared-scope partitioning, intact dependency/evidence membership, dispatch-budget parity, stable IDs and cancellation/reopen without duplicate completed calls.
