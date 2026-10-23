@@ -389,6 +389,12 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         linked = link_file_extractions(files, prepared.settings)
         inventory = {s.file_id: {**store.file(s.file_id), 'source_text': s.code} for s in prepared.sources}
         results = to_publication_results(linked, inventory)
+        # Capture this run's publication uncertainty before adding retained files.
+        incomplete_files = {f.file_id for f in files if f.semantic_coverage != 'model_reported_complete'}
+        incomplete_files.update(m['file_id'] for m, p in results
+                                if p.metadata.get('semantic_coverage') != 'model_reported_complete')
+        unresolved_resources = set(linked.unresolved) | {a.identity for _, p in results
+                                                       for a in p.assets if a.kind == 'unresolved'}
         if request.file_ids is not None:
             results.extend(retained_publication_results(store, workspace, inventory, prepared.settings, prepared.prior_revision))
         restore_manual_ai_results(store, workspace, results, prepared.settings)
@@ -399,9 +405,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             selected_projects = {p.snapshot.project_id for p in dbt_projects}
             dbt_projects.extend(p for p in load_committed_dbt_results(store, workspace) if p.snapshot.project_id not in selected_projects)
         counts['accepted'] = sum(len(f.operations) for f in files)
-        counts['unresolved'] = len(linked.unresolved) + sum(len(f.unresolved) for f in files)
-        counts['incomplete_files'] = linked.coverage['semantic_incomplete']
-        counts['coverage_gaps'] = counts['incomplete_files'] + len(linked.unresolved)
+        counts['unresolved'] = len(unresolved_resources) + sum(len(f.unresolved) for f in files)
+        counts['incomplete_files'] = len(incomplete_files)
+        counts['coverage_gaps'] = counts['incomplete_files'] + len(unresolved_resources)
         with store.analysis_lock, store.transaction():
             check()
             _current(store, workspace, prepared, expected, full=True)

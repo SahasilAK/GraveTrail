@@ -42,6 +42,8 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
             sid, oid = operation_ids(workspace, metadata, op_index, op)
             outputs = {t.identity or resolver.norm(t.name): resolver.resolve(t, metadata, parsed, 'output')[0]
                        for t in op.targets}
+            unresolved_identities = {r.identity for r in [*op.sources, *op.targets, *parsed.assets]
+                                     if r.kind == 'unresolved'}
 
             def reference(table, name, scope='', version='', output=False, identity=''):
                 if scope and not identity:
@@ -57,7 +59,12 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                     else:
                         inferred = False
                 key = column_key(name, config['case_sensitive'])
-                cid = stable_id(workspace, aid, key, sid if scope or version else '', scope, version)
+                resolved_ai = (op.method == 'ai-project' and identity and identity not in unresolved_identities
+                               and resolver.registry[aid][4] != 'unresolved')
+                # AI asset identities already encode resource scope/version. Static
+                # expression scopes and unresolved references stay statement-local.
+                cid = (stable_id(workspace, aid, key) if resolved_ai else
+                       stable_id(workspace, aid, key, sid if scope or version else '', scope, version))
                 if not scope:
                     table = resolver.registry[aid][2]
                 references[cid] = [cid, workspace, aid, table, name, key, scope, version]
