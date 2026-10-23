@@ -12,17 +12,17 @@ from dataforge.ai_analysis_store import _run, load_validation_checkpoint
 from dataforge.models import canonical
 
 
-def _resource_key(resource, file):
-    name = resource.name.strip() if any(q in resource.name for q in '"`[') else canonical(resource.name)
+def _resource_key(resource, file, case_sensitive=False):
+    name = resource.name.strip() if case_sensitive or any(q in resource.name for q in '"`[') else canonical(resource.name)
     if resource.identity:
         return resource.identity
-    scope = resource.scope or (file.file_id if resource.temporary or name.startswith(('work.', '#')) else '')
+    scope = resource.scope or (file.file_id if resource.temporary or name.lower().startswith(('work.', '#')) else '')
     if file.source_kind == 'dbt':
         return 'dbt:' + scope + ':' + name
     return name + ('\x1fjob\x1f' + scope if scope else '')
 
 
-def build_operation_graph(file_extractions):
+def build_operation_graph(file_extractions, *, case_sensitive=False):
     """Versioned resources and operations, preserving parallel dependency roles."""
     graph, writers = nx.MultiDiGraph(), defaultdict(list)
     for file in file_extractions:
@@ -32,13 +32,16 @@ def build_operation_graph(file_extractions):
                            evidence=[r.model_dump() for r in op.evidence], limitations=op.limitations, order=op.order,
                            unresolved=any(d.status == 'unresolved' for d in op.derivations))
             for resource in op.writes:
-                writers[_resource_key(resource, file)].append((file, op, resource))
+                writers[_resource_key(resource, file, case_sensitive)].append((file, op, resource))
     for key, entries in writers.items():
+        ordered = (len({f.file_id for f, _, _ in entries}) == 1 and
+                   all(o.order is not None for _, o, _ in entries) and
+                   len({o.order for _, o, _ in entries}) == len(entries))
         for file, op, resource in entries:
             version = str(resource.version) if resource.version != '' else (op.operation_id if len(entries) > 1 else '')
             rid = key + ('@' + version if version else '')
             graph.add_node(rid, kind='resource', name=resource.name, identity=key, version=version,
-                           external=False, unresolved=len(entries) > 1 and not resource.version,
+                           external=False, unresolved=len(entries) > 1 and not resource.version and not ordered,
                            evidence=[r.model_dump() for r in op.evidence])
             graph.add_edge('operation:' + op.operation_id, rid, role='write', evidence=[r.model_dump() for r in op.evidence])
     for file in file_extractions:
@@ -51,7 +54,9 @@ def build_operation_graph(file_extractions):
                     if not any(r.name == dependency.table and r.scope == dependency.scope and str(r.version) == str(dependency.version) for r in reads):
                         reads.append(ResourceReference(name=dependency.table, scope=dependency.scope, version=dependency.version))
             for resource in reads:
-                key = _resource_key(resource, file)
+                key = _resource_key(resource, file, case_sensitive)
+                in_place = resource.version == '' and any(
+                    _resource_key(w, file, case_sensitive) == key for w in op.writes)
                 entries = [e for e in writers.get(key, []) if e[1].operation_id != op.operation_id]
                 future_only = False
                 if resource.version == '' and op.order is not None:
@@ -71,9 +76,11 @@ def build_operation_graph(file_extractions):
                     version = str(output.version) if output.version != '' else (producer.operation_id if len(writers[key]) > 1 else '')
                     rid = key + ('@' + version if version else '')
                 else:
-                    rid = key + ('@unresolved:' + op.operation_id if ambiguous else '@external-before:' + op.operation_id if future_only else ('@' + str(resource.version) if resource.version != '' else ''))
+                    rid = key + ('@unresolved:' + op.operation_id if ambiguous else '@external-before:' + op.operation_id if future_only or in_place else ('@' + str(resource.version) if resource.version != '' else ''))
                     graph.add_node(rid, kind='resource', name=resource.name, identity=key, version=str(resource.version),
-                        external=not ambiguous, unresolved=ambiguous, evidence=[r.model_dump() for r in op.evidence])
+                        external=not ambiguous, unresolved=ambiguous or in_place,
+                        limitations=['unresolved_before_version'] if in_place else [],
+                        evidence=[r.model_dump() for r in op.evidence])
                 roles = [(i.role, d.fact_id, ordinal, i.column) for d in op.derivations for ordinal, i in enumerate(d.inputs)
                          if i.table == resource.name and i.scope == resource.scope and str(i.version) == str(resource.version)] or [('rowset', '', 0, '')]
                 for role, fact_id, ordinal, column in roles:
@@ -97,17 +104,22 @@ def upstream_operations(graph, target_resource_id):
     if target_resource_id not in graph or graph.nodes[target_resource_id]['kind'] != 'resource':
         raise ValueError('Select an existing resource/version')
     nodes = nx.ancestors(graph, target_resource_id) | {target_resource_id}
-    subgraph = graph.subgraph(nodes)
-    cycles = [sorted(c) for c in nx.strongly_connected_components(subgraph) if len(c) > 1 or any(subgraph.has_edge(n, n) for n in c)]
+    subgraph = graph.subgraph(nodes).copy()
+    operation_nodes = sorted(n for n in nodes if graph.nodes[n]['kind'] == 'operation')
+    # Source order is evidence too. Constrain only the selected upstream slice.
+    for i, a in enumerate(operation_nodes):
+        for b in operation_nodes[i+1:]:
+            left, right = graph.nodes[a], graph.nodes[b]
+            if (left['file_id'] == right['file_id'] and left['order'] is not None and
+                    right['order'] is not None and left['order'] != right['order']):
+                before, after = (a, b) if left['order'] < right['order'] else (b, a)
+                subgraph.add_edge(before, after, role='source_order')
+    cycles = sorted(sorted(c) for c in nx.strongly_connected_components(subgraph) if len(c) > 1 or any(subgraph.has_edge(n, n) for n in c))
     unresolved = sorted(n for n in nodes if graph.nodes[n].get('unresolved') or graph.nodes[n].get('limitations'))
     operations = sorted(graph.nodes[n]['operation_id'] for n in nodes if graph.nodes[n]['kind'] == 'operation')
     references = {json.dumps(ref, sort_keys=True): ref for n in nodes for ref in graph.nodes[n].get('evidence', [])}
     order = None
-    operation_nodes = [n for n in nodes if graph.nodes[n]['kind'] == 'operation']
-    known_order = all(nx.has_path(subgraph, a, b) or nx.has_path(subgraph, b, a) or
-        (graph.nodes[a]['file_id'] == graph.nodes[b]['file_id'] and
-         graph.nodes[a]['order'] is not None and graph.nodes[b]['order'] is not None and
-         graph.nodes[a]['order'] != graph.nodes[b]['order'])
+    known_order = all(nx.has_path(subgraph, a, b) or nx.has_path(subgraph, b, a)
         for i, a in enumerate(operation_nodes) for b in operation_nodes[i+1:])
     if not cycles and not unresolved and known_order:
         order = [graph.nodes[n]['operation_id'] for n in nx.lexicographical_topological_sort(subgraph)
@@ -126,7 +138,7 @@ class LinkedAnalysis:
 
 
 def link_file_extractions(files, settings):
-    graph = build_operation_graph(files)
+    graph = build_operation_graph(files, case_sensitive=settings.get('case_sensitive', False))
     unresolved = sorted(n for n, data in graph.nodes(data=True) if data.get('unresolved'))
     return LinkedAnalysis(files, graph, unresolved, {'processed_files': len(files),
         'semantic_incomplete': sum(f.semantic_coverage != 'model_reported_complete' for f in files)})
