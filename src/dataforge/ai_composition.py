@@ -1,6 +1,98 @@
 """Source-backed expression components; only complete, validated unions become facts."""
 from __future__ import annotations
 
+
+def merge_extraction_revision(original, replacement):
+    """Retain original facts unless explicitly superseded; conflicts stay visible."""
+    from dataforge.ai_analysis_models import PartExtraction
+    result = PartExtraction.model_validate(original).model_copy(deep=True)
+    known = {d.fact_id for op in result.operations for d in op.derivations}
+    superseded = set(replacement.superseded_fact_ids)
+    if superseded - known:
+        raise ValueError('unknown_superseded_fact')
+    result.revision += 1
+    result.superseded_fact_ids = sorted(set(result.superseded_fact_ids) | superseded)
+    result.definitions.extend(replacement.definitions)
+    result.missing_context = replacement.missing_context
+    result.unresolved.extend(replacement.unresolved)
+    by_id = {op.operation_id: op for op in result.operations}
+    for op in result.operations:
+        op.derivations = [d for d in op.derivations if d.fact_id not in superseded]
+    for op in replacement.operations:
+        if op.operation_id not in by_id:
+            by_id[op.operation_id] = op
+            continue
+        old = by_id[op.operation_id]
+        for name in ('reads', 'writes', 'usages', 'derivations', 'limitations', 'context_ids'):
+            values = getattr(old, name)
+            for value in getattr(op, name):
+                if value not in values:
+                    if name == 'derivations' and any(d.fact_id == value.fact_id for d in values):
+                        result.unresolved.append('conflicting_replacement:' + value.fact_id)
+                    values.append(value)
+    result.operations = list(by_id.values())
+    result.omitted |= replacement.omitted
+    result.coverage = 'partial' if result.unresolved or result.missing_context or result.omitted else replacement.coverage
+    return result
+
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ConsolidationWork:
+    part: object
+    inputs: dict
+    overflow: bool = False
+
+
+def plan_file_consolidation(parts, limits):
+    from dataforge.ai_budget import request_budget
+    from dataforge.ai_batching import extraction_instructions
+    from dataforge.llm import Adapter
+    from dataforge.models import stable_id
+    if len(parts) < 2:
+        return []
+    groups = {}
+    for part, result in parts:
+        for operation in result.operations:
+            groups.setdefault(operation.scope, []).append((part, operation))
+    work = []
+    for scope, entries in sorted(groups.items()):
+        if len({p.part_id for p, _ in entries}) < 2:
+            continue
+        base = entries[0][0]
+        evidence = [r for _, op in entries for r in op.evidence]
+        part = base.model_copy(update={'part_id': stable_id('consolidation5', base.file_id, base.content_hash, scope),
+            'work_kind': 'consolidation', 'scope': scope,
+            'start_offset': min(p.start_offset for p, _ in entries),
+            'end_offset': max(p.end_offset for p, _ in entries), 'context_references': evidence})
+        inputs = {'operations': [op.model_dump() for _, op in entries],
+                  'part_ids': sorted({p.part_id for p, _ in entries})}
+        user = json.dumps({'protocol_version': 5, 'items': [{'part': part.model_dump(), 'source': '',
+                           'saved_details': inputs}], 'definitions': []}, ensure_ascii=False)
+        _, payload = Adapter.completion_request(limits, extraction_instructions(), user)
+        serialized = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+        overflow = not request_budget(limits, serialized, limits.max_tokens).fits or len(user.encode()) // 2 + 128 > limits.max_tokens
+        work.append(ConsolidationWork(part, inputs, overflow))
+    return work
+
+
+def assemble_file_extraction(source, parts, consolidations, *, provenance):
+    from dataforge.ai_analysis_models import FileExtraction, PartExtraction
+    combined = PartExtraction(part_id='combined')
+    for _, item in parts:
+        combined = merge_extraction_revision(combined, item)
+    for item in consolidations:
+        combined = merge_extraction_revision(combined, item)
+    return FileExtraction(file_id=source.file_id, content_hash=source.content_hash, source_kind=source.source_kind,
+        part_ids=[p.part_id for p, _ in parts], operations=combined.operations,
+        assets=[a for _, result in parts for a in result.assets],
+        unresolved=[*combined.unresolved, *[m.reason + ':' + m.symbol for _, r in parts for m in r.missing_context]],
+        semantic_coverage='partial' if combined.unresolved or combined.omitted or any(
+            r.coverage not in {'complete', 'no_operations'} or r.missing_context for _, r in parts) else 'model_reported_complete',
+        provenance=provenance)
+
 import json
 from collections import defaultdict
 

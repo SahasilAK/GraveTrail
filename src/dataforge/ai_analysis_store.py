@@ -118,6 +118,44 @@ def save_unit_result(store, workspace, run_id, unit_id, *, file_id, content_hash
         [unit_id, workspace, run_id, file_id, content_hash, start_char, end_char, context_hash, status, record_id, _json(result or {})])
 
 
+def save_part_extraction(store, workspace, run_id, part, extraction, *, record_id=None):
+    save_unit_result(store, workspace, run_id, part.part_id, file_id=part.file_id, content_hash=part.content_hash,
+        start_char=part.start_offset, end_char=part.end_offset, context_hash='extraction5', status='completed',
+        record_id=record_id, result={'contract': 'part5', 'part': part.model_dump(), 'extraction': extraction.model_dump()})
+
+
+def load_file_parts(store, workspace, run_id, file_id=None):
+    from dataforge.ai_analysis_models import FilePart, PartExtraction
+    _run(store, workspace, run_id)
+    rows = store.rows('SELECT result FROM ai_analysis_units WHERE workspace_id=? AND run_id=?' +
+        (' AND file_id=?' if file_id else '') + ' ORDER BY file_id,start_char,unit_id',
+        [workspace, run_id, *([file_id] if file_id else [])])
+    result = []
+    for row in rows:
+        saved = json.loads(row['result'])
+        if saved.get('contract') == 'part5':
+            result.append((FilePart.model_validate(saved['part']), PartExtraction.model_validate(saved['extraction'])))
+    return result
+
+
+def save_file_extraction(store, workspace, run_id, extraction):
+    save_unit_result(store, workspace, run_id, 'file5:' + extraction.file_id,
+        file_id=extraction.file_id, content_hash=extraction.content_hash,
+        status='completed', result={'contract': 'file5', 'extraction': extraction.model_dump()})
+
+
+def load_file_extractions(store, workspace, run_id):
+    from dataforge.ai_analysis_models import FileExtraction
+    _run(store, workspace, run_id)
+    result = []
+    for row in store.rows('SELECT result FROM ai_analysis_units WHERE workspace_id=? AND run_id=? ORDER BY file_id,unit_id',
+                          [workspace, run_id]):
+        saved = json.loads(row['result'])
+        if saved.get('contract') == 'file5':
+            result.append(FileExtraction.model_validate(saved['extraction']))
+    return result
+
+
 def _run(store, workspace, run_id):
     if not store.rows('SELECT 1 FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?', [workspace, run_id]):
         raise ValueError('Analysis run does not belong to workspace')

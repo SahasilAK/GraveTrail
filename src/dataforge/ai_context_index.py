@@ -115,3 +115,33 @@ def context_for_part(index, part, budget, *, symbols=None):
         result.wire.append(wire)
     result.fingerprint = hashlib.sha256(json.dumps(result.wire, sort_keys=True).encode()).hexdigest()
     return result
+
+
+@dataclass(frozen=True)
+class CompletionWork:
+    part: object
+    original_part_id: str
+    missing_symbols: tuple[str, ...]
+    context: ContextSelection
+    catalog_revision: str
+    superseded_revision: int
+
+
+def plan_context_completion(extractions, frozen_index, *, completed=frozenset(), budget=1000000):
+    works = []
+    for part, item in extractions:
+        if part.work_kind != 'extraction' or part.part_id in completed or not item.missing_context:
+            continue
+        symbols = {m.symbol for m in item.missing_context if m.status == 'unresolved' and
+                   (not m.scope or m.scope == part.scope)}
+        selection = context_for_part(frozen_index, part, budget, symbols=symbols)
+        if not selection.entries or all(m.consumed_fingerprint == selection.fingerprint for m in item.missing_context):
+            continue
+        completion = part.model_copy(update={
+            'part_id': stable_id('completion5', part.part_id, frozen_index.revision),
+            'work_kind': 'context_completion', 'context_ids': [e.entry_id for e in selection.entries],
+            'context_hashes': [selection.fingerprint],
+            'context_references': [r for e in selection.entries for r in e.evidence]})
+        works.append(CompletionWork(completion, part.part_id, tuple(sorted(symbols)), selection,
+                                    frozen_index.revision, item.revision))
+    return works

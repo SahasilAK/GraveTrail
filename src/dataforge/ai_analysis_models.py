@@ -344,6 +344,7 @@ class FilePart(SourceReference):
     scope: str = ''
     context_ids: list[str] = Field(default_factory=list)
     context_hashes: list[str] = Field(default_factory=list)
+    context_references: list[SourceReference] = Field(default_factory=list)
     overlap: list[SourceReference] = Field(default_factory=list)
     work_kind: Literal['extraction', 'context_completion', 'consolidation'] = 'extraction'
 

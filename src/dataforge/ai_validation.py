@@ -1,6 +1,66 @@
 """Deterministic project evidence checks over whole originals, never AI quote fragments."""
 from __future__ import annotations
 
+
+def validate_extraction(item, part, source_snapshot):
+    """Verify source integrity and internal consistency without semantic approval."""
+    from dataforge.ai_analysis_models import PartExtraction
+    from dataforge.models import stable_id
+    item = PartExtraction.model_validate(item).model_copy(deep=True)
+    if item.part_id != part.part_id:
+        raise ValueError('unexpected_extraction_part')
+    allowed = [part, *part.overlap, *part.context_references]
+    def check(ref):
+        source = source_snapshot.get(ref.file_id)
+        if (source is None or source.content_hash != ref.content_hash or
+                not 0 <= ref.start_offset < ref.end_offset <= len(source.code) or not any(
+                    a.file_id == ref.file_id and a.content_hash == ref.content_hash and
+                    a.start_offset <= ref.start_offset < ref.end_offset <= a.end_offset for a in allowed)):
+            raise ValueError('invalid_source_reference')
+    def refs(values):
+        if not values:
+            raise ValueError('missing_source_reference')
+        for ref in values:
+            check(ref)
+    operations, ids = {}, {}
+    for op in item.operations:
+        refs(op.evidence)
+        if not any(r.file_id == part.file_id and part.start_offset <= r.start_offset < r.end_offset <= part.end_offset
+                   for r in op.evidence):
+            raise ValueError('operation_missing_own_source_reference')
+        old_id = op.operation_id
+        op.operation_id = stable_id('operation5', part.file_id, part.content_hash, op.kind, op.scope,
+            str(op.order), str([(r.start_offset, r.end_offset) for r in op.evidence]))
+        ids[old_id] = op.operation_id
+        for usage in op.usages:
+            refs(usage.evidence)
+        seen_facts = {}
+        for fact in op.derivations:
+            refs(fact.evidence)
+            if fact.expression:
+                check(fact.expression)
+            fact.fact_id = stable_id(op.operation_id, fact.target_table, fact.target_column, fact.scope,
+                str(fact.branch), str(fact.version), str(fact.ordinal))
+            value = fact.model_dump_json()
+            if fact.fact_id in seen_facts and seen_facts[fact.fact_id] != value:
+                item.unresolved.append('conflicting_fact:' + fact.fact_id)
+            seen_facts[fact.fact_id] = value
+        value = op.model_dump_json()
+        if op.operation_id in operations and operations[op.operation_id].model_dump_json() != value:
+            raise ValueError('conflicting_operation_identity')
+        operations[op.operation_id] = op
+    item.operations = list(operations.values())
+    for entry in item.definitions:
+        refs(entry.evidence)
+        entry.origin = 'ai_inferred'
+    for missing in item.missing_context:
+        for reference in missing.evidence:
+            check(reference)
+        missing.operation_id = ids.get(missing.operation_id, missing.operation_id)
+    if item.omitted or item.unresolved or item.missing_context:
+        item.coverage = 'partial'
+    return item
+
 import json
 from dataclasses import asdict, fields
 from functools import lru_cache
