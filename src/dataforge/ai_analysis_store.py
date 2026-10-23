@@ -55,7 +55,7 @@ def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None
              configuration=None, summary=None, analysis_run_id=None, accepted_results=None):
     if mode not in {'ai', 'hybrid', 'parser'}:
         raise ValueError('Unknown analysis mode')
-    if status not in TERMINAL | {'planning', 'extracting', 'validating', 'reconciling', 'reviewing', 'waiting_provider', 'linking', 'resolving', 'ready'}:
+    if status not in TERMINAL | {'planning', 'extracting', 'consolidating', 'validating', 'reconciling', 'reviewing', 'waiting_provider', 'linking', 'resolving', 'ready'}:
         raise ValueError('Unknown AI analysis state')
     old = store.rows('SELECT workspace_id,configuration,summary FROM ai_analysis_runs WHERE run_id=?', [run_id])
     if old and old[0]['workspace_id'] != workspace:
