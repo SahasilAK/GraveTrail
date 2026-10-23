@@ -67,37 +67,80 @@ class ConsolidationWork:
     overflow: bool = False
 
 
-def plan_file_consolidation(parts, limits):
-    from dataforge.ai_batching import extraction_instructions
-    from dataforge.ai_budget import request_budget
-    from dataforge.llm import Adapter
-    from dataforge.models import stable_id
+def plan_file_consolidation(parts, limits, *, context=None):
+    """Pack whole dependency components; never split an operation's evidence."""
+    from types import SimpleNamespace
+
+    import networkx as nx
+
+    from dataforge.ai_batching import pack_request
+    from dataforge.ai_linking import _resource_key
+
     if len(parts) < 2:
         return []
-    groups = {}
-    for part, result in parts:
-        for operation in result.operations:
-            groups.setdefault(operation.scope, []).append((part, operation))
-    work = []
-    for scope, entries in sorted(groups.items()):
-        if len({p.part_id for p, _ in entries}) < 2:
-            continue
-        base = entries[0][0]
-        evidence = [r for _, op in entries for r in [*op.evidence,
+    context = context or {}
+    sensitive = context.get('settings', {}).get('case_sensitive', False)
+    entries = sorted(((p, op) for p, result in parts for op in result.operations),
+                     key=lambda item: (item[1].operation_id, item[0].part_id,
+                                       json.dumps(item[1].model_dump(), sort_keys=True)))
+    dependencies = nx.Graph()
+    dependencies.add_nodes_from(range(len(entries)))
+    writers, readers, fragments = defaultdict(list), defaultdict(list), defaultdict(list)
+    from dataforge.ai_analysis_models import ResourceReference
+    for i, (part, operation) in enumerate(entries):
+        fragments[operation.operation_id].append(i)
+        for resource in operation.writes:
+            writers[_resource_key(resource, part, sensitive)].append(i)
+        for resource in [*operation.reads, *[ResourceReference(name=d.table, scope=d.scope, version=d.version)
+                         for fact in operation.derivations for d in fact.inputs]]:
+            readers[_resource_key(resource, part, sensitive)].append(i)
+    for indices in fragments.values():
+        dependencies.add_edges_from(zip(indices, indices[1:]))
+    for key, indices in writers.items():
+        # All candidate writers belong with their consumers: ambiguity is context.
+        members = [*indices, *readers[key]]
+        dependencies.add_edges_from(zip(members, members[1:]))
+
+    def make(indices):
+        selected = [entries[i] for i in sorted(indices)]
+        base = selected[0][0]
+        evidence = [r for _, op in selected for r in [*op.evidence,
             *[r for usage in op.usages for r in usage.evidence],
             *[r for d in op.derivations for r in [*d.evidence, *([d.expression] if d.expression else [])]]]]
-        part = base.model_copy(update={'part_id': stable_id('consolidation5', base.file_id, base.content_hash, scope),
-            'work_kind': 'consolidation', 'scope': scope,
-            'start_offset': min(p.start_offset for p, _ in entries),
-            'end_offset': max(p.end_offset for p, _ in entries), 'context_references': evidence})
-        inputs = {'operations': [op.model_dump() for _, op in entries],
-                  'part_ids': sorted({p.part_id for p, _ in entries})}
-        user = json.dumps({'protocol_version': 5, 'items': [{'part': part.model_dump(), 'source': '',
-                           'saved_details': inputs}], 'definitions': []}, ensure_ascii=False)
-        _, payload = Adapter.completion_request(limits, extraction_instructions(), user)
-        serialized = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
-        overflow = not request_budget(limits, serialized, limits.max_tokens).fits or len(user.encode()) // 2 + 128 > limits.max_tokens
-        work.append(ConsolidationWork(part, inputs, overflow))
+        evidence = list({r.model_dump_json(): r for r in evidence}.values())
+        inputs = {'operations': [op.model_dump() for _, op in selected],
+                  'part_ids': sorted({p.part_id for p, _ in selected})}
+        fingerprint = json.dumps(inputs, sort_keys=True, ensure_ascii=False)
+        part = base.model_copy(update={'part_id': stable_id('consolidation5', base.file_id, base.content_hash, fingerprint),
+            'work_kind': 'consolidation', 'scope': base.scope,
+            'start_offset': min(p.start_offset for p, _ in selected),
+            'end_offset': max(p.end_offset for p, _ in selected), 'context_references': evidence})
+        actual_context = {**context, 'sources': context.get('sources', {
+            base.file_id: SimpleNamespace(code='', path='')}),
+            'work_inputs': {part.part_id: inputs}}
+        try:
+            pack_request([part], limits, actual_context)
+            overflow = False
+        except ValueError:
+            overflow = True
+        return ConsolidationWork(part, inputs, overflow)
+
+    work, pending = [], []
+    for component in sorted((sorted(c) for c in nx.connected_components(dependencies)), key=lambda c: c[0]):
+        candidate = make([*pending, *component])
+        if not candidate.overflow:
+            pending.extend(component)
+            continue
+        if pending:
+            work.append(make(pending))
+            pending = []
+        standalone = make(component)
+        if standalone.overflow:
+            work.append(standalone)
+        else:
+            pending = component
+    if pending:
+        work.append(make(pending))
     return work
 
 

@@ -76,7 +76,7 @@ def test_resume_after_extraction_reuses_completed_parts(tmp_path, monkeypatch):
     Importer(store, workspace).files([('a.sql', b'select 1;')], {'.sql'})
     seen = []
     original = __import__('dataforge.analysis_service', fromlist=['plan_file_consolidation']).plan_file_consolidation
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise ValueError('synthetic consolidation failure')
     monkeypatch.setattr('dataforge.analysis_service.plan_file_consolidation', fail)
     result = run_analysis(store, workspace, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(empty_provider(seen)))

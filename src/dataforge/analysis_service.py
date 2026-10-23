@@ -369,7 +369,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             if source.source_kind not in {'sql', 'sas', 'dbt'}:
                 continue
             file_parts = [(p, r) for p, r in initial.values() if p.file_id == source.file_id]
-            groups = plan_file_consolidation(file_parts, profile)
+            groups = plan_file_consolidation(file_parts, profile, context=context)
             execute([g.part for g in groups if not g.overflow],
                 {**context, 'work_inputs': {g.part.part_id: g.inputs for g in groups if not g.overflow}})
             consolidated = [r for p, r in load_file_parts(store, workspace, run_id, source.file_id) if p.work_kind == 'consolidation']
