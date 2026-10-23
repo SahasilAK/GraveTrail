@@ -42,3 +42,10 @@ Prompt 6 issues source-only `expression_references` and accepts `expression_refe
 Project extraction uses shared strict facts with SQL/SAS/dbt context. dbt prompts include safe source/resource/YAML/macro/artifact context rather than computed parser lineage answers. Batch protocol 1 wraps independently validated unit payloads (maximum eight); targeted resolution reuses exact source evidence and cannot override host validation. See [AI pipeline](architecture/ai-analysis-pipeline.md).
 
 Protocol4 adds partial_expression_references and fragment input subsets for exact source/context views. The host validates each component, requires complete expression-range coverage and validates the union against the original parent. Review prompt4 uses source references and bounded one-input components, retaining scope/branch/version/ordinal identity. Full expressions remain local during component review. Complete source, projection and generic source/context tasks share the same strict evidence boundary. See the [detailed flow](user-guide/ai-analysis-flow.md).
+
+
+## Protocol 5 file extraction (2026-10-23)
+
+New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.

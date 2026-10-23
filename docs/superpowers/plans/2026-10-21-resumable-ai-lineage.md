@@ -1,3 +1,5 @@
+> Superseded for new AI project builds by `docs/promts/2026-10-23-simplify-ai-lineage-plan.md` and protocol 5 file extraction. Historical/manual contracts remain readable.
+
 # Resumable AI Lineage Build Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. This planning request authorizes the plan only; no product implementation has started. Preserve the user's chosen execution method when one is supplied.

@@ -177,7 +177,7 @@ Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The key
 
 New contract/context/transport/validator/reconciliation/orchestration tests use synthetic originals and HTTPX MockTransport. Strict evidence and negative fixtures cover fragments/splices, ambiguous ownership, unused CTEs, scope/role/version mapping, static UPDATE/MERGE gaps, retry/fallback budgeting, truncation, unknown usage and cooperative deadline/cancellation. Fourteen versioned SQL/SAS holdout scripts label expected facts and abstentions separately from prompt examples.
 
-These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-current-limits) records the still-open language-specific live precision, coverage and sample-size targets.
+These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-semantic-quality) records the still-open language-specific live precision, coverage and sample-size targets.
 
 Earlier source verification on 2026-10-20: **738 passed, 2 existing Windows symlink skips** in 178.66 seconds. The actual browser confirmed unchecked defaults, hybrid opt-in/preview, background publication and accepted table/column claims in the report using synthetic mocked extraction. Follow-up AppTest/browser checks cover automatic terminal report refresh and selection. A clean wheel installed in a separate environment ran outside the checkout, loading packaged project prompts/schemas and publishing one table edge/column derivation with durable support through mock HTTP. Ruff, lock and strict Pages validation are recorded with the PR. The bounded two-case live OmniRoute smoke described above verifies requests/usage and AI gap publication, but its sample is too small and was used in prompt development; do not infer a precision percentage.
 
@@ -369,3 +369,13 @@ responses supply known components or explicit partial outcomes; they do not
 establish live-model precision or complete semantic coverage. The user's Test
 workspace and providers are untouched. Static parser algorithms are unchanged;
 native executable and container release checks were not rerun.
+
+
+## Protocol 5 file extraction (2026-10-23)
+
+New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.
+
+
+Protocol-5 offline scale evidence (2026-10-23): SQL 1,002 files / 1,003 parts / 39 requests; SAS 1,002 / 1,003 / 38; dbt 1,002 / 1,003 / 42. All had full processed range coverage and exact deterministic golden table/column/file graphs after interruption/reopen. SQL/SAS retain duplicate-writer boundaries. These are mock transport checks, not live semantic accuracy. Peak measured Python allocations were approximately 106.5 / 57.4 / 97.2 MiB; elapsed times approximately 89 / 91 / 305 seconds with tracing enabled. Actual provider tokens/cost remain unknown.

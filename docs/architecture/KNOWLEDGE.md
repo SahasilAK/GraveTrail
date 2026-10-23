@@ -5,3 +5,5 @@
 Direct usage and the separate bounded column transformation service have distinct contracts.
 
 - `ai-analysis-pipeline.md` — Coordinator/worker sequence, schema9 journals, quota/accounting/reuse, adaptive source/context views, component review/composition, source-offset persistence and one atomic graph publication.
+
+ai-analysis-pipeline.md is the current protocol-5 file extraction/index/completion/consolidation/operation graph design. Older adaptive/resumable plans are marked superseded.

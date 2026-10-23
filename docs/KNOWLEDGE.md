@@ -99,3 +99,5 @@ SECURITY/setup/build guides explain temporary Streamlit1.66/Pillow13 exception, 
 Three public pages detail the resumable AI flow, controls/recovery and architecture; mkdocs.yml publishes them with CLI/MCP references. Internal superpowers plan/spec stay outside site and source distribution. Migration9 tables, dbt AI inclusion and bounded synthetic qualification are documented.
 
 Adaptive AI guides describe source-character versus model-envelope limits, nullable per-build override, sortable file sizing, exact source/context views and validated dependency-component composition/review/reuse. DATA_MODEL documents source-offset expression persistence and preserved support without a migration. Prompt engineering pins wire4/prompt6 extraction and wire2/prompt4 review. TESTING distinguishes actual-fixture request fitting/mock execution from live precision.
+
+AI_ANALYSIS.md and architecture/ai-analysis-pipeline.md are protocol-5 authorities. CLI/MCP guides match simplified token/selection/recovery contracts; historical hybrid/window descriptions are superseded. docs/promts contains the approved plan and verification record.

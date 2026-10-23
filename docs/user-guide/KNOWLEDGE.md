@@ -17,3 +17,5 @@ The hub leads with local parser/no-AI operation and presents hybrid as optional 
 
 - `ai-analysis-flow.md` — Complete SQL/SAS/dbt extraction→component checkpoint/review→validated expression composition→stored linking/resolution→publication flow.
 - `ai-analysis-controls-and-recovery.md` — Files/parallel maxima, optional character allowance, sortable sizing diagnostics, project vs window budgets, provider quotas and explicit unknown/restart actions.
+
+ai-analysis-flow.md and ai-analysis-controls-and-recovery.md now describe static/independent AI, automatic model token fitting, one optional run ceiling, one completion wave, saved-file consolidation and compatible recovery.

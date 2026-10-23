@@ -27,12 +27,6 @@ Windows staging consumes an explicit single artifact directory and requires chec
 
 Benchmark/live-check temporary directories use gravetrail prefixes; supplied fixture archive names remain original.
 
-- `benchmark_ai_analysis.py` — Offline operation/scope/version/role gold scorer and optional synthetic ZIP acceptance; explicit doubly opted-in bounded live OmniRoute evaluation. Aggregate sanitized metrics distinguish absent precision/sample-size insufficiency from pass.
-
-`benchmark_ai_analysis.py --scale-units 1000` adds mock-transport durable continuation, exact request/unit coverage, reopen, one final publication, elapsed time, peak Python allocations and maximum unit record bytes. Scale mode never makes live provider calls.
-
-- `benchmark_lineage_archives.py` — Supplied synthetic SQL/SAS ZIP checksum/inventory checks, answer-header masking preserving offsets, versioned scenario-group splits and per-script table-manifest agreement. Offline default; explicit bounded live samples reuse production planner/adapter/validator and compare parser/AI/hybrid. Receipts include quarantined metering and gateway-reported models. Missing column gold keeps qualification open.
-
-`benchmark_ai_analysis.py` adds --scenario existing/mixed/rate-limit/recovery/scale, --files/--units and grouping/parallel controls. Scale scenarios stay mock-only; 2001 unique physical calls crossed the 2000-attempt window in one Start/one publication. Semantic scoring/live qualification remains separate.
-
-- `qualify_ai_context.py` — Isolated actual2200SQL archive request-fitting preview and optional mock full build. Checks every source/model allowance, unique task extraction and single publication; no live model accuracy claim or user workspace access.
+- `benchmark_ai_analysis.py` — Independent semantic gold scorer; explicit environment + selected-case live opt-in routes through current file pipeline. Requires actual gateway token capacity. No ordinary paid calls; no hybrid comparison.
+- `benchmark_lineage_archives.py` — Supplied archive checksum/masking/scenario split and table-only parser/AI scoring. Missing column gold cannot qualify accuracy.
+- `qualify_ai_context.py` — Generated SQL/SAS/dbt golden transport qualification with oversized files, duplicate writers, interruption/reopen and exact table/column/file metrics. Reports request/token/memory/storage/coverage separately; live accuracy pending.

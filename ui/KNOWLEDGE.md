@@ -54,3 +54,5 @@ Provider request timeout accepts1–3600seconds without changing saved/default v
 `analysis_ai.py` now exposes files/request and parallel maxima immediately after enabling AI, separate execution and lifetime budgets, quota/unknown-outcome recovery and dbt project disclosure. `provider_settings.py` adds a non-secret shared quota-group label.
 
 AI previews expose a collapsed-by-default, lazy sortable Source files and request sizes table with original characters, maximum source/full-envelope request sizes, limits and blockers. Adaptive views/component composition are described alongside the controls.
+
+Protocol 5 supersedes older AI control notes above: analysis_ai shows one optional run output ceiling, provider/model/family, automatic token preview, stage progress and compatible continue/unknown retry. Historical reports remain readable; old protocols require a new build. provider_settings binds discovered/manual token capacity, preserves manual overrides and requires explicit legacy disclosure-limit migration. No new character/window/parallel/review controls.

@@ -95,3 +95,13 @@ across durable continuation without repeats.
 ## Resumable AI analysis
 
 A 2026-10-21 synthetic mock-transport qualification processed 2,001 distinct units/physical requests across automatic windows in one Start with one publication: 171.007 seconds with tracemalloc, 60,722,523 peak Python bytes and 791 maximum unit-record bytes. This is local scheduling/storage evidence, not a provider latency or accuracy benchmark. Reproduce with `python scripts/benchmark_ai_analysis.py --scenario scale --units 2001 --files 7 --max-files-per-request 1 --max-parallel-requests 2 --output pipeline-scale.json`. The planner also has a 2,200-file/6,238-unit synthetic regression.
+
+
+## Protocol 5 file extraction (2026-10-23)
+
+New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.
+
+
+Protocol-5 offline scale evidence (2026-10-23): SQL 1,002 files / 1,003 parts / 39 requests; SAS 1,002 / 1,003 / 38; dbt 1,002 / 1,003 / 42. All had full processed range coverage and exact deterministic golden table/column/file graphs after interruption/reopen. SQL/SAS retain duplicate-writer boundaries. These are mock transport checks, not live semantic accuracy. Peak measured Python allocations were approximately 106.5 / 57.4 / 97.2 MiB; elapsed times approximately 89 / 91 / 305 seconds with tracing enabled. Actual provider tokens/cost remain unknown.

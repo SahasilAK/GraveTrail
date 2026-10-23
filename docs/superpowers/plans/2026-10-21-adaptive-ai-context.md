@@ -1,3 +1,5 @@
+> Superseded for new AI project builds by `docs/promts/2026-10-23-simplify-ai-lineage-plan.md` and protocol 5 file extraction. Historical/manual contracts remain readable.
+
 # Adaptive AI context implementation plan
 
 > **For agentic workers:** Use superpowers:executing-plans, with test-driven development and a final independent review.
@@ -46,3 +48,7 @@
 - Large exact expressions persist as immutable offsets. A real17MiB regression passes checkpoint/snapshot rehydration; support refresh and one-source-read report regressions pass.
 - Independent reviewer reproduced six correctness/performance gaps; all were addressed with targeted regressions. Final narrow storage re-review: no remaining actionable findings;14 persistence tests pass.
 - Verification in progress: focused88 passed, later component/storage/scaling62 passed, strict42-page Pages build and lint/lock passed. Fresh installed wheel exercised301dependency composition, additional review and zero-network reuse. Final suite:963 passed/2 existing Windows skips in248.62seconds; actual2200fixture execution remains in progress.
+
+- Full-fixture execution exposed repeated observed read sites copied into every task dependency/context snapshot (2.7GiB working set before first dispatch). Compact these scoped name hints before hashing/scheduling/persistence; preserve declaration IDs/hashes/coordinates and full run freshness checks. The500read-site regression failed then passed,19 shared integration tests pass, and independent narrow re-review found no authority loss. The interrupted task-owned fixture is restarted under the final code; user data remains untouched.
+
+- Output-pressure regression:35columns used in value, partition and order roles produce105inputs despite few distinct names. Count visible lexical occurrences (qualification counted once) as well as expression slots. The regression failed before this fix; the56-test adaptive/scaling/context set passes after it.

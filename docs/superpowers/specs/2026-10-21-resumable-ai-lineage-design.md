@@ -1,3 +1,5 @@
+> Superseded for new AI project builds by `docs/promts/2026-10-23-simplify-ai-lineage-plan.md` and protocol 5 file extraction. Historical/manual contracts remain readable.
+
 # Resumable AI lineage build requirements and design
 
 Status: proposed design, not implemented. Updated: 2026-10-21, Asia/Calcutta.
