@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 from test_ai_token_budget import model
 
 from dataforge.ai_analysis_models import AnalysisRequest
@@ -107,4 +108,55 @@ def test_truncated_part_is_split_without_repeating_completed_siblings(tmp_path):
     parts = load_file_extractions(store, workspace, result.run_id)[0].part_ids
     assert len(parts) == 2
     assert len(seen) == len(set(seen)) == 2
+    store.close()
+
+
+@pytest.mark.parametrize('stop_after', [1, 2, 3])
+def test_cancel_between_part_commits_reopens_and_sends_only_missing(tmp_path, monkeypatch, stop_after):
+    import dataforge.analysis_service as service
+    from dataforge.ai_analysis_store import load_file_parts
+    store = Store(tmp_path)
+    w = store.create_workspace('small_sql')
+    configured(store, w)
+    Importer(store, w).files([(f'{n}.sql', b'select 1;') for n in range(3)], {'.sql'})
+    seen, committed = [], []
+    original = service.save_part_extraction
+    def save(*args, **kwargs):
+        original(*args, **kwargs)
+        committed.append(args[3].part_id)
+    monkeypatch.setattr(service, 'save_part_extraction', save)
+    first = run_analysis(store, w, AnalysisRequest(mode='ai'),
+        transport=httpx.MockTransport(empty_provider(seen)), cancelled=lambda: len(committed) >= stop_after)
+    assert first.status == 'cancelled'
+    assert len(load_file_parts(store, w, first.run_id)) == stop_after
+    assert not store.rows('SELECT * FROM analysis_runs')
+    initial = set(committed)
+    requested = set(seen)
+    store.close()
+    store = Store(tmp_path)
+    seen.clear()
+    resumed = run_analysis(store, w, AnalysisRequest(mode='ai', resume_run_id=first.run_id, retry_unknown=True),
+        transport=httpx.MockTransport(empty_provider(seen)))
+    assert resumed.status == 'committed', resumed.reasons
+    assert set(seen) == requested - initial
+    assert len(load_file_parts(store, w, first.run_id)) == 3
+    provenance = store.rows("SELECT record_id FROM ai_analysis_units WHERE context_hash='extraction5'")
+    assert all(r['record_id'] for r in provenance)
+    store.close()
+
+
+def test_checkpoint_write_failure_blocks_further_dispatch(tmp_path, monkeypatch):
+    import dataforge.analysis_service as service
+    store = Store(tmp_path)
+    w = store.create_workspace('storage failure')
+    configured(store, w)
+    Importer(store, w).files([('a.sql', b'select 1;')], {'.sql'})
+    def fail(*args, **kwargs):
+        raise OSError('synthetic disk failure')
+    monkeypatch.setattr(service, 'save_part_extraction', fail)
+    seen = []
+    result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(empty_provider(seen)))
+    assert result.status == 'failed' and len(seen) == 1
+    assert store.rows('SELECT status FROM ai_analysis_requests') == [{'status': 'planned'}]
+    assert not store.rows('SELECT * FROM analysis_runs')
     store.close()

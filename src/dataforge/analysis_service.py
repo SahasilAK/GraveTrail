@@ -355,8 +355,15 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             nonlocal usage_known
             if not work:
                 return set()
-            saved = {r['unit_id'] for r in store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed'",
-                                                     [workspace, run_id])}
+            def completed_parts():
+                records = {r['unit_id']: json.loads(r['result']) for r in store.rows(
+                    "SELECT unit_id,result FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed' AND context_hash='extraction5'",
+                    [workspace, run_id])}
+                for p in work:
+                    if p.part_id in records and records[p.part_id].get('part') != p.model_dump():
+                        raise ValueError('source_or_configuration_changed')
+                return set(records)
+            saved = completed_parts()
             summary['reused_part_ids'] = sorted(set(summary.get('reused_part_ids', [])) | ({p.part_id for p in work} & saved))
             checkpoint()
             unresolved_work = summary.setdefault('unresolved_work', {})
@@ -385,6 +392,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 counts['parts'] = len(parts)
                 return True
             while pending:
+                saved.update(completed_parts())
+                pending = [p for p in pending if p.part_id not in saved]
+                if not pending:
+                    break
                 check()
                 truncated = False
                 ready = [p for p in pending if not queue.get(p.part_id, {}).get('budget_blocked') and
@@ -561,10 +572,11 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             item = None
                         if item is not None:
                             # Storage failures are blockers, not model repairs.
-                            save_part_extraction(store, workspace, run_id, part, item)
+                            save_part_extraction(store, workspace, run_id, part, item, record_id=ticket)
                             counts['processed'] += 1
                             saved.add(part.part_id)
                             activity('persistence', request_id=batch_id, part_id=part.part_id)
+                            check()
                     if part.part_id not in saved:
                         errors[part.part_id] = errors.get(part.part_id, 0) + 1
                 counts['requests'], counts['reserved_output_tokens'] = attempt_totals(store, workspace, run_id)
