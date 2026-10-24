@@ -15,6 +15,7 @@ from dataforge.connections import current_connections
 from dataforge.llm import analysis_routes
 from dataforge.settings_service import revision
 from ui.analysis_inspection import render_inspection
+from ui.analysis_reasoning import reasoning_panel
 
 
 @st.cache_resource(max_entries=8)
@@ -222,6 +223,7 @@ def progress(store, workspace):
         return
     jobs = analysis_jobs(str(store.home))
     record = jobs.read(job_id, workspace)
+    reasoning_panel(jobs, job_id, workspace, record.get('run_id'), record['status'] not in TERMINAL)
     if record.get('result', {}).get('status') == 'committed':
         st.progress(1., text='Publication complete')
     elif record['status'] not in TERMINAL and not record.get('run_id'):
@@ -284,6 +286,8 @@ def progress(store, workspace):
             st.session_state['ai_report_choice_' + workspace] = run_id
         st.rerun(scope='app')
     if st.button('Dismiss progress', key='ai_dismiss_' + workspace):
+        if hasattr(jobs, 'discard_reasoning'):
+            jobs.discard_reasoning(job_id)
         st.session_state.pop('ai_analysis_job_' + workspace, None)
         st.rerun()
 

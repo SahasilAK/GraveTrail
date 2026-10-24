@@ -251,10 +251,101 @@ def decode_provider_response(provider, data, *, requested_model=None):
         raise ProviderError("Provider returned an unsupported response shape") from None
 
 
+class ChatEventStream:
+    """Bounded OpenAI chat SSE framing; native LM Studio events are unsupported."""
+
+    def __init__(self, reasoning_observer=None):
+        self.pending = b''
+        self.lines = []
+        self.content = []
+        self.usage = {}
+        self.finish = None
+        self.model = None
+        self.done = False
+        self.size = 0
+        self.observer = reasoning_observer
+
+    def feed(self, chunk):
+        self.size += len(chunk)
+        if self.size > 2 * 1024 * 1024:
+            raise ProviderError('Provider stream exceeds 2 MB limit', unknown=True)
+        self.pending += chunk
+        while b'\n' in self.pending:
+            line, self.pending = self.pending.split(b'\n', 1)
+            line = line.rstrip(b'\r')
+            if not line:
+                if self.lines:
+                    self._event(b'\n'.join(self.lines))
+                    self.lines = []
+            elif line.startswith(b'data:'):
+                self.lines.append(line[5:].lstrip(b' '))
+            elif not line.startswith(b':'):
+                raise ProviderError('Unsupported SSE event format', unknown=True)
+
+    def _event(self, body):
+        if self.done:
+            raise ProviderError('Unexpected event after stream termination', unknown=True)
+        if body == b'[DONE]':
+            self.done = True
+            return
+        try:
+            event = json.loads(body)
+            if not isinstance(event, dict) or event.get('error'):
+                raise ValueError()
+            if event.get('usage') is not None:
+                if not isinstance(event['usage'], dict):
+                    raise ValueError()
+                self.usage = event['usage']
+            self.model = event.get('model') or self.model
+            choices = event['choices']
+            if not isinstance(choices, list) or len(choices) > 1:
+                raise ValueError()
+            for choice in choices:
+                if choice.get('index', 0) != 0:
+                    raise ValueError()
+                delta = choice.get('delta', {})
+                content = delta.get('content')
+                if content is not None:
+                    if not isinstance(content, str) or self.finish is not None:
+                        raise ValueError()
+                    self.content.append(content)
+                reasoning = delta.get('reasoning') or delta.get('reasoning_content')
+                if reasoning is not None:
+                    if not isinstance(reasoning, str):
+                        raise ValueError()
+                    if self.observer:
+                        self.observer(reasoning)
+                if choice.get('finish_reason') is not None:
+                    if self.finish is not None:
+                        raise ValueError()
+                    self.finish = choice['finish_reason']
+        except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+            raise ProviderError('Invalid chat SSE event', unknown=True) from None
+
+    def result(self):
+        if not self.done or not isinstance(self.finish, str) or self.pending.strip() or self.lines:
+            raise ProviderError('Incomplete chat SSE response', unknown=True)
+        return {'choices': [{'message': {'content': ''.join(self.content)}, 'finish_reason': self.finish}],
+            'usage': self.usage, 'model': self.model}
+
+
+def decode_wire_response(content, wire_format='json'):
+    if wire_format == 'openai_chat_sse':
+        stream = ChatEventStream()
+        stream.feed(content.encode('utf-8') if isinstance(content, str) else content)
+        return stream.result()
+    if wire_format != 'json':
+        raise ProviderError('Unsupported retained wire format')
+    data = json.loads(content)
+    if not isinstance(data, dict):
+        raise ProviderError('Provider response must be a JSON object')
+    return data
+
+
 class Adapter:
     """Send non-streaming requests to a configured model provider."""
 
-    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True, attempt_observer=None, wire_observer=None) -> None:
+    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True, attempt_observer=None, wire_observer=None, reasoning_observer=None, stream_analysis=False) -> None:
         """Create an HTTP client for the profile and current cancellation source.
 
         Args:
@@ -274,6 +365,9 @@ class Adapter:
         self.retry_unknown_transports = retry_unknown_transports
         self.attempt_observer = attempt_observer
         self.wire_observer = wire_observer
+        self.reasoning_observer = reasoning_observer
+        self.stream_analysis = stream_analysis
+        self._sse_observed = False
         self._transport = transport
         self.client = httpx.Client(timeout=self._timeouts(), follow_redirects=False, trust_env=False, transport=transport,
             event_hooks={'request': [self._capture_request]} if wire_observer else None)
@@ -335,7 +429,7 @@ class Adapter:
             with self.client.stream(method, url, **kwargs) as response:
                 yield response
             return
-        # Buffer ordinary JSON over cancellable HTTPX I/O. No model SSE protocol.
+        # Consume chat deltas as they arrive; retain bounded wire bytes for replay.
         async def receive():
             async def capture(request):
                 self._capture_request(request)
@@ -343,6 +437,9 @@ class Adapter:
                     event_hooks={'request': [capture]} if self.wire_observer else None) as client:
                 async with client.stream(method, url, **kwargs) as response:
                     self._http_status = response.status_code
+                    sse = (kwargs.get('json') or {}).get('stream') and 'text/event-stream' in response.headers.get('content-type', '')
+                    events = ChatEventStream(self.reasoning_observer) if sse and response.status_code < 300 else None
+                    self._sse_observed = events is not None
                     chunks, total = [], 0
                     async for chunk in response.aiter_bytes():
                         total += len(chunk)
@@ -351,6 +448,8 @@ class Adapter:
                                 self.wire_observer('output', b'', (), unavailable='response exceeds 2 MiB transport limit')
                             raise ProviderError('Provider response exceeds 2 MB limit')
                         chunks.append(chunk)
+                        if events:
+                            events.feed(chunk)
                     headers = {k: v for k, v in response.headers.items()
                                if k.lower() not in {'content-encoding', 'content-length'}}
                     return httpx.Response(response.status_code, headers=headers, content=b''.join(chunks))
@@ -391,6 +490,7 @@ class Adapter:
                if root_relative else self.profile.base_url + path)
         unknowns = 0
         for attempt in range(self.profile.retries + 1):
+            self._sse_observed = False
             self._guard()
             started, sent, recorded = time.monotonic(), False, False
             transport_error = None
@@ -472,6 +572,8 @@ class Adapter:
                         record('authentication' if response.status_code in {401, 403} else 'http_failure', False, False)
                         raise ProviderError(f"Provider request failed (HTTP {response.status_code})",
                                             response.status_code == 429 or response.status_code >= 500)
+                    sse = bool(payload and payload.get('stream')) and 'text/event-stream' in response.headers.get('content-type', '')
+                    events = ChatEventStream(None if self._sse_observed else self.reasoning_observer) if sse else None
                     chunks, total = [], 0
                     for chunk in response.iter_bytes():
                         if self.check:
@@ -484,10 +586,13 @@ class Adapter:
                                 self.wire_observer('output', b'', request_secrets, unavailable='response exceeds 2 MiB transport limit')
                             raise ProviderError("Provider response exceeds 2 MB limit")
                         chunks.append(chunk)
+                        if events:
+                            events.feed(chunk)
                     if self.wire_observer:
-                        self.wire_observer('output', b''.join(chunks), request_secrets)
+                        self.wire_observer('output', b''.join(chunks), request_secrets,
+                            **({'wire_format': 'openai_chat_sse'} if sse else {}))
                     try:
-                        data = json.loads(b"".join(chunks))
+                        data = events.result() if events else json.loads(b"".join(chunks))
                         if not isinstance(data, dict):
                             raise ProviderError("Provider response must be a JSON object")
                         return self.connections.sanitize(data, request_secrets)
@@ -508,10 +613,11 @@ class Adapter:
                     raise ProviderError('Provider response outcome is unknown' if unknown else 'Provider connection failed',
                                         retryable=pre_send, unknown=unknown) from None
                 self.wait(min(60, 2 ** attempt))
-            except ProviderError:
+            except ProviderError as exc:
                 if not recorded:
                     cancelled = bool(self.cancelled and self.cancelled())
-                    record('cancelled' if cancelled else 'invalid_response', sent and cancelled, False)
+                    record('cancelled' if cancelled else 'transport_unknown' if exc.unknown else 'invalid_response',
+                           exc.unknown or (sent and cancelled), False)
                 raise
             except (InterruptedError, TimeoutError, ValueError) as exc:
                 if not recorded:
@@ -531,9 +637,12 @@ class Adapter:
             time.sleep(min(.2, max(0, until - time.monotonic())))
 
     @staticmethod
-    def completion_request(p, system, user):
+    def completion_request(p, system, user, *, stream_analysis=False):
         """Return the actual provider request body used for sizing and dispatch."""
-        return _completion_request(p, system, user)
+        path, payload = _completion_request(p, system, user)
+        if stream_analysis and p.provider == 'LM Studio':
+            payload.update(stream=True, stream_options={'include_usage': True})
+        return path, payload
 
     def complete(self, system: str, user: str) -> tuple[str, dict]:
         """Submit a system and user prompt using the provider's chat protocol.
@@ -548,7 +657,7 @@ class Adapter:
         Raises:
             ProviderError: If the provider response has an unsupported shape."""
         p = self.profile
-        path, payload = self.completion_request(p, system, user)
+        path, payload = self.completion_request(p, system, user, stream_analysis=self.stream_analysis)
         data = self._request("POST", path, payload)
         text, usage, self.completion_metadata = decode_provider_response(p.provider, data, requested_model=p.model)
         return text, usage

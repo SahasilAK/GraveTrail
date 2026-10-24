@@ -43,7 +43,7 @@ def _attempt(store, workspace, run_id, attempt_id):
 
 
 def capture_payload(store, workspace, run_id, attempt_id, kind, body, secrets=(), *, unavailable=None,
-                    replay_fingerprint=None, wire_format='json'):
+                    replay_fingerprint=None, wire_format='json', replay_eligible=True):
     """Store a redacted copy; never change the dispatched body or retain headers."""
     if kind not in KINDS:
         raise ValueError('Unknown inspection artifact kind')
@@ -80,11 +80,12 @@ def capture_payload(store, workspace, run_id, attempt_id, kind, body, secrets=()
                 [workspace, run_id, attempt_id, kind, content, size, status, redacted, time()])
             if kind == 'output' and replay_fingerprint:
                 details = json.loads(store.rows('SELECT details FROM ai_analysis_attempts WHERE attempt_id=?', [attempt_id])[0]['details'])
-                eligible = content is not None and not redacted and not unavailable
+                eligible = content is not None and not redacted and not unavailable and replay_eligible
                 details['response_checkpoint'] = {'version': 1, 'fingerprint': replay_fingerprint,
                     'eligible': eligible, 'format': wire_format,
                     'sha256': hashlib.sha256(body).hexdigest() if eligible else None,
-                    'reason': None if eligible else 'response_redacted' if redacted else status}
+                    'reason': None if eligible else 'response_redacted' if redacted else
+                        'incomplete_or_invalid_provider_envelope' if not replay_eligible else status}
                 store.execute('UPDATE ai_analysis_attempts SET details=? WHERE attempt_id=?', [json.dumps(details), attempt_id])
 
 

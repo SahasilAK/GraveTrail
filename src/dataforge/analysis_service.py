@@ -51,7 +51,14 @@ from dataforge.ai_pipeline_store import (
 from dataforge.ai_validation import validate_extraction
 from dataforge.ai_wire import decode_extractions
 from dataforge.connections import connection_scope, current_connections
-from dataforge.llm import Adapter, ProviderError, analysis_routes, decode_provider_response, is_local
+from dataforge.llm import (
+    Adapter,
+    ProviderError,
+    analysis_routes,
+    decode_provider_response,
+    decode_wire_response,
+    is_local,
+)
 from dataforge.llm_resources import request_slot
 from dataforge.model_capabilities import execution_profile
 from dataforge.models import stable_id
@@ -287,7 +294,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if retained['content'] is not None and fingerprint:
                         try:
                             raw, usage, metadata = decode_provider_response(profile.provider,
-                                json.loads(retained['content']), requested_model=profile.model)
+                                decode_wire_response(retained['content'], retained['format']), requested_model=profile.model)
                         except (ValueError, ProviderError):
                             retained = {'reason': 'invalid_retained_response', 'content': None}
                         else:
@@ -507,6 +514,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             'connect': profile.connect_timeout, 'read': None if profile.wait_until_stopped else (profile.read_timeout or profile.timeout),
                             'write': profile.timeout, 'pool': profile.connect_timeout}})
                     physical_started = monotonic()
+                    if progress and hasattr(progress, 'reasoning'):
+                        with connection_scope(bound):
+                            progress.reasoning(run_id, ticket)
                     activity('dispatch', request_id=batch_id, attempt_id=ticket)
                 def observed_failure(detail):
                     nonlocal usage_known
@@ -539,8 +549,21 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 bound = manager.for_profile(pid, context['credential_profile']) if hasattr(manager, 'for_profile') else manager
                 def capture(kind, body, secrets=(), **options):
                     if ticket:
+                        eligible = False
+                        if kind == 'output' and not options.get('unavailable'):
+                            try:
+                                decode_provider_response(profile.provider,
+                                    decode_wire_response(body, options.get('wire_format', 'json')), requested_model=profile.model)
+                            except (ValueError, ProviderError, UnicodeError):
+                                pass
+                            else:
+                                eligible = True
                         capture_payload(store, workspace, run_id, ticket, kind, body, secrets,
-                            replay_fingerprint=_hash({'pin': pin, 'payload': planned.serialized_payload}), **options)
+                            replay_fingerprint=_hash({'pin': pin, 'payload': planned.serialized_payload}),
+                            replay_eligible=eligible, **options)
+                def thinking(delta='', state='streaming'):
+                    if ticket and progress and hasattr(progress, 'reasoning'):
+                        progress.reasoning(run_id, ticket, delta, state)
                 try:
                     if replay:
                         ticket = replay['attempt']['attempt_id']
@@ -551,8 +574,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                 transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
                                 attempt_observer=observed_failure,
                                 wire_observer=capture,
+                                stream_analysis=True, reasoning_observer=thinking,
                                 retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
                             raw, usage = adapter.complete(planned.system, planned.user)
+                            thinking(state='finished')
                             metadata = response_metadata(adapter.completion_metadata, usage)
                             usage = metadata['usage']
                         if ticket:
@@ -573,6 +598,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                                      'truncated_extraction_response'} else 'invalid_extraction_response'
                         valid, invalid = {}, {p.part_id: code for p in scheduled}
                 except ProviderError as exc:
+                    thinking(state='interrupted')
                     if ticket and store.rows('SELECT status FROM ai_analysis_attempts WHERE attempt_id=?', [ticket])[0]['status'] == 'dispatched':
                         observed_failure({'failure_category': 'invalid_response', 'outcome': 'known',
                                           'retry_scheduled': False, 'allowance_exhausted': False})
