@@ -56,6 +56,9 @@ def render_inspection(store, workspace, run_id):
                 st.caption('Actual dispatched provider body: prompts, source/context, model parameters and output allowance. Headers are never retained.')
             else:
                 st.caption('Captured provider response is separate from decoded/validated results. Pending or unknown outcomes may have no complete response. Content is displayed as data.')
+                request = store.rows('SELECT details FROM ai_analysis_requests WHERE workspace_id=? AND run_id=? AND batch_id=?',
+                    [workspace, run_id, item['request_id']])[0]
+                st.json({'part_outcome': json.loads(request['details']).get('outcome', 'Validation outcome not checkpointed')}, expanded=False)
                 details = store.rows('''SELECT status,details FROM ai_analysis_attempts
                     WHERE workspace_id=? AND run_id=? AND attempt_id=?''', [workspace, run_id, ticket])[0]
                 st.json({'attempt_status': details['status'], 'diagnostics': json.loads(details['details'])}, expanded=False)

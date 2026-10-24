@@ -202,3 +202,24 @@ def test_resumed_partial_run_reuses_saved_parts_and_reconciles_counts(tmp_path, 
     store = Store(tmp_path)
     assert analysis_progress(store, workspace, first.run_id) == after
     store.close()
+
+
+def test_handled_responses_are_not_saved_parts(tmp_path):
+    from dataforge.ai_analysis_progress import analysis_progress
+    from dataforge.ai_analysis_store import save_run
+    from dataforge.ai_pipeline_store import begin_attempt, finish_attempt, save_request
+    store, workspace = setup_run(tmp_path, files=0)
+    save_run(store, workspace, 'r', mode='ai', status='cancelled', summary={
+        'parts': [{'part_id': p, 'file_id': 'f', 'work_kind': 'extraction'} for p in ('a', 'b')],
+        'recovery_queue': {'a': {'code': 'truncated_extraction_response'}, 'b': {'code': 'missing_extraction_item'}}})
+    for part in ('a', 'b'):
+        save_request(store, workspace, 'r', part, [part])
+        ticket = begin_attempt(store, workspace, 'r', part, 100)
+        finish_attempt(store, workspace, 'r', ticket, 'received', details={'truncated': True})
+        store.execute("UPDATE ai_analysis_requests SET status='processed' WHERE batch_id=?", [part])
+    snapshot = analysis_progress(store, workspace, 'r')
+    assert snapshot['responses']['received'] == snapshot['responses']['handled'] == 2
+    assert snapshot['parts']['completed'] == 0 and snapshot['parts']['remaining'] == 2
+    assert all(r['saved'] == 0 and r['expected'] == 1 for r in snapshot['request_outcomes'])
+    assert snapshot['responses']['saved_validation_pending'] == 0
+    store.close()

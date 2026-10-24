@@ -161,9 +161,21 @@ def render_status(snapshot):
     for group, prefix in [('files', 'Files'), ('parts', 'Parts')]:
         with st.container(horizontal=True):
             for name, value in snapshot[group].items():
-                st.metric(f'{prefix} {name}', 'Unknown' if value is None else str(value), border=True)
+                label = {'completed': 'Validated parts saved', 'reused': 'Saved parts reused',
+                         'remaining': 'Parts needing recovery'}.get(name, f'{prefix} {name}') if group == 'parts' else f'{prefix} {name}'
+                st.metric(label, 'Unknown' if value is None else str(value), border=True)
     for group in ('requests', 'attempts'):
-        st.write(group.title() + ': ' + ' · '.join(f'{key.replace("_", " ")}: {value}' for key, value in snapshot[group].items()))
+        st.write(group.title() + ': ' + ' · '.join(f'{("Responses handled" if key == "processed" else key.replace("_", " "))}: {value}' for key, value in snapshot[group].items()))
+    responses = snapshot['responses']
+    st.caption(f"Responses received: {responses['received']} · Responses handled: {responses['handled']} · Responses saved; validation pending: {responses['saved_validation_pending']}")
+    if not snapshot['parts']['completed']:
+        st.caption('No reusable extraction parts saved yet. Receiving or handling a response does not complete an extraction.')
+    for reason in sorted(set(snapshot['replay_unavailable'].values())):
+        st.caption('Response replay unavailable: ' + reason + '. Validated parts remain reusable; unfinished work may require an explicit retry.')
+    for outcome in snapshot['request_outcomes']:
+        st.caption(f"Request {outcome['request_id']}: {outcome['saved']} / {outcome['expected']} validated parts saved · {outcome['status']}")
+        for diagnostic in outcome['diagnostics']:
+            st.caption(f"{diagnostic['code']} · {diagnostic.get('recovery_action', 'validation pending')}")
     st.caption(f"Pending recovery parts: {snapshot['recovery_pending']}. Failed attempts do not mean failed files. Reused parts are saved successes, not skipped work.")
     tokens = snapshot['tokens']
     def value(key):
@@ -316,6 +328,11 @@ def report(store, workspace):
     st.caption(f"Extracted operations: {counts.get('accepted', 'Unknown')} · Unresolved semantic details: {counts.get('unresolved', 'Unknown')} · Incomplete coverage: {counts.get('coverage_gaps', 'Unknown')}")
     if summary.get('protocol_version') != 5:
         render_diagnostics(summary)
+    else:
+        st.caption('Continue reuses saved compatible parts in this selected run. Start fresh creates a new run and may send the selected sources again.')
+        if st.button('Start fresh AI analysis (new run)', key='ai_fresh_' + selected):
+            start(store, workspace, AnalysisRequest(mode='ai', file_ids=summary.get('request', {}).get('file_ids')))
+            st.rerun()
     if result.get('recent_requests'):
         with st.expander('Recent request and extraction diagnostics'):
             st.caption('Validation codes, field paths, recovery actions and request budgets. Retained transport bodies are available under Inputs and Outputs.')

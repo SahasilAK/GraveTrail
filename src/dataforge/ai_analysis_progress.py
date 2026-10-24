@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from time import time
+
+from dataforge.ai_inspection import MAX_ARTIFACT_BYTES, RETENTION_SECONDS
 
 
 def analysis_progress(store, workspace, run_id):
@@ -12,7 +15,7 @@ def analysis_progress(store, workspace, run_id):
 
 def _analysis_progress(store, workspace, run_id):
     fields = ('parts', 'completion_work', 'consolidation_work', 'recovery_queue', 'unresolved_work',
-              'reused_part_ids', 'activity', 'stage', 'initial_estimate', 'current_activity', 'last_failure', 'reasons')
+              'reused_part_ids', 'activity', 'stage', 'initial_estimate', 'current_activity', 'last_failure', 'reasons', 'replay_unavailable')
     part_schema = {'part_id': 'VARCHAR', 'file_id': 'VARCHAR', 'work_kind': 'VARCHAR'}
     projections = {'parts': [part_schema], 'completion_work': [{'part': part_schema}],
                    'consolidation_work': [{'part': part_schema, 'overflow': 'BOOLEAN'}]}
@@ -46,6 +49,32 @@ def _analysis_progress(store, workspace, run_id):
     requests = store.rows('SELECT batch_id,status,unit_ids,details FROM ai_analysis_requests WHERE workspace_id=? AND run_id=? ORDER BY rowid', [workspace, run_id])
     attempts = store.rows('SELECT attempt_id,batch_id,status,reserved_output,details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=? ORDER BY rowid', [workspace, run_id])
     states = Counter(a['status'] for a in attempts)
+    artifacts = {a['attempt_id']: a for a in store.rows('''SELECT attempt_id,status,redacted,captured_at,byte_count
+        FROM ai_inspection_artifacts WHERE workspace_id=? AND run_id=? AND kind='output' ''', [workspace, run_id])}
+    history = store.setting(workspace, 'llm_history', False)
+    age = min(RETENTION_SECONDS, int(store.setting(workspace, 'llm_retention_days', 30)) * 86400)
+    handled = {r['batch_id'] for r in requests if r['status'] == 'processed'}
+    pending_responses, unavailable = [], dict(summary['replay_unavailable'] or {})
+    for attempt in attempts:
+        if attempt['batch_id'] in handled:
+            continue
+        marker = json.loads(attempt['details']).get('response_checkpoint', {})
+        artifact = artifacts.get(attempt['attempt_id'], {})
+        eligible = (history and marker.get('eligible') and artifact.get('status') == 'retained'
+            and not artifact.get('redacted') and artifact.get('captured_at', 0) >= time() - age
+            and 0 < artifact.get('byte_count', 0) <= MAX_ARTIFACT_BYTES)
+        if eligible:
+            pending_responses.append(attempt['attempt_id'])
+        elif attempt['status'] == 'received':
+            unavailable[attempt['attempt_id']] = ('AI interaction history disabled' if not history else
+                marker.get('reason') or 'Response unavailable, expired, redacted or inspection-only')
+    outcomes = []
+    for req in requests:
+        ids = set(json.loads(req['unit_ids'])) - superseded
+        detail = json.loads(req['details'])
+        outcomes.append({'request_id': req['batch_id'], 'status': req['status'],
+            'saved': len(ids & completed), 'expected': len(ids), 'missing': sorted(ids - completed),
+            'diagnostics': detail.get('diagnostics', [])})
     terminal = row['status'] in {'committed', 'cancelled', 'failed', 'interrupted', 'stale', 'awaiting_continuation', 'blocked'}
     in_flight = [] if terminal else [a for a in attempts if a['status'] == 'dispatched']
     active_ids = {a['batch_id'] for a in in_flight}
@@ -93,6 +122,8 @@ def _analysis_progress(store, workspace, run_id):
                      'in_flight': len(active_ids), 'processed': sum(r['status'] == 'processed' for r in requests)},
         'attempts': {'in_flight': len(in_flight), 'received': states['received'], 'failed': states['known_failure'],
                      'unknown': states['unknown'] + (states['dispatched'] if terminal else 0)},
+        'responses': {'received': states['received'], 'handled': len(handled), 'saved_validation_pending': len(pending_responses)},
+        'request_outcomes': outcomes, 'replay_unavailable': unavailable,
         'recovery_pending': len(summary['recovery_queue'] or {}), 'tokens': tokens,
         'initial_estimate': summary['initial_estimate'], 'stages': kinds,
         'current': current, 'activity': summary['activity'] or [], 'current_activity': summary['current_activity'],
