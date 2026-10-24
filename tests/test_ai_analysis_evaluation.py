@@ -110,7 +110,12 @@ def install_mock_benchmark(monkeypatch, *, truncated=False):
             assert 'value_inputs' not in item['source']
             seen.append(item['part']['part_id'])
         result = {'items': [{'part_id': item['part']['part_id'], 'coverage': 'partial'} for item in context['items']]}
-        return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(result)},
+        content = json.dumps(result)
+        if truncated:
+            # Quarantine requires an actually incomplete item: a parseable
+            # length-flagged item is independently valid under partial recovery.
+            content = content[:content.index('"coverage"')]
+        return httpx.Response(200, json={'choices': [{'message': {'content': content},
             'finish_reason': 'length' if truncated else 'stop'}], 'usage': {'prompt_tokens': 11, 'completion_tokens': 23}})
     def initialize(self, profile, *args, **kwargs):
         kwargs['transport'] = httpx.MockTransport(provider)

@@ -69,6 +69,9 @@ def test_completed_consolidation_groups_reused_after_reopen(tmp_path, monkeypatc
 
     store = Store(tmp_path)
     workspace = store.create_workspace('group resume')
+    # Cancellation now stops between saves. Replaying the unsaved siblings
+    # without resending requires opt-in retention of their original response.
+    store.set_setting(workspace, 'llm_history', True)
     configured(store, workspace, model().model_copy(update={'max_tokens': 4000}))
     Importer(store, workspace).files([('large.sql', b'x' * 16000)], {'.sql'})
     calls, stopped = [], [False]

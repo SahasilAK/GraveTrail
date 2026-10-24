@@ -47,6 +47,21 @@ def capture_payload(store, workspace, run_id, attempt_id, kind, body, secrets=()
     """Store a redacted copy; never change the dispatched body or retain headers."""
     if kind not in KINDS:
         raise ValueError('Unknown inspection artifact kind')
+    if kind == 'output' and wire_format == 'openai_chat_sse' and not unavailable:
+        from dataforge.llm import ChatEventStream, ProviderError
+        reasoning = []
+        stream = ChatEventStream(reasoning.append)
+        try:
+            stream.feed(body)
+            content = stream.result()['choices'][0]['message']['content']
+        except (ValueError, ProviderError):
+            replay_eligible = False
+            content = ''
+        # Wire deltas can split a secret across JSON strings. Rewriting those
+        # events would no longer be the original response, so omit the artifact.
+        manager = current_connections()
+        if any(manager.redact(text, secrets) != text for text in (content, ''.join(reasoning))):
+            unavailable = 'SSE content requires redaction across events'
     with store.lock:
         _attempt(store, workspace, run_id, attempt_id)
         cleanup_payloads(store, workspace)

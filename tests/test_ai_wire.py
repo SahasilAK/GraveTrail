@@ -58,6 +58,7 @@ def test_many_claims_store_compactly_even_when_canonical_expansion_exceeds_recor
 
 def test_truncation_decoder_recovers_only_unambiguous_complete_items():
     from types import SimpleNamespace
+
     from dataforge.ai_wire import decode_extractions
     parts = [SimpleNamespace(part_id=p) for p in ('a', 'b', 'c')]
     a = {'part_id': 'a', 'coverage': 'complete', 'unresolved': ['nested { \\" string }']}
@@ -81,7 +82,17 @@ def test_truncation_decoder_recovers_only_unambiguous_complete_items():
 @pytest.mark.parametrize('suffix', ['}', '],"extra":1}', '],"items":[]}', ']garbage'])
 def test_truncation_decoder_rejects_malformed_envelopes(suffix):
     from types import SimpleNamespace
+
     from dataforge.ai_wire import decode_extractions
     with pytest.raises(ValueError):
         decode_extractions('{"items":[{"part_id":"a","coverage":"no_operations"}' + suffix,
             [SimpleNamespace(part_id='a')], allow_truncated=True)
+
+
+def test_truncation_after_items_array_preserves_complete_items():
+    from types import SimpleNamespace
+
+    from dataforge.ai_wire import decode_extractions
+    valid, errors = decode_extractions('{"items":[{"part_id":"a","coverage":"no_operations"}]',
+        [SimpleNamespace(part_id='a')], allow_truncated=True)
+    assert set(valid) == {'a'} and not errors

@@ -504,3 +504,15 @@ def test_truncated_batch_commits_valid_siblings_and_retries_only_missing(tmp_pat
     assert [seen[p] for p in calls[0]] == [1, 1, 2]
     assert len(load_file_parts(store, w, result.run_id)) == 3
     store.close()
+
+
+def test_complete_truncated_response_keeps_visible_warning(tmp_path):
+    store, w = setup_run(tmp_path)
+    def provider(request):
+        ctx = json.loads(json.loads(request.content)['messages'][-1]['content'])
+        return envelope([{'part_id': i['part']['part_id'], 'coverage':'no_operations'} for i in ctx['items']], finish='length')
+    result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
+    assert result.status == 'committed'
+    diagnostics = [d for r in store.rows('SELECT details FROM ai_analysis_requests') for d in json.loads(r['details'])['diagnostics']]
+    assert any(d['code'] == 'truncated_extraction_response' and d['recovery_action'] == 'complete_items_preserved' for d in diagnostics)
+    store.close()

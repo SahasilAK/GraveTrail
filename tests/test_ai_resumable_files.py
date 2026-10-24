@@ -160,3 +160,30 @@ def test_checkpoint_write_failure_blocks_further_dispatch(tmp_path, monkeypatch)
     assert store.rows('SELECT status FROM ai_analysis_requests') == [{'status': 'planned'}]
     assert not store.rows('SELECT * FROM analysis_runs')
     store.close()
+
+
+def test_interrupted_split_cannot_persist_parent_without_child_plan(tmp_path, monkeypatch):
+    import dataforge.analysis_service as service
+    store = Store(tmp_path)
+    w = store.create_workspace('atomic split')
+    configured(store, w)
+    Importer(store, w).files([('a.sql', b'select 1; select 2;')], {'.sql'})
+    save = service.save_run
+    class ProcessDeath(BaseException):
+        pass
+    def failed_plan(*args, **kwargs):
+        if kwargs.get('summary', {}).get('split_parts'):
+            raise ProcessDeath('split plan checkpoint failure')
+        return save(*args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(service, 'save_run', failed_plan)
+        with pytest.raises(ProcessDeath):
+            run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(
+                lambda r: httpx.Response(200, json={'choices':[{'message':{'content':'{"items":['},'finish_reason':'length'}]})))
+    store.close()
+    store = Store(tmp_path)
+    plan = json.loads(store.rows('SELECT summary FROM ai_analysis_runs')[0]['summary'])
+    ids = {p['part_id'] for p in plan['parts']}
+    for row in store.rows("SELECT result FROM ai_analysis_units WHERE status='superseded'"):
+        assert set(json.loads(row['result'])['children']) <= ids
+    store.close()

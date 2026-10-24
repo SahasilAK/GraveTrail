@@ -86,7 +86,7 @@ def _complete_items(text, expected):
         seen.add(pid)
         items.append(item)
         rest = rest[end:].lstrip()
-        if not rest:
+        if not rest or rest == ']':
             return {'items': items}
         if not rest.startswith(','):
             raise ValueError('invalid_extraction_envelope')

@@ -54,13 +54,16 @@ def _analysis_progress(store, workspace, run_id):
     history = store.setting(workspace, 'llm_history', False)
     age = min(RETENTION_SECONDS, int(store.setting(workspace, 'llm_retention_days', 30)) * 86400)
     handled = {r['batch_id'] for r in requests if r['status'] == 'processed'}
+    fingerprints = {r['batch_id']: json.loads(r['details']).get('fingerprint') for r in requests}
     pending_responses, unavailable = [], dict(summary['replay_unavailable'] or {})
     for attempt in attempts:
         if attempt['batch_id'] in handled:
             continue
         marker = json.loads(attempt['details']).get('response_checkpoint', {})
         artifact = artifacts.get(attempt['attempt_id'], {})
-        eligible = (history and marker.get('eligible') and artifact.get('status') == 'retained'
+        eligible = (history and marker.get('version') == 1 and marker.get('eligible')
+            and fingerprints.get(attempt['batch_id'])
+            and marker.get('fingerprint') == fingerprints[attempt['batch_id']] and artifact.get('status') == 'retained'
             and not artifact.get('redacted') and artifact.get('captured_at', 0) >= time() - age
             and 0 < artifact.get('byte_count', 0) <= MAX_ARTIFACT_BYTES)
         if eligible:

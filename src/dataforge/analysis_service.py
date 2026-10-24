@@ -285,9 +285,23 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     usage_known = False
                 recovery = recover_pipeline(store, workspace, run_id)
                 unknown = []
+                completed = {r['unit_id'] for r in store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed' AND context_hash='extraction5'", [workspace, run_id])}
                 for attempt in recovery['unknown']:
                     req = store.rows('SELECT unit_ids,details FROM ai_analysis_requests WHERE batch_id=?', [attempt['batch_id']])[0]
                     request_details = json.loads(req['details'])
+                    membership = set(json.loads(req['unit_ids']))
+                    if attempt['status'] == 'received' and membership <= completed:
+                        # Successful checkpoints are authoritative even when the
+                        # response body was never retained or has since expired.
+                        for part_id in membership:
+                            summary.get('recovery_queue', {}).pop(part_id, None)
+                            summary.get('unresolved_work', {}).pop(part_id, None)
+                        with store.transaction():
+                            save_run(store, workspace, run_id, mode='ai', status='planning', summary=summary)
+                            store.execute("UPDATE ai_analysis_requests SET status='processed',details=? WHERE batch_id=?",
+                                [json.dumps({**request_details, 'outcome': {'saved': sorted(membership), 'missing': [],
+                                    'invalid': {}, 'unresolved': []}}), attempt['batch_id']])
+                        continue
                     fingerprint = request_details.get('fingerprint')
                     retained = load_replayable_response(store, workspace, run_id, attempt['attempt_id'],
                         expected_fingerprint=fingerprint)
@@ -295,6 +309,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         try:
                             raw, usage, metadata = decode_provider_response(profile.provider,
                                 decode_wire_response(retained['content'], retained['format']), requested_model=profile.model)
+                            raw = manager.redact(raw)
                         except (ValueError, ProviderError):
                             retained = {'reason': 'invalid_retained_response', 'content': None}
                         else:
@@ -361,6 +376,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             registered = True
 
         def checkpoint():
+            counts['processed'] = len(store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed' AND context_hash='extraction5'", [workspace, run_id]))
             summary.update(counts=dict(counts), stage=stage, usage_known=usage_known,
                            active_seconds=prior_seconds + monotonic() - started)
             save_run(store, workspace, run_id, mode='ai', status=stage, summary=summary)
@@ -667,13 +683,21 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         'part_id': None, 'attempt_number': len(batch_attempts(store, workspace, run_id, batch_id)),
                         'recovery_action': 'ignore_unknown_id', 'response': metadata,
                         'reserved_output_tokens': planned.reserved_output})
+                if '__truncation__' in diagnostics:
+                    request_diagnostics.append({**diagnostics['__truncation__'], 'stage': stage,
+                        'request_id': batch_id, 'part_id': None,
+                        'attempt_number': len(batch_attempts(store, workspace, run_id, batch_id)),
+                        'recovery_action': 'complete_items_preserved', 'response': metadata,
+                        'reserved_output_tokens': planned.reserved_output})
                 # Reduce a truncated multi-item batch first. A singleton can
                 # split once, with explicit parent/children and exact core ranges.
                 if truncated and len(scheduled) == 1:
                     for parent in list(failed):
-                        if split_pending(parent, 'split_truncated_source'):
-                            request_diagnostics[0]['recovery_action'] = 'split_truncated_source'
-                            failed.remove(parent)
+                        with store.transaction():
+                            if split_pending(parent, 'split_truncated_source'):
+                                request_diagnostics[0]['recovery_action'] = 'split_truncated_source'
+                                failed.remove(parent)
+                                checkpoint()
                 for part in list(failed):
                     state = queue[part.part_id]
                     if state['failures'] - state.get('retry_baseline', 0) >= 3:
