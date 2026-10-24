@@ -8,9 +8,11 @@ import streamlit as st
 from dataforge.agent.jobs import TERMINAL, Jobs
 from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.ai_budget import allocate_analysis_profile
+from dataforge.ai_context import inventory_revision
 from dataforge.analysis_service import analysis_report, preview_analysis, recovery_message, run_analysis
 from dataforge.connections import current_connections
 from dataforge.llm import analysis_routes
+from dataforge.settings_service import revision
 
 
 @st.cache_resource(max_entries=8)
@@ -20,6 +22,20 @@ def analysis_jobs(home):
 
 def _preview_with_status(store, workspace, request, status, activity, started):
     """Show actual local preparation work; the native timer ticks between callbacks."""
+    cache_key = None
+    try:
+        pid, profile = analysis_routes(store, workspace, 'project_lineage')[0]
+        allocate_analysis_profile(profile, request)  # Expired metadata cannot reuse a ready preview.
+        manager = current_connections()
+        bound = manager.for_profile(pid, profile) if hasattr(manager, 'for_profile') else manager
+        cache_key = (str(store.home), request.model_dump_json(), inventory_revision(store, workspace),
+                     revision(store, workspace), profile.model_dump_json(), bool(not profile.key_env or bound.resolve(profile.key_env)))
+    except ValueError:
+        pass
+    cached = st.session_state.get('ai_preview_' + workspace)
+    if cache_key is not None and cached and cached['key'] == cache_key:
+        status.update(label='Ready · Reusing unchanged offline preview', state='complete')
+        return cached['preview']
     stages = {}
     last_update = 0
 
@@ -42,6 +58,8 @@ def _preview_with_status(store, workspace, request, status, activity, started):
                       state='error', expanded=True)
         raise
     blocked = not preview['valid']
+    if not blocked and cache_key is not None:
+        st.session_state['ai_preview_' + workspace] = {'key': cache_key, 'preview': preview}
     status.update(label=('Needs attention' if blocked else 'Ready') + ' · Elapsed: ' +
                   str(timedelta(seconds=int(monotonic() - started))),
                   state='error' if blocked else 'complete', expanded=blocked)
@@ -49,29 +67,35 @@ def _preview_with_status(store, workspace, request, status, activity, started):
 
 
 def controls(store, workspace, file_ids):
-    if not st.checkbox('Use AI for analysis', key='ai_build_' + workspace):
+    if not st.checkbox('Use AI for analysis', key='ai_build_' + workspace, persist_state='session'):
         return None, True
     st.caption('AI extracts actual file contents independently. Every fact remains inferred; semantic completeness is not proven.')
     with st.expander('AI spending limit'):
         ceiling = st.number_input('Run output token ceiling (optional)', min_value=1000, max_value=2000000,
-            value=None, key='ai_run_output_' + workspace,
+            value=None, key='ai_run_output_' + workspace, persist_state='session',
             help='Reserved output across every physical attempt, including retries and resumes. Leave blank for no run ceiling.')
     with st.expander('AI budget overrides'):
-        share = st.slider('Maximum output share (%)', 10, 50, 30, key='ai_output_share_' + workspace,
+        share = st.slider('Maximum output share (%)', 10, 50, 30, key='ai_output_share_' + workspace, persist_state='session',
+            on_change=lambda: st.session_state.update({'ai_slider_override_' + workspace: True}),
             help='A maximum output allowance, not a request to generate that many tokens. Shared windows divide usable context; separate windows use a fraction of output capacity.')
         input_override, output_override = None, None
         with st.expander('Advanced token overrides'):
-            override = st.checkbox('Override per-request token allowances', key='ai_exact_override_' + workspace)
-            st.caption('Exact run overrides take precedence over saved custom output limits. Otherwise custom output limits cap the slider. Automatic profiles use the slider. Model limits always apply; saved profiles are not changed.')
+            override = st.checkbox('Override per-request token allowances', key='ai_exact_override_' + workspace, persist_state='session')
+            st.caption('Moving the slider explicitly selects this run’s allowance instead of the saved Custom default. Exact overrides take precedence. Model limits always apply; saved profiles are not changed.')
             if override:
                 input_override = st.number_input('Effective input tokens (optional)', min_value=1, max_value=2147483647,
-                    value=None, key='ai_exact_input_' + workspace)
+                    value=None, key='ai_exact_input_' + workspace, persist_state='session')
                 output_override = st.number_input('Maximum output tokens per request (optional)', min_value=64, max_value=2147483647,
-                    value=None, key='ai_exact_output_' + workspace)
+                    value=None, key='ai_exact_output_' + workspace, persist_state='session')
         request = AnalysisRequest(mode='ai', file_ids=file_ids, max_output_tokens_total=ceiling,
             output_share=share, input_token_limit=input_override, output_token_limit=output_override)
         try:
             profile = analysis_routes(store, workspace, 'project_lineage')[0][1]
+            slider_clamps = []
+            if output_override is None and st.session_state.get('ai_slider_override_' + workspace):
+                slider_profile, slider_allocation = allocate_analysis_profile(profile.model_copy(update={'output_mode': 'automatic'}), request)
+                slider_clamps = slider_allocation['clamps']
+                request = request.model_copy(update={'output_token_limit': slider_profile.max_tokens})
             _, allocation = allocate_analysis_profile(profile, request)
             st.metric('Effective input allowance (tokens)', f"{allocation['input_allowance']:,}")
             st.metric('Maximum output allowance per request (tokens)', f"{allocation['output_allowance']:,}")
@@ -79,12 +103,12 @@ def controls(store, workspace, file_ids):
                 f"input {allocation['input_capacity'] or 'unreported'}, output {allocation['output_capacity'] or 'unreported'}. "
                 f"Source: {allocation['source']}; windows: {allocation['window']}. "
                 + ('Dynamic route: manually confirmed limits apply.' if allocation['dynamic'] else ''))
-            explanations = {'saved_custom_output_limit': 'Saved custom output allowance clamps the slider; use an explicit Advanced override to change this run.',
-                'model_output_limit': 'The model output limit clamps the requested allowance.',
+            explanations = {'saved_custom_output_limit': 'The saved Custom output allowance is the current default; move the slider or use Advanced to change this run.',
+                'model_output_limit': 'The model output limit clamps the requested allowance. Effective values will stay fixed above this limit.',
                 'model_input_limit': 'The model input limit clamps the available input.',
                 'shared_context_limit': 'The shared context window clamps the requested output.',
                 'available_input_limit': 'The available model input allowance clamps the exact input override.'}
-            for reason in allocation['clamps']:
+            for reason in dict.fromkeys(allocation['clamps'] + slider_clamps):
                 st.caption(explanations[reason])
             for note in allocation['notes']:
                 st.caption(note)

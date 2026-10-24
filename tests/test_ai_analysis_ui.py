@@ -123,3 +123,87 @@ def test_legacy_report_stays_readable_but_cannot_resume(tmp_path, monkeypatch):
     assert any('incompatible protocol' in i.value for i in view.info)
     import streamlit as st
     st.cache_resource.clear()
+
+
+def test_analyze_reuses_preview_and_shows_cancellable_worker_before_inventory(tmp_path, monkeypatch):
+    import streamlit as st
+    from test_ai_resumable_files import configured
+
+    import ui.analysis_ai as ai
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Start UI')
+    configured(store, w)
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    original = ai.preview_analysis
+    previews, cancellations, starts = [], [], []
+    record = {'status': 'running', 'progress': .1, 'stage': 'Preparing selected sources'}
+    def preview(*args, **kwargs):
+        previews.append(1)
+        return original(*args, **kwargs)
+    class PendingJobs:
+        def start(self, *args, **kwargs):
+            starts.append(1)
+            return {'job_id': 'queued'}
+        def read(self, *args):
+            return record
+        def cancel(self, *args):
+            cancellations.append(args)
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *args: PendingJobs())
+    monkeypatch.setattr(ai, 'preview_analysis', preview)
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    assert len(previews) == 1
+    next(b for b in view.button if b.label == 'Analyze with AI').click().run()
+    assert not view.exception and len(starts) == 1
+    assert len(previews) == 1, 'Analyze must not repeat the expensive preview'
+    assert any(b.label == 'Cancel AI analysis' for b in view.button)
+    original_files = store.files
+    monkeypatch.setattr(store, 'files', lambda *args: (_ for _ in ()).throw(AssertionError('Worker UI waited on inventory')))
+    next(b for b in view.button if b.label == 'Cancel AI analysis').click().run()
+    assert not view.exception and cancellations == [('queued', w)]
+    monkeypatch.setattr(store, 'files', original_files)
+    record.update(status='cancelled', result={'status': 'cancelled'})
+    view.run()
+    assert not view.exception and len(previews) == 1
+    assert next(c for c in view.checkbox if c.label == 'Use AI for analysis').value
+    st.cache_resource.clear()
+
+
+def test_preview_cache_invalidates_for_sources_settings_profile_and_request(tmp_path, monkeypatch):
+    import json
+
+    import streamlit as st
+    from test_ai_resumable_files import configured
+
+    import ui.analysis_ai as ai
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Preview freshness')
+    configured(store, w)
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    original, calls = ai.preview_analysis, []
+    def preview(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(ai, 'preview_analysis', preview)
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    view.run()
+    assert len(calls) == 1
+    Importer(store, w).files([('q.sql', b'select 2;')], {'.sql'})
+    view.run()
+    assert len(calls) == 2
+    store.set_setting(w, 'case_sensitive', True)
+    view.run()
+    assert len(calls) == 3
+    config = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
+    config['max_tokens'] = 9000
+    store.execute('UPDATE llm_profiles SET config=?', [json.dumps(config)])
+    view.run()
+    assert len(calls) == 4
+    next(s for s in view.slider if s.label == 'Maximum output share (%)').set_value(40).run()
+    assert not view.exception and len(calls) == 5
+    st.cache_resource.clear()

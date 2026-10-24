@@ -22,6 +22,15 @@ the chosen allocation is pinned for resume. Compatible old checkpoints keep thei
 original policy. Dynamic routes need manually confirmed route-safe capacities;
 discovered catalog maxima alone are insufficient.
 
+Moving the slider explicitly overrides the saved Custom output default for this
+run; Advanced exact output wins if supplied. Saved profiles remain unchanged.
+At a declared model output maximum, increasing the share can leave both effective
+allowances fixed; the page explains that clamp. Completed offline previews are
+reused while source, settings, request, profile and credential availability remain
+unchanged. Analyze starts the worker without repeating that preview. While the
+worker runs, progress and Cancel render before inventory and preparation controls;
+your budget choices persist when those controls return.
+
 Admins record context/input/output limits with provenance and endpoint/model
 binding. For old profiles, choose token capacity or retain an explicit disclosure
 restriction. This choice preserves source/network permission checks.

@@ -134,6 +134,34 @@ def test_analysis_ui_slider_and_optional_advanced_use_same_allocation(tmp_path, 
     st.cache_resource.clear()
 
 
+@pytest.mark.parametrize('model_output,expected', [(None, 18483), (8192, 8192)])
+def test_explicit_slider_change_overrides_saved_default_but_respects_model_cap(tmp_path, monkeypatch, model_output, expected):
+    from pathlib import Path
+
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+
+    from ui.common import get_store
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Custom slider')
+    p = model(38912, output_tokens=model_output).model_copy(update={'max_tokens': 8192})
+    configured(store, w, p)
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    next(s for s in view.slider if s.label == 'Maximum output share (%)').set_value(50).run()
+    assert not view.exception
+    metrics = {m.label: m.value for m in view.metric}
+    assert metrics['Maximum output allowance per request (tokens)'] == f'{expected:,}'
+    assert metrics['Effective input allowance (tokens)'] == f'{36966 - expected:,}'
+    if model_output:
+        assert any('will stay fixed' in c.value for c in view.caption)
+    assert json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])['max_tokens'] == 8192
+    st.cache_resource.clear()
+
+
 def test_run_allocation_keeps_profile_bound_session_credentials(tmp_path, monkeypatch):
     from dataforge.agent.service import AgentService
     from dataforge.connections import RuntimeConnections

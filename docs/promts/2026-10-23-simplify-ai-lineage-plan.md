@@ -136,6 +136,14 @@ Illustration, not a provider claim: shared `C=70,000`, no separate reasoning res
 
 Under **Use AI for analysis → AI budget overrides**, show **Maximum output share (%)**, effective input/output allowances, capacity/provenance and clamp explanations. Optional Advanced exact overrides take precedence over saved Custom output allowances; absent an explicit run override, saved Custom output caps the slider. Model limits always apply. Automatic profiles use the model-aware recommendation without an 8,192-token ceiling. Persist and pin the selection; compatible old checkpoints retain their original policy. Preview and dispatch use the same allocator and request builder. Dynamic routes require existing manual route-safe capacity confirmation; do not assume catalog maxima apply to every fallback or change routing.
 
+2026-10-24 UI clarification: moving the slider is an explicit run output selection,
+so it overrides a saved Custom default without changing that profile. Advanced
+exact overrides and real model caps still take precedence. Reuse unchanged offline
+previews using session-local source/configuration/request/credential-availability
+pins; actual worker execution still revalidates independently. Render active worker
+progress and Cancel before inventory/preparation, and retain hidden budget controls'
+session state. Never block the worker controls on repeating the full preview.
+
 - Prefer an exact local tokenizer only when its mapping to the selected model is known. Reuse an existing supported counter if available; do not introduce a tokenizer registry/framework for arbitrary providers.
 - Otherwise retain a conservative, explicitly labelled estimate such as the existing UTF-8-byte estimate with framing and headroom. It may underuse the model, but removing the separate character cap still helps. Never advertise this estimate as exact or switch universally to `characters / 4`.
 - Count the actual serialized singleton/batch/consolidation payload, including context and schema. Recheck at dispatch, after any payload transformation.

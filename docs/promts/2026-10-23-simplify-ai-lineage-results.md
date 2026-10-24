@@ -475,3 +475,77 @@ described above; it has not been hidden, skipped or weakened.
 Local implementation commit: `09e42ad` — pin model budgets and bounded recovery.
 The plan, user guides, knowledge maps and this evidence follow in the documentation
 commit. No push was performed.
+
+## Slider and Analyze progress follow-up — 2026-10-24
+
+The user reported fixed 28,774 input / 8,192 output allowances and missing progress/
+Cancel after Analyze. Regressions failed before implementation: one Analyze click
+called the expensive preview three times, and explicit slider movement retained the
+saved Custom output default. A hard model-cap case also lacked a clear plateau
+explanation. All three initial regression cases failed before the fixes.
+
+### Focused changes
+
+- Moving the slider explicitly selects this run's output allowance through the
+  existing request override; Advanced exact values and real model limits still
+  take precedence. Saved profiles are untouched. At declared model limits, effective
+  values can correctly plateau; the UI now explains this. The backend allocator,
+  model-cap rules, source disclosure and resume pins remain unchanged.
+- Successful offline previews are reused only in the same session with matching
+  home, request, source inventory, settings/profile, current capacity metadata and
+  credential availability. Invalid previews are not cached. Source reimport, settings,
+  profile or request edits invalidate reuse. Execution still prepares and validates
+  its own fresh inputs; the preview grants no source/network authority.
+- The active progress fragment and Cancel render before inventory/preparation.
+  Nonterminal jobs skip the build controls, so preparation cannot hide cancellation.
+  Budget widgets persist while hidden and return after completion/cancellation.
+  Tests exercise Analyze → active progress → Cancel → restored controls without
+  another preview or an inventory read on the active path.
+
+### Verification
+
+Commands use `.venv/Scripts/python.exe`:
+
+- `-m pytest tests/test_ai_analysis_ui.py tests/test_ai_budget_allocation.py tests/test_ai_preparation.py -q --tb=short`:
+  **37 passed**, 105.11 seconds, exit 0 (before the additional cache-invalidation
+  case and extended restored-control assertion).
+- `-m pytest tests/test_ai_analysis_ui.py tests/test_ai_budget_allocation.py tests/test_ai_preparation.py tests/test_ai_analysis_jobs.py tests/test_ai_partial_recovery.py tests/test_gateway_recovery.py tests/test_gateway_sockets.py -q --tb=short`:
+  **84 passed, 2 failed**, 240.86 seconds. Both failures are existing accelerated
+  socket-deadline cases: their deadline expired before dispatch, leaving zero sends.
+  The transport/backend implementation is unchanged by this UI patch.
+- `-m pytest tests/test_ai_analysis_ui.py tests/test_navigation_redesign.py tests/test_ui.py tests/test_workflow.py -q --tb=short`:
+  **27 passed**, 182.84 seconds, exit 0, including the final restored-control
+  assertion and source/settings/profile/request cache invalidation.
+- Isolated rerun of both `[False-deadline]` / `[True-deadline]` silent-socket cases:
+  **2 failed**, 21.37 seconds; one exceeded the two-second wall-clock assertion
+  (2.625 seconds), the other again expired before sending. Assertions were not
+  changed or skipped. These timing-sensitive failures remain reported.
+- `-m ruff check src ui tests scripts`: **All checks passed**, exit 0.
+- `scripts/docs/build.py`: strict build passed, **42 public pages, 8 assets,
+  rendered links/anchors and 236 search entries** validated, exit 0.
+- `git diff --check`: passed. Knowledge maps refreshed incrementally. The unrelated
+  `.streamlit/config.toml` edit remains excluded. Full suite was not repeated for
+  this UI-only follow-up; the preceding full-suite result remains historical.
+
+### Authorized LM Studio check and remaining limitation
+
+The user explicitly authorized testing `http://127.0.0.1:1997/v1`, model
+`qwen/qwen3.5-9b`, context 38,912, and instructed stopping on connection trouble.
+Discovery succeeded and listed the requested model. An isolated synthetic SQL
+workspace used that endpoint without changing existing workspaces/profiles. The
+AppTest drove the actual UI and real background worker with retries disabled and
+one physical attempt permitted:
+
+- Initial allowances reproduced **28,774 input / 8,192 output**.
+- Moving to 50% yielded **18,483 input / 18,483 output**, retaining the saved
+  8,192 Custom profile default unchanged.
+- Analyze displayed running progress with **Cancel visible in 1.25 seconds**.
+- The single generation request returned **HTTP 400**. The run paused with
+  `http_failure`, no graph was published, and usage remained unknown. Live calls
+  stopped; the LM Studio server-log rejection reason was requested from the user.
+
+This verifies the narrow live UI transition and endpoint discovery, not successful
+live extraction, cancellation of a live generation, or model accuracy. No retry,
+full 2,114-file analysis, route change or additional model call was made after the
+400. Further provider diagnosis requires the server's error reason. All other
+verification used deterministic mocks/local test sockets.

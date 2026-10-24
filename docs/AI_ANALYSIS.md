@@ -54,6 +54,13 @@ Automatic profiles use the new model-aware recommendation, without the former
 share and overrides are saved with the run and cannot change during resume. Older
 compatible checkpoints retain their original allocation policy.
 
+Moving the UI slider explicitly selects this run's output allowance, overriding the
+saved Custom default without editing the profile. Advanced exact overrides take
+precedence. Real model limits still apply: once output reaches a declared model
+maximum, both effective values can stay fixed as the share increases; the UI says
+why. For 38,912 shared tokens without a lower cap, 50% gives 18,483 input and
+18,483 maximum output after 1,946 safety tokens.
+
 The controls show effective allowances, capacity provenance and clamp reasons.
 Unknown shared context requires confirmed capacity. A missing optional output cap
 is shown as unreported, never as verified provider support. Separate windows without
