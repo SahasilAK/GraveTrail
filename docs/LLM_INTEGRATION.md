@@ -81,6 +81,12 @@ and retention is configurable. Minimal merged claims are durable lineage evidenc
 removes their full context/response bodies while retaining claims/provenance. Monetary cost
 is not estimated without provider pricing.
 
+AI build Inputs/Outputs use the same history opt-in. Actual dispatched bodies and
+provider responses live separately from checkpoints in migration-10 artifacts,
+with credential redaction, at most seven days (or shorter workspace retention),
+4 MiB per artifact and 64 MiB per run. Missing or unavailable payloads have explicit
+reasons. Inspection is lazy, paged and offline; [details](AI_ANALYSIS.md#inspecting-request-inputs-and-outputs).
+
 Codex's interactive environment is used to develop this application, not as a hidden runtime API.
 ChatGPT/Codex sign-in credentials are not scraped or repurposed. Databricks Genie is a distinct
 query agent; it is not a generic chat endpoint in this implementation.

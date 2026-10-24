@@ -39,6 +39,7 @@ from dataforge.ai_extraction_recovery import (
     split_truncated_part,
     validation_failure,
 )
+from dataforge.ai_inspection import capture_payload
 from dataforge.ai_pipeline_store import (
     attempt_totals,
     batch_attempts,
@@ -491,10 +492,14 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             update(recovery_message({'last_failure': detail}))
                         checkpoint()
                 bound = manager.for_profile(pid, context['credential_profile']) if hasattr(manager, 'for_profile') else manager
+                def capture(kind, body, secrets=(), **options):
+                    if ticket:
+                        capture_payload(store, workspace, run_id, ticket, kind, body, secrets, **options)
                 try:
                     with connection_scope(bound), request_slot(store.home, workspace, 1), Adapter(profile,
                             transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
                             attempt_observer=observed_failure,
+                            wire_observer=capture,
                             retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
                         raw, usage = adapter.complete(planned.system, planned.user)
                         metadata = response_metadata(adapter.completion_metadata, usage)
@@ -617,6 +622,14 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     store.execute("UPDATE ai_analysis_requests SET status='processed',details=? WHERE batch_id=?",
                         [json.dumps({**details, 'diagnostics': request_diagnostics}), batch_id])
                     checkpoint()
+                if ticket:
+                    with connection_scope(bound):
+                        capture_payload(store, workspace, run_id, ticket, 'decoded', json.dumps({
+                            'decoded': {key: value.model_dump() for key, value in valid.items()},
+                            'validated': [p.part_id for p in scheduled if p.part_id in saved],
+                            'validation_errors': invalid, 'diagnostics': request_diagnostics,
+                            'recovery': {p.part_id: queue[p.part_id] for p in scheduled if p.part_id in queue}
+                        }, ensure_ascii=False).encode('utf-8'))
                 pending = [p for p in pending if p.part_id not in saved and p.part_id not in unresolved_work and p not in failed] + failed
             return {p.part_id for p in work if p.part_id in unresolved_work}
 
@@ -777,7 +790,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 summary={**summary, **report.model_dump(), 'stage': stage})
         return report
     except Exception:
-        if registered:
+        if registered or associated:
             save_run(store, workspace, run_id, mode='ai', status='failed', summary={'reasons': ['internal_error'], 'stage': stage})
         raise
 

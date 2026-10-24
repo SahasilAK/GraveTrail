@@ -105,3 +105,5 @@ Adaptive AI guides describe source-character versus model-envelope limits, nulla
 AI_ANALYSIS.md and architecture/ai-analysis-pipeline.md are protocol-5 authorities. CLI/MCP guides match simplified token/selection/recovery contracts; historical hybrid/window descriptions are superseded. docs/promts contains the approved plan and verification record.
 
 2026-10-24 context-management amendment documents pinned model-aware output share, exact override/Custom precedence, independent wire payloads, safe batching diagnostics and bounded unresolved partial publication/retry. Gateway-internal memory/live accuracy remain unverified; earlier indefinite pending guidance is superseded.
+
+AI_ANALYSIS and LLM_INTEGRATION document shared durable live counters, opt-in migration-10 transport artifacts, explicit missing outcomes and bounded lazy inspection/retention. Counter completion is processing coverage, not semantic proof.

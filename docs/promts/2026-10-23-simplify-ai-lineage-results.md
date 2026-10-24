@@ -549,9 +549,41 @@ live extraction, cancellation of a live generation, or model accuracy. No retry,
 full 2,114-file analysis, route change or additional model call was made after the
 400. Further provider diagnosis requires the server's error reason. All other
 verification used deterministic mocks/local test sockets.
-# AI analysis visibility — 2026-10-24
+## AI analysis visibility — 2026-10-24
 
 Phase 1 adds a lightweight projection of existing run, request, attempt and unit checkpoints, early worker/run association, bounded activity and shared live/final status rendering. Active polling stays before inventory/preparation. Cancellation remains visible until acknowledgement; source evidence hydration is deferred until expansion.
 
-Focused verification: visibility/UI/partial recovery/extraction recovery/jobs/resumable files: **48 passed** (before the additional ledger-growth test). The initial full-suite baseline was **1114 passed, 2 skipped, 1 failed** in 271.13s. The preexisting failure is `tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean`: the preserved user config selects Crimson Forge instead of Ocean dark. No assertions or config were changed to hide this failure. Mock providers only.
+Phase 1 verification: `python -m pytest tests/test_ai_analysis_visibility.py tests/test_ai_analysis_ui.py tests/test_ai_partial_recovery.py tests/test_ai_extraction_recovery.py tests/test_ai_analysis_jobs.py tests/test_ai_resumable_files.py -q`: **49 passed in 20.94s**. Commit: `98b6f18`.
+
+Phase 2 adds actual HTTPX body capture at the existing transport boundary, before normalization, through the same extraction/completion/consolidation/retry loop. Captured provider response, decoded structured results, validation failures and recovery decisions are separate. Inputs and Outputs render lazily by request/attempt ID, with 20-item lists, 16,000-character content pages and deferred full-retained-content download. No headers/URLs are retained; registered/request/environment credentials and sensitive JSON fields are redacted in a copy. Dispatch bodies are unchanged.
+
+Privacy remains opt-in through `llm_history`. The separate migration-10 `ai_inspection_artifacts` table has 4 MiB/artifact, 64 MiB/run and min(workspace retention, seven days) limits. Startup/capture cleanup expires content and removes orphaned run artifacts; reads deny expired or disabled content immediately. Existing AI/workspace/source/lineage cleanup and backup/restore include the new table. Historical/disabled/oversized/non-UTF-8/expired bodies have explicit Not retained outcomes; no approximate payload is reconstructed. Saved validated checkpoints and publication remain independent of capture retention.
+
+The initial full-suite baseline was **1114 passed, 2 skipped, 1 failed** in 271.13s. The preexisting failure is `tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean`: the preserved user config selects Crimson Forge instead of Ocean dark. No assertions or config were changed to hide this failure. An intermediate run exposed migration compatibility failures; the schema-version assertion was updated to 10 and legacy backups without column migration 5 remain accepted. A later full suite reported **1133 passed, 2 skipped, 1 existing theme failure** in 280.55s; final verification follows below.
+
+An independent read-only review identified source-bearing completion metadata in polling, a lock wait that could delay Cancel, and unexpected preparation failures leaving active runs. Each received a failing regression and fix; re-review found no additional actionable issues (**27 focused tests passed independently**). New regressions also cover actual async I/O through a mocked AsyncClient transport, including cancellation while waiting, unknown outcomes, early identity, growing totals, partial resume/reuse, historical missing artifacts, privacy/retention, malformed/error bodies, lazy selection and migration/backup cleanup. Live and final durable counters reconcile across store reopen.
+
+Reused/refactored: existing jobs/heartbeat/cancel markers, durable run/request/attempt/unit ledger, recovery diagnostics and controls, provider adapter, safe redaction, source evidence, checkpoints and atomic publication. Replaced duplicate final-only metrics with shared status/diagnostic helpers; deferred previously eager source evidence. No new dependency, framework, pipeline semantics or resource/lineage identity change.
+
+Manual UI verification selected the existing `small` workspace (86 SQL files), opened its saved cancelled report and historical input inspection. The running app's cached connection needed refreshing for migration 10. No new analysis or provider call was started. Existing LM Studio HTTP 400 remains unresolved and live-model accuracy remains unverified. All execution tests used mocks; no paid calls or pushes.
+
+### Final visibility verification
+
+All commands used the repository `.venv/Scripts/python.exe` on Windows:
+
+```text
+-m pytest tests/test_ai_analysis_visibility.py tests/test_ai_inspection.py tests/test_ai_inspection_ui.py tests/test_ai_analysis_ui.py tests/test_ai_analysis_jobs.py tests/test_ai_partial_recovery.py tests/test_ai_extraction_recovery.py tests/test_ai_resumable_files.py tests/test_ai_analysis_transport.py tests/test_dbt_store.py tests/test_dbt_maintenance.py tests/test_maintenance.py -q
+92 passed in 46.30s
+
+-m pytest -q
+1 failed, 1136 passed, 2 skipped in 282.65s
+
+-m ruff check src ui tests scripts
+All checks passed!
+
+scripts/docs/build.py
+Strict build passed; 42 public pages, 8 assets, local links/anchors, search and publication inventory validated (239 search entries).
+```
+
+The sole final failure remains `tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` (Crimson Forge in the unchanged user configuration versus expected Ocean dark). No new failing tests remain. The database migration assertion now checks version 10 explicitly; no acceptance assertion was relaxed. No production artifact/package build or live-model evaluation was performed. Logical retention cannot erase existing backups or guarantee immediate physical database shrinkage. Elapsed time is the current worker execution; attempt/reservation totals survive resume.
 

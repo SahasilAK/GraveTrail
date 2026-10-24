@@ -1,5 +1,19 @@
 # Testing
 
+## AI visibility verification — 2026-10-24
+
+Final source suite: **1136 passed, 2 skipped, 1 existing theme/config failure** in
+282.65s. `test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` expects
+Ocean dark; the preserved user `.streamlit/config.toml` selects Crimson Forge.
+The focused progress/inspection/recovery/transport/storage group passes **92 tests**
+in 46.30s. Ruff and the strict 42-page documentation build pass.
+Tests cover blocked-provider progress/Cancel, nonblocking preparation polling,
+run identity, partial resume/reuse, exact transport capture, malformed/error bodies,
+history opt-in/redaction/retention, lazy inspection, migration/backup and the mocked
+production async cancellation path. The existing `small` workspace was checked
+through saved results only. No live generation, paid call or accuracy claim.
+Counter, capture and retention definitions: [AI analysis](AI_ANALYSIS.md).
+
 <span id="current-acceptance-summary-2026-10-20"></span>
 
 ## Current acceptance summary — 2026-10-21

@@ -139,4 +139,6 @@ Historical/manual validation, wire, citation and snapshot tests remain distinct 
 - `test_ai_partial_recovery.py` — Three-pass unresolved partial publication, retained sibling facts/ranges/missing context, close/reopen unresolved-only retry, deferred enrichment, truthful messages/counters and source/config/other-publication freshness. Mock provider qualification only.
 
 UI regressions reproduce three full previews per Analyze click, verify reuse/invalidation and active Cancel without inventory reads. Allocation AppTests cover explicit slider changes overriding saved Custom defaults while preserving hard model caps and profiles.
-`ntest_ai_analysis_visibility.py covers blocked-provider durable progress, cancellation, early identity, reopen/isolation and growing work totals; test_ai_analysis_ui.py guards the inventory-free active path.
+`test_ai_analysis_visibility.py` covers blocked-provider progress/cancel, early identity, preparation failure, source-free projection, growing totals, partial resume/reuse and reopen/isolation. `test_ai_analysis_ui.py` guards the inventory-free/nonblocking active path and terminal selection.
+
+`test_ai_inspection.py` covers exact transport capture, raw-versus-decoded output, malformed/error bodies, credential privacy, bounded retention, lifecycle/backup/migration, pagination and mocked production async cancellation. `test_ai_inspection_ui.py` proves nested lazy loading/selection without provider calls.

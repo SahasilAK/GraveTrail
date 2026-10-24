@@ -14,6 +14,7 @@ from dataforge.analysis_service import analysis_report, preview_analysis, recove
 from dataforge.connections import current_connections
 from dataforge.llm import analysis_routes
 from dataforge.settings_service import revision
+from ui.analysis_inspection import render_inspection
 
 
 @st.cache_resource(max_entries=8)
@@ -155,6 +156,8 @@ def start(store, workspace, request):
 def render_status(snapshot):
     """Use identical ledger definitions for running and saved analysis."""
     st.write(f"Run: {snapshot['run_id']} · Status: {snapshot['status']} · Stage: {snapshot['stage']}")
+    if snapshot.get('current_activity'):
+        st.caption('Latest activity: ' + snapshot['current_activity'])
     for group, prefix in [('files', 'Files'), ('parts', 'Parts')]:
         with st.container(horizontal=True):
             for name, value in snapshot[group].items():
@@ -184,6 +187,20 @@ def render_status(snapshot):
             'Parts planned include extraction, completion and consolidation, excluding superseded split parents. Completed parts have valid saved checkpoints; remaining includes unresolved work. '
             'Queued requests are durable planned batches without an in-flight attempt; future batches are not yet requests. Received attempts may still fail validation. '
             'Unknown attempts may have reached the provider. Output reservation is an allowance, not actual usage. Processing completion does not prove semantic completeness.')
+    render_diagnostics(snapshot)
+
+
+def render_diagnostics(summary):
+    """The same safe failure and recovery evidence during execution and afterwards."""
+    if summary.get('reasons') or summary.get('last_failure'):
+        st.warning(recovery_message({**summary, 'reasons': summary.get('reasons') or []}))
+    if summary.get('last_failure'):
+        with st.expander('Connection diagnostics'):
+            st.json(summary['last_failure'])
+    if summary.get('recovery_queue'):
+        with st.expander('Pending extraction recovery'):
+            st.caption('Saved successes are retained. Bounded recovery uses smaller batches and backoff; unresolved work can be retried after partial publication. Cancel retains saved progress.')
+            st.json(summary['recovery_queue'], expanded=False)
 
 
 @st.fragment(run_every=2)
@@ -193,7 +210,9 @@ def progress(store, workspace):
         return
     jobs = analysis_jobs(str(store.home))
     record = jobs.read(job_id, workspace)
-    if not record.get('run_id') or record['status'] in TERMINAL:
+    if record.get('result', {}).get('status') == 'committed':
+        st.progress(1., text='Publication complete')
+    elif record['status'] not in TERMINAL and not record.get('run_id'):
         st.progress(float(record['progress']), text=record.get('stage', record['status']))
     else:
         st.write(record.get('stage', record['status']))
@@ -217,12 +236,22 @@ def progress(store, workspace):
             st.session_state[cancel_key] = True
             st.info('Cancellation requested. The last committed lineage stays available.')
         if record.get('run_id'):
-            try:
-                render_status(analysis_progress(store, workspace, record['run_id']))
-            except ValueError:
-                st.caption('Preparing this run; durable work planning is not yet available.')
+            # Preparation/publication may hold the DB lock; never wait on it in
+            # the control fragment, which must remain free to process Cancel.
+            if store.lock.acquire(blocking=False):
+                try:
+                    snapshot = analysis_progress(store, workspace, record['run_id'])
+                    render_status(snapshot)
+                    render_inspection(store, workspace, record['run_id'])
+                except ValueError:
+                    st.caption('Preparing this run; durable work planning is not yet available.')
+                finally:
+                    store.lock.release()
+            else:
+                st.caption('Worker is preparing or saving a checkpoint. Counters refresh when it releases storage; Cancel remains available.')
         return
     result = record.get('result', {})
+    run_id = result.get('run_id') or record.get('run_id')
     if result.get('status') == 'committed':
         if result.get('counts', {}).get('unresolved_parts'):
             st.warning('Available validated lineage published with incomplete coverage. Unresolved work can be retried from the report.')
@@ -232,15 +261,15 @@ def progress(store, workspace):
         st.info(recovery_message(result))
     else:
         st.warning('AI analysis did not publish a new graph: ' + ', '.join(result.get('reasons', [record['status']])))
-    if result.get('run_id'):
-        st.session_state['ai_analysis_report_' + workspace] = result['run_id']
+    if run_id:
+        st.session_state['ai_analysis_report_' + workspace] = run_id
     refresh_key = 'ai_analysis_refreshed_' + workspace
     if st.session_state.get(refresh_key) != job_id:
         # A fragment refreshes only its own progress area. Refresh the outer
         # report/metrics once after publication so it cannot show staged counts.
         st.session_state[refresh_key] = job_id
-        if result.get('run_id'):
-            st.session_state['ai_report_choice_' + workspace] = result['run_id']
+        if run_id:
+            st.session_state['ai_report_choice_' + workspace] = run_id
         st.rerun(scope='app')
     if st.button('Dismiss progress', key='ai_dismiss_' + workspace):
         st.session_state.pop('ai_analysis_job_' + workspace, None)
@@ -262,6 +291,7 @@ def report(store, workspace):
     summary = result['summary']
     if summary.get('protocol_version') == 5:
         render_status(analysis_progress(store, workspace, selected))
+    render_inspection(store, workspace, selected)
     partial_publication = result['status'] == 'committed' and bool(summary.get('unresolved_work'))
     if (result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} or partial_publication) and 'request' in summary:
         from dataforge.ai_pipeline_store import recover_pipeline
@@ -281,22 +311,14 @@ def report(store, workspace):
     counts = summary.get('counts', {})
     if summary.get('protocol_version') != 5:
         st.write(f"Requests: {counts.get('requests', 'Unknown')} · reused parts: {counts.get('cache_hits', 'Unknown')} · "
-             f"accepted: {counts.get('accepted', 0)} · rejected: {counts.get('rejected', 0)} · "
-             f"unresolved: {counts.get('unresolved', 0)}")
+             f"accepted: {counts.get('accepted', 'Unknown')} · rejected: {counts.get('rejected', 'Unknown')} · "
+             f"unresolved: {counts.get('unresolved', 'Unknown')}")
     st.caption(f"Extracted operations: {counts.get('accepted', 'Unknown')} · Unresolved semantic details: {counts.get('unresolved', 'Unknown')} · Incomplete coverage: {counts.get('coverage_gaps', 'Unknown')}")
-    if summary.get('reasons'):
-        st.warning(recovery_message(summary))
-    if summary.get('last_failure'):
-        with st.expander('Connection diagnostics'):
-            st.json(summary['last_failure'])
-    if summary.get('recovery_queue'):
-        with st.expander('Pending extraction recovery'):
-            st.caption('Unresolved work remains retryable after bounded recovery. Saved valid results are retained; published coverage stays incomplete.'
-                if partial_publication else 'Required work remains pending. Recovery uses smaller batches and backoff; Cancel retains saved progress.')
-            st.json(summary['recovery_queue'], expanded=False)
+    if summary.get('protocol_version') != 5:
+        render_diagnostics(summary)
     if result.get('recent_requests'):
         with st.expander('Recent request and extraction diagnostics'):
-            st.caption('Safe validation codes, field paths, recovery actions and request budgets. Raw responses are not retained.')
+            st.caption('Validation codes, field paths, recovery actions and request budgets. Retained transport bodies are available under Inputs and Outputs.')
             st.json(result['recent_requests'], expanded=False)
     st.dataframe([{'Claim': c['claim_id'], 'Kind': c['kind'], 'Outcome': c['status'],
                    'Reasons': ', '.join(c['reasons'])} for c in result['claims']],

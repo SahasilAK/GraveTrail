@@ -36,6 +36,8 @@ Saved and live reports share the same durable-ledger counters:
 - Parts planned across extraction, completion and consolidation; completed valid
   checkpoints; reused saved checkpoints; unresolved bounded failures; remaining
   planned work. Superseded split parents are excluded. Reuse is not skipping.
+  Reused parts are a subset of completed parts; unresolved parts are a subset of
+  remaining work. File completed/partial/unfinished counts partition the selection.
 - Requests planned/queued/in flight/processed are batches; attempts received,
   failed and unknown are physical provider attempts. Failed attempts are not
   failed files. Received responses may still fail validation.
@@ -47,6 +49,51 @@ Stage bars measure saved parts against actual planned parts. Completion,
 consolidation and recovery can increase totals; there is no fixed overall
 percentage or invented provider progress. Recent activity is bounded to 30 events.
 Polling does not prepare sources, dispatch requests or hydrate evidence.
+Elapsed time measures the current worker execution; waiting time measures its
+current provider wait. Durable attempt/reservation totals persist across resume.
+
+## Inspecting request inputs and outputs
+
+Saved and running reports have collapsible **Inputs** and **Outputs**, linked by
+request and physical attempt IDs. Extraction, context completion, consolidation
+and retries share the same inspector. A planned request is clearly distinguished
+from an attempt that reached the dispatch boundary.
+
+Inputs capture the actual serialized HTTPX request body at dispatch, including
+prompts, source/context, model parameters and output allowance. Outputs separate
+the captured provider response body from decoded results, validated part IDs,
+validation errors and recovery decisions. A received response can fail validation.
+Malformed responses and HTTP error bodies are retained when policy and limits
+permit. Normalized results are never labelled as the raw provider response.
+
+Capture follows **Workspace settings → Security and privacy → Store full AI
+interaction context locally**, which remains off by default. Enabling it applies
+to future attempts; previous bodies cannot be reconstructed. Authorization
+headers, URLs and credentials are never stored. Existing credential redaction and
+additional credential-field redaction apply only to the retained copy; the actual
+provider request is unchanged. Redacted artifacts are explicitly marked. Captured
+text is displayed as data, never executed or interpreted as instructions.
+
+Migration 10 adds one separate DuckDB artifact table. Each input, output or decoded
+artifact is limited to 4 MiB; their combined content is limited to 64 MiB per run.
+Retention uses the shorter of the configured AI retention period and seven days.
+Cleanup runs when the store opens and when capturing; reads refuse expired or
+privacy-disabled content immediately. Cleanup leaves small reason records;
+workspace/source/lineage/AI cleanup removes them with their runs. Orphaned run
+artifacts are removed during lifecycle cleanup. Backups include retained artifacts
+under the same workspace ownership rules. Database pages and existing backup
+archives are not securely erased by logical expiry.
+
+The existing 2 MiB provider response limit still applies. Oversized, non-UTF-8,
+expired, disabled or otherwise unavailable content has an explicit **Not retained**
+reason. Incomplete transfers may have no complete response. Historical runs say
+**Not retained**. Nothing is silently truncated and presented as a full payload.
+
+Collapsed sections do not load artifacts. Expand a section, select one item from
+pages of 20, then expand its artifact to load 16,000 characters at a time. A
+deferred download loads the complete retained, redacted artifact only when clicked.
+Selection, expansion and content-page state survive refreshes. Inspection and
+reopening saved results never call the provider or repeat source preparation.
 
 ## Token capacity and disclosure
 

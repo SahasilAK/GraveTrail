@@ -1,5 +1,30 @@
 # AI controls and recovery
 
+While a run is active, its report remains visible above the source inventory.
+It shows run/stage, elapsed/provider waiting time, selected/completed/partial/
+unfinished files, planned/completed/reused/unresolved/remaining parts, batch
+requests, physical attempts, pending recovery and recent activity. Failed attempts
+do not mean failed files. Initial token/request estimates, output reservations and
+actual provider-reported usage are separate; missing values say **Unknown**.
+Stage counts can grow when completion, consolidation or recovery adds work.
+Cancel stays **requested** until the worker acknowledges it. Polling does not
+wait on a source-preparation or publication storage lock before handling Cancel.
+See [counter definitions](../AI_ANALYSIS.md#live-progress).
+
+Expand **Inputs** or **Outputs**, select a request/attempt, then expand its artifact.
+Inputs are the actual dispatched provider body. Outputs separate the captured
+response from decoded results, validation errors and recovery decisions. Lists use
+20-item pages and content uses 16,000-character pages, with a download of the whole
+retained redacted artifact. Collapsed artifacts are not loaded during refreshes.
+
+Full bodies follow the existing **Store full AI interaction context locally**
+privacy opt-in. Disabled capture, historical missing content and retention/size
+limits say **Not retained** with a reason; enabling history does not recover older
+bodies. Retention is at most seven days (or the shorter configured AI period),
+4 MiB per artifact and 64 MiB per run. Credentials/authorization headers are never
+retained. The actual provider request is unchanged by inspection redaction.
+See [capture and lifecycle details](../AI_ANALYSIS.md#inspecting-request-inputs-and-outputs).
+
 The normal build asks for Static or AI and necessary model configuration. An
 optional **Run output token ceiling** limits reserved output across all physical
 attempts, including retries and resume. Token capacity determines file splitting

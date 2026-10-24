@@ -219,7 +219,7 @@ def response_object(text: str) -> dict[str, Any]:
 class Adapter:
     """Send non-streaming requests to a configured model provider."""
 
-    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True, attempt_observer=None) -> None:
+    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True, attempt_observer=None, wire_observer=None) -> None:
         """Create an HTTP client for the profile and current cancellation source.
 
         Args:
@@ -238,8 +238,16 @@ class Adapter:
         self.wait = wait or self._wait
         self.retry_unknown_transports = retry_unknown_transports
         self.attempt_observer = attempt_observer
+        self.wire_observer = wire_observer
         self._transport = transport
-        self.client = httpx.Client(timeout=self._timeouts(), follow_redirects=False, trust_env=False, transport=transport)
+        self.client = httpx.Client(timeout=self._timeouts(), follow_redirects=False, trust_env=False, transport=transport,
+            event_hooks={'request': [self._capture_request]} if wire_observer else None)
+
+    def _capture_request(self, request):
+        """Observe the serialized HTTPX body after authorization and before send."""
+        secrets = tuple(value.removeprefix('Bearer ') for name, value in request.headers.items()
+            if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
+        self.wire_observer('input', request.content, secrets)
 
     def __enter__(self) -> Adapter:
         """Return this adapter for use as a context manager."""
@@ -294,13 +302,18 @@ class Adapter:
             return
         # Buffer ordinary JSON over cancellable HTTPX I/O. No model SSE protocol.
         async def receive():
-            async with httpx.AsyncClient(follow_redirects=False, trust_env=False) as client:
+            async def capture(request):
+                self._capture_request(request)
+            async with httpx.AsyncClient(follow_redirects=False, trust_env=False,
+                    event_hooks={'request': [capture]} if self.wire_observer else None) as client:
                 async with client.stream(method, url, **kwargs) as response:
                     self._http_status = response.status_code
                     chunks, total = [], 0
                     async for chunk in response.aiter_bytes():
                         total += len(chunk)
                         if total > 2 * 1024 * 1024:
+                            if self.wire_observer:
+                                self.wire_observer('output', b'', (), unavailable='response exceeds 2 MiB transport limit')
                             raise ProviderError('Provider response exceeds 2 MB limit')
                         chunks.append(chunk)
                     headers = {k: v for k, v in response.headers.items()
@@ -378,9 +391,23 @@ class Adapter:
                         self.response_observer(response.status_code,
                             normalize_rate_limits(self.profile.provider, dict(response.headers), now=time.time()))
                     category = ''
+                    error_body = None
+                    if response.status_code >= 300 and self.wire_observer:
+                        chunks, total, complete = [], 0, True
+                        for chunk in response.iter_bytes():
+                            total += len(chunk)
+                            if total > 2 * 1024 * 1024:
+                                complete = False
+                                break
+                            chunks.append(chunk)
+                        error_body = b''.join(chunks)
+                        self.wire_observer('output', error_body if complete else b'', request_secrets,
+                            unavailable=None if complete else 'error body exceeds 2 MiB capture limit')
                     if response.status_code == 429:
                         chunks, total = [], 0
-                        for chunk in response.iter_bytes():
+                        for chunk in ([error_body] if error_body is not None else response.iter_bytes()):
+                            if error_body is not None:
+                                chunk = chunk[:65536]
                             total += len(chunk)
                             if total > 65536:
                                 break
@@ -418,8 +445,12 @@ class Adapter:
                             raise ProviderError("AI request cancelled while receiving response")
                         total += len(chunk)
                         if total > 2 * 1024 * 1024:
+                            if self.wire_observer:
+                                self.wire_observer('output', b'', request_secrets, unavailable='response exceeds 2 MiB transport limit')
                             raise ProviderError("Provider response exceeds 2 MB limit")
                         chunks.append(chunk)
+                    if self.wire_observer:
+                        self.wire_observer('output', b''.join(chunks), request_secrets)
                     try:
                         data = json.loads(b"".join(chunks))
                         if not isinstance(data, dict):
