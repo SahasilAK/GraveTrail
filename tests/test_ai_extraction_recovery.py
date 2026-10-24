@@ -478,3 +478,29 @@ def test_interrupted_group_planning_does_not_freeze_an_incomplete_work_list(tmp_
     assert resumed.status == 'committed'
     assert consolidation_files == {'a.sql', 'b.sql'}
     store.close()
+
+
+@pytest.mark.parametrize('cutoff', [False, True])
+def test_truncated_batch_commits_valid_siblings_and_retries_only_missing(tmp_path, monkeypatch, cutoff):
+    from test_ai_partial_recovery import advance_backoff
+    advance_backoff(monkeypatch)
+    store, w = setup_run(tmp_path, files=3)
+    seen, calls = Counter(), []
+    def provider(request):
+        ctx = json.loads(json.loads(request.content)['messages'][-1]['content'])
+        ids = [i['part']['part_id'] for i in ctx['items']]
+        seen.update(ids)
+        calls.append(ids)
+        items = [{'part_id': p, 'coverage': 'no_operations'} for p in ids]
+        if len(calls) == 1:
+            content = json.dumps({'items': items[:2]})
+            if cutoff:
+                content = content[:-2] + ',{"part_id":' + json.dumps(ids[2]) + ',"coverage":"no_'
+            return envelope(content, finish='length')
+        return envelope(items)
+    result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
+    assert result.status == 'committed', result.reasons
+    assert len(calls[0]) == 3 and calls[1:] == [[calls[0][2]]]
+    assert [seen[p] for p in calls[0]] == [1, 1, 2]
+    assert len(load_file_parts(store, w, result.run_id)) == 3
+    store.close()

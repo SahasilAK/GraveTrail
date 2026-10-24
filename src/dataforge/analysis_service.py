@@ -525,10 +525,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                          'output_tokens': ('output_tokens', 'completion_tokens', 'candidatesTokenCount')}.items():
                         counts[key] += next((usage[a] for a in aliases if type(usage.get(a)) is int), 0)
                     try:
-                        if metadata.get('truncated'):
-                            truncated = True
-                            raise ValueError('truncated_extraction_response')
-                        valid, invalid = decode_extractions(raw, scheduled, diagnostics=diagnostics)
+                        truncated = bool(metadata.get('truncated'))
+                        valid, invalid = decode_extractions(raw, scheduled, diagnostics=diagnostics,
+                            allow_truncated=truncated)
                     except ValueError as exc:
                         code = str(exc) if str(exc) in {'invalid_extraction_json', 'invalid_extraction_envelope',
                                                      'truncated_extraction_response'} else 'invalid_extraction_response'

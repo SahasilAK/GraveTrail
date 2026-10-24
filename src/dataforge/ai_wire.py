@@ -30,16 +30,91 @@ class SourceCitationError(ValueError):
     """A fixed host code, safe to retain without source text or provider input."""
 
 
-def decode_extractions(payload, expected_parts, *, diagnostics=None):
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('duplicate_extraction_key')
+        result[key] = value
+    return result
+
+
+def _complete_items(text, expected):
+    """Decode only complete JSON values in the sole top-level items array."""
+    decoder = json.JSONDecoder(object_pairs_hook=_unique_object)
+    text = text.lstrip()
+    if not text.startswith('{'):
+        raise ValueError('invalid_extraction_envelope')
+    key, end = decoder.raw_decode(text, 1 + len(text[1:]) - len(text[1:].lstrip()))
+    rest = text[end:].lstrip()
+    if key != 'items' or not rest.startswith(':') or not rest[1:].lstrip().startswith('['):
+        raise ValueError('invalid_extraction_envelope')
+    rest = rest[1:].lstrip()[1:].lstrip()
+    items, seen = [], set()
+    while rest:
+        try:
+            item, end = decoder.raw_decode(rest)
+        except json.JSONDecodeError:
+            # A trailing item must identify itself before its incomplete value.
+            # Without that identity it might conflict with any saved sibling.
+            if not rest.startswith('{'):
+                raise ValueError('ambiguous_truncated_item') from None
+            tail, fields = rest[1:].lstrip(), {}
+            while tail:
+                try:
+                    key, end = decoder.raw_decode(tail)
+                    after = tail[end:].lstrip()
+                    if not isinstance(key, str) or key in fields or not after.startswith(':'):
+                        raise ValueError('ambiguous_truncated_item')
+                    value, end = decoder.raw_decode(after[1:].lstrip())
+                except json.JSONDecodeError:
+                    break
+                fields[key] = value
+                tail = after[1:].lstrip()[end:].lstrip()
+                if not tail.startswith(','):
+                    break
+                tail = tail[1:].lstrip()
+            pid = fields.get('part_id')
+            if not isinstance(pid, str) or pid not in expected or pid in seen:
+                raise ValueError('ambiguous_truncated_item') from None
+            return {'items': items}
+        if not isinstance(item, dict):
+            raise ValueError('invalid_extraction_item')
+        pid = item.get('part_id')
+        if not isinstance(pid, str) or pid not in expected or pid in seen:
+            raise ValueError('ambiguous_truncated_item')
+        seen.add(pid)
+        items.append(item)
+        rest = rest[end:].lstrip()
+        if not rest:
+            return {'items': items}
+        if not rest.startswith(','):
+            raise ValueError('invalid_extraction_envelope')
+        rest = rest[1:].lstrip()
+    raise ValueError('ambiguous_truncated_item')
+
+
+def decode_extractions(payload, expected_parts, *, diagnostics=None, allow_truncated=False):
     from dataforge.ai_analysis_models import PartExtraction
     if isinstance(payload, str):
         try:
-            payload = json.loads(payload)
+            if len(payload.encode('utf-8')) > 2 * 1024 * 1024:
+                raise ValueError('invalid_extraction_json')
+            payload = json.loads(payload, object_pairs_hook=_unique_object)
+        except json.JSONDecodeError:
+            if not allow_truncated:
+                raise ValueError('invalid_extraction_json') from None
+            try:
+                payload = _complete_items(payload, {p.part_id for p in expected_parts})
+            except (ValueError, RecursionError):
+                raise ValueError('invalid_extraction_json') from None
         except (ValueError, RecursionError):
             raise ValueError('invalid_extraction_json') from None
     if not isinstance(payload, dict) or set(payload) != {'items'} or not isinstance(payload['items'], list):
         raise ValueError('invalid_extraction_envelope')
     expected = {p.part_id for p in expected_parts}
+    if allow_truncated and diagnostics is not None:
+        diagnostics['__truncation__'] = {'code': 'truncated_extraction_response', 'path': 'items'}
     valid, errors, seen = {}, {}, set()
     for item in payload['items']:
         pid = item.get('part_id') if isinstance(item, dict) else None
