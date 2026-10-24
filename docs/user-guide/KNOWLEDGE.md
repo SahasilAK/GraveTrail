@@ -19,3 +19,5 @@ The hub leads with local parser/no-AI operation and presents hybrid as optional 
 - `ai-analysis-controls-and-recovery.md` — Files/parallel maxima, optional character allowance, sortable sizing diagnostics, project vs window budgets, provider quotas and explicit unknown/restart actions.
 
 ai-analysis-flow.md and ai-analysis-controls-and-recovery.md now describe static/independent AI, automatic model token fitting, one optional run ceiling, one completion wave, saved-file consolidation and compatible recovery.
+
+Recovery controls include cancellable waiting between failed-item passes, safe validation diagnostics, request utilization/output allowances and reuse of saved siblings; required failures remain pending.

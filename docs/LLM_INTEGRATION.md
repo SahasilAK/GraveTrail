@@ -192,17 +192,19 @@ invalidate paused-run pins: configure before a new build, or use the existing re
 manual acknowledgement without changing its pinned profile.
 
 **Shared retries per batch** excludes the initial attempt: two means at most three
-physical sends for an identical unfinished batch in one automatic allowance. HTTP
-429/5xx, pre-send, item-validation and permitted unknown retries share it; unknown
-retries are a subset cap, not another loop. Restart does not renew it. Explicit manual
-retry, or continuation after known received-but-invalid items, can renew a bounded
-allowance. Run-wide attempt, reserved-output and elapsed-time ceilings never reset.
-Successfully checkpointed parts are not resent.
+physical sends for an identical unfinished batch in one recovery pass. HTTP
+429/5xx, pre-send and permitted unknown retries share it; unknown retries are a
+subset cap. Restart does not renew a pass. After a recoverable failure, the durable
+extraction queue processes other work and waits before another pass. Invalid items
+receive safe field/code feedback in smaller batches. Every physical attempt still
+counts toward optional run-wide attempt, reserved-output and elapsed-time ceilings;
+those limits never reset. Successfully checkpointed parts are not resent.
 
 Only connection-establishment/pool failures with pre-send evidence are safe to retry.
 Read/write, remote protocol and proxy errors may already have been processed or billed;
-automatic recovery requires the configured unknown policy. Authentication and invalid
-provider-response failures do not enter a transient retry loop. Bounded Retry-After
+automatic recovery requires the configured unknown policy. Authentication and credit
+or daily-quota exhaustion remain blockers. Invalid provider responses enter item
+recovery with backoff and diagnostics rather than an identical immediate loop. Bounded Retry-After
 and backoff remain for retryable HTTP failures. No idempotency header or gateway
 request-status lookup support is assumed.
 
@@ -220,6 +222,13 @@ The active app-side request closes before another starts. That does not prove up
 generation or billing stopped. Callers without check/cancellation callbacks still use
 the configured HTTP timeouts. Worker progress refreshes every two seconds; report
 messages describe the gateway connection, never an unreported upstream provider switch.
+
+When only required failures remain, the build waits to retry with Cancel available.
+No failed file is silently skipped, and no graph is published until required work
+has been saved. Completion/consolidation uses the same recovery path while keeping
+original facts durable. Truncation first reduces batch width; an isolated source
+part can split once with exact cores and bounded disclosed overlap. Irreducible
+request sizes require a budget/configuration change. See [controls and recovery](user-guide/ai-analysis-controls-and-recovery.md).
 
 ## Protocol 5 file extraction (2026-10-23)
 

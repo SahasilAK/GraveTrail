@@ -50,11 +50,16 @@ an explicit source character restriction. This choice does not grant network acc
 One physical request is active per build, using the existing shared request slots.
 The optional run-wide output ceiling reserves every physical retry and resumed
 attempt. Completed work is reused within the same compatible run. A new build
-extracts again. There are no execution windows or automatic allowance multipliers.
+extracts again. There are no execution windows; every recovery pass reserves tokens in the same run ledger.
 
 Cancellation and transient failure retain saved parts. Unknown outcomes can have
-been billed. Configured automatic recovery uses a durable shared retry allowance;
-disabled or exhausted recovery requires explicit manual acknowledgement. Source, settings, model or
+been billed. Each recovery pass has a durable shared HTTP/transport retry allowance.
+Invalid items receive safe corrective feedback in smaller batches; validated siblings
+are saved immediately. Failed work rotates behind other files and waits with backoff
+between passes. If only failures remain, the build stays pending with Cancel available;
+it does not skip required work or publish it as complete. Automatic unknown-outcome
+retries still require the configured opt-in; disabled unknown recovery needs acknowledgement.
+Source, settings, model or
 prompt changes make a paused run stale. Historical snapshots and migration-9 tables
 remain readable; old paused protocols require a new build. Explicit Static builds
 use static results instead of restoring prior project AI results.
@@ -64,6 +69,12 @@ The latter must accommodate fallback plus generation; it is not a total deadline
 Project cancellation and optional run-time limits are checked during silent waits.
 Every lost response remains an unknown attempt with its output reservation, even
 when a retry succeeds. See [timeout and gateway recovery settings](LLM_INTEGRATION.md#request-timeout-gateway-waiting-and-recovery).
+
+Preview and recent request diagnostics show input utilization, expected/reserved output,
+packing limits, configured output allowance and advertised output capacity separately.
+The automatic 8,192-token output recommendation is a conservative starting allowance,
+not a dispatch cap. Increasing it needs appropriate routed-model capacity and quality
+evidence. The conservative UTF-8 fallback remains for unknown gateway tokenizers.
 
 ## Evidence and semantic quality
 

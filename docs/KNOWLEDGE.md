@@ -2,6 +2,8 @@
 
 Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries; parser/security/testing guides state verified coverage and limitations.
 
+AI_ANALYSIS, LLM_INTEGRATION and current pipeline/recovery guides distinguish active HTTP waiting from durable failed-item recovery, configured capacity from advertised limits, and mock qualification from live semantic accuracy.
+
 The public landing page and site description include dbt; the User guide navigation exposes
 DBT_SUPPORT.md. Getting started has a separate dbt retail sample walkthrough and explicit parser-only limits.
 

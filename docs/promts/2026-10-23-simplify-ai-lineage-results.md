@@ -163,7 +163,7 @@ Final full-suite verification: `.venv/Scripts/python.exe -m pytest -q` — **103
 Local implementation commit: `a75e81c` — bound gateway waiting and recovery. Documentation and verification are recorded in the accompanying documentation commit. No push was performed.
 
 
-## Follow-up: optional wait-until-stopped � 2026-10-24
+## Follow-up: optional wait-until-stopped — 2026-10-24
 
 Added one opt-in profile setting, `wait_until_stopped`, and an admin checkbox. Cancellable AI requests use an unlimited HTTP read timeout while retaining bounded connection/write/pool timeouts. Existing profiles retain their previous timeout behavior. Setup/discovery calls without a cancellation callback remain bounded. Cancel and configured run ceilings still interrupt silent HTTP I/O; actual disconnections retain the existing bounded retry policy. Transport diagnostics now retain the exception class (never its potentially sensitive message), distinguishing an app read timeout from a disconnected gateway.
 
@@ -172,3 +172,137 @@ Socket regressions cover a response arriving beyond the configured inactivity ti
 Authorized live test: enabled the setting on the existing OmniRoute profile in `new_test`, using the running app's already-available credential and `auto/best-coding`. The workspace contained 2,114 SQL files (225 estimated initial requests). Previous gateway logs showed 499 outcomes around 30 seconds; the new first batch stayed open beyond that interval and successfully checkpointed 14 extracted parts, reporting 9,339 input / 12,503 output tokens, then began the next request. No secret or source content was copied into this document. This is transport/checkpoint functionality evidence, not a semantic accuracy evaluation or proof that the entire build completed.
 
 Verification: full suite **1,042 passed, 2 skipped** in 297.39 seconds; the skips require Windows symlink privileges. The final bounded setup/discovery adjustment was independently checked by the final gateway/socket group (**39 passed** in 38.83 seconds). Provider/LLM/connection/resume group: **86 passed**. Ruff, diff checks, and strict documentation build passed. The user took over the ongoing live build after the first successful checkpoint; no full live-build completion is claimed.
+
+## Progressive extraction recovery — 2026-10-24
+
+Implemented from `02c8d6d` on the existing branch. The working tree was clean at entry;
+the committed **Wait until stopped** changes were preserved. No source data, provider
+configuration, credentials or routing was changed. No paid/live model calls or push.
+
+### Confirmed causes and diagnostic limits
+
+The coordinator previously aborted the whole build when any required part accumulated
+two invalid results (`missing_or_invalid_required_extraction`). It collapsed decode
+errors into `invalid_extraction_response` and source/internal validation errors into
+one generic code. Thus the observed stop is an extraction/recovery decision, not
+evidence of a read timeout. The live DuckDB file was locked by the running app when
+opened read-only; it was not copied, unlocked or modified. The precise original
+model-output defect in the reported 2,114-file / 14-saved-part run cannot be reconstructed
+from available evidence. Missing IDs, malformed schema/citations, truncation and
+provider normalization are tested possible causes, not asserted live-run causes.
+
+The 8,192-token recommendation is not a runtime dispatch cap. Locked live records
+prevented verifying whether it limited that run. It remains a conservative profile
+recommendation; configured output allowance and advertised model capacity now appear
+separately with actual request packing diagnostics. Gateway-wide advertised maxima
+are not assumed valid for every routed model. The conservative UTF-8 fallback remains.
+
+### Recovery behavior
+
+- Valid siblings are durably saved; only unsuccessful items enter smaller corrective
+  batches, eventually singletons. Safe host codes and bounded schema paths accompany
+  retry. Unknown response IDs are recorded without copying their supplied value.
+- Recovery state, failure/pass count, width and next eligible wall time live in the
+  existing run summary. Fresh pending work proceeds first. Each HTTP/transport pass
+  retains finite shared/subset allowances; another pass follows durable backoff
+  (1–60 seconds). Restart does not reset pass history or run spending ceilings.
+- Persistent required failures remain visibly waiting with Cancel available. There is
+  no elapsed-time default cutoff, silent skip, fabricated `no_operations` or incomplete
+  required-work publication. Unknown-outcome retry remains opt-in. Authentication,
+  quota/credits, authorization, source/configuration, storage and explicit run ceilings
+  remain blockers; irreducible corrective request sizes require a budget change.
+- Truncated batches first reduce width. A singleton source part can subdivide once
+  on a natural boundary or a sufficiently long contiguous range. Exact cores,
+  bounded disclosed overlap, parent/child IDs and context persist across reopening.
+  Repeatedly truncated children wait for repair instead of recursive halving.
+- Initial/enrichment sizing reserves bounded corrective feedback through the actual
+  request builder. Smaller eligible items can fill room after a non-fitting later
+  candidate; the first eligible item retains priority. Diagnostics expose input,
+  expected output, disclosure limits, utilization and reserved output.
+- Completion/consolidation failures retain initial validated details. Consolidation
+  groups from all files share one pending set. Membership freezes as references to
+  saved operation hashes before requests; old started stages retain their original
+  grouping, preventing repeated calls or supersession. Interrupted planning never
+  checkpoints a partial group list. Restored source parts recover their exact pinned
+  definition IDs, evidence and fingerprint despite changed fitting boundaries.
+- Per-request journals retain safe stage/request/part IDs, failure code/path, attempt,
+  recovery action, whitelisted finish/usage metadata and output budgets. Reports/UI
+  show the latest 20 request records plus pending recovery; earlier records remain in
+  the database. No raw rejected responses, arbitrary exception messages or source are
+  added to diagnostics. Null, malformed, negative and partial token usage stays unknown.
+
+### Regression evidence
+
+The first eight regressions failed before implementation: six invalid-item recovery
+variants, persistent cancellation/reopen, and packing around a non-fitting candidate.
+Additional tests reproduced corrective feedback overflowing input (one failure),
+consolidation blocking later files (one), changed resume ranges dropping pinned
+definitions (one), invalid/partial usage incorrectly claiming known counts (three),
+changed legacy consolidation groups repeating supersession (one), and an interrupted
+planner freezing only some groups (one). Each received its targeted fix.
+
+`test_ai_extraction_recovery.py` now has 24 mock cases covering these boundaries,
+including missing/duplicate/unknown IDs, JSON/envelope/schema/citation failures,
+saved siblings, shrinking batches, safe feedback, persistent backoff, cancellation,
+reopen, explicit attempt/output ceilings, source-range/overlap preservation, bounded
+splitting, enrichment retention, consolidation fairness and exactly one publication.
+Existing abort-oriented tests now use explicit spending ceilings or cancellation at
+backoff while retaining strict ledger/previous-graph/source-validation assertions.
+A fresh read-only reviewer reproduced the context/group migration defects; the final
+review found no further actionable issues and reran the three migration/planning tests.
+
+### Verification and commits
+
+All commands used repository `.venv/Scripts/python.exe`; all model transports were
+mocked or local test HTTP servers.
+
+- `-m pytest tests/test_ai_extraction_recovery.py -q --tb=short`:
+  **24 passed**, 16.63 seconds, exit 0.
+- `-m pytest tests/test_ai_extraction_recovery.py tests/test_ai_consolidation_review.py tests/test_ai_resumable_files.py tests/test_ai_review_regressions.py -q --tb=short`:
+  **40 passed**, 20.44 seconds, exit 0.
+- `-m pytest -q --tb=short` on the final implementation:
+  **1,066 passed, 2 skipped**, 297.51 seconds, exit 0. Both skips are existing
+  unavailable Windows symlink privileges. An earlier full run, before the final
+  consolidation migration/planning follow-ups, passed 1,064 with the same two skips.
+- `-m ruff check src ui tests scripts`: **All checks passed**, exit 0.
+- `scripts/docs/build.py`: strict build passed; **42 public pages, 8 assets,
+  rendered local links/anchors and 236 search entries** validated, exit 0.
+- `git diff --check`: passed. The pre-existing single CP1252 em-dash byte in this
+  results document was normalized to UTF-8 while preserving its text.
+
+The final broad linking/publication/graph/transformation/gateway/UI group passed
+**154 cases**, 80.03 seconds, exit 0:
+
+```powershell
+.venv/Scripts/python.exe -m pytest tests/test_ai_extraction_recovery.py tests/test_ai_context_index.py tests/test_ai_context_completion.py tests/test_ai_consolidation_review.py tests/test_ai_resumable_files.py tests/test_gateway_recovery.py tests/test_gateway_sockets.py tests/test_ai_analysis_ui.py tests/test_ai_linking_review.py tests/test_ai_version_publication.py tests/test_ai_traversal_counters.py tests/test_ai_operation_graph.py tests/test_ai_saved_publication.py tests/test_transformations.py -q --tb=short
+```
+
+`scripts/qualify_ai_context.py --files 1000 --family all` completed with exact golden
+table/column/file relationships and interruption/reopen reuse in all families:
+
+| Family | Source files | Parts | Requests | Maximum sent input | Reserved output | Table/column/file correct | Seconds | Peak Python bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| SQL | 1002 | 1003 | 38 | 47558 | 304000 | 1002/2004/999 | 104.328 | 114712904 |
+| SAS | 1002 | 1003 | 38 | 28379 | 304000 | 1002/2004/999 | 81.156 | 61039836 |
+| dbt | 1002 | 1003 | 42 | 57488 | 336000 | 1000/2000/999 | 411.938 | 104884584 |
+
+All scheduled source coverage was processed. SQL/SAS retained two duplicate-writer
+boundaries each. dbt retained two source-context uncertainty records (2/1002), with
+zero missing/false-positive golden relationships. Mock provider tokens/cost remain
+unavailable. This scale command started before the final frozen-membership follow-up;
+the final full suite includes final-code per-family golden/reopen and targeted
+legacy-group migration/planning coverage. No live semantic qualification is implied.
+
+Local implementation commit: `9cb6027` — recover failed extraction work durably.
+Documentation and this evidence are in the following documentation commit. No push.
+
+### Remaining limits
+
+These results qualify deterministic mocks/local HTTP sockets and the existing
+publication stack. They do not establish live-model precision, recall, routing
+reliability or token cost. The original live response defect and actual 8,192-token
+bottleneck remain unverified. No full 2,114-file live retry was launched. Required
+failures may continue incurring configured, authorized attempts until cancelled or
+an explicit ceiling is reached; unknown reservations remain even after success.
+Irreducible context groups retain existing explicit uncertainty/budget handling.
+No new database, dependency, generic workflow layer, generation or optimization.

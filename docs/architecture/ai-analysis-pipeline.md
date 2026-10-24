@@ -30,6 +30,20 @@ scoped, authorized definition evidence and freezes bounded completion work.
 one stable instructions/schema prefix and an items envelope. `ai_validation`
 checks source integrity independently of legacy semantic validation.
 
+`ai_extraction_recovery` supplies safe failure metadata, bounded source subdivision
+and cancellable waits. Pending item state, feedback, delays and split ancestry live
+in the existing run summary; per-request diagnostics live in the existing journal.
+Passes have finite HTTP/transport attempts, rotate failed items behind other work,
+and retain every unknown outcome/reservation. Required failures remain pending until
+repaired, cancelled or blocked by explicit policy/configuration. Initial fitting
+also checks a bounded corrective-feedback envelope through the same request builder.
+Resume rehydrates exact pinned definition IDs/evidence/fingerprints, independent of
+any newly calculated source-part boundaries. Consolidation groups across files share
+one pending set, so a failing file does not block later file work.
+Consolidation membership is frozen before dispatch as hashes referencing saved
+operations. Existing checkpoints recreate their original group fitting once before
+freezing it, so completed groups and explicit supersessions are not repeated.
+
 Existing DuckDB run/unit/request/attempt tables store part and file results.
 Original part details survive refinement and failure. Historical snapshots and
 migration-9 tables remain registered for maintenance/backup.
