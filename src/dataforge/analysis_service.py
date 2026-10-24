@@ -319,6 +319,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             continue
                     summary.setdefault('replay_unavailable', {})[attempt['attempt_id']] = retained['reason']
                     unknown.append(attempt)
+                # An intact response checkpoint can resolve a dispatch whose
+                # receipt/usage write was interrupted. Other unknowns stay unknown.
+                usage_known = all(json.loads(a['details']).get('usage_known') is True
+                    for a in store.rows('SELECT details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=?', [workspace, run_id]))
                 if unknown:
                     usage_known = False
                 for attempt in unknown:

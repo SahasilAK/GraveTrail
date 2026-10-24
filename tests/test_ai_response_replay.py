@@ -163,3 +163,25 @@ def test_history_off_complete_parts_need_no_response_retry_acknowledgement(tmp_p
     assert result.usage_known
     assert store.rows('SELECT status FROM ai_analysis_requests') == [{'status': 'processed'}]
     store.close()
+
+
+def test_crash_after_wire_checkpoint_recovers_received_usage(tmp_path, monkeypatch):
+    import dataforge.analysis_service as service
+    store, w = setup_run(tmp_path)
+    capture = service.capture_payload
+    def crash(*args, **kwargs):
+        capture(*args, **kwargs)
+        if args[4] == 'output':
+            raise OSError('after wire checkpoint before received outcome')
+    with monkeypatch.context() as patch:
+        patch.setattr(service, 'capture_payload', crash)
+        first = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(empty_provider([])))
+    assert first.status == 'failed' and store.rows('SELECT status FROM ai_analysis_attempts') == [{'status':'dispatched'}]
+    store.close()
+    store = Store(tmp_path)
+    second = run_analysis(store, w, AnalysisRequest(mode='ai', resume_run_id=first.run_id),
+        transport=httpx.MockTransport(lambda r: pytest.fail('wire checkpoint replay dispatched')))
+    assert second.status == 'committed' and second.usage_known
+    assert second.counts['input_tokens'] == second.counts['output_tokens'] == 1
+    assert second.counts['requests'] == 1
+    store.close()
