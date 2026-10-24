@@ -29,3 +29,5 @@ Hidden source/AI/tree/maintenance bodies are gated. Business rules stay in src/d
 Analysis Run renders the active AI progress fragment and Cancel before inventory reads; nonterminal jobs skip full controls/preparation until completion. Offline preview reuse and persistent budget widgets are owned by `ui/analysis_ai.py`.
 
 Explorer Export prepares fitted SVG/PNG through services.export_graph_image; summarizes scope/appearance, explains pan/zoom independence and metadata privacy, and keeps generation errors in place. Images are built only on Prepare and are not cached.
+
+AI analysis uses shared durable response/part counters and an independent transient reasoning fragment; selected-run Continue and explicit new-run Start fresh are rendered by ui.analysis_ai.

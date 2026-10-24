@@ -23,3 +23,5 @@ ai-analysis-flow.md and ai-analysis-controls-and-recovery.md now describe static
 Recovery controls include cancellable waiting, safe validation diagnostics, full request budgets and saved siblings. After three unsuccessful item passes, incomplete lineage publishes with explicit unresolved work and later retry. Budget overrides show a pinned 10–50% output share, capacity/clamp details and optional Advanced exact limits. Earlier indefinite pending guidance is superseded.
 
 Controls/recovery also defines durable file/part/request/attempt counters, nonblocking Cancel, growing totals, lazy Inputs/Outputs, history opt-in and bounded capture retention/downloads.
+
+`ai-analysis-controls-and-recovery.md` distinguishes durable validated parts, handled responses, eligible response retention and new-run Start fresh; describes optional 500ms/300px reasoning display and exact absence fallback.

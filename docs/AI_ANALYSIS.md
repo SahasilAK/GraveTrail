@@ -227,3 +227,53 @@ Live-model precision/recall, evidence validity, tokens and cost per correct
 relationship remain pending. Larger model capacity alone is not a quality claim.
 No paid provider calls run as ordinary tests. SQL generation, SAS translation,
 optimization, GraphRAG, vector stores and agent orchestration are outside this work.
+
+## Durable extraction and response recovery (2026-10-24)
+
+A handled response is not a saved extraction. The UI derives **Validated parts saved**
+from completed compatible `extraction5` checkpoints; unresolved stubs do not count.
+**Saved parts reused** is a subset of that total. **Responses received** counts
+provider outcomes, **Responses handled** counts finalized local handling, and
+**Parts needing recovery** counts planned, non-superseded work without a successful
+checkpoint. Per-request saved/expected counts and fixed rejection codes explain gaps.
+Progress polling reads metadata, never raw provider bodies.
+
+| Stage | Durable state | What Continue can reuse |
+| --- | --- | --- |
+| Planning | Pinned source/configuration/protocol and complete initial part plan | The same compatible logical work |
+| Before dispatch | Request membership/fingerprint, attempt ID and token reservation | Exact dispatched identities and conservative spending totals |
+| Receipt | Outcome, finish reason, reported usage and payload availability | Receipt alone completes no part |
+| Optional response retention | Existing bounded history artifact plus attempt/context/integrity marker | Eligible original response can be validated locally |
+| Validation | Each validated part committed with producing attempt provenance | Each saved part survives cancellation/reopen independently |
+| Handling complete | Per-part outcome and recovery queue, committed before handled status | Only missing or invalid work enters bounded recovery |
+| Publication | Final file records and atomic graph publication | Results reopen and relink without a provider call |
+
+**Continue** operates on the selected compatible run. **Start fresh AI analysis
+(new run)** deliberately creates another run and can send selected sources again.
+A changed source, context, configuration, or protocol makes continuation stale;
+it never silently becomes a fresh run. There is no cross-run extraction cache.
+
+Truncation is a warning. Parseable envelopes still validate each item independently.
+For cut-off JSON, a bounded JSON decoder accepts only complete `items` entries when
+the incomplete tail identifies a distinct expected part. Unknown/duplicate identities,
+duplicate keys, ambiguous tails, unsupported wrappers and malformed envelopes fail
+closed. It does not repair JSON or infer `no_operations`. Source/evidence and
+completion/consolidation checks remain mandatory. Recovery only sends unfinished
+parts; split children replace their superseded parent in the durable plan.
+
+Response replay uses the existing optional output artifact, never a second archive.
+Only complete, unredacted, intact, unexpired output bound to the exact attempt/work
+fingerprint is eligible. Historical artifacts without provenance remain inspection-only.
+The current history policy and retention are checked again before replay. Local replay
+creates no attempt, reservation or provider usage. Artifact cleanup cannot delete
+successful extraction checkpoints; backup/restore includes both existing tables and
+new metadata in their JSON records, with no schema version change.
+
+With history disabled, redacted, oversized, missing or expired output, validated
+parts remain reusable but unvalidated content may need an explicitly authorized
+unknown-outcome retry under the existing policy. Storage failures stop dispatch.
+A crash after remote receipt but before local persistence can still leave an unknown
+outcome: exactly-once remote execution is not promised.
+
+The optional **Model thinking** panel is transient display, separate from final
+answer JSON and extraction checkpoints. See [provider streaming details](LLM_INTEGRATION.md#optional-live-provider-reasoning).

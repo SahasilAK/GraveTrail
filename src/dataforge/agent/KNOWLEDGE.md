@@ -65,3 +65,5 @@ Project build/preview also accept nullable max_context_chars (500–2,000,000), 
 Protocol5 supersedes older hybrid/window/character options above. MCP start/preview accept parser/ai, source selection, optional run ceiling and optional output_share/input_token_limit/output_token_limit. Omitted allocation fields preserve pinned resume choices; explicit incompatible changes fail. Committed partial runs may retry unresolved work through the same permission-gated service without repeating successes.
 
 Jobs progress binds run identity before preparation; read exposes cancel_requested from the existing marker until worker acknowledgement. Journals remain free of source/provider payloads.
+
+`jobs.ReasoningBuffer` keeps a transient, redacted 64 KiB display plus bounded redaction context, keyed by job/workspace/run/attempt; progress.reasoning updates no durable per-token journal. Jobs.reasoning_snapshot/discard_reasoning support the UI; disposal clears buffers.

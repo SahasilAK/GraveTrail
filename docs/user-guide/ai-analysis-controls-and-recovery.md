@@ -108,3 +108,31 @@ Historical reports remain readable. Old hybrid/window protocols cannot resume;
 start a new build. Stale inputs, fatal errors and unaccounted missing checkpoints
 preserve the published graph. Bounded failures and semantic uncertainty publish an
 explicitly incomplete inferred graph with retained validated details.
+
+## What is actually saved
+
+**Responses received** and **Responses handled** describe transport and local response
+handling. **Validated parts saved** is the durable reusable extraction count.
+**Saved parts reused** is already included in that count; unresolved stubs are excluded.
+**Parts needing recovery** and request saved/expected counts identify unfinished work.
+A truncated response can save independently valid complete items while the remaining
+parts enter bounded recovery. No complete part is resent during compatible continuation.
+
+**Continue AI analysis** reuses this selected run. **Start fresh AI analysis (new run)**
+intentionally sends work for a new run. Compatibility failures explain why the selected
+run cannot continue; the app never silently starts over.
+
+**Responses saved; validation pending** appears only for eligible retained output.
+Raw responses follow the existing optional history policy: disabled history, redaction,
+expiration, size limits or missing/corrupt content can prevent replay. Previously
+validated parts survive those limits. Local replay creates no provider attempt or
+additional reported tokens. A response received before a crash is not guaranteed to
+be recoverable, and unknown remote outcomes can still require retry acknowledgement.
+
+For LM Studio analysis, provider-exposed reasoning appears in **Model thinking** with
+a 300px scrolling body. Updates poll that panel about every 500ms; scrolling up pauses
+follow, **Jump to latest** resumes it, and collapse does not affect Cancel or generation.
+The transient display holds at most 64 KiB, never counts as saved extraction, and may
+be absent depending on the model/template. In that case the caption is exactly
+**No thinking/reasoning available**. No additional model request generates the display.
+See [save stages and crash limits](../AI_ANALYSIS.md#durable-extraction-and-response-recovery-2026-10-24).

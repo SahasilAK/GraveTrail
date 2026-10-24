@@ -587,3 +587,132 @@ Strict build passed; 42 public pages, 8 assets, local links/anchors, search and 
 
 The sole final failure remains `tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` (Crimson Forge in the unchanged user configuration versus expected Ocean dark). No new failing tests remain. The database migration assertion now checks version 10 explicitly; no acceptance assertion was relaxed. No production artifact/package build or live-model evaluation was performed. Logical retention cannot erase existing backups or guarantee immediate physical database shrinkage. Elapsed time is the current worker execution; attempt/reservation totals survive resume.
 
+
+## Durable extraction and response recovery (2026-10-24)
+
+Implemented the durable-response plan on `codex/resumable-ai-lineage` from the
+combined checkout. No provider calls, pushes, user-store writes, running-analysis
+cancellations, cache clears or application restarts were used. The existing
+`.streamlit/config.toml` edit and original plan input were preserved.
+
+Metadata saved, raw response retained and validated extraction saved are distinct:
+request/attempt records establish dispatch and spending, optional history artifacts
+establish eligible local replay, and completed compatible `extraction5` records
+establish reusable extraction. Each part commits with its producing attempt before
+between-part cancellation. Request outcomes finalize after validation/recovery state.
+Splits commit supersession and child plan atomically. Storage failures block dispatch.
+
+Truncated responses retain independently valid items through a bounded JSON decoder,
+including complete array entries when only the outer closure is missing. Ambiguous
+identities, duplicate keys and malformed envelopes fail closed. Completion and
+consolidation validators remain shared with normal responses. Response replay uses
+existing bounded artifacts with fingerprint/integrity/privacy/retention checks,
+no new attempt or provider usage, and no second raw archive. Historical output is
+inspection-only without sufficient provenance. Cleanup cannot erase saved parts.
+
+The UI derives saved/reused/unfinished parts and received/handled responses from
+durable metadata, with request saved/expected outcomes and explicit new-run Start
+fresh. Reasoning uses a transient bounded buffer and a 500ms fragment; only explicit
+LM Studio OpenAI-compatible reasoning fields populate the escaped 300px browser
+panel. No reasoning caption/box is fabricated when absent. SSE requires terminal
+finish evidence plus `[DONE]`; incomplete streams remain unknown, with no silent
+non-streaming resend. Semantic redaction rejects wire retention when a credential
+was split across events. The model/template must expose reasoning; live Qwen behavior
+and the prior LM Studio HTTP 400 remain unverified.
+
+Independent read-only review found split-event credential retention, all-saved
+history-off resume gating, non-atomic truncation splitting and closed-array salvage
+loss. The three persistence/decoder regressions failed before fixes and passed after;
+SSE privacy was reproduced and verified manually under the no-new-reasoning-tests
+exception. A visible truncation-warning propagation gap was also fixed with a
+failing regression. There are no deferred review findings.
+
+Rulings made:
+
+- Used the requested existing branch/combined checkout instead of making a new
+  worktree. This preserves the required input state; the cost of a wrong choice is
+  less filesystem isolation, so only task files were staged.
+- Kept existing configuration-staleness checks when history is disabled later;
+  the loader independently denies replay. The cost is that privacy-setting changes
+  can require a new compatible run, rather than bypassing configuration pins.
+- Updated two fixture assumptions without weakening assertions: quarantine now
+  means a syntactically incomplete item; consolidation zero-resend recovery opts
+  into response history. The cost is changed fixture realism; separate parseable
+  truncation/history-off regressions verify both contracts explicitly.
+
+### small_sql verification method
+
+Used disposable temporary stores named **small_sql**, populated from the first
+three SQL sources in `tests/sample_data/banking_sql_compact_10_file_lineage_test.zip`.
+The current user database was never opened. Responses contained fixed synthetic
+facts with exact source coordinates; no claim of model-derived accuracy is made.
+The initial part plan and dispatched attempt were asserted inside mock transport.
+
+One recorded cancellation scenario dispatched IDs `d348d7cae022e57229a66ac75a4bd492`,
+`95362be22660ac0c7c22e0cbb7fabde9` and `f276e178edaaf6ace9ac00a47ab88b4e`.
+The first two were saved; after reopen Continue dispatched only
+`f276e178edaaf6ace9ac00a47ab88b4e`. Start fresh deliberately sent all three IDs in a
+distinct run and reproduced the same three graph edges, without duplication.
+A separate crash after the first saved part with eligible retained output completed
+all three through local replay: zero new calls, one lifetime attempt, 7 input and
+9 output tokens. Random IDs differ between isolated stores by design.
+
+The manual browser used an independent synthetic app on port 18543. A scroll position
+of 628 stayed fixed while content height grew from 2934 to 5007; Jump to latest,
+collapse/expand, responsive synthetic cancellation and exact absence caption were
+visually checked. The app was stopped after verification. Actual async mock transport
+also exposed reasoning before release of the remaining response and omitted unsafe
+split-secret SSE content from retention. No Task-5 automated tests were added.
+
+### Durable recovery validation
+
+Initial full suite: **3 failed, 1160 passed, 2 skipped in 344.98s**. Two failures
+were obsolete fixture assumptions described above; the third was the existing
+Crimson Forge user-theme mismatch. Final results follow after the last verification.
+
+Final focused checks used `.venv/Scripts/python.exe`:
+
+```text
+-m pytest tests/test_ai_resumable_files.py tests/test_ai_partial_recovery.py tests/test_ai_wire.py tests/test_ai_extraction_recovery.py tests/test_ai_response_replay.py tests/test_ai_inspection.py tests/test_ai_analysis_transport.py tests/test_ai_analysis_visibility.py tests/test_ai_analysis_ui.py tests/test_ai_inspection_ui.py tests/test_ai_analysis_jobs.py tests/test_ai_consolidation_review.py tests/test_ai_analysis_evaluation.py -q
+130 passed in 57.23s
+
+-m ruff check src ui tests scripts
+All checks passed!
+
+scripts/docs/build.py
+Strict build passed: 42 public pages, 8 assets, all local links/anchors, search and publication inventory (243 search entries).
+```
+
+The final persistence regression also covers a crash after complete wire capture but
+before the receipt write: replay resolves the dispatched outcome and restores known
+usage from the original response, without a new attempt. Manual terminal-SSE replay
+likewise preserved one attempt and 7/9 input/output tokens. Omitting `[DONE]` kept a
+synthetic stream unknown with no saved extraction or automatic JSON retry.
+
+Local implementation commits (no push): `440724f` durable part cancellation/provenance;
+`b1dcde7` conservative truncation; `fcb83dd` eligible response replay; `f7b0e3e`
+durable counters/new-run controls; `fe68e61` optional reasoning; `4ea95ac` reviewed
+recovery/privacy fixes. The receipt/usage boundary and this final documentation have
+separate focused local commits.
+
+Limits: no live inference or model-accuracy evaluation, no production package build,
+no cross-run extraction cache and no exactly-once remote execution guarantee.
+Raw retention is optional and bounded; validated extraction durability is independent.
+Logical artifact cleanup cannot erase existing backups or guarantee physical database
+shrinkage. The unchanged user theme remains authoritative even when a baseline test
+expects Ocean dark.
+
+Final full-suite command and result:
+
+```text
+.venv/Scripts/python.exe -m pytest -q
+1 failed, 1170 passed, 2 skipped in 328.98s (0:05:28)
+```
+
+The sole failure is
+`tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean`:
+the preserved user `.streamlit/config.toml` selects **Crimson Forge**, while the test
+expects **Ocean dark**. No configuration or assertion was changed to hide it. No new
+implementation failure remains. Final Ruff and strict documentation checks passed.
+Receipt/usage recovery is committed locally as `a33ecb3`; documentation/knowledge maps
+have their own final commit. The branch remains local with no push or merge.

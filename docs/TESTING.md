@@ -393,3 +393,41 @@ Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fix
 
 
 Protocol-5 offline scale evidence (2026-10-23): SQL 1,002 files / 1,003 parts / 39 requests; SAS 1,002 / 1,003 / 38; dbt 1,002 / 1,003 / 42. All had full processed range coverage and exact deterministic golden table/column/file graphs after interruption/reopen. SQL/SAS retain duplicate-writer boundaries. These are mock transport checks, not live semantic accuracy. Peak measured Python allocations were approximately 106.5 / 57.4 / 97.2 MiB; elapsed times approximately 89 / 91 / 305 seconds with tracing enabled. Actual provider tokens/cost remain unknown.
+
+## Durable response recovery verification (2026-10-24)
+
+The focused regression set adds per-part cancellation/provenance, storage-write
+failure, atomic split-plan interruption, complete-item truncation salvage, eligible
+response replay, current-privacy/integrity/retention/scope gates and lazy durable
+counters. Replay tests reopen isolated stores and assert zero additional transport
+calls, attempts, reservations or reported usage. Raw cleanup and backup/restore
+preserve validated parts. The quarantined-response fixture now actually cuts off
+an item; the consolidation no-resend fixture explicitly enables history. Existing
+acceptance assertions remain intact.
+
+Workspace verification used temporary isolated **small_sql** stores populated from
+the first three SQL files in the bundled compact banking archive. The running user
+store was never opened, restarted, cancelled or modified. Synthetic provider output
+was tied to exact part/source coordinates. Two valid parts survived cancellation;
+Continue dispatched only the third ID. Start fresh created a new run, deliberately
+resent all three IDs, and produced the same three deterministic graph edges. A
+separate retained-response crash after one committed part replayed the other two
+with zero new calls and unchanged one-attempt usage (7 input / 9 output tokens).
+These checks establish persistence and graph mechanics, not model accuracy.
+
+Task 5 follows the explicit user exception: **no new automated live-reasoning tests**.
+Manual synthetic checks exercised byte-split SSE framing, usage-only/terminal events,
+answer/reasoning separation, replay parity, credential splits, the display cap and
+actual mocked asynchronous HTTPX consumption before response completion. The browser
+check confirmed the 300px panel, scroll hold during growth, Jump to latest,
+collapse/expand, interruption and exact absence caption. No live inference was used.
+
+Exact final commands, results, local commits and the preserved user-theme failure
+are recorded in the repository implementation results at
+`docs/promts/2026-10-23-simplify-ai-lineage-results.md` (an internal record, not a published page).
+
+Final durable-recovery validation: **130 focused tests passed in 57.23s**;
+full suite **1170 passed, 2 skipped, 1 existing theme failure in 328.98s**.
+`test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` expects Ocean dark;
+the preserved user configuration selects Crimson Forge. Ruff and strict docs validation
+passed. No assertion or user configuration was weakened to conceal this mismatch.

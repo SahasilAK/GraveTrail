@@ -266,3 +266,50 @@ acknowledgement, authorization, freshness, Wait until stopped, responsive cancel
 and optional spending ceilings remain enforced.
 
 Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.
+
+## Optional live provider reasoning
+
+The LM Studio analysis path requests `stream: true` and
+`stream_options.include_usage: true` at the existing OpenAI-compatible Chat
+Completions endpoint. It consumes SSE incrementally inside cancellable HTTPX I/O;
+ordinary JSON responses still use the existing decoder. Other provider paths retain
+their existing behavior. Request sizing uses the same streaming body as dispatch.
+
+Only explicit `choices[].delta.reasoning` or `reasoning_content` fields supply
+reasoning; answer `delta.content` stays separate for extraction decoding. LM Studio
+[documents the reasoning field](https://lmstudio.ai/docs/developer/api-changelog)
+and [Chat Completions streaming option](https://lmstudio.ai/docs/developer/openai-compat/chat-completions).
+These are different from the named events on its
+[native REST endpoint](https://lmstudio.ai/docs/developer/rest/streaming-events).
+The installed model/template must expose reasoning; no thinking option is enabled
+and no extra request obtains or summarizes it. The
+[Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) does not establish
+what the user's installed LM Studio template emits. That live behavior remains
+unverified while the earlier HTTP 400 is unresolved.
+
+A narrowly scoped Streamlit fragment refreshes approximately every 500ms while the
+job is active. This is incremental polling, not browser push. Non-whitespace reasoning
+appears in a collapsible **Model thinking** panel with a fixed 300px scroll body,
+current attempt ID and streaming/finished/interrupted status. Scrolling up pauses
+auto-follow; **Jump to latest** resumes it. Expansion and scroll state survive panel
+updates. Otherwise the small caption reads exactly **No thinking/reasoning available**.
+Cancel remains in the independent job controls. Timed reasoning updates stop after
+termination; collapsing never cancels or sends another request.
+
+The thread-safe buffer is scoped to workspace/run/attempt, resets for a new attempt,
+and is cleared on job disposal. It displays at most 64 KiB UTF-8, trims at character
+boundaries, and labels removed history. Extra bounded transient context supports
+credential redaction, including values split across chunks; unfinished tails are
+withheld. Content is rendered with `textContent`, never executable markup. Tokens
+are not written to the job journal or database one by one.
+
+Optional retained SSE wire output uses the existing history artifact and is labeled
+`openai_chat_sse`. Replay reconstructs answer, finish reason and reported usage through
+the same pure decoder and requires both finish evidence and `[DONE]`. A disconnected
+stream stays incomplete/unknown and is never automatically resent as ordinary JSON.
+Reasoning alone proves neither response persistence nor extraction success. When a
+credential spans SSE events, the wire artifact is omitted if semantic redaction would
+change its reconstructed answer or reasoning; no hidden unredacted copy is kept.
+History, retention and size limits still apply. Displaying already-generated reasoning
+adds no generation tokens; separately enabling model thinking can increase tokens
+and latency. Mock/synthetic verification does not establish model accuracy.

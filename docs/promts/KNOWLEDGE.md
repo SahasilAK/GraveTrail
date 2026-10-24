@@ -8,3 +8,5 @@ Results record the 2026-10-24 invalid-extraction abort diagnosis, durable recove
 The visibility results section records the two-phase ledger/capture refactor, privacy/retention rules, small-workspace offline UI check, independent review and exact full/focused/lint evidence, including the preserved-config theme failure.
 
 The approved context-management amendment supersedes fixed automatic output limits and indefinite recovery with deterministic output-share allocation, independent requests and bounded unresolved partial publication/retry. Results distinguish local mock transport proof from pending live accuracy evaluation.
+
+`2026-10-23-simplify-ai-lineage-results.md` also records 2026-10-24 durable part/replay/truncation/reasoning implementation, local commits, independent review, small_sql isolation and verification limits.
