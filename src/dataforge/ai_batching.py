@@ -87,7 +87,11 @@ def pack_request(pending_parts, profile, context):
     if last is None:
         raise ValueError('empty_request')
     last.packing.update(stop_reasons=sorted(stops) or ['no_remaining_work'],
+        files=len({p.file_id for p in pending_parts if p.part_id in selected}), parts=len(selected),
+        estimated_input_tokens=last.budget.input_count, input_allowance=last.budget.input_limit,
+        token_counting_method=last.budget.count_method,
         expected_output_tokens=output_estimate, reserved_output_tokens=reserve,
+        output_estimate_method='256_per_item_plus_half_source_or_saved_detail_utf8_bytes',
         input_utilization=last.budget.input_count / last.budget.input_limit if last.budget.input_limit else None,
         configured_output_allowance=profile.max_tokens,
         advertised_output_capacity=profile.model_capabilities.output_tokens if profile.model_capabilities else None)

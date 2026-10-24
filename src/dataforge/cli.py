@@ -375,19 +375,25 @@ def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str
 @lineage_app.command("build")
 def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
           file_id: list[str] = typer.Option(None), background: bool = False, mode: str = 'parser',
-          max_output_tokens_total: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> None:
+          max_output_tokens_total: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
+          output_share: int | None = None, input_token_limit: int | None = None, output_token_limit: int | None = None) -> None:
     """Build static or AI lineage; token limits come from the selected provider profile."""
     invoke(ctx, 'analyze', workspace, background, force=force, file_ids=file_id, mode=mode,
-           max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+           max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
+           **{k: v for k, v in dict(output_share=output_share, input_token_limit=input_token_limit,
+                                    output_token_limit=output_token_limit).items() if v is not None})
 
 
 @lineage_app.command('preview')
 def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'ai',
                   file_id: list[str] = typer.Option(None), max_output_tokens_total: int | None = None,
-                  resume_run_id: str = '') -> None:
+                  resume_run_id: str = '', output_share: int | None = None,
+                  input_token_limit: int | None = None, output_token_limit: int | None = None) -> None:
     """Preview pinned sources and token budgets without provider calls."""
     invoke(ctx, 'analysis_preview', workspace, mode=mode, file_ids=file_id,
-           max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id)
+           max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id,
+           **{k: v for k, v in dict(output_share=output_share, input_token_limit=input_token_limit,
+                                    output_token_limit=output_token_limit).items() if v is not None})
 
 
 @lineage_app.command('analysis-report')

@@ -51,7 +51,8 @@ def execution_profile(profile):
     """Observation timestamps/provenance do not change the executable configuration."""
     values = profile if isinstance(profile, dict) else profile.model_dump()
     values = dict(values)
-    for key, default in {'connect_timeout': 5, 'read_timeout': None, 'unknown_retries': 0, 'wait_until_stopped': False}.items():
+    for key, default in {'connect_timeout': 5, 'read_timeout': None, 'unknown_retries': 0,
+                         'wait_until_stopped': False, 'analysis_input_allowance': None}.items():
         if values.get(key) == default:
             values.pop(key, None)
     if values.get('model_capabilities'):
@@ -62,7 +63,7 @@ def execution_profile(profile):
 
 def runtime_profile(profile):
     # Preserve invalidation on request-option edits; metadata refresh is harmless.
-    return profile.model_dump_json(exclude={'model_capabilities'})
+    return profile.model_dump_json(exclude={'model_capabilities', 'analysis_input_allowance'})
 
 
 def _limit(values):

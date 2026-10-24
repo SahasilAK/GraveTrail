@@ -96,11 +96,11 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `jobs cancel` | `JOB_ID` | `--workspace`, `-w` **required**; `--help` |
 | `jobs status` | `JOB_ID` | `--workspace`, `-w` **required**; `--wait`, `--no-wait`; `--help` |
 | `lineage analysis-report` | — | `--workspace`, `-w` **required**; `--run-id`; `--help` |
-| `lineage build` | — | `--workspace`, `-w`; `--force`, `--no-force`; `--file-id`; `--background`, `--no-background`; `--mode`; `--max-output-tokens-total`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
+| `lineage build` | — | `--workspace`, `-w`; `--force`, `--no-force`; `--file-id`; `--background`, `--no-background`; `--mode`; `--max-output-tokens-total`; `--output-share`; `--input-token-limit`; `--output-token-limit`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
 | `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
 | `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
-| `lineage preview` | — | `--workspace`, `-w`; `--mode`; `--file-id`; `--max-output-tokens-total`; `--resume-run-id`; `--help` |
+| `lineage preview` | — | `--workspace`, `-w`; `--mode`; `--file-id`; `--max-output-tokens-total`; `--output-share`; `--input-token-limit`; `--output-token-limit`; `--resume-run-id`; `--help` |
 | `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
 | `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |
@@ -373,3 +373,9 @@ within that compatible run; `--retry-unknown` acknowledges a possibly billed los
 response. Ceilings cannot reset on resume. No push or live call is made by preview.
 See [AI analysis](AI_ANALYSIS.md) for source permissions, semantic uncertainty and
 historical-data compatibility.
+
+Build and preview accept `--output-share` (10–50, default 30 for new runs),
+`--input-token-limit` and `--output-token-limit`. Optional exact run overrides use
+the same precedence and model clamps as the UI; omitted fields preserve pinned
+resume choices. `--resume-run-id` also retries unresolved work from an explicitly
+incomplete committed run, reusing successes without resetting cumulative spending.

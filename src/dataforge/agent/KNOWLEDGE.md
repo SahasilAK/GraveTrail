@@ -61,3 +61,5 @@ Job journals add created_at/started_at/stage_started_at/finished_at epoch times.
 AI build/preview share nullable files/request and parallel maxima, auto continuation, lifetime attempts/output/seconds and existing execution/resume/retry fields across CLI/MCP/UI. Permissions remain source/network gated.
 
 Project build/preview also accept nullable max_context_chars (500–2,000,000), explicitly overriding saved source-character allowances per build; model capacity and permissions remain binding.
+
+Protocol5 supersedes older hybrid/window/character options above. MCP start/preview accept parser/ai, source selection, optional run ceiling and optional output_share/input_token_limit/output_token_limit. Omitted allocation fields preserve pinned resume choices; explicit incompatible changes fail. Committed partial runs may retry unresolved work through the same permission-gated service without repeating successes.

@@ -24,6 +24,10 @@ class AnalysisRequest(StrictModel):
     max_provider_attempts: int | None = Field(default=None, ge=1, le=2000)
     max_output_tokens_total: int | None = Field(default=None, ge=1000, le=2000000)
     max_seconds: int | None = Field(default=None, ge=30, le=14400)
+    output_share: int = Field(default=30, ge=10, le=50)
+    input_token_limit: int | None = Field(default=None, ge=1, le=2147483647)
+    output_token_limit: int | None = Field(default=None, ge=64, le=2147483647)
+    budget_policy: Literal['model_share', 'legacy'] = 'model_share'
     max_files_per_request: int | None = Field(default=None, ge=1, le=100)
     max_parallel_requests: int | None = Field(default=None, ge=1, le=4)
     max_context_chars: int | None = Field(default=None, ge=500, le=2000000)

@@ -76,8 +76,10 @@ def request_budget(profile, serialized_request, reserved_output, *, disclosed_ch
     """Count the complete provider body, with conservative framing and model headroom."""
     limits = effective_limits(profile)
     count, method = count_request_tokens(serialized_request, profile)
-    headroom = max(512, ceil((limits.context_tokens or limits.input_tokens or 0) * .05))
-    allowance = limits.input_tokens
+    capacity = ((limits.context_tokens or limits.input_tokens) if limits.window == 'combined' or profile.analysis_input_allowance is None
+                else (limits.input_tokens or limits.context_tokens))
+    headroom = max(512, ceil((capacity or 0) * .05))
+    allowance = limits.input_tokens or (limits.context_tokens if limits.window == 'separate' else None)
     reasons = []
     if limits.window == 'combined' and limits.context_tokens:
         shared = max(0, limits.context_tokens - reserved_output - limits.reasoning_reserve - headroom)
@@ -86,6 +88,10 @@ def request_budget(profile, serialized_request, reserved_output, *, disclosed_ch
         allowance = max(0, allowance - headroom)
     else:
         reasons.append('model_token_capacity_required')
+    if profile.analysis_input_allowance is not None:
+        # Already allocated after safety/reasoning. Only intersect with the
+        # physical allowance above; do not subtract either reserve again.
+        allowance = min(allowance, profile.analysis_input_allowance) if allowance is not None else None
     if allowance is not None and count > allowance:
         reasons.append('complete_request_exceeds_input_budget')
     if reserved_output > limits.output_tokens or reserved_output < 1:
@@ -115,8 +121,79 @@ def request_budget(profile, serialized_request, reserved_output, *, disclosed_ch
 
 
 
+def _allocation(capabilities, share, output_capacity=None):
+    if capabilities.window == 'combined' and capabilities.context_tokens is None:
+        raise ValueError('shared_model_context_capacity_required')
+    capacity = ((capabilities.context_tokens or capabilities.input_tokens) if capabilities.window == 'combined'
+                else (capabilities.input_tokens or capabilities.context_tokens))
+    if not capacity:
+        raise ValueError('model_token_capacity_required')
+    safety = max(512, ceil(capacity * .05))
+    reasoning = capabilities.reasoning_tokens if capabilities.window == 'combined' and capabilities.reasoning_accounting == 'shared_context' else 0
+    usable = max(0, capacity - safety - reasoning)
+    base = usable if capabilities.window == 'combined' else (capabilities.output_tokens or output_capacity)
+    if base is None:
+        raise ValueError('separate_model_output_capacity_required')
+    return usable, int(base * share / 100), safety, reasoning
+
+
+def allocate_analysis_profile(profile, request):
+    """Deterministic run allocation; the saved provider profile is never mutated."""
+    caps = profile.model_capabilities
+    if request.budget_policy == 'legacy':
+        budget = request_budget(profile, '{}', profile.max_tokens)
+        return profile, {'policy': 'legacy', 'input_allowance': budget.input_limit,
+                         'output_allowance': profile.max_tokens, 'source': caps.source if caps else 'unknown'}
+    if caps is None or not caps.current_for(profile):
+        raise ValueError('model_token_capacity_required')
+    if caps.dynamic and caps.source != 'manual':
+        raise ValueError('dynamic_route_safe_capacity_confirmation_required')
+    fallback_output = request.output_token_limit or (profile.max_tokens if profile.output_mode == 'custom' else None)
+    usable, preferred, safety, reasoning = _allocation(caps, request.output_share, fallback_output)
+    clamps, notes = [], []
+    if caps.window == 'separate' and caps.output_tokens is None and profile.output_mode == 'custom':
+        preferred = profile.max_tokens
+        notes.append('Independent output capacity is unreported; the saved custom output allowance is retained instead of inventing a percentage capacity.')
+    output = request.output_token_limit if request.output_token_limit is not None else preferred
+    if request.output_token_limit is None and profile.output_mode == 'custom' and output > profile.max_tokens:
+        output = profile.max_tokens
+        clamps.append('saved_custom_output_limit')
+    if caps.output_tokens is not None and output > caps.output_tokens:
+        output = caps.output_tokens
+        clamps.append('model_output_limit')
+    if caps.window == 'combined' and output > usable:
+        output = usable
+        clamps.append('shared_context_limit')
+    input_ = max(0, usable - output) if caps.window == 'combined' else usable
+    if caps.window == 'combined' and caps.input_tokens is not None and input_ > caps.input_tokens:
+        input_ = caps.input_tokens
+        clamps.append('model_input_limit')
+    if request.input_token_limit is not None:
+        if request.input_token_limit > input_:
+            clamps.append('available_input_limit')
+        input_ = min(input_, request.input_token_limit)
+    if output < 64 or input_ < 1:
+        raise ValueError('insufficient_model_token_capacity')
+    if caps.output_tokens is None:
+        notes.append('Model output limit is unreported; the requested maximum is not a verified provider output capacity.')
+    if caps.window == 'separate':
+        notes.append('The percentage applies to the independent output capacity; it does not reduce the input window.')
+    effective = profile.model_copy(update={'max_tokens': output, 'analysis_input_allowance': input_})
+    return effective, {'policy': 'model_share', 'output_share': request.output_share,
+        'input_allowance': input_, 'output_allowance': output, 'safety_reserve': safety, 'reasoning_reserve': reasoning,
+        'context_capacity': caps.context_tokens, 'input_capacity': caps.input_tokens, 'output_capacity': caps.output_tokens,
+        'window': caps.window, 'source': caps.source, 'dynamic': caps.dynamic, 'clamps': clamps, 'notes': notes}
+
+
 def profile_recommendations(capabilities=None):
-    output = min(8192, capabilities.output_tokens) if capabilities and capabilities.output_tokens else 2048
+    output = 2048  # No capacity has been confirmed; builds still require confirmation.
+    if capabilities:
+        try:
+            _, output, _, _ = _allocation(capabilities, 30)
+            if capabilities.output_tokens is not None:
+                output = min(output, capabilities.output_tokens)
+        except ValueError:
+            pass
     output = max(64, output)
     capacity = capabilities.input_tokens or capabilities.context_tokens if capabilities else None
     if capabilities and capabilities.context_tokens and capabilities.window == 'combined':

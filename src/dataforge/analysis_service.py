@@ -71,6 +71,8 @@ def recovery_message(summary):
     """Explain observed connection state without speculating about upstreams."""
     detail = summary.get('last_failure', {})
     category = detail.get('failure_category')
+    if summary.get('status') == 'committed' and (summary.get('unresolved_work') or 'required_work_unresolved' in summary.get('reasons', [])):
+        return 'Available validated lineage was published with incomplete coverage. Retry unresolved work to continue; saved successes are reused.'
     if summary.get('status') == 'committed' or summary.get('reasons') == ['semantic_coverage_not_proven']:
         return 'Published AI lineage remains inferred; semantic completeness is not proven.'
     if any(r.startswith('run_') and r.endswith('_reached') for r in summary.get('reasons', [])):
@@ -104,6 +106,8 @@ def _protocol_hash():
 
 
 def _compatible_request(request):
+    if request.budget_policy == 'legacy' and not request.resume_run_id:
+        raise ValueError('legacy_budget_policy_only_for_saved_runs')
     if request.mode == 'hybrid' or request.additional_ai_review:
         raise ValueError('Hybrid comparison and additional review are no longer supported; choose parser or ai')
     removed = ('max_files_per_request', 'max_parallel_requests', 'max_context_chars',
@@ -117,12 +121,18 @@ def _resume_request(store, workspace, request):
     if not request.resume_run_id:
         return request, {}
     rows = store.rows('SELECT status,summary FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?', [workspace, request.resume_run_id])
-    if not rows or rows[0]['status'] not in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'}:
+    if not rows or rows[0]['status'] not in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed', 'committed'}:
         raise ValueError('Run is not available for continuation')
     summary = json.loads(rows[0]['summary'])
+    if rows[0]['status'] == 'committed':
+        if not summary.get('unresolved_work'):
+            raise ValueError('Run is not available for continuation')
+        summary['_retry_partial_publication'] = True
     if summary.get('protocol_version') != 5:
         raise ValueError('Legacy analysis checkpoint is incompatible; start a new build')
-    saved = AnalysisRequest.model_validate(summary['request'])
+    saved_values = dict(summary['request'])
+    saved_values.setdefault('budget_policy', 'legacy')
+    saved = AnalysisRequest.model_validate(saved_values)
     if request.file_ids is not None and request.file_ids != saved.file_ids:
         raise ValueError('Continuation source selection is pinned')
     if request.mode not in {'parser', saved.mode}:
@@ -130,16 +140,21 @@ def _resume_request(store, workspace, request):
     for key in ('max_provider_attempts', 'max_output_tokens_total', 'max_seconds'):
         if getattr(request, key) is not None and getattr(request, key) != getattr(saved, key):
             raise ValueError('Continuation spending ceilings are pinned')
+    for key in ('output_share', 'input_token_limit', 'output_token_limit', 'budget_policy'):
+        if key in request.model_fields_set and getattr(request, key) != getattr(saved, key):
+            raise ValueError('Continuation token allocation is pinned')
     return saved.model_copy(update={'resume_run_id': request.resume_run_id, 'retry_unknown': request.retry_unknown}), summary
 
 
 def _prepare(store, workspace, request, connections=None, cancelled=None, transport=None, authorize=None,
              preparation_progress=None):
-    from dataforge.ai_budget import effective_limits
+    from dataforge.ai_budget import allocate_analysis_profile, effective_limits
     prepared = prepare_analysis(store, workspace, request, progress=preparation_progress)
     profile_id, profile = analysis_routes(store, workspace, 'project_lineage')[0]
+    credential_profile = profile
+    profile, allocation = allocate_analysis_profile(profile, request)
     manager = connections or current_connections()
-    bound = manager.for_profile(profile_id, profile) if hasattr(manager, 'for_profile') else manager
+    bound = manager.for_profile(profile_id, credential_profile) if hasattr(manager, 'for_profile') else manager
     if profile.key_env and not bound.resolve(profile.key_env):
         raise ValueError('Configured provider credential is unavailable')
     index = build_context_index(prepared, [])
@@ -155,7 +170,8 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         pinned.append(part.model_copy(update={'context_ids': [e.entry_id for e in selection.entries],
             'context_hashes': [selection.fingerprint], 'context_references': [r for e in selection.entries for r in e.evidence]}))
         definitions[part.part_id] = selection.wire
-    context = {'sources': index.sources, 'definitions': definitions, 'settings': domain_settings}
+    context = {'sources': index.sources, 'definitions': definitions, 'settings': domain_settings,
+               'credential_profile': credential_profile}
     pending, estimates = list(pinned), []
     while pending:
         planned = pack_request(pending, profile, context)
@@ -171,6 +187,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         'estimated_output_tokens': sum(p.reserved_output for p in estimates), 'limits': asdict(limits),
         'estimate_method': estimates[0].budget.count_method if estimates else '',
         'packing': [p.packing for p in estimates],
+        'allocation': allocation,
         'disclosure': [{'file_id': s.file_id, 'path': s.path, 'content_hash': s.content_hash,
                         'characters': len(s.code), 'source_kind': s.source_kind} for s in prepared.sources]}
     return prepared, pinned, (profile_id, profile), context, preview
@@ -278,10 +295,16 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 pinned_index = build_context_index(prepared, [])
                 for part in parts:
                     context['definitions'][part.part_id] = restore_part_context(pinned_index, part)
+                if summary.pop('_retry_partial_publication', False):
+                    for part_id in summary.get('unresolved_work', {}):
+                        state = summary.get('recovery_queue', {}).get(part_id, {})
+                        state.update(retry_baseline=state.get('failures', 0), not_before=time())
+                    summary['unresolved_work'] = {}
             counts['files'], counts['parts'] = len(prepared.sources), len(parts)
-            counts['processed'] = len(store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed'",
+            counts['processed'] = len(store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed' AND context_hash='extraction5'",
                                                   [workspace, run_id]))
             summary.update(protocol_version=5, request=request.model_dump(), pin=pin, parts=[p.model_dump() for p in parts],
+                           allocation=preview['allocation'],
                            retry_policy={'unknown_retries': profile.unknown_retries, 'shared_retries': profile.retries})
             save_run(store, workspace, run_id, mode='ai', status='extracting', manifest=prepared.manifest,
                      configuration=prepared.settings, summary=summary)
@@ -305,17 +328,18 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 raise ValueError('complete_source_permission_required')
             if authorize:
                 authorize(profile)
-            bound = manager.for_profile(pid, profile) if hasattr(manager, 'for_profile') else manager
+            bound = manager.for_profile(pid, context['credential_profile']) if hasattr(manager, 'for_profile') else manager
             if profile.key_env and not bound.resolve(profile.key_env):
                 raise ValueError('Configured provider credential is unavailable')
 
         def execute(work, work_context):
             nonlocal usage_known
             if not work:
-                return
+                return set()
             saved = {r['unit_id'] for r in store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed'",
                                                      [workspace, run_id])}
-            pending = [p for p in work if p.part_id not in saved]
+            unresolved_work = summary.setdefault('unresolved_work', {})
+            pending = [p for p in work if p.part_id not in saved and p.part_id not in unresolved_work]
             errors = summary.setdefault('item_failures', {})
             queue = summary.setdefault('recovery_queue', {})
             def split_pending(parent, reason):
@@ -443,7 +467,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         if detail['retry_scheduled']:
                             update(recovery_message({'last_failure': detail}))
                         checkpoint()
-                bound = manager.for_profile(pid, profile) if hasattr(manager, 'for_profile') else manager
+                bound = manager.for_profile(pid, context['credential_profile']) if hasattr(manager, 'for_profile') else manager
                 try:
                     with connection_scope(bound), request_slot(store.home, workspace, 1), Adapter(profile,
                             transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
@@ -519,7 +543,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     number = state.get('failures', 0) + 1
                     detail = diagnostics.get(part.part_id, {'code': invalid.get(part.part_id, 'missing_extraction_item'), 'path': ''})
                     state.update(failures=number, attempt=number, code=detail['code'], path=detail['path'],
-                        batch_limit=max(1, len(scheduled) // 2),
+                        batch_limit=1 if number - state.get('retry_baseline', 0) >= 2 else max(1, len(scheduled) // 2),
                         not_before=time() + min(60, 2 ** min(number - 1, 6)),
                         recovery_action='isolate' if len(scheduled) <= 2 else 'smaller_batch')
                     history = batch_attempts(store, workspace, run_id, batch_id)
@@ -539,9 +563,26 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         if split_pending(parent, 'split_truncated_source'):
                             request_diagnostics[0]['recovery_action'] = 'split_truncated_source'
                             failed.remove(parent)
+                for part in list(failed):
+                    state = queue[part.part_id]
+                    if state['failures'] - state.get('retry_baseline', 0) >= 3:
+                        from dataforge.ai_analysis_models import PartExtraction
+                        # Host-owned failure record, never a model no_operations
+                        # result. Its source range remains explicitly unprocessed.
+                        stub = PartExtraction(part_id=part.part_id, coverage='partial', omitted=True,
+                            unresolved=['required_work_unresolved:' + state['code']])
+                        save_part_extraction(store, workspace, run_id, part, stub, status='unresolved')
+                        state['recovery_action'] = 'retry_after_partial_publication'
+                        unresolved_work[part.part_id] = {'file_id': part.file_id, 'work_kind': part.work_kind,
+                            'code': state['code'], 'failures': state['failures']}
+                        for diagnostic in request_diagnostics:
+                            if diagnostic.get('part_id') == part.part_id:
+                                diagnostic['recovery_action'] = state['recovery_action']
+                        failed.remove(part)
                 for part in scheduled:
                     if part.part_id in saved:
                         queue.pop(part.part_id, None)
+                        unresolved_work.pop(part.part_id, None)
                 details = json.loads(store.rows('SELECT details FROM ai_analysis_requests WHERE batch_id=?', [batch_id])[0]['details'])
                 # Atomic queue/status checkpoint: an interrupted recovery pass
                 # cannot look processed while losing its delay/feedback state.
@@ -549,19 +590,20 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     store.execute("UPDATE ai_analysis_requests SET status='processed',details=? WHERE batch_id=?",
                         [json.dumps({**details, 'diagnostics': request_diagnostics}), batch_id])
                     checkpoint()
-                pending = [p for p in pending if p.part_id not in saved and p not in failed] + failed
+                pending = [p for p in pending if p.part_id not in saved and p.part_id not in unresolved_work and p not in failed] + failed
+            return {p.part_id for p in work if p.part_id in unresolved_work}
 
         stage = 'extracting'
         update('Extracting file contents')
-        execute(parts, context)
+        extraction_unresolved = execute(parts, context)
         initial = {p.part_id: (p, r) for p, r in load_file_parts(store, workspace, run_id) if p.work_kind == 'extraction'}
-        if 'completion_work' not in summary:
+        if 'completion_work' not in summary and not extraction_unresolved:
             frozen = build_context_index(prepared, [r for _, r in initial.values()])
             works = plan_context_completion(list(initial.values()), frozen)
             summary['completion_work'] = [{'part': w.part.model_dump(), 'original': w.original_part_id,
                 'definitions': w.context.wire, 'catalog_revision': w.catalog_revision} for w in works]
             checkpoint()
-        works = summary['completion_work']
+        works = summary.get('completion_work', [])
         stage = 'validating'
         completion_context = {**context, 'definitions': {w['part']['part_id']: w['definitions'] for w in works},
             'work_inputs': {w['part']['part_id']: initial[w['original']][1].model_dump() for w in works}}
@@ -575,10 +617,12 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             except ValueError:
                 initial[work['original']][1].unresolved.append('completion_context_exceeds_budget')
         update('Completing affected source context')
-        execute(bounded, completion_context)
+        completion_unresolved = execute(bounded, completion_context)
         saved = {p.part_id: r for p, r in load_file_parts(store, workspace, run_id)}
         for work in works:
-            if work['part']['part_id'] in saved:
+            if work['part']['part_id'] in completion_unresolved:
+                initial[work['original']][1].unresolved.append('context_completion_unresolved')
+            elif work['part']['part_id'] in saved:
                 original, item = initial[work['original']]
                 initial[original.part_id] = (original, merge_extraction_revision(item, saved[work['part']['part_id']]))
         stage = 'consolidating'
@@ -586,7 +630,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         file_work, consolidation_inputs, consolidation_parts = {}, {}, []
         file_parts_by_id = {s.file_id: [(p, r) for p, r in initial.values() if p.file_id == s.file_id]
                             for s in prepared.sources if s.source_kind in {'sql', 'sas', 'dbt'}}
-        if 'consolidation_work' not in summary:
+        if 'consolidation_work' not in summary and not (extraction_unresolved or completion_unresolved):
             # Before this queue existed, group fitting did not reserve feedback.
             # Recreate that fitting only for an already-started consolidation
             # stage, retaining its stable IDs, attempts and saved supersessions.
@@ -606,7 +650,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         operations_by_hash = {_hash(op.model_dump()): op.model_dump()
                               for _, result in initial.values() for op in result.operations}
         groups_by_file = {}
-        for frozen_group in summary['consolidation_work']:
+        for frozen_group in summary.get('consolidation_work', []):
             part = FilePart.model_validate(frozen_group['part'])
             if any(key not in operations_by_hash for key in frozen_group['operation_hashes']):
                 raise ValueError('pinned_consolidation_inputs_unavailable')
@@ -629,6 +673,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             consolidated = [r for p, r in load_file_parts(store, workspace, run_id, source.file_id) if p.work_kind == 'consolidation']
             final = assemble_file_extraction(source, file_parts, consolidated,
                 provenance={'profile': execution_profile(profile), 'prompt': pin['protocol'], 'schema': 5})
+            final.processed = not any(p.part_id in extraction_unresolved for p, _ in file_parts)
+            if (extraction_unresolved or completion_unresolved) and len(file_parts) > 1:
+                final.unresolved.append('enrichment_deferred_until_required_work_recovery')
+                final.semantic_coverage = 'partial'
             if any(g.overflow for g in groups):
                 final.unresolved.append('consolidation_context_exceeds_budget')
                 final.semantic_coverage = 'partial'
@@ -662,6 +710,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         counts['unresolved'] = len(unresolved_resources) + sum(len(f.unresolved) for f in files)
         counts['incomplete_files'] = len(incomplete_files)
         counts['coverage_gaps'] = counts['incomplete_files'] + len(unresolved_resources)
+        counts['unresolved_parts'] = len(summary.get('unresolved_work', {}))
+        counts['unprocessed_files'] = sum(not f.processed for f in files)
         with store.analysis_lock, store.transaction():
             check()
             _current(store, workspace, prepared, expected, full=True)
@@ -670,7 +720,11 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             counts.update({k: published[k] for k in ('analyzed', 'cached', 'assets', 'edges')})
             report = AnalysisReport(run_id=run_id, mode='ai', status='committed', complete=False,
                 counts=dict(counts), usage_known=usage_known,
-                reasons=['semantic_coverage_not_proven'])
+                reasons=['semantic_coverage_not_proven', *(['required_work_unresolved'] if counts['unresolved_parts'] else [])])
+            if counts['unresolved_parts']:
+                # Only this run's own publication advances its pinned predecessor.
+                # Another build, or a source/config change, still makes retry stale.
+                pin['prior'] = published['run_id']
             save_run(store, workspace, run_id, mode='ai', status='committed', analysis_run_id=published['run_id'],
                 accepted_results=results, summary={**summary, **report.model_dump()})
         if progress:

@@ -169,7 +169,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` |
 | `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
 | `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
-| `preview_project_analysis` | `workspace_id` | `file_ids`, `max_output_tokens_total`, `mode`, `resume_run_id` | Shared static/AI analysis service |
+| `preview_project_analysis` | `workspace_id` | `file_ids`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id` | Shared static/AI analysis service |
 | `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
 | `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` |
@@ -177,7 +177,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
-| `start_lineage_analysis` | `workspace_id` | `file_ids`, `force`, `max_output_tokens_total`, `mode`, `resume_run_id`, `retry_unknown` | Shared static/AI analysis service |
+| `start_lineage_analysis` | `workspace_id` | `file_ids`, `force`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id`, `retry_unknown` | Shared static/AI analysis service |
 | `test_local_agent_access` | `workspace_id` | `options` |
 | `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
 | `update_application_logging` | `level` | `options` |
@@ -301,3 +301,9 @@ requires source authority. `cancel_job` cancels cooperatively. Resume compatible
 runs with `resume_run_id`; acknowledge a possibly billed lost response using
 `retry_unknown`. Source/configuration/prompt/model changes block continuation.
 Historical paused protocols require a new build. See [AI analysis](AI_ANALYSIS.md).
+
+Start/preview also accept optional `output_share` (10–50, default 30 for new runs),
+`input_token_limit` and `output_token_limit`, using the same allocator and precedence
+as the UI/CLI. Omitted fields preserve resumed choices. A committed partial run
+with unresolved required work can resume to retry only those items; completed
+checkpoints and cumulative reservations are retained.

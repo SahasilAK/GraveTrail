@@ -145,18 +145,24 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
     @server.tool(annotations=write)
     async def start_lineage_analysis(workspace_id: str, file_ids: list[str] | None = None, force: bool = False,
                                      mode: Literal['parser', 'ai'] = 'parser', max_output_tokens_total: int | None = None,
-                                     resume_run_id: str = '', retry_unknown: bool = False) -> CallToolResult:
+                                     resume_run_id: str = '', retry_unknown: bool = False, output_share: int | None = None,
+                                     input_token_limit: int | None = None, output_token_limit: int | None = None) -> CallToolResult:
         """Start static or AI lineage. AI requires source/network grants. Poll job_id."""
         return await call('analyze', workspace_id, file_ids=file_ids, force=force, mode=mode,
-                          max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+                          max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
+                          **{k: v for k, v in dict(output_share=output_share, input_token_limit=input_token_limit,
+                                                   output_token_limit=output_token_limit).items() if v is not None})
 
     @server.tool(annotations=read)
     async def preview_project_analysis(workspace_id: str, mode: Literal['parser', 'ai'] = 'ai',
                                        file_ids: list[str] | None = None, max_output_tokens_total: int | None = None,
-                                       resume_run_id: str = '') -> CallToolResult:
+                                       resume_run_id: str = '', output_share: int | None = None,
+                                       input_token_limit: int | None = None, output_token_limit: int | None = None) -> CallToolResult:
         """Offline source disclosure and token budget preview. Requires source access."""
         return await call('analysis_preview', workspace_id, mode=mode, file_ids=file_ids,
-                          max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id)
+                          max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id,
+                          **{k: v for k, v in dict(output_share=output_share, input_token_limit=input_token_limit,
+                                                   output_token_limit=output_token_limit).items() if v is not None})
 
     @server.tool(annotations=read)
     async def get_project_analysis_report(workspace_id: str, run_id: str | None = None,

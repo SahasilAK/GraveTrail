@@ -7,8 +7,10 @@ import streamlit as st
 
 from dataforge.agent.jobs import TERMINAL, Jobs
 from dataforge.ai_analysis_models import AnalysisRequest
+from dataforge.ai_budget import allocate_analysis_profile
 from dataforge.analysis_service import analysis_report, preview_analysis, recovery_message, run_analysis
 from dataforge.connections import current_connections
+from dataforge.llm import analysis_routes
 
 
 @st.cache_resource(max_entries=8)
@@ -54,7 +56,40 @@ def controls(store, workspace, file_ids):
         ceiling = st.number_input('Run output token ceiling (optional)', min_value=1000, max_value=2000000,
             value=None, key='ai_run_output_' + workspace,
             help='Reserved output across every physical attempt, including retries and resumes. Leave blank for no run ceiling.')
-    request = AnalysisRequest(mode='ai', file_ids=file_ids, max_output_tokens_total=ceiling)
+    with st.expander('AI budget overrides'):
+        share = st.slider('Maximum output share (%)', 10, 50, 30, key='ai_output_share_' + workspace,
+            help='A maximum output allowance, not a request to generate that many tokens. Shared windows divide usable context; separate windows use a fraction of output capacity.')
+        input_override, output_override = None, None
+        with st.expander('Advanced token overrides'):
+            override = st.checkbox('Override per-request token allowances', key='ai_exact_override_' + workspace)
+            st.caption('Exact run overrides take precedence over saved custom output limits. Otherwise custom output limits cap the slider. Automatic profiles use the slider. Model limits always apply; saved profiles are not changed.')
+            if override:
+                input_override = st.number_input('Effective input tokens (optional)', min_value=1, max_value=2147483647,
+                    value=None, key='ai_exact_input_' + workspace)
+                output_override = st.number_input('Maximum output tokens per request (optional)', min_value=64, max_value=2147483647,
+                    value=None, key='ai_exact_output_' + workspace)
+        request = AnalysisRequest(mode='ai', file_ids=file_ids, max_output_tokens_total=ceiling,
+            output_share=share, input_token_limit=input_override, output_token_limit=output_override)
+        try:
+            profile = analysis_routes(store, workspace, 'project_lineage')[0][1]
+            _, allocation = allocate_analysis_profile(profile, request)
+            st.metric('Effective input allowance (tokens)', f"{allocation['input_allowance']:,}")
+            st.metric('Maximum output allowance per request (tokens)', f"{allocation['output_allowance']:,}")
+            st.caption(f"Model/route capacity: context {allocation['context_capacity'] or 'unreported'}, "
+                f"input {allocation['input_capacity'] or 'unreported'}, output {allocation['output_capacity'] or 'unreported'}. "
+                f"Source: {allocation['source']}; windows: {allocation['window']}. "
+                + ('Dynamic route: manually confirmed limits apply.' if allocation['dynamic'] else ''))
+            explanations = {'saved_custom_output_limit': 'Saved custom output allowance clamps the slider; use an explicit Advanced override to change this run.',
+                'model_output_limit': 'The model output limit clamps the requested allowance.',
+                'model_input_limit': 'The model input limit clamps the available input.',
+                'shared_context_limit': 'The shared context window clamps the requested output.',
+                'available_input_limit': 'The available model input allowance clamps the exact input override.'}
+            for reason in allocation['clamps']:
+                st.caption(explanations[reason])
+            for note in allocation['notes']:
+                st.caption(note)
+        except ValueError:
+            st.caption('Effective allowances need confirmed model limits. Dynamic routes require a route-safe manual capacity override in provider settings.')
     status = st.status('Preparing AI analysis…', expanded=False)
     status.caption('Offline preparation. Model requests start when you choose Analyze.')
     try:
@@ -117,7 +152,10 @@ def progress(store, workspace):
         return
     result = record.get('result', {})
     if result.get('status') == 'committed':
-        st.success('AI analysis committed. Open lineage or inspect the validation report below.')
+        if result.get('counts', {}).get('unresolved_parts'):
+            st.warning('Available validated lineage published with incomplete coverage. Unresolved work can be retried from the report.')
+        else:
+            st.success('AI analysis committed. Open lineage or inspect the validation report below.')
     elif result.get('status') == 'awaiting_continuation':
         st.info(recovery_message(result))
     else:
@@ -150,7 +188,8 @@ def report(store, workspace):
                             format_func=choices.get, key='ai_report_choice_' + workspace)
     result = analysis_report(store, workspace, selected, include_source=True)
     summary = result['summary']
-    if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
+    partial_publication = result['status'] == 'committed' and bool(summary.get('unresolved_work'))
+    if (result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} or partial_publication) and 'request' in summary:
         from dataforge.ai_pipeline_store import recover_pipeline
         unknown = bool(result['summary'].get('inflight') or recover_pipeline(store, workspace, selected)['unknown'])
         exhausted = not summary.get('recovery_queue') and (summary.get('last_failure', {}).get('allowance_exhausted') or
@@ -159,8 +198,9 @@ def report(store, workspace):
         retry = st.checkbox('Retry the unfinished batch (may incur a duplicate charge; renews the bounded retry allowance)', key='ai_retry_' + selected) if needs_ack else False
         if summary.get('protocol_version') != 5:
             st.info('This historical run uses an incompatible protocol. Start a new build.')
-        elif st.button('Continue AI analysis', disabled=needs_ack and not retry):
-            request = AnalysisRequest.model_validate({**summary['request'], 'resume_run_id': selected, 'retry_unknown': retry})
+        elif st.button('Retry unresolved AI work' if partial_publication else 'Continue AI analysis', disabled=needs_ack and not retry):
+            request = AnalysisRequest.model_validate({**summary['request'], 'budget_policy': summary['request'].get('budget_policy', 'legacy'),
+                'resume_run_id': selected, 'retry_unknown': retry})
             start(store, workspace, request)
             st.rerun()
 
@@ -171,6 +211,7 @@ def report(store, workspace):
     st.caption(f"Reported tokens: {counts.get('input_tokens', 0)} input / {counts.get('output_tokens', 0)} output"
                if summary.get('usage_known') else 'Provider token usage is unknown or only partially reported. Cached reuse makes no new extraction request.')
     st.caption(f"Processed parts: {counts.get('processed', 0)} · Files: {counts.get('files', 0)} · "
+               f"Unresolved parts: {counts.get('unresolved_parts', 0)} · Unprocessed files: {counts.get('unprocessed_files', 0)} · "
                f"Incomplete coverage: {counts.get('coverage_gaps', 0)} · Stage: {summary.get('stage', result['status'])}")
     if summary.get('reasons'):
         st.warning(recovery_message(summary))
@@ -179,7 +220,8 @@ def report(store, workspace):
             st.json(summary['last_failure'])
     if summary.get('recovery_queue'):
         with st.expander('Pending extraction recovery'):
-            st.caption('Required work remains pending. Recovery continues with smaller batches and backoff; Cancel retains saved progress.')
+            st.caption('Unresolved work remains retryable after bounded recovery. Saved valid results are retained; published coverage stays incomplete.'
+                if partial_publication else 'Required work remains pending. Recovery uses smaller batches and backoff; Cancel retains saved progress.')
             st.json(summary['recovery_queue'], expanded=False)
     if result.get('recent_requests'):
         with st.expander('Recent request and extraction diagnostics'):

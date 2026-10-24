@@ -91,6 +91,7 @@ class Profile(BaseModel):
     model_capabilities: ModelCapabilities | None = None
     context_mode: Literal['automatic', 'custom'] = 'custom'
     output_mode: Literal['automatic', 'custom'] = 'custom'
+    analysis_input_allowance: int | None = Field(default=None, ge=1)
     source_limit_policy: Literal['unconfirmed', 'token_capacity', 'explicit'] = 'unconfirmed'
     source_disclosure_chars: int | None = Field(default=None, ge=1)
 

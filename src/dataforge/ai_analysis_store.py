@@ -118,9 +118,11 @@ def save_unit_result(store, workspace, run_id, unit_id, *, file_id, content_hash
         [unit_id, workspace, run_id, file_id, content_hash, start_char, end_char, context_hash, status, record_id, _json(result or {})])
 
 
-def save_part_extraction(store, workspace, run_id, part, extraction, *, record_id=None):
+def save_part_extraction(store, workspace, run_id, part, extraction, *, record_id=None, status='completed'):
+    if status not in {'completed', 'unresolved'}:
+        raise ValueError('Invalid extraction checkpoint status')
     save_unit_result(store, workspace, run_id, part.part_id, file_id=part.file_id, content_hash=part.content_hash,
-        start_char=part.start_offset, end_char=part.end_offset, context_hash='extraction5', status='completed',
+        start_char=part.start_offset, end_char=part.end_offset, context_hash='extraction5', status=status,
         record_id=record_id, result={'contract': 'part5', 'part': part.model_dump(), 'extraction': extraction.model_dump()})
 
 
