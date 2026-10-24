@@ -7,6 +7,7 @@ import streamlit as st
 
 from dataforge.agent.jobs import TERMINAL, Jobs
 from dataforge.ai_analysis_models import AnalysisRequest
+from dataforge.ai_analysis_progress import analysis_progress
 from dataforge.ai_budget import allocate_analysis_profile
 from dataforge.ai_context import inventory_revision
 from dataforge.analysis_service import analysis_report, preview_analysis, recovery_message, run_analysis
@@ -151,6 +152,40 @@ def start(store, workspace, request):
     st.session_state['ai_analysis_job_' + workspace] = job['job_id']
 
 
+def render_status(snapshot):
+    """Use identical ledger definitions for running and saved analysis."""
+    st.write(f"Run: {snapshot['run_id']} · Status: {snapshot['status']} · Stage: {snapshot['stage']}")
+    for group, prefix in [('files', 'Files'), ('parts', 'Parts')]:
+        with st.container(horizontal=True):
+            for name, value in snapshot[group].items():
+                st.metric(f'{prefix} {name}', 'Unknown' if value is None else str(value), border=True)
+    for group in ('requests', 'attempts'):
+        st.write(group.title() + ': ' + ' · '.join(f'{key.replace("_", " ")}: {value}' for key, value in snapshot[group].items()))
+    st.caption(f"Pending recovery parts: {snapshot['recovery_pending']}. Failed attempts do not mean failed files. Reused parts are saved successes, not skipped work.")
+    tokens = snapshot['tokens']
+    def value(key):
+        return 'Unknown' if tokens[key] is None else f'{tokens[key]:,}'
+    st.caption(f"Initial estimated input tokens: {value('estimated_input')} · Reserved output across attempts: {value('reserved_output')}")
+    st.caption(f"Provider-reported tokens: {value('actual_input')} input / {value('actual_output')} output. "
+               f"Known subtotals: {tokens['reported_input']:,} input / {tokens['reported_output']:,} output; unknown attempts are excluded from these subtotals.")
+    estimate = snapshot.get('initial_estimate') or {}
+    st.caption(f"Initial estimated requests: {estimate.get('requests', 'Unknown')}. Completion, consolidation and recovery may add work; totals can grow. No provider-internal progress is available while waiting.")
+    for name, stage in snapshot['stages'].items():
+        st.progress(stage['completed'] / max(1, stage['planned']),
+            text=f"{name.replace('_', ' ').title()}: {stage['completed']} / {stage['planned']} saved parts")
+    if snapshot['current']:
+        st.write('Current request / attempt')
+        st.json(snapshot['current'], expanded=False)
+    if snapshot['activity']:
+        with st.expander('Recent activity'):
+            st.dataframe(snapshot['activity'], hide_index=True, alt='Recent bounded analysis activity')
+    with st.expander('Counter definitions'):
+        st.caption('Files completed have finalized processed extraction records. Partial files have saved work but are not completed; unfinished files have none. '
+            'Parts planned include extraction, completion and consolidation, excluding superseded split parents. Completed parts have valid saved checkpoints; remaining includes unresolved work. '
+            'Queued requests are durable planned batches without an in-flight attempt; future batches are not yet requests. Received attempts may still fail validation. '
+            'Unknown attempts may have reached the provider. Output reservation is an allowance, not actual usage. Processing completion does not prove semantic completeness.')
+
+
 @st.fragment(run_every=2)
 def progress(store, workspace):
     job_id = st.session_state.get('ai_analysis_job_' + workspace)
@@ -158,7 +193,10 @@ def progress(store, workspace):
         return
     jobs = analysis_jobs(str(store.home))
     record = jobs.read(job_id, workspace)
-    st.progress(float(record['progress']), text=record.get('stage', record['status']))
+    if not record.get('run_id') or record['status'] in TERMINAL:
+        st.progress(float(record['progress']), text=record.get('stage', record['status']))
+    else:
+        st.write(record.get('stage', record['status']))
     started = record.get('started_at')
     if started is not None:
         ended = record.get('finished_at', record.get('updated_at', started)) if record['status'] in TERMINAL else time()
@@ -170,9 +208,19 @@ def progress(store, workspace):
     elif record['status'] == 'queued':
         st.caption('Queued — waiting for an analysis worker.')
     if record['status'] not in TERMINAL:
-        if st.button('Cancel AI analysis', key='ai_cancel_' + workspace):
+        cancel_key = 'ai_cancel_pending_' + job_id
+        if record.get('cancel_requested') or st.session_state.get(cancel_key):
+            st.info('Cancellation requested. Waiting for the worker to acknowledge; saved work is retained.')
+        if st.button('Cancel AI analysis', key='ai_cancel_' + workspace,
+                     disabled=record.get('cancel_requested', False) or st.session_state.get(cancel_key, False)):
             jobs.cancel(job_id, workspace)
+            st.session_state[cancel_key] = True
             st.info('Cancellation requested. The last committed lineage stays available.')
+        if record.get('run_id'):
+            try:
+                render_status(analysis_progress(store, workspace, record['run_id']))
+            except ValueError:
+                st.caption('Preparing this run; durable work planning is not yet available.')
         return
     result = record.get('result', {})
     if result.get('status') == 'committed':
@@ -210,8 +258,10 @@ def report(store, workspace):
         run_id = next(iter(choices))
     selected = st.selectbox('AI analysis report', list(choices), index=list(choices).index(run_id),
                             format_func=choices.get, key='ai_report_choice_' + workspace)
-    result = analysis_report(store, workspace, selected, include_source=True)
+    result = analysis_report(store, workspace, selected, include_source=False)
     summary = result['summary']
+    if summary.get('protocol_version') == 5:
+        render_status(analysis_progress(store, workspace, selected))
     partial_publication = result['status'] == 'committed' and bool(summary.get('unresolved_work'))
     if (result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} or partial_publication) and 'request' in summary:
         from dataforge.ai_pipeline_store import recover_pipeline
@@ -229,14 +279,11 @@ def report(store, workspace):
             st.rerun()
 
     counts = summary.get('counts', {})
-    st.write(f"Requests: {counts.get('requests', 0)} · reused parts: {counts.get('cache_hits', 0)} · "
+    if summary.get('protocol_version') != 5:
+        st.write(f"Requests: {counts.get('requests', 'Unknown')} · reused parts: {counts.get('cache_hits', 'Unknown')} · "
              f"accepted: {counts.get('accepted', 0)} · rejected: {counts.get('rejected', 0)} · "
              f"unresolved: {counts.get('unresolved', 0)}")
-    st.caption(f"Reported tokens: {counts.get('input_tokens', 0)} input / {counts.get('output_tokens', 0)} output"
-               if summary.get('usage_known') else 'Provider token usage is unknown or only partially reported. Cached reuse makes no new extraction request.')
-    st.caption(f"Processed parts: {counts.get('processed', 0)} · Files: {counts.get('files', 0)} · "
-               f"Unresolved parts: {counts.get('unresolved_parts', 0)} · Unprocessed files: {counts.get('unprocessed_files', 0)} · "
-               f"Incomplete coverage: {counts.get('coverage_gaps', 0)} · Stage: {summary.get('stage', result['status'])}")
+    st.caption(f"Extracted operations: {counts.get('accepted', 'Unknown')} · Unresolved semantic details: {counts.get('unresolved', 'Unknown')} · Incomplete coverage: {counts.get('coverage_gaps', 'Unknown')}")
     if summary.get('reasons'):
         st.warning(recovery_message(summary))
     if summary.get('last_failure'):
@@ -256,4 +303,4 @@ def report(store, workspace):
                  hide_index=True, alt='Source validation outcomes for AI candidates')
     with st.expander('Inspect exact candidate evidence', on_change='rerun', key='ai_claims_' + workspace) as panel:
         if panel.open:
-            st.json(result['claims'])
+            st.json(analysis_report(store, workspace, selected, include_source=True)['claims'])

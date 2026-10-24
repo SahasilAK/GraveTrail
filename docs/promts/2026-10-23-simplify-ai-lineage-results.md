@@ -549,3 +549,9 @@ live extraction, cancellation of a live generation, or model accuracy. No retry,
 full 2,114-file analysis, route change or additional model call was made after the
 400. Further provider diagnosis requires the server's error reason. All other
 verification used deterministic mocks/local test sockets.
+# AI analysis visibility — 2026-10-24
+
+Phase 1 adds a lightweight projection of existing run, request, attempt and unit checkpoints, early worker/run association, bounded activity and shared live/final status rendering. Active polling stays before inventory/preparation. Cancellation remains visible until acknowledgement; source evidence hydration is deferred until expansion.
+
+Focused verification: visibility/UI/partial recovery/extraction recovery/jobs/resumable files: **48 passed** (before the additional ledger-growth test). The initial full-suite baseline was **1114 passed, 2 skipped, 1 failed** in 271.13s. The preexisting failure is `tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean`: the preserved user config selects Crimson Forge instead of Ocean dark. No assertions or config were changed to hide this failure. Mock providers only.
+

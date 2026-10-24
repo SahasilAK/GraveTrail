@@ -87,6 +87,40 @@ def test_pending_worker_elapsed_advances_and_stops_on_completion(tmp_path, monke
     st.cache_resource.clear()
 
 
+def test_active_report_uses_ledger_without_inventory_or_preparation(tmp_path, monkeypatch):
+    import streamlit as st
+
+    import ui.analysis_ai as ai
+    from dataforge.ai_analysis_store import save_run
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    workspace = store.create_workspace('small')
+    Importer(store, workspace).files([('q.sql', b'select 1;')], {'.sql'})
+    save_run(store, workspace, 'live', mode='ai', status='extracting', summary={
+        'parts': [{'part_id': 'p', 'file_id': 'f', 'work_kind': 'extraction'}], 'stage': 'extracting'})
+    cancelled = []
+    class PendingJobs:
+        def read(self, *args):
+            return {'status': 'running', 'progress': 0, 'stage': 'Waiting for AI extraction response',
+                    'run_id': 'live', 'cancel_requested': bool(cancelled)}
+        def cancel(self, *args):
+            cancelled.append(1)
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *args: PendingJobs())
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.session_state['ai_analysis_job_' + workspace] = 'job'
+    monkeypatch.setattr(store, 'files', lambda *a: (_ for _ in ()).throw(AssertionError('Inventory read')))
+    monkeypatch.setattr(ai, 'preview_analysis', lambda *a, **k: (_ for _ in ()).throw(AssertionError('Preparation repeated')))
+    view.switch_page('ui/pages/analysis.py').run()
+    assert not view.exception
+    assert any(m.label == 'Files selected' and m.value == '1' for m in view.metric)
+    assert any(m.label == 'Parts planned' and m.value == '1' for m in view.metric)
+    next(b for b in view.button if b.label == 'Cancel AI analysis').click().run()
+    view.run()
+    assert any('Cancellation requested' in i.value for i in view.info)
+    assert len(cancelled) == 1
+    st.cache_resource.clear()
+
+
 def test_normal_controls_only_expose_one_optional_run_ceiling(tmp_path, monkeypatch):
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     store = get_store(str(tmp_path))

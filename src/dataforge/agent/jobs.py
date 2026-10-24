@@ -98,6 +98,7 @@ class Jobs:
         if record["status"] not in TERMINAL and time.time() - record["updated_at"] > 30:
             # Never rewrite a live worker's journal from a polling process.
             record = {**record, "status": "interrupted", "error": "Worker heartbeat expired; retry explicitly"}
+        record['cancel_requested'] = self.path(job_id).with_suffix('.cancel').exists() and record['status'] not in TERMINAL
         return record if private else {k: v for k, v in record.items() if k not in {"access", "request"}}
 
     def create(self, workspace: str, operation: str, access: dict[str, Any] | None=None) -> dict[str, Any]:
@@ -206,6 +207,8 @@ class Jobs:
         try:
             def progress(fraction, stage):
                 update(progress=round(fraction, 3), stage=str(stage)[:100], stage_started_at=time.time())
+
+            progress.bind_run = lambda run_id: update(run_id=run_id)
 
             with connection_scope(connections or current_connections()):
                 if cancelled():

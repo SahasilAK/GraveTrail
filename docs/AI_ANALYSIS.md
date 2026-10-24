@@ -24,6 +24,30 @@ belong to one dbt project. Imported code is never executed.
    validated details with explicit unresolved work and incomplete coverage. Fatal
    errors, stale inputs and unaccounted missing checkpoints preserve the previous graph.
 
+## Live progress
+
+The active run shows stage activity, elapsed/provider waiting time and Cancel before
+source inventory or preparation. Cancellation stays requested until acknowledged.
+Saved and live reports share the same durable-ledger counters:
+
+- Files selected; completed (finalized, processed extraction); partial (saved work
+  without completed extraction); unfinished (no saved work). These categories do
+  not claim semantic completeness.
+- Parts planned across extraction, completion and consolidation; completed valid
+  checkpoints; reused saved checkpoints; unresolved bounded failures; remaining
+  planned work. Superseded split parents are excluded. Reuse is not skipping.
+- Requests planned/queued/in flight/processed are batches; attempts received,
+  failed and unknown are physical provider attempts. Failed attempts are not
+  failed files. Received responses may still fail validation.
+- Initial estimated input and request counts are planning estimates. Output
+  reservations count every attempt; actual usage comes only from provider reports.
+  Missing usage is Unknown, with known subtotals shown separately.
+
+Stage bars measure saved parts against actual planned parts. Completion,
+consolidation and recovery can increase totals; there is no fixed overall
+percentage or invented provider progress. Recent activity is bounded to 30 events.
+Polling does not prepare sources, dispatch requests or hydrate evidence.
+
 ## Token capacity and disclosure
 
 Admins configure known context, input and output token limits, with endpoint/model

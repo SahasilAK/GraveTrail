@@ -220,13 +220,21 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
     request = AnalysisRequest.model_validate(request)
     manager = connections or current_connections()
     run_id = request.resume_run_id or uuid.uuid4().hex
-    registered, stage, summary = False, 'planning', {}
+    registered, associated, stage, summary = False, False, 'planning', {}
     counts, usage_known = Counter(), True
     started = monotonic()
     prior_seconds = 0.
+    if progress and hasattr(progress, 'bind_run'):
+        progress.bind_run(run_id)
+    def activity(kind, **detail):
+        summary['current_activity'] = kind
+        summary['activity'] = [*summary.get('activity', []), {'kind': kind, 'at': time(), **detail}][-30:]
+        if registered:
+            save_run(store, workspace, run_id, mode='ai', status=stage,
+                summary={'activity': summary['activity'], 'current_activity': kind, 'stage': stage})
     def update(name):
         if progress:
-            progress(min(.85, .1 + counts['processed'] / max(1, counts['parts']) * .7), name)
+            progress(0., name)
     try:
         request, summary = _resume_request(store, workspace, request)
         prior_seconds = summary.get('active_seconds', 0.)
@@ -239,8 +247,17 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         with store.analysis_lock:
             if active_project_runs(store, workspace):
                 raise ValueError('analysis_already_active')
+            save_run(store, workspace, run_id, mode='ai', status='planning', summary=summary)
+            associated = True
             try:
-                prepared, parts, route, context, preview = _prepare(store, workspace, request, manager, cancelled)
+                def preparing(name, completed, total):
+                    if cancelled and cancelled():
+                        raise InterruptedError('cancelled')
+                    if progress:
+                        progress(completed / max(1, total), f'{name}: {completed} / {total}')
+                update('Preparing selected sources')
+                prepared, parts, route, context, preview = _prepare(store, workspace, request, manager, cancelled,
+                    preparation_progress=preparing)
             except ValueError:
                 if request.resume_run_id:
                     raise ValueError('source_or_configuration_changed') from None
@@ -306,6 +323,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             summary.update(protocol_version=5, request=request.model_dump(), pin=pin, parts=[p.model_dump() for p in parts],
                            allocation=preview['allocation'],
                            retry_policy={'unknown_retries': profile.unknown_retries, 'shared_retries': profile.retries})
+            summary.setdefault('initial_estimate', {'requests': preview['estimated_requests'], 'input_tokens': preview['estimated_input_tokens']})
             save_run(store, workspace, run_id, mode='ai', status='extracting', manifest=prepared.manifest,
                      configuration=prepared.settings, summary=summary)
             registered = True
@@ -338,6 +356,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 return set()
             saved = {r['unit_id'] for r in store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed'",
                                                      [workspace, run_id])}
+            summary['reused_part_ids'] = sorted(set(summary.get('reused_part_ids', [])) | ({p.part_id for p in work} & saved))
+            checkpoint()
             unresolved_work = summary.setdefault('unresolved_work', {})
             pending = [p for p in work if p.part_id not in saved and p.part_id not in unresolved_work]
             errors = summary.setdefault('item_failures', {})
@@ -375,6 +395,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     due = min(queue[p.part_id]['not_before'] for p in retryable)
                     reason = queue[pending[0].part_id]['code']
                     update(f'Waiting to retry {pending[0].work_kind}: {reason}. Cancel remains available.')
+                    activity('recovery', part_ids=[p.part_id for p in pending], reason=reason)
                     checkpoint()
                     recovery_wait(max(.01, due - time()), check)
                     continue
@@ -435,11 +456,12 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             summary['last_failure'].update(retry_scheduled=False, allowance_exhausted=True)
                         raise TimeoutError('batch_retry_allowance_exhausted')
                     ticket = begin_attempt(store, workspace, run_id, batch_id, planned.reserved_output,
-                        details={'attempt_number': len(history) + 1, 'cycle_attempt': len(cycle) + 1,
+                        details={'started_at': time(), 'attempt_number': len(history) + 1, 'cycle_attempt': len(cycle) + 1,
                                  'attempt_limit': profile.retries + 1, 'batch_number': request_details.get('batch_number', 1), 'timeouts': {
                             'connect': profile.connect_timeout, 'read': None if profile.wait_until_stopped else (profile.read_timeout or profile.timeout),
                             'write': profile.timeout, 'pool': profile.connect_timeout}})
                     physical_started = monotonic()
+                    activity('dispatch', request_id=batch_id, attempt_id=ticket)
                 def observed_failure(detail):
                     nonlocal usage_known
                     if ticket:
@@ -464,6 +486,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             'unknown' if detail['outcome'] == 'unknown' else 'known_failure', details=detail)
                         usage_known &= detail['usage_known']
                         summary['last_failure'] = detail
+                        activity('recovery', request_id=batch_id, attempt_id=ticket, outcome=detail['failure_category'])
                         if detail['retry_scheduled']:
                             update(recovery_message({'last_failure': detail}))
                         checkpoint()
@@ -479,6 +502,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if ticket:
                         finish_attempt(store, workspace, run_id, ticket, 'received',
                             details={**metadata, 'usage': usage})
+                    activity('response', request_id=batch_id, attempt_id=ticket)
+                    update('Validating AI response')
                     usage_known &= metadata.get('usage_known', False)
                     for key, aliases in {'input_tokens': ('input_tokens', 'prompt_tokens', 'promptTokenCount'),
                                          'output_tokens': ('output_tokens', 'completion_tokens', 'candidatesTokenCount')}.items():
@@ -513,6 +538,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     if str(exc) != 'batch_retry_allowance_exhausted':
                         raise
                     valid, invalid = {}, {p.part_id: 'batch_retry_allowance_exhausted' for p in scheduled}
+                activity('validation', request_id=batch_id, attempt_id=ticket)
                 for part in scheduled:
                     item = valid.get(part.part_id)
                     if item is not None:
@@ -533,6 +559,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             save_part_extraction(store, workspace, run_id, part, item)
                             counts['processed'] += 1
                             saved.add(part.part_id)
+                            activity('persistence', request_id=batch_id, part_id=part.part_id)
                     if part.part_id not in saved:
                         errors[part.part_id] = errors.get(part.part_id, 0) + 1
                 counts['requests'], counts['reserved_output_tokens'] = attempt_totals(store, workspace, run_id)
@@ -626,6 +653,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 original, item = initial[work['original']]
                 initial[original.part_id] = (original, merge_extraction_revision(item, saved[work['part']['part_id']]))
         stage = 'consolidating'
+        activity('consolidation')
         checkpoint()
         file_work, consolidation_inputs, consolidation_parts = {}, {}, []
         file_parts_by_id = {s.file_id: [(p, r) for p, r in initial.values() if p.file_id == s.file_id]
@@ -712,6 +740,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
         counts['coverage_gaps'] = counts['incomplete_files'] + len(unresolved_resources)
         counts['unresolved_parts'] = len(summary.get('unresolved_work', {}))
         counts['unprocessed_files'] = sum(not f.processed for f in files)
+        update('Publishing validated lineage')
+        activity('publication', outcome='started')
         with store.analysis_lock, store.transaction():
             check()
             _current(store, workspace, prepared, expected, full=True)
@@ -727,6 +757,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 pin['prior'] = published['run_id']
             save_run(store, workspace, run_id, mode='ai', status='committed', analysis_run_id=published['run_id'],
                 accepted_results=results, summary={**summary, **report.model_dump()})
+        summary['activity'] = [*summary.get('activity', []), {'kind': 'publication', 'at': time(), 'outcome': 'committed'}][-30:]
+        save_run(store, workspace, run_id, mode='ai', status='committed', summary={'activity': summary['activity'], 'current_activity': 'publication'})
         if progress:
             progress(1., 'Publication complete')
         return report
@@ -739,7 +771,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
             if summary.get('last_failure'):
                 summary['last_failure']['retry_scheduled'] = False
         report = AnalysisReport(run_id=run_id, mode=request.mode, status=status, counts=dict(counts), reasons=[reason], usage_known=usage_known)
-        if registered or status == 'stale':
+        if registered or associated or status == 'stale':
             summary['active_seconds'] = prior_seconds + monotonic() - started
             save_run(store, workspace, run_id, mode='ai', status=status,
                 summary={**summary, **report.model_dump(), 'stage': stage})
