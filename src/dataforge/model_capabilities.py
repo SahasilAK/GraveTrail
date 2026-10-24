@@ -75,7 +75,7 @@ def normalize_model(item, provider):
     """Unknown/malformed capacities stay unknown; raw provider fields never persist."""
     if not isinstance(item, dict):
         return None
-    name = item.get('id', item.get('name'))
+    name = item.get('id', item.get('name', item.get('key') if provider == 'LM Studio' else None))
     if not isinstance(name, str) or not name.strip() or len(name) > 250 or any(ord(c) < 32 for c in name):
         return None
     nested = [item]
@@ -88,13 +88,23 @@ def normalize_model(item, provider):
     native = item.get('model_info', {})
     native_context = _limit([value for key, value in native.items() if key.endswith('.context_length')]) if isinstance(native, dict) else None
     context = _limit([limits('context_length', 'context_window', 'contextWindow'), native_context])
+    source = 'native' if native_context else 'catalog'
+    if provider == 'LM Studio':
+        instances = item.get('loaded_instances', [])
+        loaded_context = _limit([instance['config'].get('context_length') for instance in instances
+            if isinstance(instance, dict) and isinstance(instance.get('config'), dict)]) if isinstance(instances, list) else None
+        context = _limit([context, limits('max_context_length'), loaded_context])
+        if loaded_context is not None:
+            source = 'runtime'
+        elif limits('max_context_length') is not None:
+            source = 'native'
     input_tokens = limits('max_input_tokens', 'max_prompt_tokens', 'inputTokenLimit')
     output_tokens = limits('max_output_tokens', 'max_completion_tokens', 'outputTokenLimit')
     return ModelDescriptor(id=name, capabilities=ModelCapabilities(
         context_tokens=context, input_tokens=input_tokens, output_tokens=output_tokens,
         window='separate' if item.get('window_type') == 'separate' else 'combined',
         dynamic=name.startswith(('auto/', 'auto:')) or (provider == 'OmniRoute' and item.get('custom') is True),
-        source='native' if native_context else 'catalog'))
+        source=source))
 
 
 def merge_descriptors(descriptors):

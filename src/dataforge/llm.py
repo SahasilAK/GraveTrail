@@ -324,19 +324,23 @@ class Adapter:
         finally:
             response.close()
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None=None) -> dict[str, Any]:
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None=None, *,
+                 root_relative: bool=False) -> dict[str, Any]:
         """Send one bounded JSON request and sanitize its response.
 
         Args:
             method: HTTP method for the provider endpoint.
             path: Provider-relative request path.
             payload: JSON request body, when the method requires one.
+            root_relative: Resolve the path at the same origin instead of below the API base URL.
 
         Returns:
             Sanitized provider response object.
 
         Raises:
             ProviderError: If the request fails, is cancelled, or returns invalid or oversized content."""
+        url = (urlparse(self.profile.base_url)._replace(path=path, params='', query='', fragment='').geturl()
+               if root_relative else self.profile.base_url + path)
         unknowns = 0
         for attempt in range(self.profile.retries + 1):
             self._guard()
@@ -366,7 +370,7 @@ class Adapter:
                 request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
                     if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
                 sent = True
-                with self._stream(method, self.profile.base_url + path, headers=headers, json=payload,
+                with self._stream(method, url, headers=headers, json=payload,
                                   timeout=timeout) as response:
                     self._http_status = response.status_code
                     if self.response_observer:
@@ -567,6 +571,16 @@ class Adapter:
                 descriptor = descriptor.model_copy(update={'capabilities': descriptor.capabilities.model_copy(update={'source': 'runtime'})})
         else:
             descriptor = next((item for item in self.model_catalog() if item.id == model), None)
+            if self.profile.provider == 'LM Studio' and (descriptor is None or descriptor.capabilities.context_tokens is None):
+                try:
+                    items = self._request('GET', '/api/v1/models', root_relative=True).get('models', [])
+                    if isinstance(items, list) and len(items) <= 20000:
+                        native = next((item for item in merge_descriptors(
+                            normalize_model(item, 'LM Studio') for item in items) if item.id == model), None)
+                        if native is not None:
+                            descriptor = merge_descriptors([descriptor, native])[0]
+                except ProviderError:
+                    pass  # Optional native metadata must not discard the catalog or configured defaults.
             if descriptor is None:
                 raise ValueError('Selected model is absent from the provider catalog')
         profile = self.profile.model_copy(update={'model': model})
