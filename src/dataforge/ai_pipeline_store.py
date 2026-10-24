@@ -70,6 +70,16 @@ def attempt_totals(store, workspace, run_id):
     return requests, reserved
 
 
+def reported_totals(store, workspace, run_id):
+    totals = {'input_tokens': 0, 'output_tokens': 0}
+    for row in store.rows('SELECT details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=?', [workspace, run_id]):
+        usage = json.loads(row['details']).get('usage', {})
+        for key, aliases in {'input_tokens': ('input_tokens', 'prompt_tokens', 'promptTokenCount'),
+                             'output_tokens': ('output_tokens', 'completion_tokens', 'candidatesTokenCount')}.items():
+            totals[key] += next((usage[a] for a in aliases if type(usage.get(a)) is int), 0)
+    return totals
+
+
 def recover_pipeline(store, workspace, run_id):
     _run(store, workspace, run_id)
     rows = store.rows("""SELECT a.* FROM ai_analysis_attempts a JOIN ai_analysis_requests r

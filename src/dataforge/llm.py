@@ -216,6 +216,41 @@ def response_object(text: str) -> dict[str, Any]:
     return obj
 
 
+def decode_provider_response(provider, data, *, requested_model=None):
+    """Pure provider envelope decoding, shared by transport and retained replay."""
+    finish = None
+    envelope_key = 'candidates' if provider == 'Gemini' else 'choices'
+    if provider not in {'Anthropic','Ollama'}:
+        choices = data.get(envelope_key)
+        if not isinstance(choices,list) or not choices or not isinstance(choices[0],dict):
+            raise ProviderError('Provider returned an unsupported response shape')
+    if provider == 'Anthropic':
+        finish = data.get('stop_reason')
+    elif provider == 'Ollama':
+        finish = data.get('done_reason')
+    elif provider == 'Gemini':
+        finish = (data.get('candidates') or [{}])[0].get('finishReason')
+    else:
+        finish = (data.get('choices') or [{}])[0].get('finish_reason')
+    reported_usage = data.get('usage', data.get('usageMetadata', {}))
+    if provider == 'Ollama':
+        reported_usage = {k:data[k] for k in ['prompt_eval_count','eval_count'] if k in data}
+    metadata = {'finish_reason':finish,
+        'truncated':finish in {'length','max_tokens','MAX_TOKENS','model_length'},
+        'usage_known':any(type(v) is int for v in reported_usage.values()) if isinstance(reported_usage,dict) else False,
+        'resolved_model':data.get('model'), 'requested_model':requested_model}
+    try:
+        if provider == "Anthropic":
+            return "".join(c.get("text", "") for c in data["content"]), data.get("usage", {}), metadata
+        if provider == "Ollama":
+            return data["message"]["content"], {"input_tokens": data.get("prompt_eval_count"), "output_tokens": data.get("eval_count")}, metadata
+        if provider == "Gemini":
+            return "".join(c.get("text", "") for c in data["candidates"][0]["content"]["parts"]), data.get("usageMetadata", {}), metadata
+        return data["choices"][0]["message"]["content"], data.get("usage", {}), metadata
+    except (KeyError, IndexError, TypeError, AttributeError):
+        raise ProviderError("Provider returned an unsupported response shape") from None
+
+
 class Adapter:
     """Send non-streaming requests to a configured model provider."""
 
@@ -515,37 +550,8 @@ class Adapter:
         p = self.profile
         path, payload = self.completion_request(p, system, user)
         data = self._request("POST", path, payload)
-        finish = None
-        envelope_key = 'candidates' if p.provider == 'Gemini' else 'choices'
-        if p.provider not in {'Anthropic','Ollama'}:
-            choices = data.get(envelope_key)
-            if not isinstance(choices,list) or not choices or not isinstance(choices[0],dict):
-                raise ProviderError('Provider returned an unsupported response shape')
-        if p.provider == 'Anthropic':
-            finish = data.get('stop_reason')
-        elif p.provider == 'Ollama':
-            finish = data.get('done_reason')
-        elif p.provider == 'Gemini':
-            finish = (data.get('candidates') or [{}])[0].get('finishReason')
-        else:
-            finish = (data.get('choices') or [{}])[0].get('finish_reason')
-        reported_usage = data.get('usage', data.get('usageMetadata', {}))
-        if p.provider == 'Ollama':
-            reported_usage = {k:data[k] for k in ['prompt_eval_count','eval_count'] if k in data}
-        self.completion_metadata = {'finish_reason':finish,
-            'truncated':finish in {'length','max_tokens','MAX_TOKENS','model_length'},
-            'usage_known':any(type(v) is int for v in reported_usage.values()) if isinstance(reported_usage,dict) else False,
-            'resolved_model':data.get('model'), 'requested_model':p.model}
-        try:
-            if p.provider == "Anthropic":
-                return "".join(c.get("text", "") for c in data["content"]), data.get("usage", {})
-            if p.provider == "Ollama":
-                return data["message"]["content"], {"input_tokens": data.get("prompt_eval_count"), "output_tokens": data.get("eval_count")}
-            if p.provider == "Gemini":
-                return "".join(c.get("text", "") for c in data["candidates"][0]["content"]["parts"]), data.get("usageMetadata", {})
-            return data["choices"][0]["message"]["content"], data.get("usage", {})
-        except (KeyError, IndexError, TypeError, AttributeError):
-            raise ProviderError("Provider returned an unsupported response shape") from None
+        text, usage, self.completion_metadata = decode_provider_response(p.provider, data, requested_model=p.model)
+        return text, usage
 
     def models(self) -> list[str]:
         """List model identifiers exposed by providers that support discovery.

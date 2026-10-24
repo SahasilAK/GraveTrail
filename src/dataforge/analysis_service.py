@@ -39,7 +39,7 @@ from dataforge.ai_extraction_recovery import (
     split_truncated_part,
     validation_failure,
 )
-from dataforge.ai_inspection import capture_payload
+from dataforge.ai_inspection import capture_payload, load_replayable_response
 from dataforge.ai_pipeline_store import (
     attempt_totals,
     batch_attempts,
@@ -51,7 +51,7 @@ from dataforge.ai_pipeline_store import (
 from dataforge.ai_validation import validate_extraction
 from dataforge.ai_wire import decode_extractions
 from dataforge.connections import connection_scope, current_connections
-from dataforge.llm import Adapter, ProviderError, analysis_routes, is_local
+from dataforge.llm import Adapter, ProviderError, analysis_routes, decode_provider_response, is_local
 from dataforge.llm_resources import request_slot
 from dataforge.model_capabilities import execution_profile
 from dataforge.models import stable_id
@@ -225,6 +225,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
     counts, usage_known = Counter(), True
     started = monotonic()
     prior_seconds = 0.
+    replay_attempts = []
     if progress and hasattr(progress, 'bind_run'):
         progress.bind_run(run_id)
     def activity(kind, **detail):
@@ -275,7 +276,27 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                        or json.loads(a['details']).get('uncheckpointed_response')
                        for a in historical):
                     usage_known = False
-                unknown = recover_pipeline(store, workspace, run_id)['unknown']
+                recovery = recover_pipeline(store, workspace, run_id)
+                unknown = []
+                for attempt in recovery['unknown']:
+                    req = store.rows('SELECT unit_ids,details FROM ai_analysis_requests WHERE batch_id=?', [attempt['batch_id']])[0]
+                    request_details = json.loads(req['details'])
+                    fingerprint = request_details.get('fingerprint')
+                    retained = load_replayable_response(store, workspace, run_id, attempt['attempt_id'],
+                        expected_fingerprint=fingerprint)
+                    if retained['content'] is not None and fingerprint:
+                        try:
+                            raw, usage, metadata = decode_provider_response(profile.provider,
+                                json.loads(retained['content']), requested_model=profile.model)
+                        except (ValueError, ProviderError):
+                            retained = {'reason': 'invalid_retained_response', 'content': None}
+                        else:
+                            finish_attempt(store, workspace, run_id, attempt['attempt_id'], 'received', details={**metadata, 'usage': usage})
+                            replay_attempts.append({'attempt': attempt, 'part_ids': json.loads(req['unit_ids']),
+                                'raw': raw, 'metadata': response_metadata(metadata, usage), 'usage': usage})
+                            continue
+                    summary.setdefault('replay_unavailable', {})[attempt['attempt_id']] = retained['reason']
+                    unknown.append(attempt)
                 if unknown:
                     usage_known = False
                 for attempt in unknown:
@@ -318,6 +339,9 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         state = summary.get('recovery_queue', {}).get(part_id, {})
                         state.update(retry_baseline=state.get('failures', 0), not_before=time())
                     summary['unresolved_work'] = {}
+            from dataforge.ai_pipeline_store import reported_totals
+            for key, value in reported_totals(store, workspace, run_id).items():
+                counts[key] = value
             counts['files'], counts['parts'] = len(prepared.sources), len(parts)
             counts['processed'] = len(store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed' AND context_hash='extraction5'",
                                                   [workspace, run_id]))
@@ -364,6 +388,7 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         raise ValueError('source_or_configuration_changed')
                 return set(records)
             saved = completed_parts()
+            replays = [r for r in replay_attempts if set(r['part_ids']) <= {p.part_id for p in work}]
             summary['reused_part_ids'] = sorted(set(summary.get('reused_part_ids', [])) | ({p.part_id for p in work} & saved))
             checkpoint()
             unresolved_work = summary.setdefault('unresolved_work', {})
@@ -391,16 +416,17 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 summary['parts'] = [p.model_dump() for p in parts]
                 counts['parts'] = len(parts)
                 return True
-            while pending:
+            while pending or replays:
                 saved.update(completed_parts())
                 pending = [p for p in pending if p.part_id not in saved]
-                if not pending:
+                if not pending and not replays:
                     break
                 check()
+                replay = replays.pop(0) if replays else None
                 truncated = False
                 ready = [p for p in pending if not queue.get(p.part_id, {}).get('budget_blocked') and
                          queue.get(p.part_id, {}).get('not_before', 0) <= time()]
-                if not ready:
+                if not ready and not replay:
                     retryable = [p for p in pending if not queue.get(p.part_id, {}).get('budget_blocked')]
                     if not retryable:
                         raise TimeoutError('recovery_request_exceeds_budget')
@@ -413,32 +439,40 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     continue
                 # Fresh work goes first. A failed batch gets at most half its old
                 # width on the next pass; singleton failures remain isolated.
+                if replay:
+                    ready = [p for p in work if p.part_id in replay['part_ids']]
                 fresh = [p for p in ready if not queue.get(p.part_id, {}).get('failures')]
                 eligible = fresh or ready
                 width = min(queue.get(p.part_id, {}).get('batch_limit', len(eligible)) for p in eligible)
                 feedback = {p.part_id: {k: queue[p.part_id][k] for k in ('code', 'path', 'attempt')}
                             for p in eligible if queue.get(p.part_id, {}).get('failures')}
-                try:
-                    planned = pack_request(eligible[:width], profile, {**work_context, 'recovery_feedback': feedback})
-                except ValueError as exc:
-                    # Feedback/overlap is sized in the actual body, too. This is
-                    # concrete size evidence, not permission for blind halving.
-                    if str(exc) not in {'complete_request_exceeds_input_budget', 'part_output_estimate_exceeds_budget',
-                                        'explicit_disclosure_limit_exceeded'}:
-                        raise
-                    parent = eligible[0]
-                    with store.transaction():
-                        if not split_pending(parent, 'split_request_budget'):
-                            queue.setdefault(parent.part_id, {}).update(code='recovery_request_exceeds_budget',
-                                budget_blocked=True, recovery_action='change_request_budget')
-                        checkpoint()
-                    continue
-                scheduled = [p for p in pending if p.part_id in planned.part_ids]
-                batch_id = stable_id(run_id, planned.serialized_payload)
-                save_request(store, workspace, run_id, batch_id, list(planned.part_ids),
-                    details={'work_kind': scheduled[0].work_kind, 'budget': asdict(planned.budget),
-                             'packing': planned.packing,
-                             'batch_number': len(store.rows('SELECT batch_id FROM ai_analysis_requests WHERE workspace_id=? AND run_id=?', [workspace, run_id])) + 1})
+                if replay:
+                    from types import SimpleNamespace
+                    scheduled = ready
+                    batch_id = replay['attempt']['batch_id']
+                    planned = SimpleNamespace(reserved_output=replay['attempt']['reserved_output'])
+                else:
+                    try:
+                        planned = pack_request(eligible[:width], profile, {**work_context, 'recovery_feedback': feedback})
+                    except ValueError as exc:
+                        # Feedback/overlap is sized in the actual body, too. This is
+                        # concrete size evidence, not permission for blind halving.
+                        if str(exc) not in {'complete_request_exceeds_input_budget', 'part_output_estimate_exceeds_budget',
+                                            'explicit_disclosure_limit_exceeded'}:
+                            raise
+                        parent = eligible[0]
+                        with store.transaction():
+                            if not split_pending(parent, 'split_request_budget'):
+                                queue.setdefault(parent.part_id, {}).update(code='recovery_request_exceeds_budget',
+                                    budget_blocked=True, recovery_action='change_request_budget')
+                            checkpoint()
+                        continue
+                    scheduled = [p for p in pending if p.part_id in planned.part_ids]
+                    batch_id = stable_id(run_id, planned.serialized_payload)
+                    save_request(store, workspace, run_id, batch_id, list(planned.part_ids),
+                        details={'work_kind': scheduled[0].work_kind, 'budget': asdict(planned.budget),
+                                 'packing': planned.packing, 'fingerprint': _hash({'pin': pin, 'payload': planned.serialized_payload}),
+                                 'batch_number': len(store.rows('SELECT batch_id FROM ai_analysis_requests WHERE workspace_id=? AND run_id=?', [workspace, run_id])) + 1})
                 ticket = None
                 diagnostics, metadata, usage = {}, {}, {}
                 physical_started = monotonic()
@@ -505,25 +539,31 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 bound = manager.for_profile(pid, context['credential_profile']) if hasattr(manager, 'for_profile') else manager
                 def capture(kind, body, secrets=(), **options):
                     if ticket:
-                        capture_payload(store, workspace, run_id, ticket, kind, body, secrets, **options)
+                        capture_payload(store, workspace, run_id, ticket, kind, body, secrets,
+                            replay_fingerprint=_hash({'pin': pin, 'payload': planned.serialized_payload}), **options)
                 try:
-                    with connection_scope(bound), request_slot(store.home, workspace, 1), Adapter(profile,
-                            transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
-                            attempt_observer=observed_failure,
-                            wire_observer=capture,
-                            retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
-                        raw, usage = adapter.complete(planned.system, planned.user)
-                        metadata = response_metadata(adapter.completion_metadata, usage)
-                        usage = metadata['usage']
-                    if ticket:
-                        finish_attempt(store, workspace, run_id, ticket, 'received',
-                            details={**metadata, 'usage': usage})
-                    activity('response', request_id=batch_id, attempt_id=ticket)
-                    update('Validating AI response')
-                    usage_known &= metadata.get('usage_known', False)
-                    for key, aliases in {'input_tokens': ('input_tokens', 'prompt_tokens', 'promptTokenCount'),
-                                         'output_tokens': ('output_tokens', 'completion_tokens', 'candidatesTokenCount')}.items():
-                        counts[key] += next((usage[a] for a in aliases if type(usage.get(a)) is int), 0)
+                    if replay:
+                        ticket = replay['attempt']['attempt_id']
+                        raw, usage, metadata = replay['raw'], replay['usage'], replay['metadata']
+                        activity('replay', request_id=batch_id, attempt_id=ticket)
+                    else:
+                        with connection_scope(bound), request_slot(store.home, workspace, 1), Adapter(profile,
+                                transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
+                                attempt_observer=observed_failure,
+                                wire_observer=capture,
+                                retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
+                            raw, usage = adapter.complete(planned.system, planned.user)
+                            metadata = response_metadata(adapter.completion_metadata, usage)
+                            usage = metadata['usage']
+                        if ticket:
+                            finish_attempt(store, workspace, run_id, ticket, 'received',
+                                details={**metadata, 'usage': usage})
+                        activity('response', request_id=batch_id, attempt_id=ticket)
+                        update('Validating AI response')
+                        usage_known &= metadata.get('usage_known', False)
+                        for key, aliases in {'input_tokens': ('input_tokens', 'prompt_tokens', 'promptTokenCount'),
+                                             'output_tokens': ('output_tokens', 'completion_tokens', 'candidatesTokenCount')}.items():
+                            counts[key] += next((usage[a] for a in aliases if type(usage.get(a)) is int), 0)
                     try:
                         truncated = bool(metadata.get('truncated'))
                         valid, invalid = decode_extractions(raw, scheduled, diagnostics=diagnostics,
@@ -555,6 +595,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                     valid, invalid = {}, {p.part_id: 'batch_retry_allowance_exhausted' for p in scheduled}
                 activity('validation', request_id=batch_id, attempt_id=ticket)
                 for part in scheduled:
+                    if part.part_id in saved:
+                        continue
                     item = valid.get(part.part_id)
                     if item is not None:
                         try:
@@ -631,7 +673,10 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 # cannot look processed while losing its delay/feedback state.
                 with store.transaction():
                     store.execute("UPDATE ai_analysis_requests SET status='processed',details=? WHERE batch_id=?",
-                        [json.dumps({**details, 'diagnostics': request_diagnostics}), batch_id])
+                        [json.dumps({**details, 'diagnostics': request_diagnostics,
+                            'outcome': {'saved': [p.part_id for p in scheduled if p.part_id in saved],
+                                'missing': [p.part_id for p in failed],
+                                'invalid': invalid, 'unresolved': [p.part_id for p in scheduled if p.part_id in unresolved_work]}}), batch_id])
                     checkpoint()
                 if ticket:
                     with connection_scope(bound):

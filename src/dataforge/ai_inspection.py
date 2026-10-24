@@ -1,6 +1,8 @@
 """Bounded, redacted transport artifacts separate from progress/checkpoint rows."""
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from time import time
 
@@ -40,7 +42,8 @@ def _attempt(store, workspace, run_id, attempt_id):
         raise ValueError('Attempt not found in this workspace/run')
 
 
-def capture_payload(store, workspace, run_id, attempt_id, kind, body, secrets=(), *, unavailable=None):
+def capture_payload(store, workspace, run_id, attempt_id, kind, body, secrets=(), *, unavailable=None,
+                    replay_fingerprint=None, wire_format='json'):
     """Store a redacted copy; never change the dispatched body or retain headers."""
     if kind not in KINDS:
         raise ValueError('Unknown inspection artifact kind')
@@ -70,10 +73,45 @@ def capture_payload(store, workspace, run_id, attempt_id, kind, body, secrets=()
             [workspace, run_id, attempt_id, kind])[0]['n']
         if size > MAX_ARTIFACT_BYTES or used + size > MAX_RUN_BYTES:
             status, content, size = 'Not retained: capture size limit (4 MiB/artifact, 64 MiB/run)', None, 0
-        store.execute('''INSERT INTO ai_inspection_artifacts VALUES (?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(run_id,attempt_id,kind) DO UPDATE SET content=excluded.content,
-            byte_count=excluded.byte_count,status=excluded.status,redacted=excluded.redacted,captured_at=excluded.captured_at''',
-            [workspace, run_id, attempt_id, kind, content, size, status, redacted, time()])
+        with store.transaction():
+            store.execute('''INSERT INTO ai_inspection_artifacts VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(run_id,attempt_id,kind) DO UPDATE SET content=excluded.content,
+                byte_count=excluded.byte_count,status=excluded.status,redacted=excluded.redacted,captured_at=excluded.captured_at''',
+                [workspace, run_id, attempt_id, kind, content, size, status, redacted, time()])
+            if kind == 'output' and replay_fingerprint:
+                details = json.loads(store.rows('SELECT details FROM ai_analysis_attempts WHERE attempt_id=?', [attempt_id])[0]['details'])
+                eligible = content is not None and not redacted and not unavailable
+                details['response_checkpoint'] = {'version': 1, 'fingerprint': replay_fingerprint,
+                    'eligible': eligible, 'format': wire_format,
+                    'sha256': hashlib.sha256(body).hexdigest() if eligible else None,
+                    'reason': None if eligible else 'response_redacted' if redacted else status}
+                store.execute('UPDATE ai_analysis_attempts SET details=? WHERE attempt_id=?', [json.dumps(details), attempt_id])
+
+
+def load_replayable_response(store, workspace, run_id, attempt_id, *, expected_fingerprint):
+    """Return retained wire text or an explicit reason; never repair an artifact."""
+    def unavailable(reason):
+        return {'content': None, 'reason': reason}
+    attempts = store.rows('SELECT details FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=? AND attempt_id=?',
+        [workspace, run_id, attempt_id])
+    if not attempts:
+        return unavailable('attempt_scope_mismatch')
+    marker = json.loads(attempts[0]['details']).get('response_checkpoint', {})
+    if marker.get('version') != 1:
+        return unavailable('historical_inspection_only')
+    if not marker.get('eligible'):
+        return unavailable(marker.get('reason') or 'response_not_replayable')
+    if marker.get('fingerprint') != expected_fingerprint:
+        return unavailable('response_context_mismatch')
+    payload = inspection_payload(store, workspace, run_id, attempt_id, 'output', limit=MAX_ARTIFACT_BYTES)
+    if payload['content'] is None or payload['status'] != 'retained':
+        return unavailable(payload['status'])
+    if payload['redacted']:
+        return unavailable('response_redacted')
+    body = payload['content'].encode('utf-8')
+    if payload['has_more'] or len(body) > MAX_ARTIFACT_BYTES or hashlib.sha256(body).hexdigest() != marker.get('sha256'):
+        return unavailable('response_integrity_mismatch')
+    return {'content': payload['content'], 'format': marker.get('format'), 'reason': None}
 
 
 def inspection_items(store, workspace, run_id, *, offset=0, limit=20):
