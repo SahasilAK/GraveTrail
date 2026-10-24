@@ -73,3 +73,41 @@ def test_schema_compaction_keeps_literal_values_and_dependency_property_names():
         'enum':[{'description':'literal'}],'dependentRequired':{'default':['title']}}
     assert _transmitted_schema(schema)=={'const':{'title':'literal','default':5},
         'enum':[{'description':'literal'}],'dependentRequired':{'default':['title']}}
+
+
+def test_lm_studio_analysis_planning_and_dispatch_use_non_streaming_json(tmp_path, monkeypatch):
+    from test_ai_extraction_recovery import envelope, setup_run
+
+    import dataforge.analysis_service as service
+    from dataforge.ai_analysis_models import AnalysisRequest
+    from dataforge.ai_analysis_store import load_file_parts
+    from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
+
+    profile = Profile(provider='LM Studio', base_url='http://localhost:1234/v1', model='synthetic-qwen',
+        max_tokens=36625, source_limit_policy='token_capacity')
+    profile.model_capabilities = bind_capabilities(ModelCapabilities(context_tokens=128000, source='manual'), profile)
+    store, workspace = setup_run(tmp_path, files=9, profile=profile)
+    plans, dispatched = [], []
+    pack = service.pack_request
+    def capture_plan(*args, **kwargs):
+        planned = pack(*args, **kwargs)
+        plans.append(planned.payload)
+        return planned
+    monkeypatch.setattr(service, 'pack_request', capture_plan)
+    def provider(request):
+        body = json.loads(request.content)
+        dispatched.append(body)
+        assert body['stream'] is False
+        assert 'stream_options' not in body
+        context = json.loads(body['messages'][-1]['content'])
+        return envelope([{'part_id': item['part']['part_id'], 'coverage': 'no_operations'} for item in context['items']])
+    try:
+        preview = service.preview_analysis(store, workspace, AnalysisRequest(mode='ai'))
+        assert preview['valid'] and preview['estimated_requests'] == 1
+        report = service.run_analysis(store, workspace, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
+        assert report.status == 'committed', report.reasons
+        assert len(dispatched) == 1 and len(load_file_parts(store, workspace, report.run_id)) == 9
+        assert all(body['stream'] is False and 'stream_options' not in body for body in plans)
+        assert dispatched[0] == plans[-1]
+    finally:
+        store.close()

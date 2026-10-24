@@ -275,5 +275,6 @@ unknown-outcome retry under the existing policy. Storage failures stop dispatch.
 A crash after remote receipt but before local persistence can still leave an unknown
 outcome: exactly-once remote execution is not promised.
 
-The optional **Model thinking** panel is transient display, separate from final
-answer JSON and extraction checkpoints. See [provider streaming details](LLM_INTEGRATION.md#optional-live-provider-reasoning).
+Live streaming is currently disabled: analysis uses non-streaming JSON. The retained
+**Model thinking** panel receives no live reasoning for new requests and displays the
+absence caption. Durable extraction/replay/counters remain enabled. See [provider streaming details](LLM_INTEGRATION.md#optional-live-provider-reasoning).

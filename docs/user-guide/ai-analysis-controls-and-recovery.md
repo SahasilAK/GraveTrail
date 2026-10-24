@@ -129,10 +129,9 @@ validated parts survive those limits. Local replay creates no provider attempt o
 additional reported tokens. A response received before a crash is not guaranteed to
 be recoverable, and unknown remote outcomes can still require retry acknowledgement.
 
-For LM Studio analysis, provider-exposed reasoning appears in **Model thinking** with
-a 300px scrolling body. Updates poll that panel about every 500ms; scrolling up pauses
-follow, **Jump to latest** resumes it, and collapse does not affect Cancel or generation.
-The transient display holds at most 64 KiB, never counts as saved extraction, and may
-be absent depending on the model/template. In that case the caption is exactly
-**No thinking/reasoning available**. No additional model request generates the display.
+Live streaming is currently disabled. AI analysis uses ordinary non-streaming JSON;
+new requests show **No thinking/reasoning available**. The reasoning panel and bounded
+buffer remain in the code for later work, but receive no live reasoning now. Durable
+saves, truncation recovery, eligible response replay and the saved-work counters remain
+enabled. Cancel still works while waiting for the provider.
 See [save stages and crash limits](../AI_ANALYSIS.md#durable-extraction-and-response-recovery-2026-10-24).

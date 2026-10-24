@@ -68,7 +68,7 @@ def pack_request(pending_parts, profile, context):
         user = json.dumps({'protocol_version': 5, 'items': [*items, candidate],
                            'definitions': list(candidate_definitions.values()), 'settings': context.get('settings', {})},
                           ensure_ascii=False, separators=(',', ':'))
-        _, payload = Adapter.completion_request(profile, system, user, stream_analysis=True)
+        _, payload = Adapter.completion_request(profile, system, user, stream_analysis=False)
         serialized = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
         disclosed = sum(len(i['source']) + sum(len(o['source']) for o in i.get('overlap', [])) for i in [*items, candidate]) + sum(
             len(e.get('source', '')) for e in candidate_definitions.values())

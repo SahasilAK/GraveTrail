@@ -25,3 +25,5 @@ Recovery controls include cancellable waiting, safe validation diagnostics, full
 Controls/recovery also defines durable file/part/request/attempt counters, nonblocking Cancel, growing totals, lazy Inputs/Outputs, history opt-in and bounded capture retention/downloads.
 
 `ai-analysis-controls-and-recovery.md` distinguishes durable validated parts, handled responses, eligible response retention and new-run Start fresh; describes optional 500ms/300px reasoning display and exact absence fallback.
+
+Current AI controls/recovery guide marks live reasoning paused: ordinary JSON requests and the absence caption; durable recovery/replay remain enabled.

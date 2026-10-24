@@ -431,3 +431,13 @@ full suite **1170 passed, 2 skipped, 1 existing theme failure in 328.98s**.
 `test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` expects Ocean dark;
 the preserved user configuration selects Crimson Forge. Ruff and strict docs validation
 passed. No assertion or user configuration was weakened to conceal this mismatch.
+
+
+## Non-streaming analysis rollback (2026-10-24)
+
+A focused regression verifies that LM Studio preview/planning and actual analysis
+transport both use `stream: false`, omit `stream_options`, and save all nine validated
+parts from a mocked ordinary JSON response. The regression failed with `stream: true`
+before the two call sites were changed. Reasoning internals were retained; no new
+live-reasoning tests or live provider calls were added. Existing persistence, replay,
+truncation, cancellation and UI checks remain the preservation gates.

@@ -594,7 +594,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                 transport=transport, cancelled=cancelled, before_attempt=before_attempt, check=check,
                                 attempt_observer=observed_failure,
                                 wire_observer=capture,
-                                stream_analysis=True, reasoning_observer=thinking,
+                                # Keep live streaming off pending realistic wire-size qualification.
+                                stream_analysis=False, reasoning_observer=thinking,
                                 retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
                             raw, usage = adapter.complete(planned.system, planned.user)
                             thinking(state='finished')

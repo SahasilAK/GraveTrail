@@ -716,3 +716,50 @@ expects **Ocean dark**. No configuration or assertion was changed to hide it. No
 implementation failure remains. Final Ruff and strict documentation checks passed.
 Receipt/usage recovery is committed locally as `a33ecb3`; documentation/knowledge maps
 have their own final commit. The branch remains local with no push or merge.
+
+
+### Non-streaming rollback after the observed transport regression
+
+The user reported request `c9e1afbb630a5c33938ab258917c70c4` in `small_sql` saving
+0/9 parts after `invalid_response`. Existing application diagnostics and LM Studio
+logs confirmed HTTP 200 followed by client disconnection at the old 2 MiB wire limit.
+The first response had 19,379 answer bytes and 2,296 reasoning bytes, but approximately
+2,098,752 bytes after reconstructing SSE framing from logged packets (limit 2,097,152).
+A synthetic mock reproduced the same local size error/classification without a live
+call. Smaller batches retained the same 36,625-token allowance and could fail again.
+
+At the user's request, both packing/preview and dispatch now explicitly disable live
+streaming. Requests return to ordinary `stream: false` JSON with no `stream_options`.
+Reasoning transport/parser/buffer/UI code remains available but inactive for new
+analysis requests; durable extraction, partial acceptance, privacy, eligible replay
+and progress counters are preserved. Existing retained SSE artifacts can still replay
+locally. No configuration, source, historical run, retention setting or provider was
+changed, and the running app was not restarted or any user analysis cancelled.
+
+The new nine-part ordinary-JSON regression failed before the rollback (`stream` was
+true) and verifies planning/dispatch parity, one request and nine saved checkpoints.
+No new automated tests for live reasoning were introduced. Re-enabling streaming is
+reserved for a later plan with realistic response sizes and separate wire/content
+bounds; this rollback does not attempt that redesign.
+
+Rollback verification (repository `.venv/Scripts/python.exe`):
+
+```text
+-m pytest tests/test_ai_analysis_transport.py tests/test_ai_batching.py tests/test_ai_budget_allocation.py tests/test_ai_resumable_files.py tests/test_ai_partial_recovery.py tests/test_ai_wire.py tests/test_ai_extraction_recovery.py tests/test_ai_response_replay.py tests/test_ai_inspection.py tests/test_ai_analysis_visibility.py tests/test_ai_analysis_ui.py tests/test_ai_inspection_ui.py tests/test_ai_analysis_jobs.py -q
+142 passed in 56.18s
+
+-m pytest -q
+1 failed, 1171 passed, 2 skipped in 335.06s
+
+-m ruff check src ui tests scripts
+All checks passed!
+
+scripts/docs/build.py
+Strict build passed: 42 public pages, 8 assets, local links/anchors, search/publication inventory (244 search entries).
+```
+
+The sole full-suite failure remains
+`tests/test_themes.py::test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean`:
+Crimson Forge is selected in the unchanged user configuration, while the test expects
+Ocean dark. No test assertion or configuration was weakened. The rollback is a focused
+local change with no push, live call, application restart or change to existing runs.

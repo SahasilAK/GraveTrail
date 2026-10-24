@@ -109,3 +109,5 @@ AI_ANALYSIS.md and architecture/ai-analysis-pipeline.md are protocol-5 authoriti
 AI_ANALYSIS and LLM_INTEGRATION document shared durable live counters, opt-in migration-10 transport artifacts, explicit missing outcomes and bounded lazy inspection/retention. Counter completion is processing coverage, not semantic proof.
 
 2026-10-24 durable recovery: AI_ANALYSIS owns the save-stage/counter/Continue-versus-new-run contract; LLM_INTEGRATION owns shared envelope/SSE replay, optional reasoning and privacy limits; TESTING and promts results record isolated small_sql synthetic evidence and exact validation.
+
+Live analysis streaming is disabled after the observed wire-overhead regression. Integration, analysis and recovery guides mark reasoning code as retained/inactive; TESTING/results record the non-streaming rollback.

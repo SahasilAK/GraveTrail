@@ -10,3 +10,5 @@ The visibility results section records the two-phase ledger/capture refactor, pr
 The approved context-management amendment supersedes fixed automatic output limits and indefinite recovery with deterministic output-share allocation, independent requests and bounded unresolved partial publication/retry. Results distinguish local mock transport proof from pending live accuracy evaluation.
 
 `2026-10-23-simplify-ai-lineage-results.md` also records 2026-10-24 durable part/replay/truncation/reasoning implementation, local commits, independent review, small_sql isolation and verification limits.
+
+The simplify-ai-lineage results also record the observed 2 MiB SSE overhead failure and user-requested non-streaming rollback with reasoning code retained inactive.

@@ -269,6 +269,18 @@ Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fix
 
 ## Optional live provider reasoning
 
+**Current status (2026-10-24): live streaming is disabled for analysis.** Planning
+and dispatch use ordinary `stream: false` JSON requests with no `stream_options`.
+The reasoning parser, transient buffer and UI remain in place but receive no live
+reasoning from new analysis requests. The normal absence caption is shown.
+Durable part saving, truncation recovery, eligible response replay and counters
+remain enabled, including local decoding of eligible historical SSE artifacts.
+
+Streaming must not be re-enabled until a later plan separates bounded wire overhead
+from decoded-answer size and qualifies realistically sized responses. The old 2 MiB
+wire cap aborts token-by-token SSE even when the actual answer is small. The following
+paragraphs describe the retained, inactive implementation.
+
 The LM Studio analysis path requests `stream: true` and
 `stream_options.include_usage: true` at the existing OpenAI-compatible Chat
 Completions endpoint. It consumes SSE incrementally inside cancellable HTTPX I/O;
