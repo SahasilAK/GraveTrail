@@ -190,3 +190,5 @@ GraveTrail uses [Streamlit](https://streamlit.io/), [SQLGlot](https://github.com
 with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
 
 Distributed under the [Apache License 2.0](LICENSE). Dependencies retain their own licenses.
+
+SQL/SAS/dbt project AI analysis supports saved unit checkpoints, bounded batching and parallel calls, automatic execution rollover and provider quota feedback. Read the [AI analysis flow](docs/user-guide/ai-analysis-flow.md) and [controls/recovery guide](docs/user-guide/ai-analysis-controls-and-recovery.md).

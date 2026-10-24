@@ -81,6 +81,108 @@ def test_explicit_selected_ollama_inspection_does_not_load_the_model():
     assert requests == [('GET', '/api/tags'), ('POST', '/api/show'), ('GET', '/api/ps')]
 
 
+def test_lm_studio_inspection_falls_back_to_native_loaded_context():
+    requests = []
+    profile = Profile(provider='LM Studio', base_url='http://localhost:1997/v1', model='qwen/qwen3.5-9b')
+
+    def respond(request):
+        requests.append((request.method, str(request.url)))
+        if request.url.path == '/v1/models':
+            return httpx.Response(200, json={'data': [{'id': profile.model, 'max_output_tokens': 8192}]})
+        return httpx.Response(200, json={'models': [
+            {'key': 'other-model', 'max_context_length': 1024},
+            {'key': profile.model, 'max_context_length': 262144,
+             'loaded_instances': [{'id': profile.model, 'config': {'context_length': 38912}}]}]})
+
+    with Adapter(profile, httpx.MockTransport(respond)) as adapter:
+        result = adapter.model_details(profile.model)
+    assert result.capabilities.context_tokens == 38912
+    assert result.capabilities.input_tokens is None
+    assert result.capabilities.output_tokens == 8192
+    assert result.capabilities.source == 'runtime'
+    assert result.capabilities.current_for(profile)
+    assert profile.max_tokens == 2048 and profile.model_capabilities is None
+    assert requests == [('GET', 'http://localhost:1997/v1/models'),
+                        ('GET', 'http://localhost:1997/api/v1/models')]
+
+
+def test_lm_studio_inspection_keeps_catalog_context_without_native_request():
+    requests = []
+    profile = Profile(provider='LM Studio', base_url='http://localhost:1997/v1', model='m')
+
+    def respond(request):
+        requests.append(request.url.path)
+        return httpx.Response(200, json={'data': [{'id': 'm', 'context_length': 32000}]})
+
+    with Adapter(profile, httpx.MockTransport(respond)) as adapter:
+        result = adapter.model_details('m')
+    assert result.capabilities.context_tokens == 32000
+    assert requests == ['/v1/models']
+
+
+@pytest.mark.parametrize('native', [None, {}, {'models': None}, {'models': 'bad'},
+    {'models': [{'key': 'other-model', 'max_context_length': 8192}]},
+    {'models': [{'key': 'm', 'max_context_length': True,
+                 'loaded_instances': [{'config': {'context_length': '38912'}}]}]}])
+def test_lm_studio_missing_native_metadata_preserves_unknown_limits_and_defaults(native):
+    requests = []
+    profile = Profile(provider='LM Studio', base_url='http://localhost:1997/v1', model='m')
+
+    def respond(request):
+        requests.append(request.url.path)
+        if request.url.path == '/v1/models':
+            return httpx.Response(200, json={'data': [{'id': 'm'}]})
+        return httpx.Response(404) if native is None else httpx.Response(200, json=native)
+
+    with Adapter(profile, httpx.MockTransport(respond)) as adapter:
+        result = adapter.model_details('m')
+    assert result.capabilities.context_tokens is None
+    assert result.capabilities.input_tokens is None and result.capabilities.output_tokens is None
+    assert profile.max_tokens == 2048 and profile.context_chars == 16000
+    assert requests == ['/v1/models', '/api/v1/models']
+
+
+def test_lm_studio_native_fallback_can_find_model_missing_from_catalog():
+    profile = Profile(provider='LM Studio', base_url='http://localhost:1997/v1', model='m')
+
+    def respond(request):
+        if request.url.path == '/v1/models':
+            return httpx.Response(200, json={'data': []})
+        return httpx.Response(200, json={'models': [{'key': 'm', 'max_context_length': 262144}]})
+
+    with Adapter(profile, httpx.MockTransport(respond)) as adapter:
+        result = adapter.model_details('m')
+    assert result.capabilities.context_tokens == 262144
+    assert result.capabilities.source == 'native'
+
+
+@pytest.mark.parametrize(('instances', 'expected', 'source'), [
+    ([{'config': {'context_length': 38912}}, {'config': {'context_length': 8192}}], 8192, 'runtime'),
+    ([{'config': {'context_length': 300000}}], 262144, 'runtime'),
+    ([None, {'config': None}, {'config': {'context_length': False}}], 262144, 'native'),
+    (None, 262144, 'native'),
+])
+def test_lm_studio_native_context_respects_loaded_and_model_constraints(instances, expected, source):
+    from dataforge.model_capabilities import normalize_model
+    result = normalize_model({'key': 'm', 'max_context_length': 262144, 'loaded_instances': instances}, 'LM Studio')
+    assert result.capabilities.context_tokens == expected
+    assert result.capabilities.source == source
+
+
+def test_other_providers_do_not_probe_lm_studio_native_endpoint():
+    requests = []
+    profile = Profile(provider='OpenAI compatible', base_url='http://localhost:1997/v1', model='m')
+
+    def respond(request):
+        requests.append(request.url.path)
+        return httpx.Response(200, json={'data': [{'id': 'm'}]})
+
+    with Adapter(profile, httpx.MockTransport(respond)) as adapter:
+        result = adapter.model_details('m')
+    assert result.capabilities.context_tokens is None
+    assert requests == ['/v1/models']
+
+
 def test_metadata_refresh_preserves_runtime_binding_and_execution_revision(tmp_path):
     from dataforge.agent.service import AgentService
     from dataforge.connections import RuntimeConnections

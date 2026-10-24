@@ -169,7 +169,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` |
 | `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
 | `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
-| `preview_project_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `resume_run_id`, `retry_unknown` |
+| `preview_project_analysis` | `workspace_id` | `file_ids`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id` | Shared static/AI analysis service |
 | `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
 | `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` |
@@ -177,7 +177,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
-| `start_lineage_analysis` | `workspace_id` | `additional_ai_review`, `file_ids`, `force`, `max_output_tokens_total`, `max_provider_attempts`, `max_seconds`, `mode`, `refresh_ai`, `resume_run_id`, `retry_unknown` |
+| `start_lineage_analysis` | `workspace_id` | `file_ids`, `force`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id`, `retry_unknown` | Shared static/AI analysis service |
 | `test_local_agent_access` | `workspace_id` | `options` |
 | `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
 | `update_application_logging` | `level` | `options` |
@@ -289,12 +289,21 @@ support yields a clear renderer error. See the [image limits](USER_GUIDE.md).
 
 ## AI project analysis tools
 
-`start_lineage_analysis` keeps parser mode as its default. Its explicit hybrid/AI modes share the same bounded request and run service as the UI/CLI. `preview_project_analysis` plans offline disclosure/context/budgets; `get_project_analysis_report` reads saved acceptance/rejection/unresolved results; `cancel_job` requests workspace-scoped cooperative cancellation. Source-bearing report details require source authority; a metadata read does not authorize a provider request.
+`start_lineage_analysis` defaults to `parser`; `ai` uses independent persisted file
+extraction. `preview_project_analysis` remains offline and source-authorized.
+Both accept the same file selection and optional `max_output_tokens_total` run
+ceiling as the UI/CLI. Model token capacity comes from the selected provider
+profile. Hybrid, review, character/window/parallel and project-window options are
+removed. The schema rejects old options rather than silently reinterpreting them.
 
-AI extraction/review requires explicit network/source/write permission, approved exact origins and credential references, and workspace privacy, rechecked at physical dispatch. Remote complete-source permission also covers a file transmitted through several chunks. No automatic connection test or request occurs on preview, ordinary graph queries or settings reads. Cancellation/deadline may return after a blocked read and already sent attempts may have incurred usage. See [AI project analysis](AI_ANALYSIS.md) for experimental generated-mode limits and current unqualified live accuracy targets.
+`get_project_analysis_report` reads historical and new reports; detailed evidence
+requires source authority. `cancel_job` cancels cooperatively. Resume compatible
+runs with `resume_run_id`; acknowledge a possibly billed lost response using
+`retry_unknown`. Source/configuration/prompt/model changes block continuation.
+Historical paused protocols require a new build. See [AI analysis](AI_ANALYSIS.md).
 
-## Automatic project budgets and continuation
-
-`start_lineage_analysis` and `preview_project_analysis` accept nullable `max_provider_attempts`, `max_output_tokens_total`, `max_seconds`, plus `resume_run_id` and `retry_unknown`. Omitted/null budgets use shared automatic recommendations; explicit numbers remain ceilings. A paused run returns `awaiting_continuation`; start again with its run ID to execute the next bounded portion. Resume uses the original source/mode/review options and rechecks source/network grants and recipients. `retry_unknown=true` explicitly authorizes potentially duplicate in-flight work. Preview stays offline.
-
-Project-analysis preview reports semantic source tasks and provisional review sizing before extraction. Continuing a saved run preserves source partitions and skips completed review batches through the same service used by UI/CLI. See [oversized operations](AI_ANALYSIS.md#oversized-operations-and-large-review-sets).
+Start/preview also accept optional `output_share` (10–50, default 30 for new runs),
+`input_token_limit` and `output_token_limit`, using the same allocator and precedence
+as the UI/CLI. Omitted fields preserve resumed choices. A committed partial run
+with unresolved required work can resume to retry only those items; completed
+checkpoints and cumulative reservations are retained.

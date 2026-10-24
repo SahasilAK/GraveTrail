@@ -51,7 +51,7 @@ def test_prepare_sparse_publish_and_offline_rehydration(tmp_path):
     save_run(store, w, 'saved', mode='ai', status='committed', configuration=config, accepted_results=results)
     assert metadata['file_id'] in load_accepted_file_results(store, w, config)
     analyze(store, w)
-    assert len(store.edges(w)) == 2
+    assert len(store.edges(w)) == 1  # Explicit Static selects static results.
     store.set_setting(w, 'case_sensitive', True)
     assert load_accepted_file_results(store, w, config | {'case_sensitive': True}) == {}
     store.close()
@@ -253,22 +253,108 @@ def test_v7_file_snapshots_remove_aggregate_limit_and_preserve_legacy_read(tmp_p
     store.close()
 
 
-def test_durable_final_claims_reference_source_instead_of_repeating_quotes(tmp_path):
+def test_durable_final_claims_reference_source_instead_of_repeating_quotes(tmp_path, monkeypatch):
+    from legacy_ai_fixtures import legacy_units
+
     from dataforge.ai_analysis_models import AnalysisRequest, EvidenceCitation
     from dataforge.ai_analysis_store import load_analysis_report, save_claim_decisions, save_run
-    from dataforge.ai_context import plan_ai_units, prepare_analysis
+    from dataforge.ai_context import prepare_analysis
     store = Store(tmp_path)
     w = store.create_workspace('compact final claims')
     code = 'select 1 /*' + 'x' * 50000 + '*/;'
     Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
-    unit = plan_ai_units(prepare_analysis(store, w, AnalysisRequest(mode='hybrid'))).units[0]
+    unit = legacy_units(prepare_analysis(store, w, AnalysisRequest(mode='hybrid'))).units[0]
     save_run(store, w, 'r', mode='hybrid')
-    payload = {'evidence': EvidenceCitation.from_unit(unit).model_dump(), 'kind': 'table_edge', 'source': 'a'}
+    payload = {'evidence': EvidenceCitation.from_unit(unit).model_dump(), 'kind': 'table_edge', 'source': 'a',
+        'expression': code, 'detail': {'derivation': {'expression': code}}}
     save_claim_decisions(store, w, 'r', [{'claim_id': str(i), 'unit_id': unit.unit_id,
         'kind': 'table_edge', 'status': 'accepted', 'payload': payload} for i in range(100)])
     stored = store.rows('SELECT payload FROM ai_analysis_claims')
     assert max(len(row['payload']) for row in stored) < 1000
+    original = store.snapshot_content
+    reads = []
+    def read_once(metadata):
+        reads.append(metadata['content_hash'])
+        return original(metadata)
+    monkeypatch.setattr(store, 'snapshot_content', read_once)
     report = load_analysis_report(store, w, 'r')
+    assert len(reads) == 1
     assert all(c['payload']['evidence']['quote'] == code for c in report['claims'])
+    assert all(c['payload']['expression'] == code and c['payload']['detail']['derivation']['expression'] == code
+        for c in report['claims'])
     assert payload['evidence']['quote'] == code
+    store.close()
+
+
+def test_large_expressions_reference_original_in_checkpoints_and_snapshots(tmp_path):
+    from legacy_ai_fixtures import legacy_units
+
+    from dataforge.ai_analysis_models import (
+        AnalysisRequest,
+        EvidenceCitation,
+        NormalizedFact,
+        ValidationReport,
+    )
+    from dataforge.ai_analysis_store import (
+        load_accepted_file_results,
+        load_validation_checkpoint,
+        save_run,
+        save_validation_checkpoint,
+    )
+    from dataforge.ai_context import prepare_analysis
+    from dataforge.models import Operation, ParseResult
+    store = Store(tmp_path)
+    w = store.create_workspace('large original expression')
+    expression = "'" + 'x' * (17 * 1024 * 1024) + "'"
+    code = 'SELECT ' + expression + ' AS x;'
+    Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
+    unit = legacy_units(prepare_analysis(store, w, AnalysisRequest(mode='ai')), adaptive=True).units[0]
+    save_run(store, w, 'r', mode='ai')
+    report = ValidationReport(accepted=[NormalizedFact(kind='derivation', unit_id=unit.unit_id, evidence_key='k',
+        candidate_id='c', evidence=EvidenceCitation.from_unit(unit), expression=expression,
+        detail={'derivation': {'expression': expression}})])
+    save_validation_checkpoint(store, w, 'r', unit, 'h', report)
+    stored = store.rows('SELECT payload FROM ai_analysis_claims')[0]['payload']
+    assert len(stored) < 2000
+    loaded = load_validation_checkpoint(store, w, 'r', unit, 'h')[0]
+    assert loaded.accepted[0].expression == expression
+    assert loaded.accepted[0].detail['derivation']['expression'] == expression
+    metadata = store.files(w)[0]
+    parsed = ParseResult(operations=[Operation(kind='SELECT', sources=[], targets=[], code=code, start=1, end=1,
+        derivations=[{'expression': expression}])])
+    save_run(store, w, 'r', mode='ai', status='committed', accepted_results=[(metadata, parsed)])
+    assert max(len(r['payload']) for r in store.rows('SELECT payload FROM ai_analysis_snapshots')) < 2000
+    assert load_accepted_file_results(store, w)[metadata['file_id']][1].operations[0].derivations[0]['expression'] == expression
+    store.close()
+
+
+def test_large_expression_provenance_survives_support_refresh(tmp_path):
+    from legacy_ai_fixtures import legacy_units
+
+    from dataforge.ai_analysis_models import AnalysisRequest, EvidenceCitation
+    from dataforge.ai_analysis_store import (
+        attach_published_support,
+        refresh_published_support,
+        save_claim_decisions,
+        save_run,
+    )
+    from dataforge.ai_context import prepare_analysis
+    from dataforge.services import prepare_analysis_results, publish_analysis_results
+    store = Store(tmp_path)
+    w = store.create_workspace('source reference support')
+    code = "CREATE TABLE b AS SELECT '" + 'x' * 5000 + "' AS x;"
+    Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
+    unit = legacy_units(prepare_analysis(store, w, AnalysisRequest(mode='ai'))).units[0]
+    results, config, counts = prepare_analysis_results(store, w)
+    op = results[0][1].operations[0]
+    op.evidence_key = 'original'
+    publish_analysis_results(store, w, results, config, counts)
+    save_run(store, w, 'r', mode='ai', configuration=config, status='committed')
+    payload = {'kind': 'derivation', 'table': 'b', 'column': 'x', 'evidence_key': op.evidence_key,
+        'evidence': EvidenceCitation.from_unit(unit).model_dump(), 'expression': op.derivations[0]['expression']}
+    claims = [{'claim_id': 'c', 'status': 'accepted', 'payload': payload}]
+    save_claim_decisions(store, w, 'r', claims)
+    assert attach_published_support(store, w, 'r', results, claims) == 1
+    assert refresh_published_support(store, w, results) == 1
+    assert len(store.rows('SELECT * FROM analysis_fact_support')) == 1
     store.close()

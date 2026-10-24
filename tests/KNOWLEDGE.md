@@ -101,7 +101,7 @@ Graph image regressions: test_graph_images.py parses inert XML, shares UI paths,
 - `test_ai_analysis_access.py`, `test_ai_analysis_jobs.py`, `test_ai_analysis_ui.py` — Launch/credential/source policy, detached full-grant jobs/cancel markers, unchecked UI defaults, offline preview, terminal report selection/refresh and full progress rendering from integer journal completion.
 - `test_ai_analysis_evaluation.py` — Role/scope/version-aware offline scoring, explicit live opt-in/limits and isolation across multiple benchmark workspaces; no normal provider use.
 
-Automatic AI tests: `test_model_capabilities.py` validates metadata/identity/freshness; `test_ai_wire.py` covers strict compact refs and canonical expansion >16MB; `test_ai_budget.py` covers full envelopes and 1000-unit bounds; `test_ai_analysis_continuation.py` covers partial outcomes/reopen/deadline between extraction-review, unknown attempts and zero-work avoidance. UI tests cover edit/reset/context action and rejected provider inputs never enter default history. Access suite uses the real MCP HTTP SDK for auto+resume.
+Automatic AI tests: `test_model_capabilities.py` validates metadata/identity/freshness and LM Studio compatible-first/native-fallback inspection, loaded/model bounds, missing metadata/default preservation and other-provider isolation; `test_ai_wire.py` covers strict compact refs and canonical expansion >16MB; `test_ai_budget.py` covers full envelopes and 1000-unit bounds; `test_ai_analysis_continuation.py` covers partial outcomes/reopen/deadline between extraction-review, unknown attempts and zero-work avoidance. UI tests cover edit/reset/character override and sortable sizing table and rejected provider inputs never enter default history. Access suite uses the real MCP HTTP SDK for auto+resume.
 
 Navigation uses a non-minimum custom budget to detect widget cleanup; Continue preserves saved API/CLI limits. Constrained fallback transport must send only to the fitting primary. Wide claim tests bound repeated host detail; final durable claims reference original source instead of duplicating quotes.
 
@@ -115,3 +115,30 @@ Navigation uses a non-minimum custom budget to detect widget cleanup; Continue p
 Timeout/progress regressions cover3600 acceptance/3601 rejection, remaining-run clamping, saved provider UI reopen, journal timer ordering, clock advancement/frozen completion, legacy status and extraction/review waiting-stage order.
 
 - `test_pillow_compatibility.py` — Exact runtime/project/installer pin parity, sole expected upstream metadata exception, Streamlit image resize/encoding modes and public icon/array rendering. Distribution tests ensure companion manifest/wheel/sdist/Docker inputs and no ignored context leakage.
+
+
+## Protocol 5 AI coverage
+- `test_ai_extraction_recovery.py` — Invalid/missing/duplicate/unknown IDs, schema/citation/JSON failures, safe feedback, sibling persistence, progressive batching, cancellation/backoff, reopened queue and spending limits, bounded truncation/overlap, consolidation fairness, usage normalization and old-part pinned-context restoration. Mock qualification only.
+- `test_ai_file_parts.py`, `test_ai_adaptive_context.py`, `test_ai_analysis_context.py`, `test_ai_batching.py` — Final-envelope token fitting, whole-file preference, contiguous Unicode/CRLF and large SQL/SAS/dbt coverage, repeated roles and >100 inputs, partial/duplicate IDs.
+- `test_ai_token_budget.py`, `test_ai_budget.py` — 70k/200k/1m limits, separate windows/reasoning, explicit disclosure migration and optional pinned offline tokenizer.
+- `test_ai_context_index.py`, `test_ai_source_context.py`, `test_dbt_ai_context.py` — Scoped/quoted declarations, authorization and deduplicated relevant source context.
+- `test_ai_independent_extraction.py`, `test_ai_context_completion.py`, `test_ai_file_consolidation.py` — Parser independence, evidence rejection, late definitions in either order, one completion wave, original-result retention, bounded overflow and reopen.
+- `test_ai_resumable_files.py`, `test_ai_analysis_continuation.py`, `test_ai_pipeline_review_regressions.py`, `test_ai_review_regressions.py` — Durable ceilings, unknown response/reopen, source/config/protocol staleness, truncation, supersession validation, operation retirement, scoped identity and selected publication preservation.
+- `test_ai_full_build.py`, `test_dbt_ai_analysis.py`, `test_ai_operation_graph.py` — Separate family golden chains, exact table/column facts, saved relinking, graph ambiguity/cycles/evidence and no SQL generation.
+- `test_ai_pipeline_qualification.py` — Independent nonempty golden oracle; omissions despite complete JSON, batch/order comparisons, duplicate writers and linear saved-result decoding. Scale command separately checks >=1000 files per family; mock qualification never establishes live accuracy.
+- `legacy_ai_fixtures.py` — Historical wire/checkpoint unit fixtures without retaining the retired project planner.
+
+Historical/manual validation, wire, citation and snapshot tests remain distinct from new project execution. Removed scheduler/window/resolution tests are replaced by the behavior above.
+
+- `test_ai_linking_review.py` — Case policy/quoting/scopes and publication identity, in-place before/after versions, successive writes, source-order constraints and conflicts.
+- `test_ai_consolidation_review.py` — Bounded shared-scope partitioning, intact dependency/evidence membership, dispatch-budget parity, stable IDs and cancellation/reopen without duplicate completed calls.
+- `test_ai_version_publication.py` — Read/write identity separation in usages and persisted column dependencies; scoped/case/version ambiguity, conflicting explicit writers, repeated logical records and offline saved-result rebuilding.
+- `test_ai_traversal_counters.py` — Persisted explicit-version traversal across operations/files and reopening; scoped/case/unresolved separation; final counters include publication uncertainty without double-counting selected files or counting retained files.
+- `test_gateway_recovery.py`, `test_gateway_sockets.py` — Bounded HTTP/transport/item recovery, durable unknown usage/reservations, restart/manual policies and ceilings; safe diagnostics/AppTest controls; local delayed, partial and silent sockets verify one active app request and interruptible waiting. No live providers.
+- `test_ai_budget_allocation.py` — 70k/200k/1M 10–50% allocations; clamps/shared/separate/reasoning/full bodies; slider/Advanced/profile precedence; dynamic manual confirmation, runtime credentials, legacy resume, wire independence and CLI/MCP parity.
+- `test_ai_partial_recovery.py` — Three-pass unresolved partial publication, retained sibling facts/ranges/missing context, close/reopen unresolved-only retry, deferred enrichment, truthful messages/counters and source/config/other-publication freshness. Mock provider qualification only.
+
+UI regressions reproduce three full previews per Analyze click, verify reuse/invalidation and active Cancel without inventory reads. Allocation AppTests cover explicit slider changes overriding saved Custom defaults while preserving hard model caps and profiles.
+`test_ai_analysis_visibility.py` covers blocked-provider progress/cancel, early identity, preparation failure, source-free projection, growing totals, partial resume/reuse and reopen/isolation. `test_ai_analysis_ui.py` guards the inventory-free/nonblocking active path and terminal selection.
+
+`test_ai_inspection.py` covers exact transport capture, raw-versus-decoded output, malformed/error bodies, credential privacy, bounded retention, lifecycle/backup/migration, pagination and mocked production async cancellation. `test_ai_inspection_ui.py` proves nested lazy loading/selection without provider calls.

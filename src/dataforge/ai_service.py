@@ -32,7 +32,7 @@ def preview_ai_evidence(
     source = store.file(file_id)
     from dataforge.dbt.service import is_dbt
     if is_dbt(source):
-        raise AgentError('validation_failed', 'dbt currently requires parser analysis')
+        raise AgentError('validation_failed', 'Use project AI analysis for dbt; this manual assistance path lacks project context')
     if source['workspace_id'] != workspace or source['extension'] not in {'.sql', '.sas'}:
         raise AgentError('not_found', 'Select an SQL/SAS source in this workspace')
     chunks = context_chunks(source['raw_content'], source['extension'], first, last,

@@ -1,16 +1,17 @@
-"""Project protocol v3 expression references; strict legacy v2 payloads remain readable."""
+"""Project protocol v4 components/references; strict legacy responses remain readable."""
 from __future__ import annotations
 
 import json
 from copy import deepcopy
 from functools import lru_cache
 
-from pydantic import Field, create_model
+from pydantic import Field, ValidationError, create_model
 
 from dataforge.ai_analysis_models import (
     AssetCandidate,
     ColumnCandidate,
     DerivationCandidate,
+    DerivationInput,
     EvidenceCitation,
     LineageReviewResponse,
     Name,
@@ -29,6 +30,48 @@ class SourceCitationError(ValueError):
     """A fixed host code, safe to retain without source text or provider input."""
 
 
+def decode_extractions(payload, expected_parts, *, diagnostics=None):
+    from dataforge.ai_analysis_models import PartExtraction
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, RecursionError):
+            raise ValueError('invalid_extraction_json') from None
+    if not isinstance(payload, dict) or set(payload) != {'items'} or not isinstance(payload['items'], list):
+        raise ValueError('invalid_extraction_envelope')
+    expected = {p.part_id for p in expected_parts}
+    valid, errors, seen = {}, {}, set()
+    for item in payload['items']:
+        pid = item.get('part_id') if isinstance(item, dict) else None
+        if not isinstance(pid, str) or pid not in expected:
+            errors[str(pid)] = 'unknown_response_part'
+            if diagnostics is not None:
+                diagnostics['__envelope__'] = {'code': 'unknown_response_part', 'path': 'items.part_id'}
+            continue
+        if pid in seen:
+            valid.pop(pid, None)
+            errors[pid] = 'duplicate_response_part'
+            continue
+        seen.add(pid)
+        try:
+            valid[pid] = PartExtraction.model_validate(item)
+        except ValidationError as exc:
+            errors[pid] = 'invalid_extraction_item'
+            if diagnostics is not None:
+                # Only schema-owned names and integer array positions, never input,
+                # arbitrary extra keys, validator messages or provider values.
+                schema = PartExtraction.model_json_schema()
+                names = set(schema.get('properties', {}))
+                for definition in schema.get('$defs', {}).values():
+                    names.update(definition.get('properties', {}))
+                loc = exc.errors(include_input=False, include_url=False)[0]['loc']
+                path = '.'.join(str(p) if type(p) is int or p in names else '<field>' for p in loc)
+                diagnostics[pid] = {'code': 'invalid_extraction_item', 'path': path[:200]}
+    for pid in expected - valid.keys():
+        errors.setdefault(pid, 'missing_extraction_item')
+    return valid, errors
+
+
 def _wire_model(model, **overrides):
     # Copy field constraints, not canonical validators that need hydrated source text.
     fields = {name: (field.annotation, deepcopy(field)) for name, field in model.model_fields.items()}
@@ -40,7 +83,8 @@ WireAsset = _wire_model(AssetCandidate, evidence=(EvidenceReference, ...))
 WireRelationship = _wire_model(TableRelationship, evidence=(EvidenceReference, ...))
 WireColumn = _wire_model(ColumnCandidate, evidence=(EvidenceReference, ...))
 WireDerivation = _wire_model(DerivationCandidate, evidence=(EvidenceReference, ...),
-    expression=(str, Field(default='', max_length=20000)), expression_reference=(Name | None, None))
+    expression=(str, Field(default='', max_length=20000)), expression_reference=(Name | None, None),
+    inputs=(list[DerivationInput], Field(default_factory=list, max_length=100)))
 WireDecision = _wire_model(ReviewDecision, evidence=(list[EvidenceReference], Field(default_factory=list, max_length=20)))
 WIRE_MODELS = {
     'project_lineage': _wire_model(ProjectLineageResponse,
@@ -73,17 +117,20 @@ def decode_project_result(task, payload, unit, *, settings=None):
         return citation.copy()
 
     if task == 'project_lineage':
-        references = None
+        references = {}
         for group in ('assets', 'relationships', 'columns', 'derivations'):
             for claim in values[group]:
                 claim['evidence'] = hydrate(claim['evidence'])
                 if group == 'derivations':
                     reference_id = claim.pop('expression_reference')
+                    partial = claim['fragment']
+                    if partial and not unit.source_focus:
+                        raise SourceCitationError('fragment_requires_source_view')
                     if reference_id is not None:
-                        if references is None:
+                        if partial not in references:
                             from dataforge.ai_citations import source_references
-                            references = {r['reference_id']: r for r in source_references(unit, settings)}
-                        reference = references.get(reference_id)
+                            references[partial] = {r['reference_id']: r for r in source_references(unit, settings, partial=partial)}
+                        reference = references[partial].get(reference_id)
                         if reference is None:
                             raise SourceCitationError('unknown_source_expression_reference')
                         for field, expected in [('expression', reference['text']),

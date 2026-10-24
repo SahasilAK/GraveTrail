@@ -81,6 +81,13 @@ def save_profile(store: Store, policy: AccessPolicy, workspace: str,
     """
     policy.require('config')
     check_revision(store, workspace, expected_revision)
+    if not profile_id:
+        values = profile.model_dump(exclude_unset=True) if isinstance(profile, Profile) else dict(profile)
+        if values.get('provider') == 'OmniRoute':
+            defaults = {'unknown_retries': 2, 'retries': 2}
+            if 'timeout' not in values and 'read_timeout' not in values:
+                defaults['read_timeout'] = 300
+            profile = {**defaults, **values}
     profile = Profile.model_validate(profile, strict=True)
     if profile.key_env and profile.key_env not in policy.allowed_credential_refs:
         raise AgentError('credential_unavailable', 'Approve this named credential reference at launch before saving')

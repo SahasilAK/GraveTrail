@@ -103,7 +103,7 @@ def _focus_bounds(unit, dialect=""):
                 unit.start_offset + spans[f.ordinal_start][0],
                 unit.start_offset + spans[f.ordinal_end - 1][1],
             )
-            or unit.unit_id
+            or (unit.source_focus.parent_id if unit.source_focus else unit.unit_id)
             != stable_id(f.parent_id, "projection-v1", str(f.ordinal_start), str(f.ordinal_end))
         ):
             raise ValueError("Invalid host projection partition")
@@ -151,6 +151,8 @@ def source_view(unit, dialect=""):
             (f.start_offset, f.end_offset),
             (f.list_end, unit.end_offset),
         ]
+    from dataforge.ai_source_views import source_window
+    ranges = source_window(unit, ranges)
     return [
         {"start_offset": a, "end_offset": b, "code": unit.code[a - unit.start_offset : b - unit.start_offset]}
         for a, b in ranges

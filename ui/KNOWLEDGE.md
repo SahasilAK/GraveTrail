@@ -2,6 +2,8 @@
 
 Shared Streamlit presentation and provider/assistance forms. Uses dataforge services; source content is loaded lazily.
 
+`analysis_ai.py` exposes request-budget estimates, configured versus advertised output capacity, pending recovery and recent safe request diagnostics. Active workers retain Cancel during HTTP waits/backoff; completed split ancestry is separate from pending work.
+
 ## Subfolders
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 
@@ -43,10 +45,25 @@ GraveTrail presentation: app page/sidebar title and agent examples use the new n
 
 Asset/query/direction/depth/collapse and analysis file selections persist via native session state. A shared workspace-scoped asset bridges Lineage, Columns and Impact. Source control keys include evidence scope to avoid stale browser labels; file content/AI responses never enter navigation state. Graph source ZIPs and original downloads generate on click. Tree direction has a durable non-widget copy while its tabs are hidden. Provider protocol keys include the selected profile.
 
-`analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, explicit calculated context allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
+`analysis_ai.py` retains numeric menus with per-control Automatic/Custom origin, reset, offline recommendations, optional per-build source/context character allowance and durable Continue/retry choice. `provider_settings.py` retains selected capability metadata, explicit native inspection, invalid-draft-safe editing and automatic/custom profile limits; legacy numbers remain Custom.
 
 Budget values have non-widget session storage so navigation cannot discard Custom ceilings; Continue inherits saved numeric limits unless Reset explicitly releases them. Manual chunk-size help distinguishes the automatic project planner.
 
 `analysis_ai.py` preview identifies semantic source tasks, original-context projection paging and provisional review sizing. Existing Custom controls/Continue remain; the shared service owns per-batch checkpoints and final atomic publication.
 
 Provider request timeout accepts1–3600seconds without changing saved/default values. analysis_ai progress uses journal start/stage/finish timestamps for two-second total/wait elapsed refresh and frozen terminal duration; queued state stays distinct. Assistance/review/provider checks use native show_time spinners.
+
+`analysis_ai.py` now exposes files/request and parallel maxima immediately after enabling AI, separate execution and lifetime budgets, quota/unknown-outcome recovery and dbt project disclosure. `provider_settings.py` adds a non-secret shared quota-group label.
+
+AI previews expose a collapsed-by-default, lazy sortable Source files and request sizes table with original characters, maximum source/full-envelope request sizes, limits and blockers. Adaptive views/component composition are described alongside the controls.
+
+Protocol 5 supersedes older AI control notes above: analysis_ai shows one optional run output ceiling, provider/model/family, automatic token preview, stage progress and compatible continue/unknown retry. Historical reports remain readable; old protocols require a new build. provider_settings binds discovered/manual token capacity, preserves manual overrides and requires explicit legacy disclosure-limit migration. No new character/window/parallel/review controls.
+
+Gateway settings separate connection/read inactivity and expose shared/unknown retry limits. New OmniRoute profiles default to read300/connect5/shared2/unknown2; legacy saved timeouts and disabled automatic unknown recovery remain preserved. Reports use safe connection explanations/diagnostics and require manual acknowledgement only for disabled or exhausted recovery.
+
+`analysis_ai` budget overrides show a 10–50% maximum output share (default30), effective allowances/capacity provenance/clamps, and optional Advanced exact input/output. Shared allocator pins preview/dispatch/resume; saved profiles remain unchanged. Partial publication shows incomplete coverage and Retry unresolved AI work; reports distinguish unresolved items/unprocessed files/semantic gaps. Cancelled recovery never claims unpublished lineage was published.
+
+Explicit slider changes become run-only output overrides, respecting real model caps/Advanced values. Ready previews are cached per session with source/settings/profile/request/credential-availability pins; invalid previews are not cached. Active progress renders before inventory and skips preparation controls; hidden budget widgets persist for the session.
+`analysis_ai.render_status` and `render_diagnostics` share measured ledger definitions and recovery evidence between active and final reports. Active polling uses nonblocking storage access so preparation cannot block Cancel; terminal refresh selects the bound run even without a worker result. Evidence hydrates only on expansion.
+
+`analysis_inspection.render_inspection` provides lazy Inputs/Outputs with request/attempt selection, planned-versus-dispatched outcomes, nested artifact expansion, metadata/content pagination and deferred retained-content downloads. Privacy/retention/size failures are explicit; source/provider content is data.

@@ -116,19 +116,34 @@ def render(store: Store, workspace: str) -> None:
         st.caption(f'Output limit: {output_mode.capitalize()} · Source context limit: {context_mode.capitalize()}. Edit a number to make it Custom.')
         auths = ["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"]
         auth = st.selectbox("Authentication", auths, index=auths.index(config.get("auth", "auto")), key=prefix + '_auth')
-        timeout = st.number_input("Request timeout (seconds)", 1, 3600, int(config.get("timeout", 30)),
-            key=prefix + '_timeout', help='Up to one hour per request. The AI analysis run budget may shorten this wait.')
-        retries = st.number_input("Retries for rate limits and transient failures", 0, 2, int(config.get("retries", 1)), key=prefix + '_retries')
-        max_tokens = st.number_input("Maximum output tokens", 64, 32000, key=prefix + '_max_tokens', on_change=customize_output)
+        new_gateway = not existing and provider == 'OmniRoute'
+        timeout = config.get('timeout', 30)  # Preserve the saved legacy/write timeout.
+        wait_until_stopped = st.checkbox('Wait until stopped', value=config.get('wait_until_stopped', False),
+            key=prefix + '_wait_until_stopped',
+            help='Disable response inactivity timeout. Cancel AI analysis stops waiting and retries. Configured run limits still apply; gateway disconnects can still occur.')
+        read_timeout = st.number_input('Response inactivity timeout (seconds)', .05, 3600.,
+            float(config.get('read_timeout') or config.get('timeout', 300 if new_gateway else 30)),
+            key=prefix + '_timeout', disabled=wait_until_stopped, help='Allow upstream fallback plus generation time. This is the wait for response data, not a total request deadline. Run limits and cancellation still apply.')
+        connect_timeout = st.number_input('Connection timeout (seconds)', .05, 60.,
+            float(config.get('connect_timeout', 5)), key=prefix + '_connect_timeout')
+        retries = st.number_input('Shared retries per batch', 0, 2, int(config.get('retries', 2 if new_gateway else 1)),
+            key=prefix + '_retries', help='Excludes the initial attempt. HTTP, pre-send and unknown-outcome retries share this finite budget, including after restart.')
+        unknown_retries = st.number_input('Automatic retries of unknown outcomes', 0, 2,
+            int(config.get('unknown_retries', 2 if new_gateway else 0)), key=prefix + '_unknown_retries',
+            help='Zero requires manual acknowledgement. This also uses the shared retry budget. A lost response may have been processed upstream; retries can duplicate processing or charges.')
+        max_tokens = st.number_input("Maximum output tokens", 64, 2147483647, key=prefix + '_max_tokens', on_change=customize_output)
         context = st.number_input("Profile source context character limit", 500, 200000, key=prefix + '_context', on_change=customize_context)
         temperature_enabled = st.checkbox("Send temperature parameter", value=config.get("temperature") is not None, key=prefix + '_send_temperature')
         temperature = st.number_input("Temperature", 0., 2., float(config.get("temperature") or 0.), step=.1, key=prefix + '_temperature')
         structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True), key=prefix + '_structured')
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
+        quota_group = config.get('quota_group', '')  # Historical profile round-trip only.
     values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
+                  read_timeout=read_timeout, wait_until_stopped=wait_until_stopped, connect_timeout=connect_timeout, unknown_retries=unknown_retries,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
                   context_mode=context_mode, output_mode=output_mode,
-                  temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version)
+                  temperature=temperature if temperature_enabled else None, structured=structured, api_version=api_version,
+                  quota_group=quota_group)
     signature = (url, key_env, auth, api_version)
     discovery = st.session_state.get(models_key, {})
     if discovery.get('signature') != signature:
@@ -217,6 +232,39 @@ def render(store: Store, workspace: str) -> None:
                    f"input {capabilities.input_tokens or 'unknown'}; output {capabilities.output_tokens or 'unknown'}. "
                    f"Source: {capabilities.source}; observed {max(0, int(time.time() - capabilities.observed_at)) // 60} minutes ago. "
                    + ('Stale: configured limits apply until refreshed. ' if not capabilities.current_for(profile) else '') + ('Dynamic routing: upstream limits may differ.' if capabilities.dynamic else ''))
+    saved_manual = config.get('model_capabilities') or {}
+    if saved_manual.get('source') == 'manual' and profile:
+        prior_manual = Profile.model_validate({**config, **values, 'model': model or 'connection-check'}).model_capabilities
+        if prior_manual:
+            capabilities = prior_manual
+    with st.expander('AI build token capacity and disclosure', expanded=capabilities is None):
+        manual = st.checkbox('Override discovered token limits', value=bool(capabilities and capabilities.source == 'manual'))
+        if manual:
+            context_tokens = st.number_input('Context tokens', 1024, 2147483647,
+                value=(capabilities.context_tokens if capabilities else None) or 70000)
+            input_tokens = st.number_input('Separate input limit (optional)', 1, 2147483647,
+                value=capabilities.input_tokens if capabilities else None)
+            output_tokens = st.number_input('Model output limit', 64, 2147483647,
+                value=(capabilities.output_tokens if capabilities else None) or int(max_tokens))
+            separate = st.checkbox('Separate input and output windows', value=bool(capabilities and capabilities.window == 'separate'))
+            reasoning_separate = st.checkbox('Reasoning uses a separate shared-context reserve',
+                value=bool(capabilities and capabilities.reasoning_accounting == 'shared_context'))
+            reasoning = st.number_input('Separate reasoning tokens', 0, 2147483647,
+                value=capabilities.reasoning_tokens if capabilities else 0) if reasoning_separate else 0
+            if profile:
+                capabilities = bind_capabilities(ModelCapabilities(context_tokens=int(context_tokens),
+                    input_tokens=int(input_tokens) if input_tokens else None, output_tokens=int(output_tokens),
+                    window='separate' if separate else 'combined', source='manual', reasoning_tokens=reasoning,
+                    reasoning_accounting='shared_context' if reasoning_separate else 'included_output'), profile)
+        policies = ['unconfirmed', 'token_capacity', 'explicit']
+        source_policy = st.selectbox('Source disclosure limit policy', policies,
+            index=policies.index(config.get('source_limit_policy', 'unconfirmed')),
+            format_func=lambda p: {'unconfirmed': 'Choose how to migrate the legacy character setting',
+                'token_capacity': 'Use token capacity; preserve existing source/network grants',
+                'explicit': 'Keep an explicit source character restriction'}[p])
+        disclosure_chars = st.number_input('Explicit disclosure characters', 1, 2147483647,
+            value=config.get('source_disclosure_chars') or int(context)) if source_policy == 'explicit' else None
+        values.update(source_limit_policy=source_policy, source_disclosure_chars=disclosure_chars)
     if st.button("Test model connection", disabled=not model):
         check_connection(model, False)
     name = st.text_input("Profile name", config.get("name", provider), key=prefix + '_name')

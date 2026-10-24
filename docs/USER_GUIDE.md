@@ -302,3 +302,8 @@ download software, fonts or external image resources.
 On **Analysis**, **Use AI for analysis** is initially unchecked. When enabled, **Compare with parser** is selected by default for a hybrid build; disabling comparison selects experimental AI-generated mode. **Additional AI review** is optional. Inspect the offline disclosure/context/budget preview, then start the explicit AI analysis action. A preview or ordinary page rerun never sends requests.
 
 Use **Connections & AI** to configure the route and deliberate privacy/context settings. Remote processing of a complete file across chunks still requires complete-source permission. The compact schema retains all validation rules. Larger source/catalog/request envelopes can exceed context budgets; adjust both workspace Privacy and profile context limits explicitly when preview identifies that limit. Cancellation/failure/stale checks keep the previous committed graph. Inspect the saved comparison/report for acceptance, rejection and unresolved coverage. See the full [AI project analysis guide](AI_ANALYSIS.md).
+
+
+## Resumable AI analysis
+
+Enable AI to set maximum files per request and parallel requests before Analyze. SQL, SAS and dbt share the resumable pipeline; execution windows can continue automatically within the project allowance. See [AI flow](user-guide/ai-analysis-flow.md) and [controls/recovery](user-guide/ai-analysis-controls-and-recovery.md).

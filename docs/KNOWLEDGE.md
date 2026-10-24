@@ -2,6 +2,8 @@
 
 Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries; parser/security/testing guides state verified coverage and limitations.
 
+AI_ANALYSIS, LLM_INTEGRATION and current pipeline/recovery guides distinguish active HTTP waiting from durable failed-item recovery, configured capacity from advertised limits, and mock qualification from live semantic accuracy.
+
 The public landing page and site description include dbt; the User guide navigation exposes
 DBT_SUPPORT.md. Getting started has a separate dbt retail sample walkthrough and explicit parser-only limits.
 
@@ -11,6 +13,7 @@ through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CL
 references now enumerate107 executable routes and87 tools; UI has eleven destinations.
 
 ## Subfolders
+- `superpowers/` — Internal requirements and execution plans, excluded from the public documentation site. See [superpowers/KNOWLEDGE.md](superpowers/KNOWLEDGE.md).
 - `overrides/` — [overrides/KNOWLEDGE.md](overrides/KNOWLEDGE.md): inject shared theme CSS into Material without app dependencies.
 - `getting-started/` — [getting-started/KNOWLEDGE.md](getting-started/KNOWLEDGE.md).
 - `user-guide/` — [user-guide/KNOWLEDGE.md](user-guide/KNOWLEDGE.md).
@@ -94,3 +97,13 @@ TESTING records the post-push Certifi lock fix and unresolved Streamlit/Pillow s
 LLM_INTEGRATION/AI_ANALYSIS explain the one-hour request limit, separate execution budget and elapsed/wait timer semantics; TESTING records the bounded best-coding browser check and its functionality-only scope.
 
 SECURITY/setup/build guides explain temporary Streamlit1.66/Pillow13 exception, explicit uv wheel/source commands, ordinarypip conflict, artifact companion policy and upstream removal gates. TESTING preserves historical failures and records remediation proof.
+
+Three public pages detail the resumable AI flow, controls/recovery and architecture; mkdocs.yml publishes them with CLI/MCP references. Internal superpowers plan/spec stay outside site and source distribution. Migration9 tables, dbt AI inclusion and bounded synthetic qualification are documented.
+
+Adaptive AI guides describe source-character versus model-envelope limits, nullable per-build override, sortable file sizing, exact source/context views and validated dependency-component composition/review/reuse. DATA_MODEL documents source-offset expression persistence and preserved support without a migration. Prompt engineering pins wire4/prompt6 extraction and wire2/prompt4 review. TESTING distinguishes actual-fixture request fitting/mock execution from live precision.
+
+AI_ANALYSIS.md and architecture/ai-analysis-pipeline.md are protocol-5 authorities. CLI/MCP guides match simplified token/selection/recovery contracts; historical hybrid/window descriptions are superseded. docs/promts contains the approved plan and verification record.
+
+2026-10-24 context-management amendment documents pinned model-aware output share, exact override/Custom precedence, independent wire payloads, safe batching diagnostics and bounded unresolved partial publication/retry. Gateway-internal memory/live accuracy remain unverified; earlier indefinite pending guidance is superseded.
+
+AI_ANALYSIS and LLM_INTEGRATION document shared durable live counters, opt-in migration-10 transport artifacts, explicit missing outcomes and bounded lazy inspection/retention. Counter completion is processing coverage, not semantic proof.

@@ -79,6 +79,8 @@ nav:
       - UI reference: USER_GUIDE.md
       - dbt projects: DBT_SUPPORT.md
       - AI project analysis: AI_ANALYSIS.md
+      - AI analysis flow: user-guide/ai-analysis-flow.md
+      - AI controls & recovery: user-guide/ai-analysis-controls-and-recovery.md
       - Column transformations: TRANSFORMATION_LINEAGE.md
       - Data management & recovery: DATA_MANAGEMENT.md
   - Integrations:
@@ -93,6 +95,7 @@ nav:
   - Architecture:
       - architecture/overview.md
       - System overview: ARCHITECTURE.md
+      - AI pipeline: architecture/ai-analysis-pipeline.md
       - Data model: DATA_MODEL.md
       - Lineage engine: LINEAGE_ENGINE.md
       - SQL coverage: SQL_PARSING.md
