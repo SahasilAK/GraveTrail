@@ -103,3 +103,5 @@ Three public pages detail the resumable AI flow, controls/recovery and architect
 Adaptive AI guides describe source-character versus model-envelope limits, nullable per-build override, sortable file sizing, exact source/context views and validated dependency-component composition/review/reuse. DATA_MODEL documents source-offset expression persistence and preserved support without a migration. Prompt engineering pins wire4/prompt6 extraction and wire2/prompt4 review. TESTING distinguishes actual-fixture request fitting/mock execution from live precision.
 
 AI_ANALYSIS.md and architecture/ai-analysis-pipeline.md are protocol-5 authorities. CLI/MCP guides match simplified token/selection/recovery contracts; historical hybrid/window descriptions are superseded. docs/promts contains the approved plan and verification record.
+
+2026-10-24 context-management amendment documents pinned model-aware output share, exact override/Custom precedence, independent wire payloads, safe batching diagnostics and bounded unresolved partial publication/retry. Gateway-internal memory/live accuracy remain unverified; earlier indefinite pending guidance is superseded.

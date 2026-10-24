@@ -223,15 +223,40 @@ generation or billing stopped. Callers without check/cancellation callbacks stil
 the configured HTTP timeouts. Worker progress refreshes every two seconds; report
 messages describe the gateway connection, never an unreported upstream provider switch.
 
-When only required failures remain, the build waits to retry with Cancel available.
-No failed file is silently skipped, and no graph is published until required work
-has been saved. Completion/consolidation uses the same recovery path while keeping
-original facts durable. Truncation first reduces batch width; an isolated source
+Item recovery is bounded to three unsuccessful passes, with Cancel available during
+requests and backoff. Persistently failing items are saved as unresolved/partial,
+and available validated lineage publishes with explicit incomplete coverage.
+Later retry sends only unresolved work, reusing successful checkpoints and keeping
+cumulative attempts/reservations. Completion/consolidation uses the same recovery
+path while keeping original facts durable. Truncation first reduces batch width; an isolated source
 part can split once with exact cores and bounded disclosed overlap. Irreducible
 request sizes require a budget/configuration change. See [controls and recovery](user-guide/ai-analysis-controls-and-recovery.md).
 
 ## Protocol 5 file extraction (2026-10-23)
 
 New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+The 2026-10-24 allocation update replaces the automatic 8,192-output ceiling with
+a pinned 10–50% output-share preference (default 30%). Shared windows reserve safety
+and applicable reasoning once, then allocate output and remaining input within real
+model limits. Separate windows keep input independent. Explicit run output overrides
+take precedence over saved Custom output allowances; otherwise Custom caps the share.
+Dynamic routes require existing manual route-safe capacity confirmation. Preview and
+dispatch count the same complete request body plus estimated framing. Provider maximum
+parameters remain protocol-specific: OpenAI `max_completion_tokens`, compatible
+Chat Completions/Anthropic `max_tokens`, Ollama `num_predict`, Gemini `maxOutputTokens`.
+
+Initial calls use fresh system/user messages or equivalent provider contents, current
+source parts and relevant indexed definitions only. There are no prior extraction
+responses, continuation IDs or growing summaries. Local mock wire tests cover these
+payloads. Prefix caching remains allowed. Application payload independence does not
+establish whether a gateway adds internal history: no live gateway-memory verification
+was performed, no undocumented headers were added and routing was not changed.
+
+Bounded partial publication supersedes earlier indefinite pending recovery. Required
+initial failures defer completion; initial/completion failures defer consolidation
+until repair, preserving one frozen wave and stable saved group inputs. Unknown-outcome
+acknowledgement, authorization, freshness, Wait until stopped, responsive cancellation
+and optional spending ceilings remain enforced.
 
 Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.

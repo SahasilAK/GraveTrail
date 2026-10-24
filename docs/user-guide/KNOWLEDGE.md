@@ -20,4 +20,4 @@ The hub leads with local parser/no-AI operation and presents hybrid as optional 
 
 ai-analysis-flow.md and ai-analysis-controls-and-recovery.md now describe static/independent AI, automatic model token fitting, one optional run ceiling, one completion wave, saved-file consolidation and compatible recovery.
 
-Recovery controls include cancellable waiting between failed-item passes, safe validation diagnostics, request utilization/output allowances and reuse of saved siblings; required failures remain pending.
+Recovery controls include cancellable waiting, safe validation diagnostics, full request budgets and saved siblings. After three unsuccessful item passes, incomplete lineage publishes with explicit unresolved work and later retry. Budget overrides show a pinned 10–50% output share, capacity/clamp details and optional Advanced exact limits. Earlier indefinite pending guidance is superseded.

@@ -306,3 +306,172 @@ failures may continue incurring configured, authorized attempts until cancelled 
 an explicit ceiling is reached; unknown reservations remain even after success.
 Irreducible context groups retain existing explicit uncertainty/budget handling.
 No new database, dependency, generic workflow layer, generation or optimization.
+
+## Context-management implementation — 2026-10-24
+
+This section records the latest approved amendment and supersedes the earlier
+fixed-output recommendation and indefinite required-work recovery policy above.
+Work started from clean HEAD `63dc6dd` on `codex/resumable-ai-lineage`, preserving
+the branch's earlier identity, traversal, recovery and cancellation fixes. No push,
+paid/live provider call, gateway route change or full live workspace retry occurred.
+
+### Reproductions and changes
+
+- The automatic recommendation used `min(8192, output_capacity)`. New allocation
+  regressions initially failed because the model-share allocator did not exist;
+  UI coverage then failed on the absent slider. `allocate_analysis_profile` now
+  derives a run-only profile from a pinned 10–50% output share (default 30%). It
+  reserves safety and applicable shared-context reasoning once, clamps output to
+  the real output maximum, and gives input the remaining usable capacity subject
+  to its own cap. Separate windows keep input independent and map the percentage
+  to independent output capacity. Unknown shared context is blocked; optional
+  unreported output limits remain explicit uncertainty. Dynamic routes require
+  existing manual safe-capacity confirmation.
+- The UI shows effective allowances, route/model capacities and provenance, clamp
+  explanations and optional Advanced exact overrides. Explicit run output overrides
+  precede saved Custom output allowances; otherwise Custom caps the slider.
+  Automatic profiles use model-aware recommendations; saved profiles and source
+  disclosure limits are unchanged. UI/CLI/MCP share the allocator. Run requests
+  persist share/overrides; resume rejects allocation changes and preserves legacy
+  checkpoint allocation/hash behavior.
+- A new regression exposed that binding credentials to the derived profile lost
+  an existing session credential (`Configured provider credential is unavailable`).
+  Credential lookup now uses the original saved profile, while sizing and dispatch
+  use derived allowances. The regression passes without persisting credentials.
+- Full-envelope counting and the existing independent wire builder were reused.
+  Provider wire regressions verify fresh current-batch messages/contents, stable
+  instructions and provider-specific maximum-output parameters, with no preceding
+  response, conversation/continuation ID or accumulating summary. Relevant indexed
+  definitions remain available; no project-wide synthesis pass was added. Prefix
+  caching remains compatible. Gateway-internal memory remains outside this proof.
+- Existing packing already fits smaller eligible items after a budget miss and
+  rotates failed work behind fresh work. It still requires both actual request
+  input and estimated structured output to fit. Diagnostics now also expose file/
+  part counts, input estimate/allowance, counting method and the output-estimate
+  method alongside utilization and stopping reasons. The conservative unknown-model
+  counter and crude output estimate (256 per item plus half its actual source or
+  saved-detail UTF-8 bytes) are unchanged; there is no runtime ratio learning.
+- New recovery regressions failed before the fix by reaching cancellation instead
+  of partial publication. After three unsuccessful item passes, the coordinator
+  now persists host-owned unresolved/partial records, continues other work and
+  publishes available validated lineage with explicit incomplete coverage. It never
+  fabricates `no_operations`. Valid siblings, ranges, definitions, evidence and
+  operation identities remain saved. Unresolved initial work marks its file
+  unprocessed; failed enrichment retains initial facts and missing-context evidence.
+- A committed partial run can explicitly retry only unresolved work after reopening.
+  Successful checkpoints, frozen groups and supersessions are reused; cumulative
+  attempt/output accounting and unknown usage are retained. The prior-publication
+  pin advances only to this run's own partial publication. Regression tests reject
+  changed source/configuration or an intervening publication before dispatch.
+- Deliberate stage rule: initial required failures defer freezing the one completion
+  wave; initial/completion failures defer consolidation until repair. This avoids
+  freezing incomplete inputs or adding recursive AI passes. Partial views may retain
+  unconsolidated details. This rule is recorded in the approved plan and guides.
+- Reports persist `unresolved_parts` (deferred required work items) and
+  `unprocessed_files` (files with unresolved initial extraction), separately from
+  existing semantic-coverage counters. A further regression reproduced a cancelled
+  report claiming publication merely because work was deferred. The message now
+  requires committed status and preserves the cancellation explanation otherwise.
+
+### Regression coverage and review
+
+`test_ai_budget_allocation.py` adds 24 cases: 70k/200k/1M allocations at 10/30/50%,
+input/output clamps, shared/separate windows, safety/reasoning/full-envelope counts,
+slider/Custom/Advanced precedence, dynamic manual confirmation, UI/CLI/MCP parity,
+preview/dispatch agreement, independent provider payloads, bound session credentials,
+missing capacities and legacy close/reopen reuse. The default shared examples are:
+
+| Context | Safety | Maximum output | Effective input |
+| ---: | ---: | ---: | ---: |
+| 70,000 | 3,500 | 19,950 | 46,550 |
+| 200,000 | 10,000 | 57,000 | 133,000 |
+| 1,000,000 | 50,000 | 285,000 | 665,000 |
+
+These examples assume no lower model/explicit cap or separate reasoning reserve.
+`test_ai_partial_recovery.py` adds seven cases: bounded partial publication and
+persisted counters, successful sibling reuse after close/reopen, failed completion
+retention/retry, large-file ranges/retained facts/deferred consolidation, three
+freshness blockers and the pre-publication recovery-message regression.
+
+A fresh read-only reviewer found no Critical or Important findings. Its additional
+deterministic SAS mock integration completed context supersession, failed one
+consolidation group three times, published partial results, reopened the store and
+retried exactly that group once. It verified stable frozen input hashes, reuse of
+completed enrichment and cleared unresolved flags. No repository edits or live calls.
+
+### Verification evidence
+
+Commands use repository `.venv/Scripts/python.exe`; transports are deterministic
+mocks or local test HTTP servers. The first full run reported **1,094 passed,
+2 failed, 2 skipped**, 342.19 seconds. Both failures were documentation parity
+checks for the newly exposed CLI/MCP budget fields; the reference tables were then
+updated. The cancellation-message regression failed before its one-line guard fix;
+its seven-case recovery file then passed in 11.19 seconds.
+
+The broad focused regression command passed **241 cases**, 136.49 seconds, exit 0:
+
+```powershell
+.venv/Scripts/python.exe -m pytest tests/test_ai_budget_allocation.py tests/test_ai_partial_recovery.py tests/test_ai_analysis_ui.py tests/test_ai_token_budget.py tests/test_ai_context_completion.py tests/test_ai_consolidation_review.py tests/test_ai_extraction_recovery.py tests/test_gateway_recovery.py tests/test_gateway_sockets.py tests/test_ai_linking_review.py tests/test_ai_operation_graph.py tests/test_ai_traversal_counters.py tests/test_transformations.py tests/test_sql_transformations.py tests/test_sas_transformations.py tests/test_ai_build_policy_interfaces.py tests/test_documentation.py -q --tb=short
+```
+
+Additional saved-publication, versions, split-file/consolidation, resume, access and
+dbt checks passed **34 cases**, 20.02 seconds, exit 0:
+
+```powershell
+.venv/Scripts/python.exe -m pytest tests/test_ai_version_publication.py tests/test_ai_saved_publication.py tests/test_ai_file_parts.py tests/test_ai_file_consolidation.py tests/test_ai_resumable_files.py tests/test_ai_analysis_access.py tests/test_dbt_ai_analysis.py -q --tb=short
+```
+
+Final full-suite command `-m pytest -q --tb=short` reported **1,096 passed,
+1 failed, 2 skipped**, 552.92 seconds, exit 1. The remaining failure is
+`test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean`: it asserts the
+working `.streamlit/config.toml` is Ocean dark, while the unrelated current working
+configuration selects Crimson Forge. That edit was preserved and excluded from
+the commits; no theme code or assertion was changed. The identical test passed
+against `git show HEAD:.streamlit/config.toml` in an isolated temporary working
+directory: **1 passed**, 0.09 seconds, exit 0. This isolates the configuration
+failure; it does not turn the full-suite run into a passing run. The two skips are
+the existing unavailable Windows symlink-creation privileges. No AI lineage,
+publication, static-parser or recovery tests failed in the final full suite.
+
+- `-m ruff check src ui tests scripts`: **All checks passed**, exit 0.
+- `scripts/docs/build.py`: strict build passed; **42 public pages, 8 assets,
+  all rendered local links/anchors and 236 search entries** validated, exit 0.
+- `git diff --check` and staged diff checks: passed. Affected knowledge maps were
+  refreshed using the incremental scan; no unrelated theme changes were staged.
+
+The current-code large-context mock qualification passed:
+
+```powershell
+.venv/Scripts/python.exe scripts/qualify_ai_context.py --files 100 --family all --context-tokens 1000000 --output-tokens 285000
+```
+
+| Family | Source files/parts | Requests | Maximum sent input | Reserved output | Table/column/file correct | Seconds | Peak Python bytes | Saved bytes |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| SQL | 102/102 | 1 | 166,732 | 285,000 | 102/204/99 | 17.750 | 54,597,049 | 237,838 |
+| SAS | 102/102 | 1 | 100,127 | 285,000 | 102/204/99 | 12.579 | 6,821,488 | 237,838 |
+| dbt | 102/102 | 1 | 244,864 | 285,000 | 100/200/99 | 20.500 | 11,773,822 | 242,358 |
+
+All scheduled ranges processed; expected relationship precision/recall and evidence
+validity were 1.0 against the independent golden mocks. SQL/SAS retained two
+duplicate-writer boundaries each. This one-request configuration did not exercise
+mid-run interruption; targeted recovery tests and full-suite per-family fixtures
+cover interruption/reopen. Provider token usage and cost are unavailable. Historical
+1,000-file-per-family qualification above was not rerun for this amendment.
+
+### Remaining limitations
+
+Mock qualification demonstrates request construction, budgeting, persistence,
+recovery and deterministic linking; it does not establish live-model precision,
+recall, actual token use, latency, gateway fallback capacity or internal memory.
+No live evaluation was authorized or performed. Conservative input/output estimates
+can underuse capacity; large maximum output reservations can hit explicit run
+ceilings sooner. Missing provider output limits remain unverified and explicitly
+labelled. Irreducible context groups remain unresolved; a failed initial/completion
+stage delays enrichment even for otherwise available saved facts. No dependencies,
+framework, database, adaptive learning, SQL generation or optimization were added.
+The complete working-state suite retains the unrelated theme-default failure
+described above; it has not been hidden, skipped or weakened.
+
+Local implementation commit: `09e42ad` — pin model budgets and bounded recovery.
+The plan, user guides, knowledge maps and this evidence follow in the documentation
+commit. No push was performed.

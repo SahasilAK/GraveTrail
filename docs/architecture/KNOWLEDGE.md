@@ -9,3 +9,5 @@ Direct usage and the separate bounded column transformation service have distinc
 ai-analysis-pipeline.md is the current protocol-5 file extraction/index/completion/consolidation/operation graph design. Older adaptive/resumable plans are marked superseded.
 
 Recovery documents durable per-item passes/backoff, corrective sizing, pinned context restoration and frozen consolidation membership in existing journals.
+
+The current pipeline adds pinned deterministic model-share allocation and three-pass unresolved partial publication with successful-checkpoint reuse. Enrichment waits for required upstream work to resolve; partial retry accepts only its own prior publication, retaining freshness and cumulative spending checks.

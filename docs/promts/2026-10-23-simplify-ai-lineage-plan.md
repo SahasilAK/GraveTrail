@@ -1,14 +1,14 @@
 # Optional AI lineage: branch review and refactoring plan
 
-> Implementation guide: use `superpowers:executing-plans` to execute the checked tasks in order. This document authorizes no implementation by itself; the current deliverable is the review and plan.
+> Approved implementation guide: use `superpowers:executing-plans` to execute tasks in order against the combined working state. The user's confirmed 2026-10-24 context-management design supersedes earlier budgeting and recovery guidance below.
 
-**Goal:** Let a user upload one SQL, SAS, or dbt dataset, choose static or AI lineage, and obtain the existing lineage views from complete, persisted file extraction results.
+**Goal:** Let a user upload one SQL, SAS, or dbt dataset, choose static or AI lineage, and obtain the existing lineage views from persisted file extraction results, with explicit incomplete coverage when bounded recovery cannot finish required work.
 
 **Architecture:** Batch actual file contents with bounded relevant context, extract structured operations and facts, and persist each result. An AI-only source-context index supplies definitions and supports bounded completion of extractions missing context; split files may also require consolidation. Deterministic code combines the saved results into an evidence-backed operation graph and existing lineage views. There is no project-wide model call.
 
 **Tech stack:** Reuse Python, Pydantic, DuckDB, NetworkX, SQLGlot, HTTPX and Streamlit. Add optional `tiktoken` support for known matching models; add Hugging Face `tokenizers` only when a supported configured model requires its matching tokenizer. No agent framework, vector database, distributed queue, or second graph store.
 
-**Revision:** Updated 2026-10-23 after the user's clarification about token efficiency, cross-batch context and future SAS-to-SQL migration. Refactor the combined committed and uncommitted working state of this branch; do not reset the checkout to the review HEAD. This document changes the plan only.
+**Revision:** Updated 2026-10-24 for deterministic model-aware input/output allocation, independent requests and bounded recovery with retryable partial publication. Refactor the combined committed and uncommitted working state of this branch; do not reset the checkout to the review HEAD. Historical review findings remain below; implementation evidence belongs in the companion results document.
 
 **Spec:** The user’s instructions in this conversation, recorded in section 2, supersede the older resumable-pipeline design wherever they disagree. The user explicitly approved a file-level AI pass over saved details when a file requires multiple requests.
 
@@ -47,7 +47,7 @@ These are recommendations, not additional requirements attributed to the user:
 - Keep resume, cancellation, source/configuration freshness checks, and atomic publication. They are useful for large uploads and do not require execution-window machinery.
 - One run-wide optional output-token spending ceiling; no per-window budgets or automatic window rollover. Provider request timeouts and bounded retries remain internal settings.
 - Do not introduce cross-run incremental dependency caching in the first refactor. Reuse completed work within the same compatible run. Relinking saved results requires no AI.
-- Publish processed-but-incomplete semantic results with an explicit coverage report. A failed/missing extraction request does not silently replace the previous graph with a partial graph.
+- After bounded recovery, publish available validated details with explicit unresolved work and incomplete coverage. Never turn failed extraction into `no_operations` or a complete result. Fatal errors, stale inputs and unaccounted missing checkpoints preserve the previous graph.
 - Do not promise that sending every source byte proves every semantic relationship was discovered. Track processing coverage separately from semantic uncertainty.
 - Add a small AI-only source-context index using existing source snapshots and extraction records. This is scoped identifier lookup, not GraphRAG or a second knowledge store.
 - Persist versioned operation/dependency records with evidence, and use existing NetworkX tooling for graph traversal. Static analysis must not depend on the new AI index or tokenizers.
@@ -121,20 +121,27 @@ For a combined-window model:
 
 ```text
 C = effective context-token limit
-O = reserved output tokens for this request, <= effective output limit
 H = max(512, ceil(0.05 * C)) safety headroom
-I = min(explicit input limit if supplied, C - O - H)
+R = applicable reasoning reserve, only when separately charged to shared context
+U = C - H - R
+S = selected output share, 10–50%, default 30%
+O = min(floor(U * S / 100), model output limit if known)
+I = min(U - O, model input limit if known)
 fits = token_count(complete serialized request) <= I
 ```
 
-For explicitly separate input/output windows, reserve output against the output limit and subtract input headroom from the input limit; do not subtract output twice. If the fixed protocol alone cannot fit, stop with a configuration error before creating thousands of tiny parts.
+For explicitly separate windows, apply the share to independent output capacity and subtract safety from input capacity; output does not reduce input. If output capacity is absent, require an explicit run or saved Custom output allowance and explain that the percentage cannot certify an unknown capacity. Missing shared context requires confirmation. A missing optional output limit is shown as unreported, never as a verified maximum. If the fixed protocol cannot fit, stop before creating tiny parts.
 
-Illustration, not a provider claim: `C=70,000`, `O=8,000`, `H=3,500` permits at most `58,500` input tokens, including instructions, source, context, schema and framing. It is not an allowance of 70,000 source tokens or a fixed character count.
+Illustration, not a provider claim: shared `C=70,000`, no separate reasoning reserve and 30% output share yield `U=66,500`, `O=19,950`, `I=46,550`, including instructions, source, definitions, metadata, schema and framing. Count the full actual body and framing once; do not subtract the same protocol overhead again.
+
+Under **Use AI for analysis → AI budget overrides**, show **Maximum output share (%)**, effective input/output allowances, capacity/provenance and clamp explanations. Optional Advanced exact overrides take precedence over saved Custom output allowances; absent an explicit run override, saved Custom output caps the slider. Model limits always apply. Automatic profiles use the model-aware recommendation without an 8,192-token ceiling. Persist and pin the selection; compatible old checkpoints retain their original policy. Preview and dispatch use the same allocator and request builder. Dynamic routes require existing manual route-safe capacity confirmation; do not assume catalog maxima apply to every fallback or change routing.
 
 - Prefer an exact local tokenizer only when its mapping to the selected model is known. Reuse an existing supported counter if available; do not introduce a tokenizer registry/framework for arbitrary providers.
 - Otherwise retain a conservative, explicitly labelled estimate such as the existing UTF-8-byte estimate with framing and headroom. It may underuse the model, but removing the separate character cap still helps. Never advertise this estimate as exact or switch universally to `characters / 4`.
 - Count the actual serialized singleton/batch/consolidation payload, including context and schema. Recheck at dispatch, after any payload transformation.
-- Start output reservation from the configured model/profile output budget. Pack multiple items only if their estimated structured results fit that reservation. As a simple initial estimate, reuse a conservative source-size-based estimate for the **actual sent part**, then calibrate conservatively from completed responses; do not reuse the full parent’s length for every part.
+- Use the selected effective output budget. Pack multiple items only if their estimated structured results fit it. Retain the labelled deterministic estimate of 256 tokens per item plus half the actual source/saved-detail UTF-8 bytes; do not reuse the full parent's length for every part. No runtime ratio learning or arbitrary per-request allocation adjustment.
+- Initial provider wire payloads contain only stable instructions/schema, current batch source parts and relevant indexed definitions/references. Never replay responses, conversation history, continuation IDs or a growing summary. Provider prefix caching remains compatible. Gateway-internal history is outside application control; verify documented settings only and do not invent headers.
+- Show safe file/part counts, input estimate/allowance/counting method, expected/reserved output, utilization and packing stop reasons. Existing smaller-item fitting and fresh-work priority remain; do not starve large eligible work.
 - Output estimation cannot prove completeness. Explicit provider truncation, missing items, schema overflow, and a response indicating omitted results all require smaller work or an incomplete result—not acceptance as complete.
 - Remove arbitrary eight-item growth policy. The request’s input/output budget determines grouping. A high defensive response-size limit may remain, but must never silently discard results.
 - Preserve existing explicit source/network grants. Legacy character settings need a deliberate migration described in section 9; changing a capacity calculation must not bypass a real disclosure restriction.
@@ -142,7 +149,7 @@ Illustration, not a provider claim: `C=70,000`, `O=8,000`, `H=3,500` permits at 
 ### Token efficiency without sacrificing extraction coverage
 
 - Model capacity is a ceiling, not a fill target. Pack coherent units within the input budget **and** expected output budget; qualify batch sizes against independent semantic fixtures. Do not invent a universal percentage of context or files-per-batch threshold as an accuracy guarantee.
-- For illustration with 8,000 output tokens and 5% context headroom, combined windows of 70,000 / 200,000 / 1,000,000 permit input budgets of 58,500 / 182,000 / 942,000 tokens before protocol/source allocation, subject to any lower input cap. There is no derived fixed character limit.
+- At 30% output share and 5% headroom, shared windows of 70,000 / 200,000 / 1,000,000 permit output maxima of 19,950 / 57,000 / 285,000 and input allowances of 46,550 / 133,000 / 665,000, subject to lower limits and applicable reasoning. There is no derived fixed character cap or accuracy guarantee.
 - Reserve provider reasoning/thinking tokens according to that provider's actual accounting. If included in the output cap, do not subtract them twice; if separately charged against shared context, reserve them explicitly. Provider/model metadata governs this distinction.
 - Put shared instructions and one response schema before batch-specific data. Return facts and source references, not explanatory prose, chain-of-thought, full-source echoes or repeated long expressions. Do not compress away transformations, filters, scopes or uncertainty to reduce output tokens.
 - Deduplicate repeated definitions within a request. Send the actual file/part contents; summaries and catalog entries do not replace first-pass extraction of those contents.
@@ -200,7 +207,7 @@ After all initial parts finish, freeze a catalog revision including their saved 
 
 Completion must have a trigger: new relevant context absent from the original request. Do not resubmit every uncertain fact. Save an updated extraction revision with explicit superseded fact IDs; contradictory replacements remain unresolved instead of coexisting as accepted facts. Pin the context fingerprint and completion status for restart. Do not feed newly discovered completion definitions into repeated completion waves; remaining gaps stay reported. File consolidation consumes the updated part revisions and cannot initiate another project-wide loop.
 
-If an affected part's required completion context cannot fit, keep its saved extraction and record `completion_context_exceeds_budget`; do not silently clip a definition, increase the model limit or start recursive completion. Completion requests are optional semantic improvement work, so a recorded unresolved limit differs from a missing mandatory initial extraction. Network/protocol failures still use the ordinary pause/retry path.
+If an affected part's required completion context cannot fit, keep its saved extraction and record `completion_context_exceeds_budget`; do not silently clip a definition, increase the model limit or start recursive completion. Completion requests are optional semantic improvement work, so a recorded unresolved limit differs from missing initial extraction. Dispatched completion/consolidation failures use the same bounded recovery and partial-publication policy, retaining original facts and missing-context evidence.
 
 Acceptance example: a consumer in batch 1 calls a macro whose relevant definition is recognized in a later batch. The consumer alone receives the missing definition in completion; unaffected files are not resent. Changing batch order must not silently lose the known dependency. Cyclic or dynamic definitions may remain unresolved under the bounded policy.
 
@@ -267,8 +274,12 @@ Represent context completion as an `extracting` substage in persisted progress m
 - Journal physical dispatch/outcome sufficiently to recognize an interrupted request. Reuse the attempt records already added by this branch; do not implement a second ledger in summaries.
 - Resume skips completed parts, targeted completion requests and completed consolidation groups. Pin the stage/catalog revision and superseded fact membership. Source/config/model/prompt/schema changes make a paused run incompatible before new requests are sent.
 - An unknown response after dispatch may have been billed; preserve the existing explicit retry acknowledgement. Do not claim exactly-once billing.
-- Preview estimates requests/tokens without making provider calls. Ordinary continuation runs until pending work is complete, cancelled, or the single run ceiling is reached; there is no window-rollover concept.
-- Keep the previous published graph on failed/missing work or stale publication. If all required work was processed but some semantics remain uncertain, publish with the incomplete coverage clearly indicated.
+- Preview estimates requests/tokens without calls. Continue until work completes, reaches bounded unresolved status, is cancelled or hits an explicit ceiling; there is no window rollover.
+- After three unsuccessful item passes, save host-owned unresolved/partial records and continue other work. Preserve every successful sibling and original source range. HTTP/transport retry caps within each pass and unknown-outcome opt-in still apply; all attempts/reservations remain cumulative.
+- Publish available validated lineage with explicit incomplete coverage after bounded recovery. Record unresolved work IDs and distinguish unresolved items, unprocessed initial files and semantic gaps. Never label failed work complete or `no_operations`.
+- Explicit retry of a committed partial run grants only unresolved items another bounded cycle. Reuse successful checkpoints, frozen groups and supersessions after reopen. Advance the prior-publication pin to this run's own partial publication; other publication/source/configuration changes remain stale. Cancelled continuation does not renew bounded failure counts.
+- Defer freezing completion until initial required work resolves, and defer consolidation until initial/completion work resolves. This preserves one bounded completion wave and consistent consolidation inputs on later repair; partial views can retain unconsolidated details. Do not add recursive or project-wide AI passes.
+- Keep the previous graph on fatal errors, stale publication or missing checkpoints not explicitly accounted for as unresolved. Successful publication never proves semantic accuracy.
 
 ## 9. Keep/change/delete map and compatibility
 
@@ -408,7 +419,7 @@ Also expose `build_operation_graph(file_extractions) -> nx.MultiDiGraph` and `up
 - [ ] Test operation-level upstream traversal for a selected final resource/version, parallel dependency roles, successive writes, ambiguous ordering and cycles. Persist/reopen/rebuild must preserve IDs/evidence; independent components must be excluded from the target's upstream slice. No provider access or SQL generation is permitted in this test.
 - [ ] Include SAS RETAIN/BY/conditional OUTPUT fixtures that preserve either source-backed extracted behavior or explicit semantic limitations. Never turn an unsupported stateful operation into a supposedly equivalent ordinary join merely to make the graph complete.
 - [ ] Replace the old report-only link checkpoint plus separately rebuilt result flow. Assert the linker’s resolved identities and ambiguity decisions are reflected in the published graph.
-- [ ] Test atomic publication, stale sources and missing part failure preserve the previous graph; processed semantic uncertainty publishes an explicitly incomplete result.
+- [ ] Test atomic publication, stale sources and unaccounted missing checkpoints preserve the previous graph; bounded failures and semantic uncertainty publish explicitly incomplete results with later unresolved-only retry.
 - [ ] Run `python -m pytest tests/test_ai_linking.py tests/test_ai_full_build.py tests/test_dbt_ai_analysis.py tests/test_ai_analysis_persistence.py -q`.
 - [ ] Run `python -m pytest tests/test_ai_operation_graph.py -q`.
 

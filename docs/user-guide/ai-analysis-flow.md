@@ -12,6 +12,14 @@ Progress includes saved parts and current stage. Cancel preserves saved work and
 the previous graph. A compatible run can resume; an unknown response requires
 explicit retry acknowledgement because it may have been billed.
 
+**AI budget overrides** offers a 10–50% maximum output share (default 30%), effective
+allowances and capacity provenance. Optional Advanced exact overrides and saved
+Custom limits retain clear precedence; the selected allocation is pinned for resume.
+After bounded item recovery, available validated details publish with explicit
+incomplete coverage. **Retry unresolved AI work** retries only those items and
+reuses successful checkpoints. Incomplete initial/completion work defers later
+enrichment until repair. See [controls and recovery](ai-analysis-controls-and-recovery.md).
+
 An AI graph remains inferred and semantic completeness is not guaranteed. Processing
 coverage and semantic uncertainty are separate. Explicit Static builds use the
 static extractor even after an AI build. See [AI analysis](../AI_ANALYSIS.md).
