@@ -6,7 +6,7 @@ import json
 import uuid
 from collections import Counter
 from dataclasses import asdict
-from time import monotonic
+from time import monotonic, time
 
 from dataforge.ai_analysis_models import AnalysisReport, AnalysisRequest, FilePart
 from dataforge.ai_analysis_store import (
@@ -19,14 +19,26 @@ from dataforge.ai_analysis_store import (
     save_run,
     save_unit_result,
 )
-from dataforge.ai_batching import pack_request
+from dataforge.ai_batching import RECOVERY_FEEDBACK_RESERVE, pack_request
 from dataforge.ai_composition import (
+    ConsolidationWork,
     assemble_file_extraction,
     merge_extraction_revision,
     plan_file_consolidation,
 )
 from dataforge.ai_context import inventory_revision, plan_file_parts, prepare_analysis
-from dataforge.ai_context_index import build_context_index, context_for_part, plan_context_completion
+from dataforge.ai_context_index import (
+    build_context_index,
+    context_for_part,
+    plan_context_completion,
+    restore_part_context,
+)
+from dataforge.ai_extraction_recovery import (
+    recovery_wait,
+    response_metadata,
+    split_truncated_part,
+    validation_failure,
+)
 from dataforge.ai_pipeline_store import (
     attempt_totals,
     batch_attempts,
@@ -148,7 +160,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
     while pending:
         planned = pack_request(pending, profile, context)
         estimates.append(planned)
-        pending = pending[len(planned.part_ids):]
+        pending = [p for p in pending if p.part_id not in planned.part_ids]
     if cancelled and cancelled():
         raise InterruptedError('cancelled')
     preview = {'valid': True, 'mode': 'ai', 'source_kind': next((p.source_kind for p in parts), ''),
@@ -158,6 +170,7 @@ def _prepare(store, workspace, request, connections=None, cancelled=None, transp
         'estimated_input_tokens': sum(p.budget.input_count for p in estimates),
         'estimated_output_tokens': sum(p.reserved_output for p in estimates), 'limits': asdict(limits),
         'estimate_method': estimates[0].budget.count_method if estimates else '',
+        'packing': [p.packing for p in estimates],
         'disclosure': [{'file_id': s.file_id, 'path': s.path, 'content_hash': s.content_hash,
                         'characters': len(s.code), 'source_kind': s.source_kind} for s in prepared.sources]}
     return prepared, pinned, (profile_id, profile), context, preview
@@ -262,7 +275,12 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             details = {**json.loads(row['details']), 'manual_retry_baseline': len(history)}
                             store.execute('UPDATE ai_analysis_requests SET details=? WHERE batch_id=?', [json.dumps(details), row['batch_id']])
                 parts = [FilePart.model_validate(p) for p in summary['parts']]
+                pinned_index = build_context_index(prepared, [])
+                for part in parts:
+                    context['definitions'][part.part_id] = restore_part_context(pinned_index, part)
             counts['files'], counts['parts'] = len(prepared.sources), len(parts)
+            counts['processed'] = len(store.rows("SELECT unit_id FROM ai_analysis_units WHERE workspace_id=? AND run_id=? AND status='completed'",
+                                                  [workspace, run_id]))
             summary.update(protocol_version=5, request=request.model_dump(), pin=pin, parts=[p.model_dump() for p in parts],
                            retry_policy={'unknown_retries': profile.unknown_retries, 'shared_retries': profile.retries})
             save_run(store, workspace, run_id, mode='ai', status='extracting', manifest=prepared.manifest,
@@ -299,16 +317,73 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                                      [workspace, run_id])}
             pending = [p for p in work if p.part_id not in saved]
             errors = summary.setdefault('item_failures', {})
+            queue = summary.setdefault('recovery_queue', {})
+            def split_pending(parent, reason):
+                state = queue.setdefault(parent.part_id, {})
+                children = split_truncated_part(parent, context['sources'][parent.file_id], state.get('split_depth', 0))
+                if not children:
+                    return False
+                save_unit_result(store, workspace, run_id, parent.part_id, file_id=parent.file_id,
+                    content_hash=parent.content_hash, status='superseded', result={'contract': 'superseded5',
+                        'children': [p.part_id for p in children]})
+                state.update(recovery_action=reason, children=[p.part_id for p in children])
+                summary.setdefault('split_parts', {})[parent.part_id] = state
+                queue.pop(parent.part_id, None)
+                parts.remove(parent)
+                parts.extend(children)
+                pending.remove(parent)
+                pending.extend(children)
+                for child in children:
+                    queue[child.part_id] = {'split_depth': 1, 'parent': parent.part_id}
+                    work_context['definitions'][child.part_id] = work_context['definitions'].get(parent.part_id, [])
+                summary['parts'] = [p.model_dump() for p in parts]
+                counts['parts'] = len(parts)
+                return True
             while pending:
                 check()
                 truncated = False
-                planned = pack_request(pending, profile, work_context)
+                ready = [p for p in pending if not queue.get(p.part_id, {}).get('budget_blocked') and
+                         queue.get(p.part_id, {}).get('not_before', 0) <= time()]
+                if not ready:
+                    retryable = [p for p in pending if not queue.get(p.part_id, {}).get('budget_blocked')]
+                    if not retryable:
+                        raise TimeoutError('recovery_request_exceeds_budget')
+                    due = min(queue[p.part_id]['not_before'] for p in retryable)
+                    reason = queue[pending[0].part_id]['code']
+                    update(f'Waiting to retry {pending[0].work_kind}: {reason}. Cancel remains available.')
+                    checkpoint()
+                    recovery_wait(max(.01, due - time()), check)
+                    continue
+                # Fresh work goes first. A failed batch gets at most half its old
+                # width on the next pass; singleton failures remain isolated.
+                fresh = [p for p in ready if not queue.get(p.part_id, {}).get('failures')]
+                eligible = fresh or ready
+                width = min(queue.get(p.part_id, {}).get('batch_limit', len(eligible)) for p in eligible)
+                feedback = {p.part_id: {k: queue[p.part_id][k] for k in ('code', 'path', 'attempt')}
+                            for p in eligible if queue.get(p.part_id, {}).get('failures')}
+                try:
+                    planned = pack_request(eligible[:width], profile, {**work_context, 'recovery_feedback': feedback})
+                except ValueError as exc:
+                    # Feedback/overlap is sized in the actual body, too. This is
+                    # concrete size evidence, not permission for blind halving.
+                    if str(exc) not in {'complete_request_exceeds_input_budget', 'part_output_estimate_exceeds_budget',
+                                        'explicit_disclosure_limit_exceeded'}:
+                        raise
+                    parent = eligible[0]
+                    with store.transaction():
+                        if not split_pending(parent, 'split_request_budget'):
+                            queue.setdefault(parent.part_id, {}).update(code='recovery_request_exceeds_budget',
+                                budget_blocked=True, recovery_action='change_request_budget')
+                        checkpoint()
+                    continue
                 scheduled = [p for p in pending if p.part_id in planned.part_ids]
                 batch_id = stable_id(run_id, planned.serialized_payload)
                 save_request(store, workspace, run_id, batch_id, list(planned.part_ids),
                     details={'work_kind': scheduled[0].work_kind, 'budget': asdict(planned.budget),
+                             'packing': planned.packing,
                              'batch_number': len(store.rows('SELECT batch_id FROM ai_analysis_requests WHERE workspace_id=? AND run_id=?', [workspace, run_id])) + 1})
                 ticket = None
+                diagnostics, metadata, usage = {}, {}, {}
                 physical_started = monotonic()
                 def before_attempt(_profile):
                     nonlocal ticket, physical_started
@@ -375,7 +450,8 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                             attempt_observer=observed_failure,
                             retry_unknown_transports=bool(profile.unknown_retries)) as adapter:
                         raw, usage = adapter.complete(planned.system, planned.user)
-                        metadata = adapter.completion_metadata
+                        metadata = response_metadata(adapter.completion_metadata, usage)
+                        usage = metadata['usage']
                     if ticket:
                         finish_attempt(store, workspace, run_id, ticket, 'received',
                             details={**metadata, 'usage': usage})
@@ -387,18 +463,32 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                         if metadata.get('truncated'):
                             truncated = True
                             raise ValueError('truncated_extraction_response')
-                        valid, invalid = decode_extractions(raw, scheduled)
-                    except ValueError:
-                        valid, invalid = {}, {p.part_id: 'invalid_extraction_response' for p in scheduled}
+                        valid, invalid = decode_extractions(raw, scheduled, diagnostics=diagnostics)
+                    except ValueError as exc:
+                        code = str(exc) if str(exc) in {'invalid_extraction_json', 'invalid_extraction_envelope',
+                                                     'truncated_extraction_response'} else 'invalid_extraction_response'
+                        valid, invalid = {}, {p.part_id: code for p in scheduled}
                 except ProviderError as exc:
                     if ticket and store.rows('SELECT status FROM ai_analysis_attempts WHERE attempt_id=?', [ticket])[0]['status'] == 'dispatched':
                         observed_failure({'failure_category': 'invalid_response', 'outcome': 'known',
                                           'retry_scheduled': False, 'allowance_exhausted': False})
-                    if exc.unknown:
+                    if exc.unknown and not profile.unknown_retries:
                         raise TimeoutError('unknown_inflight_request_requires_explicit_retry') from None
                     if cancelled and cancelled():
                         raise InterruptedError('cancelled') from None
-                    raise TimeoutError(str(exc)) from None
+                    failure = summary.get('last_failure', {})
+                    category = failure.get('failure_category', 'invalid_response')
+                    if category not in {'pre_send', 'transport_unknown', 'invalid_response'} and not (
+                            category == 'http_failure' and (failure.get('http_status') == 429 or
+                                                          (failure.get('http_status') or 0) >= 500)):
+                        raise TimeoutError(category) from None
+                    valid, invalid = {}, {p.part_id: category for p in scheduled}
+                except TimeoutError as exc:
+                    # A previous process may have used up this pass. Do not
+                    # renew its allowance on resume; defer a new durable pass.
+                    if str(exc) != 'batch_retry_allowance_exhausted':
+                        raise
+                    valid, invalid = {}, {p.part_id: 'batch_retry_allowance_exhausted' for p in scheduled}
                 for part in scheduled:
                     item = valid.get(part.part_id)
                     if item is not None:
@@ -410,41 +500,56 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                                 original = (PartExtraction.model_validate(supplied) if part.work_kind == 'context_completion' else
                                     PartExtraction(part_id=part.part_id, operations=supplied['operations']))
                                 merge_extraction_revision(original, item)
+                        except ValueError as exc:
+                            diagnostics[part.part_id] = validation_failure(exc)
+                            invalid[part.part_id] = diagnostics[part.part_id]['code']
+                            item = None
+                        if item is not None:
+                            # Storage failures are blockers, not model repairs.
                             save_part_extraction(store, workspace, run_id, part, item)
                             counts['processed'] += 1
                             saved.add(part.part_id)
-                        except ValueError:
-                            invalid[part.part_id] = 'invalid_source_or_internal_reference'
                     if part.part_id not in saved:
                         errors[part.part_id] = errors.get(part.part_id, 0) + 1
-                store.execute("UPDATE ai_analysis_requests SET status='processed' WHERE batch_id=?", [batch_id])
                 counts['requests'], counts['reserved_output_tokens'] = attempt_totals(store, workspace, run_id)
-                checkpoint()
                 failed = [p for p in scheduled if p.part_id not in saved]
-                if truncated:
+                request_diagnostics = []
+                for part in failed:
+                    state = queue.setdefault(part.part_id, {})
+                    number = state.get('failures', 0) + 1
+                    detail = diagnostics.get(part.part_id, {'code': invalid.get(part.part_id, 'missing_extraction_item'), 'path': ''})
+                    state.update(failures=number, attempt=number, code=detail['code'], path=detail['path'],
+                        batch_limit=max(1, len(scheduled) // 2),
+                        not_before=time() + min(60, 2 ** min(number - 1, 6)),
+                        recovery_action='isolate' if len(scheduled) <= 2 else 'smaller_batch')
+                    history = batch_attempts(store, workspace, run_id, batch_id)
+                    request_diagnostics.append({**detail, 'stage': stage, 'request_id': batch_id,
+                        'part_id': part.part_id, 'attempt_number': len(history), 'recovery_pass': number,
+                        'recovery_action': state['recovery_action'], 'response': metadata,
+                        'reserved_output_tokens': planned.reserved_output})
+                if '__envelope__' in diagnostics:
+                    request_diagnostics.append({**diagnostics['__envelope__'], 'stage': stage, 'request_id': batch_id,
+                        'part_id': None, 'attempt_number': len(batch_attempts(store, workspace, run_id, batch_id)),
+                        'recovery_action': 'ignore_unknown_id', 'response': metadata,
+                        'reserved_output_tokens': planned.reserved_output})
+                # Reduce a truncated multi-item batch first. A singleton can
+                # split once, with explicit parent/children and exact core ranges.
+                if truncated and len(scheduled) == 1:
                     for parent in list(failed):
-                        if parent.work_kind != 'extraction' or parent.end_offset - parent.start_offset < 2:
-                            continue
-                        middle = (parent.start_offset + parent.end_offset) // 2
-                        children = [parent.model_copy(update={
-                            'part_id': stable_id('extraction5', parent.file_id, parent.content_hash, str(a), str(b)),
-                            'start_offset': a, 'end_offset': b}) for a, b in
-                            ((parent.start_offset, middle), (middle, parent.end_offset))]
-                        save_unit_result(store, workspace, run_id, parent.part_id, file_id=parent.file_id,
-                            content_hash=parent.content_hash, status='superseded', result={'contract': 'superseded5'})
-                        parts.remove(parent)
-                        parts.extend(children)
-                        pending.remove(parent)
-                        pending.extend(children)
-                        for child in children:
-                            work_context['definitions'][child.part_id] = work_context['definitions'].get(parent.part_id, [])
-                        failed.remove(parent)
-                    summary['parts'] = [p.model_dump() for p in parts]
-                    counts['parts'] = len(parts)
+                        if split_pending(parent, 'split_truncated_source'):
+                            request_diagnostics[0]['recovery_action'] = 'split_truncated_source'
+                            failed.remove(parent)
+                for part in scheduled:
+                    if part.part_id in saved:
+                        queue.pop(part.part_id, None)
+                details = json.loads(store.rows('SELECT details FROM ai_analysis_requests WHERE batch_id=?', [batch_id])[0]['details'])
+                # Atomic queue/status checkpoint: an interrupted recovery pass
+                # cannot look processed while losing its delay/feedback state.
+                with store.transaction():
+                    store.execute("UPDATE ai_analysis_requests SET status='processed',details=? WHERE batch_id=?",
+                        [json.dumps({**details, 'diagnostics': request_diagnostics}), batch_id])
                     checkpoint()
-                if any(errors[p.part_id] >= 2 for p in failed):
-                    raise ValueError('missing_or_invalid_required_extraction')
-                pending = [p for p in pending if p.part_id not in saved]
+                pending = [p for p in pending if p.part_id not in saved and p not in failed] + failed
 
         stage = 'extracting'
         update('Extracting file contents')
@@ -457,13 +562,15 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 'definitions': w.context.wire, 'catalog_revision': w.catalog_revision} for w in works]
             checkpoint()
         works = summary['completion_work']
+        stage = 'validating'
         completion_context = {**context, 'definitions': {w['part']['part_id']: w['definitions'] for w in works},
             'work_inputs': {w['part']['part_id']: initial[w['original']][1].model_dump() for w in works}}
         bounded = []
         for work in works:
             part = FilePart.model_validate(work['part'])
             try:
-                pack_request([part], profile, completion_context)
+                pack_request([part], profile, {**completion_context,
+                    'recovery_feedback': {part.part_id: RECOVERY_FEEDBACK_RESERVE}})
                 bounded.append(part)
             except ValueError:
                 initial[work['original']][1].unresolved.append('completion_context_exceeds_budget')
@@ -476,13 +583,49 @@ def run_analysis(store, workspace, request, *, connections=None, authorize=None,
                 initial[original.part_id] = (original, merge_extraction_revision(item, saved[work['part']['part_id']]))
         stage = 'consolidating'
         checkpoint()
+        file_work, consolidation_inputs, consolidation_parts = {}, {}, []
+        file_parts_by_id = {s.file_id: [(p, r) for p, r in initial.values() if p.file_id == s.file_id]
+                            for s in prepared.sources if s.source_kind in {'sql', 'sas', 'dbt'}}
+        if 'consolidation_work' not in summary:
+            # Before this queue existed, group fitting did not reserve feedback.
+            # Recreate that fitting only for an already-started consolidation
+            # stage, retaining its stable IDs, attempts and saved supersessions.
+            prior_groups = any(p.work_kind == 'consolidation' for p, _ in load_file_parts(store, workspace, run_id)) or any(
+                json.loads(row['details']).get('work_kind') == 'consolidation' for row in store.rows(
+                    'SELECT details FROM ai_analysis_requests WHERE workspace_id=? AND run_id=?', [workspace, run_id]))
+            frozen_work = []
+            for file_parts in file_parts_by_id.values():
+                for group in plan_file_consolidation(file_parts, profile, context=context, reserve_feedback=not prior_groups):
+                    frozen_work.append({'part': group.part.model_dump(), 'overflow': group.overflow,
+                        'operation_hashes': [_hash(op) for op in group.inputs['operations']],
+                        'part_ids': group.inputs['part_ids']})
+            summary['consolidation_work'] = frozen_work
+            checkpoint()
+        # Pin membership as references to existing durable facts, not another
+        # copy of their potentially large operation/column payloads.
+        operations_by_hash = {_hash(op.model_dump()): op.model_dump()
+                              for _, result in initial.values() for op in result.operations}
+        groups_by_file = {}
+        for frozen_group in summary['consolidation_work']:
+            part = FilePart.model_validate(frozen_group['part'])
+            if any(key not in operations_by_hash for key in frozen_group['operation_hashes']):
+                raise ValueError('pinned_consolidation_inputs_unavailable')
+            group = ConsolidationWork(part, {'operations': [operations_by_hash[key] for key in frozen_group['operation_hashes']],
+                'part_ids': frozen_group['part_ids']}, frozen_group['overflow'])
+            groups_by_file.setdefault(part.file_id, []).append(group)
         for source in prepared.sources:
             if source.source_kind not in {'sql', 'sas', 'dbt'}:
                 continue
-            file_parts = [(p, r) for p, r in initial.values() if p.file_id == source.file_id]
-            groups = plan_file_consolidation(file_parts, profile, context=context)
-            execute([g.part for g in groups if not g.overflow],
-                {**context, 'work_inputs': {g.part.part_id: g.inputs for g in groups if not g.overflow}})
+            file_parts = file_parts_by_id[source.file_id]
+            groups = groups_by_file.get(source.file_id, [])
+            file_work[source.file_id] = (file_parts, groups)
+            consolidation_parts.extend(g.part for g in groups if not g.overflow)
+            consolidation_inputs.update({g.part.part_id: g.inputs for g in groups if not g.overflow})
+        execute(consolidation_parts, {**context, 'work_inputs': consolidation_inputs})
+        for source in prepared.sources:
+            if source.file_id not in file_work:
+                continue
+            file_parts, groups = file_work[source.file_id]
             consolidated = [r for p, r in load_file_parts(store, workspace, run_id, source.file_id) if p.work_kind == 'consolidation']
             final = assemble_file_extraction(source, file_parts, consolidated,
                 provenance={'profile': execution_profile(profile), 'prompt': pin['protocol'], 'schema': 5})
@@ -558,4 +701,7 @@ def analysis_report(store, workspace, run_id=None, *, include_source=False):
     if report is None:
         raise ValueError('Analysis report not found')
     report.pop('configuration', None)
+    report['recent_requests'] = [{**row, 'details': json.loads(row['details'])} for row in store.rows(
+        'SELECT batch_id,status,details FROM ai_analysis_requests WHERE workspace_id=? AND run_id=? ORDER BY rowid DESC LIMIT 20',
+        [workspace, report['run_id']])]
     return report

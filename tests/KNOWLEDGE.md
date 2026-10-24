@@ -118,6 +118,7 @@ Timeout/progress regressions cover3600 acceptance/3601 rejection, remaining-run 
 
 
 ## Protocol 5 AI coverage
+- `test_ai_extraction_recovery.py` — Invalid/missing/duplicate/unknown IDs, schema/citation/JSON failures, safe feedback, sibling persistence, progressive batching, cancellation/backoff, reopened queue and spending limits, bounded truncation/overlap, consolidation fairness, usage normalization and old-part pinned-context restoration. Mock qualification only.
 - `test_ai_file_parts.py`, `test_ai_adaptive_context.py`, `test_ai_analysis_context.py`, `test_ai_batching.py` — Final-envelope token fitting, whole-file preference, contiguous Unicode/CRLF and large SQL/SAS/dbt coverage, repeated roles and >100 inputs, partial/duplicate IDs.
 - `test_ai_token_budget.py`, `test_ai_budget.py` — 70k/200k/1m limits, separate windows/reasoning, explicit disclosure migration and optional pinned offline tokenizer.
 - `test_ai_context_index.py`, `test_ai_source_context.py`, `test_dbt_ai_context.py` — Scoped/quoted declarations, authorization and deduplicated relevant source context.

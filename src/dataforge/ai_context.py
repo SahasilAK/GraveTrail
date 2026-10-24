@@ -28,7 +28,7 @@ class SourceSnapshot:
 def plan_file_parts(source, context, limits):
     """Prefer whole files; split exact contiguous ranges, never semantic products."""
     from dataforge.ai_analysis_models import FilePart
-    from dataforge.ai_batching import pack_request
+    from dataforge.ai_batching import RECOVERY_FEEDBACK_RESERVE, pack_request
     if source.source_kind not in {'sql', 'sas', 'dbt'}:
         return []
     def part(start, end, index):
@@ -49,6 +49,7 @@ def plan_file_parts(source, context, limits):
             from dataforge.ai_context_index import context_for_part
             definitions[candidate.part_id] = context_for_part(context['index'], candidate, context['context_budget']).wire
         return pack_request([candidate], limits, {'sources': {source.file_id: source}, 'definitions': definitions,
+                                                  'recovery_feedback': {candidate.part_id: RECOVERY_FEEDBACK_RESERVE},
                                                   'settings': context.get('settings', {})})
     # Fail fixed protocol/configuration errors before trying source subdivisions.
     probe = part(0, 0, 0)

@@ -67,13 +67,13 @@ class ConsolidationWork:
     overflow: bool = False
 
 
-def plan_file_consolidation(parts, limits, *, context=None):
+def plan_file_consolidation(parts, limits, *, context=None, reserve_feedback=True):
     """Pack whole dependency components; never split an operation's evidence."""
     from types import SimpleNamespace
 
     import networkx as nx
 
-    from dataforge.ai_batching import pack_request
+    from dataforge.ai_batching import RECOVERY_FEEDBACK_RESERVE, pack_request
     from dataforge.ai_linking import _resource_key
 
     if len(parts) < 2:
@@ -117,6 +117,7 @@ def plan_file_consolidation(parts, limits, *, context=None):
             'end_offset': max(p.end_offset for p, _ in selected), 'context_references': evidence})
         actual_context = {**context, 'sources': context.get('sources', {
             base.file_id: SimpleNamespace(code='', path='')}),
+            'recovery_feedback': {part.part_id: RECOVERY_FEEDBACK_RESERVE} if reserve_feedback else {},
             'work_inputs': {part.part_id: inputs}}
         try:
             pack_request([part], limits, actual_context)

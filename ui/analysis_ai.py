@@ -69,6 +69,10 @@ def controls(store, workspace, file_ids):
             for profile in profiles:
                 st.caption(profile['provider'] + ' · ' + profile['model'])
         st.json(preview['limits'], expanded=False)
+        with st.expander('Request budget estimates'):
+            st.caption('Output allowance is configured per request. Advertised model capacity may vary with gateway routing. '
+                       'Packing reports eligible work, input utilization, expected output and any limiting budget.')
+            st.json(preview.get('packing', []), expanded=False)
         with st.expander('Source disclosure preview'):
             st.dataframe(preview['disclosure'], hide_index=True, alt='Pinned selected sources and hashes')
         return request, True
@@ -149,7 +153,8 @@ def report(store, workspace):
     if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
         from dataforge.ai_pipeline_store import recover_pipeline
         unknown = bool(result['summary'].get('inflight') or recover_pipeline(store, workspace, selected)['unknown'])
-        exhausted = summary.get('last_failure', {}).get('allowance_exhausted') or 'batch_retry_allowance_exhausted' in summary.get('reasons', [])
+        exhausted = not summary.get('recovery_queue') and (summary.get('last_failure', {}).get('allowance_exhausted') or
+                                                         'batch_retry_allowance_exhausted' in summary.get('reasons', []))
         needs_ack = exhausted or (unknown and not summary.get('retry_policy', {}).get('unknown_retries', 0))
         retry = st.checkbox('Retry the unfinished batch (may incur a duplicate charge; renews the bounded retry allowance)', key='ai_retry_' + selected) if needs_ack else False
         if summary.get('protocol_version') != 5:
@@ -172,6 +177,14 @@ def report(store, workspace):
     if summary.get('last_failure'):
         with st.expander('Connection diagnostics'):
             st.json(summary['last_failure'])
+    if summary.get('recovery_queue'):
+        with st.expander('Pending extraction recovery'):
+            st.caption('Required work remains pending. Recovery continues with smaller batches and backoff; Cancel retains saved progress.')
+            st.json(summary['recovery_queue'], expanded=False)
+    if result.get('recent_requests'):
+        with st.expander('Recent request and extraction diagnostics'):
+            st.caption('Safe validation codes, field paths, recovery actions and request budgets. Raw responses are not retained.')
+            st.json(result['recent_requests'], expanded=False)
     st.dataframe([{'Claim': c['claim_id'], 'Kind': c['kind'], 'Outcome': c['status'],
                    'Reasons': ', '.join(c['reasons'])} for c in result['claims']],
                  hide_index=True, alt='Source validation outcomes for AI candidates')

@@ -5,7 +5,7 @@ import json
 from copy import deepcopy
 from functools import lru_cache
 
-from pydantic import Field, create_model
+from pydantic import Field, ValidationError, create_model
 
 from dataforge.ai_analysis_models import (
     AssetCandidate,
@@ -30,10 +30,13 @@ class SourceCitationError(ValueError):
     """A fixed host code, safe to retain without source text or provider input."""
 
 
-def decode_extractions(payload, expected_parts):
+def decode_extractions(payload, expected_parts, *, diagnostics=None):
     from dataforge.ai_analysis_models import PartExtraction
     if isinstance(payload, str):
-        payload = json.loads(payload)
+        try:
+            payload = json.loads(payload)
+        except (ValueError, RecursionError):
+            raise ValueError('invalid_extraction_json') from None
     if not isinstance(payload, dict) or set(payload) != {'items'} or not isinstance(payload['items'], list):
         raise ValueError('invalid_extraction_envelope')
     expected = {p.part_id for p in expected_parts}
@@ -42,6 +45,8 @@ def decode_extractions(payload, expected_parts):
         pid = item.get('part_id') if isinstance(item, dict) else None
         if not isinstance(pid, str) or pid not in expected:
             errors[str(pid)] = 'unknown_response_part'
+            if diagnostics is not None:
+                diagnostics['__envelope__'] = {'code': 'unknown_response_part', 'path': 'items.part_id'}
             continue
         if pid in seen:
             valid.pop(pid, None)
@@ -50,8 +55,18 @@ def decode_extractions(payload, expected_parts):
         seen.add(pid)
         try:
             valid[pid] = PartExtraction.model_validate(item)
-        except ValueError:
+        except ValidationError as exc:
             errors[pid] = 'invalid_extraction_item'
+            if diagnostics is not None:
+                # Only schema-owned names and integer array positions, never input,
+                # arbitrary extra keys, validator messages or provider values.
+                schema = PartExtraction.model_json_schema()
+                names = set(schema.get('properties', {}))
+                for definition in schema.get('$defs', {}).values():
+                    names.update(definition.get('properties', {}))
+                loc = exc.errors(include_input=False, include_url=False)[0]['loc']
+                path = '.'.join(str(p) if type(p) is int or p in names else '<field>' for p in loc)
+                diagnostics[pid] = {'code': 'invalid_extraction_item', 'path': path[:200]}
     for pid in expected - valid.keys():
         errors.setdefault(pid, 'missing_extraction_item')
     return valid, errors

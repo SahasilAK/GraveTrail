@@ -12,7 +12,7 @@ from dataforge.store import Store
 
 
 @pytest.mark.parametrize('failure', ['source_change', 'cancel', 'invalid_evidence', 'permission_change'])
-def test_failed_or_stale_build_preserves_previous_graph(tmp_path, failure):
+def test_failed_or_stale_build_preserves_previous_graph(tmp_path, monkeypatch, failure):
     store = Store(tmp_path)
     w = store.create_workspace('atomic publication')
     configured(store, w)
@@ -20,6 +20,10 @@ def test_failed_or_stale_build_preserves_previous_graph(tmp_path, failure):
     analyze(store, w)
     previous = store.edges(w)
     cancelled = [False]
+    def stop(seconds, check):
+        cancelled[0] = True
+        check()
+    monkeypatch.setattr('dataforge.analysis_service.recovery_wait', stop)
     seen = []
     normal = empty_provider(seen)
     def provider(request):
@@ -37,7 +41,7 @@ def test_failed_or_stale_build_preserves_previous_graph(tmp_path, failure):
             return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps(body)}}]})
         return normal(request)
     result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider), cancelled=lambda: cancelled[0])
-    assert result.status in {'stale', 'cancelled', 'failed'}
+    assert result.status == ('cancelled' if failure in {'cancel', 'invalid_evidence'} else 'stale')
     assert store.edges(w) == previous
     assert not store.rows("SELECT * FROM ai_analysis_runs WHERE status='committed'")
     store.close()

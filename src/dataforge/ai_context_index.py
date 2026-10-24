@@ -159,6 +159,24 @@ def context_for_part(index, part, budget, *, symbols=None):
     return result
 
 
+def restore_part_context(index, part):
+    """Rehydrate exactly pinned definitions, even if new fitting changes ranges."""
+    wire = []
+    for entry_id in part.context_ids:
+        candidates = [e for e in index.entries if e.entry_id == entry_id]
+        if len(candidates) != 1 or not _allowed(candidates[0], index.sources):
+            raise ValueError('pinned_context_unavailable')
+        entry = candidates[0]
+        if any(r not in part.context_references for r in entry.evidence):
+            raise ValueError('pinned_context_unavailable')
+        wire.append({**entry.model_dump(), 'source': '\n'.join(
+            index.sources[r.file_id].code[r.start_offset:r.end_offset] for r in entry.evidence)})
+    fingerprint = hashlib.sha256(json.dumps(wire, sort_keys=True).encode()).hexdigest()
+    if part.context_hashes and part.context_hashes != [fingerprint]:
+        raise ValueError('pinned_context_unavailable')
+    return wire
+
+
 @dataclass(frozen=True)
 class CompletionWork:
     part: object

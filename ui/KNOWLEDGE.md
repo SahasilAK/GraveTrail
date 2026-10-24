@@ -2,6 +2,8 @@
 
 Shared Streamlit presentation and provider/assistance forms. Uses dataforge services; source content is loaded lazily.
 
+`analysis_ai.py` exposes request-budget estimates, configured versus advertised output capacity, pending recovery and recent safe request diagnostics. Active workers retain Cancel during HTTP waits/backoff; completed split ancestry is separate from pending work.
+
 ## Subfolders
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 

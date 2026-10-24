@@ -116,7 +116,7 @@ def test_consolidation_can_explicitly_replace_operation_fragments():
     assert not any(d.get('unresolved') for _, d in build_operation_graph([final]).nodes(data=True))
 
 
-def test_unknown_completion_supersession_is_not_saved_as_completed(tmp_path):
+def test_unknown_completion_supersession_is_not_saved_as_completed(tmp_path, monkeypatch):
     import json
 
     from dataforge.ai_analysis_store import load_file_parts
@@ -125,6 +125,11 @@ def test_unknown_completion_supersession_is_not_saved_as_completed(tmp_path):
     configured(store, w)
     Importer(store, w).files([('consumer.sas', b'%load;'), ('definition.sas', b'opaque load;')], {'.sas'})
     poisoned = [True]
+    stopped = [False]
+    def stop(seconds, check):
+        stopped[0] = True
+        check()
+    monkeypatch.setattr('dataforge.analysis_service.recovery_wait', stop)
     def provider(request):
         ctx = json.loads(json.loads(request.content)['messages'][-1]['content'])
         items = []
@@ -141,12 +146,18 @@ def test_unknown_completion_supersession_is_not_saved_as_completed(tmp_path):
                 result['superseded_fact_ids'] = ['bogus']
             items.append(result)
         return httpx.Response(200, json={'choices': [{'message': {'content': json.dumps({'items': items})}}]})
-    first = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
-    assert first.status == 'failed'
-    assert all(p.work_kind != 'context_completion' for p, _ in load_file_parts(store, w, first.run_id))
+    first = run_analysis(store, w, AnalysisRequest(mode='ai'), cancelled=lambda: stopped[0], transport=httpx.MockTransport(provider))
+    assert first.status == 'cancelled'
+    initial = load_file_parts(store, w, first.run_id)
+    assert len(initial) == 2 and all(p.work_kind == 'extraction' for p, _ in initial)
+    assert any(r.definitions for _, r in initial)
+    assert not store.rows('SELECT * FROM analysis_runs')
     poisoned[0] = False
+    stopped[0] = False
+    monkeypatch.setattr('dataforge.analysis_service.time', lambda: 1e12)
     resumed = run_analysis(store, w, AnalysisRequest(mode='ai', resume_run_id=first.run_id), transport=httpx.MockTransport(provider))
     assert resumed.status == 'committed', resumed.reasons
+    assert all(record in load_file_parts(store, w, first.run_id) for record in initial)
     store.close()
 
 

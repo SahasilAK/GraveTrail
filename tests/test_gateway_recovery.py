@@ -60,7 +60,7 @@ def test_failure_retry_keeps_each_attempt_and_reservation(tmp_path, failure):
     store.close()
 
 
-def test_http_and_unknown_retries_share_durable_budget_across_restart(tmp_path):
+def test_http_and_unknown_passes_share_explicit_run_budget_across_restart(tmp_path):
     store, w = setup_run(tmp_path, unknown=2)
     calls = []
     def provider(request):
@@ -68,9 +68,10 @@ def test_http_and_unknown_retries_share_durable_budget_across_restart(tmp_path):
         if len(calls) == 1:
             return httpx.Response(503)
         raise httpx.ReadTimeout('lost response')
-    first = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
+    first = run_analysis(store, w, AnalysisRequest(mode='ai', max_provider_attempts=3), transport=httpx.MockTransport(provider))
     assert first.status == 'awaiting_continuation'
     assert len(calls) == 3
+    assert first.reasons == ['run_attempt_ceiling_reached']
     assert [r['status'] for r in store.rows('SELECT status FROM ai_analysis_attempts')] == ['known_failure', 'unknown', 'unknown']
     store.close()
     store = Store(tmp_path)
@@ -295,7 +296,7 @@ def test_received_but_uncheckpointed_response_consumes_recovery_allowance(tmp_pa
     store, w = setup_run(tmp_path, unknown=1, retries=2)
     original = service.plan_file_consolidation
     monkeypatch.setattr(service, 'plan_file_consolidation', lambda *a, **k: (_ for _ in ()).throw(ValueError('stopped before publication')))
-    first = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(empty_provider([])))
+    first = run_analysis(store, w, AnalysisRequest(mode='ai', max_provider_attempts=2), transport=httpx.MockTransport(empty_provider([])))
     assert first.status == 'failed'
     # Reconstruct a crash window after receipt but before result checkpointing.
     store.execute('DELETE FROM ai_analysis_units WHERE run_id=?', [first.run_id])
@@ -319,7 +320,7 @@ def test_received_but_uncheckpointed_response_consumes_recovery_allowance(tmp_pa
     store.close()
 
 
-def test_invalid_model_item_cannot_multiply_the_automatic_network_budget(tmp_path):
+def test_invalid_model_item_and_transport_recovery_share_run_spending_budget(tmp_path):
     store, w = setup_run(tmp_path, unknown=2, retries=2)
     calls = []
     def provider(request):
@@ -327,7 +328,7 @@ def test_invalid_model_item_cannot_multiply_the_automatic_network_budget(tmp_pat
         if len(calls) == 2:
             return httpx.Response(200, json={'choices': [{'message': {'content': '{"items":[]}'}}]})
         raise httpx.ReadTimeout('lost')
-    result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider))
+    result = run_analysis(store, w, AnalysisRequest(mode='ai', max_provider_attempts=3), transport=httpx.MockTransport(provider))
     assert result.status == 'awaiting_continuation'
     assert len(calls) == 3
     assert result.counts['reserved_output_tokens'] == 24000
