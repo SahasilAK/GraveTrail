@@ -19,6 +19,14 @@ The prior Linux CI run had **1245 passed, 4 skipped**, with only the stale palet
 assertion failing; its failure cancelled the Windows matrix job. Hosted reruns are
 reported separately from these local checks.
 
+A follow-up Windows Python 3.12 full run had **1243 passed, 5 skipped** and two
+silent-socket deadline harness failures. The harness accelerated preparation by
+200x and could exhaust its deadline before dispatch. Acceleration now starts
+only after the local server receives the request; an injected 200ms preparation
+delay reproduces the old failure and passes with the corrected clock. Existing
+one-request, interruption-before-read-timeout and unknown-accounting assertions
+remain unchanged. Gateway recovery/socket and theme checks: **53 passed**.
+
 ## AI visibility verification — 2026-10-24
 
 Final source suite: **1136 passed, 2 skipped, 1 existing theme/config failure** in

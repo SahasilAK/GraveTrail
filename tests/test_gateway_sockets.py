@@ -85,16 +85,24 @@ def test_real_gateway_wait_or_bounded_retry(tmp_path, mode):
 def test_silent_socket_is_interrupted_without_waiting_for_read_timeout(tmp_path, monkeypatch, stop, unlimited):
     store, w = setup_run(tmp_path)
     start = time.monotonic()
-    if stop == 'deadline':
-        monkeypatch.setattr('dataforge.analysis_service.monotonic', lambda: (time.monotonic() - start) * 200)
     with gateway('silent') as (url, calls):
+        if stop == 'deadline':
+            def deadline_clock():
+                now = time.monotonic()
+                # Accelerate the silent socket, not preparation on slower runners.
+                return now + ((now - calls[0]) * 199 if calls else 0)
+            monkeypatch.setattr('dataforge.analysis_service.monotonic', deadline_clock)
         set_endpoint(store, w, url, 5)
         if unlimited:
             row = store.rows('SELECT profile_id,config FROM llm_profiles')[0]
             config = json.loads(row['config'])
             config['wait_until_stopped'] = True
             store.execute('UPDATE llm_profiles SET config=? WHERE profile_id=?', [json.dumps(config), row['profile_id']])
+        def slow_preparation(_fraction, activity):
+            if stop == 'deadline' and activity == 'Preparing selected sources':
+                time.sleep(.2)
         result = run_analysis(store, w, AnalysisRequest(mode='ai', max_seconds=30 if stop == 'deadline' else None),
+            progress=slow_preparation,
             cancelled=(lambda: bool(calls) and time.monotonic() - calls[0] > .2) if stop == 'cancel' else None)
         assert result.status == ('cancelled' if stop == 'cancel' else 'awaiting_continuation'), result.reasons
         assert time.monotonic() - start < 2
