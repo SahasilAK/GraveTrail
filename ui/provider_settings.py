@@ -205,7 +205,8 @@ def render(store: Store, workspace: str) -> None:
                 st.session_state[model_key] = selected
         st.selectbox("Fetched models", models, index=None, key=fetched_key,
                      placeholder="Select a fetched model", on_change=select_model)
-    model = st.text_input("Model or deployment identifier", config.get("model", ""), key=model_key,
+    st.session_state.setdefault(model_key, config.get("model", ""))
+    model = st.text_input("Model or deployment identifier", key=model_key,
                           help="Select a fetched model above or type an identifier available to your account.")
     try:
         profile = Profile(model=model or 'connection-check', **values)
