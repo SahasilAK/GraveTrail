@@ -51,6 +51,12 @@ cleanup/restore and CLI/MCP authorization are relevant. This repository does not
 a supported-version matrix or guaranteed security maintenance period. Include the exact
 revision or package version you tested; verify fixes on the intended target platform.
 
+On 2026-10-25, the locked build extra's setuptools was updated from 84.0.0 to
+84.1.0 for [GHSA-xmj3-9gf7-h52w](https://github.com/pypa/setuptools/security/advisories/GHSA-xmj3-9gf7-h52w).
+The complete locked-dependency and clean installed-wheel audits remain enabled;
+no advisory is ignored. This is a build-tool lock update, not a runtime dependency
+or data-format change.
+
 ## Temporary Streamlit/Pillow compatibility exception
 
 The source lock and installers use exact **Streamlit 1.66.0 / Pillow 13.0.0** pins. Pillow 13 fixes the reported advisories; Streamlit 1.66's metadata still caps Pillow below 13. The only override is `pillow==13.0.0`, declared in `pyproject.toml` and the companion `dependency-overrides.txt`. Pin parity, the sole expected metadata discrepancy, image modes/resizing, public Streamlit image rendering and distribution boundaries are tested. This does not claim upstream support or universal compatibility.

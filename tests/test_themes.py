@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 
 
-def test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean() -> None:
-    """Verify that palette choices preserve ocean and ink and default to ocean."""
+def test_palette_choices_preserve_original_ocean_and_ink() -> None:
+    """Keep original palettes stable independently of the saved theme selection."""
     from ui.themes import PRESETS
 
     assert list(PRESETS)[:2] == ["Ocean dark", "Ink dark"]
@@ -19,8 +19,6 @@ def test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean() -> None:
     assert PRESETS["Ink dark"] == dict(base="dark", primaryColor="#4169ad", backgroundColor="#17191e",
         secondaryBackgroundColor="#22252c", textColor="#eceef2", borderColor="#404650", linkColor="#a9bfe7",
         chartCategoricalColors=["#a9bfe7", "#8abaaa", "#d4b482", "#bea4ca"])
-    from ui.themes import current_preset
-    assert current_preset(".streamlit/config.toml") == "Ocean dark"
 
 
 def test_theme_presets_apply_both_modes_and_preserve_other_configuration(tmp_path: Path) -> None:

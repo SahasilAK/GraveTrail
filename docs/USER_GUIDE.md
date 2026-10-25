@@ -203,7 +203,8 @@ remain adjustable for the current exploration. Preferences belong to each worksp
 included in safe configuration transfers.
 
 **Color themes:** In Workspace settings → Appearance choose a preset, then click
-**Apply theme**. **Ocean dark** is the default; its original colors and those of
+**Apply theme**. The saved configuration selects the active theme; the checked-in
+configuration currently selects **Crimson Forge**. The original **Ocean dark** colors and those of
 **Ink dark** are preserved. Nine additional palettes are available: **Obsidian & Ember**,
 **Arctic Mint**, **Amethyst Terminal**, **Fossil & Copper**, **Carbon & Volt**,
 **Crimson Forge**, **Cobalt Atlas**, **Rose Circuit**, and **Steel Glacier**.

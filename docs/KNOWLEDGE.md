@@ -113,3 +113,5 @@ AI_ANALYSIS and LLM_INTEGRATION document shared durable live counters, opt-in mi
 Live analysis streaming is disabled after the observed wire-overhead regression. Integration, analysis and recovery guides mark reasoning code as retained/inactive; TESTING/results record the non-streaming rollback.
 
 Diagnostics focused AI assistance: USER_GUIDE documents source-backed resource proposals, explicit inferred acceptance and conservative grounding limits. CLI_GUIDE/MCP_INTEGRATION enumerate optional prepared-request fingerprint pins for both entry points.
+
+TESTING records PR 32's setuptools security lock update and audits, plus theme tests independent of the saved user palette; dated prior failures remain historical.

@@ -64,7 +64,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_sql.py` — Behavioral regression tests for sql. Run with pytest; temporary runtime data only.
 - `test_parser_static_wrappers.py` — PostgreSQL SQL procedure/Snowflake literal wrappers and SAS %LET expressions; conservative runtime/bind/mutation rejection, nesting/resource bounds, exact LF/CRLF evidence, persisted service queries, warm caches and newline-tamper detection. Subprocess deadline covers 100k-space/comment ReDoS; header variants and dialect-specific comment nesting preserve the procedure guard.
 - `test_store.py` — Behavioral regression tests for store. Run with pytest; temporary runtime data only.
-- `test_themes.py` — Exact Ocean/Ink preservation and Ocean default, eleven atomic preset saves, sidebar-layout transitions, invalid-sidebar rollback, custom native-color startup, semantic graph roles and readable action/link contrast.
+- `test_themes.py` — Exact original Ocean/Ink preservation independently of saved theme selection, eleven atomic preset saves, sidebar-layout transitions, invalid-sidebar rollback, custom native-color startup, semantic graph roles and readable action/link contrast.
 - `test_ui.py` — Page/workspace/provider flows, complete eleven-theme dropdown, schema/history, visualization/source defaults and workspace selection resets; diagnostic preview/stale-click refusal/synthetic request/explicit merge. Temporary data only.
 - `test_workflow.py` — Behavioral regression tests for workflow. Run with pytest; temporary runtime data only.
 - `test_workspace_configuration.py` — Workspace edits preserve identity/data; safe v1/v2 configuration portability, resource validation, isolation and injected-failure rollback.

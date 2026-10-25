@@ -1,5 +1,24 @@
 # Testing
 
+## PR 32 CI repair — 2026-10-25
+
+The four dependency-audit matrix entries failed on locked setuptools 84.0.0
+with GHSA-xmj3-9gf7-h52w; push and pull-request triggers showed the same failure
+twice. The generated lock now selects patched setuptools 84.1.0 without changing
+audit policy or unrelated package versions. Full locked requirements and clean
+installed-wheel dependencies audited with no known vulnerabilities under Windows
+Python 3.11 and 3.12. The unpublished local GraveTrail distribution itself has no
+PyPI advisory entry; its third-party dependencies remain audited.
+
+The original-palette test no longer assumes the saved theme must be Ocean dark.
+It still checks the exact original Ocean/Ink colors, while the existing apply/reload
+tests cover all eleven presets. The saved Crimson Forge configuration is unchanged.
+The older dated failures below are historical evidence, not the current assertion.
+Theme/Pillow compatibility, distribution and documentation checks: **37 passed**.
+The prior Linux CI run had **1245 passed, 4 skipped**, with only the stale palette
+assertion failing; its failure cancelled the Windows matrix job. Hosted reruns are
+reported separately from these local checks.
+
 ## AI visibility verification — 2026-10-24
 
 Final source suite: **1136 passed, 2 skipped, 1 existing theme/config failure** in
