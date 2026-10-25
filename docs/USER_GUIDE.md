@@ -59,11 +59,32 @@ the previous committed facts. A newer file imported during a run remains pending
 **Review unresolved code:** Open **Unresolved review queue** in Analysis → Diagnostics after analysis. It
 lists up to 100 current SQL/SAS warnings and errors, with errors first. CSV, informational
 and pending-file diagnostics are excluded. Choose a diagnostic to preview its containing
-statement or bounded nearby context, then adjust original start/end lines if needed. A long
-range has a truncated preview and cannot be sent until it fits the workspace context budget.
-Previewing needs no provider. **Request AI review of this range** uses the SQL/SAS task route
-configured in Connections & AI and all existing privacy, redaction and profile budgets. No background
+statement or bounded nearby context, then adjust original start/end lines if needed. The exact
+selected range is preserved; source and referenced known assets are never shortened to force a fit.
+As in project AI Analysis, context follows the selected evidence: the prompt lists known
+asset names referenced in that range, excluding comments and string literals. The preview
+shows included and total job-visible asset counts. The complete catalog remains available
+locally for grounded validation; unrelated catalog growth does not enlarge the request.
+If the complete relevant context still exceeds capacity, submission remains blocked.
+The offline preview shows the SQL/SAS task profile/model, complete redacted request's estimated
+input tokens, input allowance, output reservation, counting method and blocking reasons.
+**Request AI review of this range** uses the SQL/SAS task route
+configured in Connections & AI and all existing privacy and redaction controls. No background
 requests occur. If source changes after the preview, refresh it before requesting again.
+
+Both Diagnostics AI panels require confirmed, current model capacity. In **Connections & AI**, inspect
+the selected model or explicitly confirm its capacity; legacy profiles also require the explicit
+source-disclosure migration choice. The default output share is 30%, bounded by a saved Custom
+output cap and model limits, with reasoning and safety reserves applied once. Project-analysis
+session overrides do not affect focused assistance or change saved profiles. `token_capacity` profiles
+use token capacity instead of legacy implicit character ceilings; `explicit` profiles retain
+their configured source-character disclosure restriction. Submission is disabled when blocked.
+CLI `ai review preview`/`ai chunks` and MCP `preview_diagnostic_review`/`preview_ai_chunks`
+expose the same `budget` diagnostics and a `request_fingerprint` for the selected range.
+The UIs pin that fingerprint on submission; CLI/MCP callers can pass it as `expected_request`
+(CLI `--expected-request`). Dispatch rechecks capacity, source, profile and privacy; an
+authorized fallback uses its own model limits. Chunk previews remain an explicit optional
+selection aid; focused requests never automatically split or schedule remaining chunks.
 
 Validated responses can be merged separately as inferred relationships. Quarantined output
 changes no facts. A valid relationship does not resolve a parser warning about a column or
@@ -71,6 +92,28 @@ runtime construct; diagnostics remain until deterministic analysis resolves them
 is a bounded manual review list, not an automatic batch agent. **Optional AI assistance**
 remains available for manual source-range/task selection. AI results are read from local
 retained activity records and can expire under the configured retention policy.
+
+Both panels use the same source-grounded proposal workflow. Known assets are context rather
+than a closed list: executable source syntax can support a resource missed by static analysis.
+The host checks exact quotes, original file coordinates, source hash, configured dialect,
+job/session identity and bound read/write roles. A wrong location can be corrected only when
+the exact quote occurs once inside the authorized selection; the result retains both the
+reported and corrected coordinates. Comments, string contents, uninvoked SAS macro bodies,
+runtime guesses and ambiguous resource identities cannot establish additions.
+
+Results distinguish existing static operations, validated AI resources to create/reuse,
+relationship proposals, evidence corrections and unresolved symbols. **Merge grounded
+relationships as inferred** explicitly accepts eligible resources and relationships in one
+transaction. Repeat acceptance does not duplicate them. Accepted AI relationships stay
+inferred after normal Analysis/refresh; changed source, job, parsing settings or conflicting
+identity require a new review. Quarantine shows a safe reason and changes no facts. Historical
+results remain readable and must pass current evidence checks before acceptance; historical
+advisory results cannot be merged. Column suggestions and code explanations remain advisory.
+
+Focused verification supports the configured parser's SQL/SAS operations plus a bounded
+literal INSERT/SELECT syntax witness for backticks and MySQL VALUES(column) upserts. It does
+not establish arbitrary runtime or unsupported dialect semantics. Configuring MySQL for a
+MySQL folder can improve static parsing; source fixture comments do not configure the dialect.
 
 **Explore:** Search and explicitly select an exact asset. Searching `orders` in the supplied
 fixture yields raw/staging/mart choices. Use upstream/downstream trees and graph direction,

@@ -44,13 +44,13 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `ai activity` | — | `--workspace`, `-w` **required**; `--help` |
 | `ai chunks` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--help` |
 | `ai merge` | `RECORD_ID` | `--workspace`, `-w` **required**; `--refresh`, `--no-refresh`; `--help` |
-| `ai request` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--expected-hash` **required**; `--expected-job`; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `ai request` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--expected-hash` **required**; `--expected-job`; `--credential-prompt`, `--no-credential-prompt`; `--expected-request`; `--help` |
 | `ai results export` | `RECORD_ID` | `--workspace`, `-w` **required**; `--help` |
 | `ai results get` | `RECORD_ID` | `--workspace`, `-w` **required**; `--help` |
 | `ai results list` | — | `--workspace`, `-w` **required**; `--help` |
 | `ai review list` | — | `--workspace`, `-w` **required**; `--help` |
 | `ai review preview` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--first`; `--last`; `--help` |
-| `ai review request` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--expected-hash` **required**; `--first` **required**; `--last` **required**; `--expected-job`; `--help` |
+| `ai review request` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--expected-hash` **required**; `--first` **required**; `--last` **required**; `--expected-job`; `--expected-request`; `--help` |
 | `application logging get` | — | `--help` |
 | `application logging update` | `LEVEL` | `--help` |
 | `application theme apply` | `NAME` | `--help` |
@@ -299,7 +299,7 @@ Workspace preferences: `settings schema -w ID [--section parsing]`, `settings ge
 
 Providers: `providers list|get|save|remove`, `providers routing get|update`, `providers credentials status`, `providers models|test PROFILE -w ID [--credential-prompt]`. Save/update take bounded JSON files and --expected-revision; remove refuses routed profiles. All outbound calls need --allow-write --allow-llm, an exact --allowed-llm-origin (scheme/host/port), approved --allowed-credential-ref and workspace privacy approval for remote recipients. Hidden input exists only during that invocation. Never pass key values in arguments/files.
 
-AI: `ai chunks FILE -w ID --first N --last N --task sql_lineage` is offline. `ai request` takes the same bounds plus --expected-hash HASH, --expected-job JOB (default workspace), optionally --credential-prompt. Each request sends only that explicit selection; retries/fallback may bill more than once after an ambiguous disconnect. `ai review list|preview|request`, `ai results list|get`, `ai activity`, `ai merge RECORD -w ID` reuse stored evidence and contracts. Five tasks are sql_lineage, sas_lineage, lineage_validation, column_usage, code_explanation. Advisory/quarantined results cannot merge; merged lineage remains inferred. Detailed saved-result reads require source permission.
+AI: `ai chunks FILE -w ID --first N --last N --task sql_lineage` is offline. `ai request` takes the same bounds plus --expected-hash HASH, --expected-job JOB (default workspace), optionally --credential-prompt and --expected-request FINGERPRINT from the offline preview. Each request sends only that explicit selection; retries/fallback may bill more than once after an ambiguous disconnect. `ai review list|preview|request`, `ai results list|get`, `ai activity`, `ai merge RECORD -w ID` reuse stored evidence and contracts. Five tasks are sql_lineage, sas_lineage, lineage_validation, column_usage, code_explanation. Advisory/quarantined results cannot merge; merged lineage remains inferred. Detailed saved-result reads require source permission.
 
 Reports: `runs list|get|compare BEFORE AFTER -w ID`, `ingestions list|get -w ID`, `dictionary list -w ID`, `assets schema ASSET -w ID`, `workspace health -w ID`, `lineage validate -w ID`, `source metadata FILE -w ID`. Source inventory adds encoding/file_size. `source search TEXT -w ID --include-matches` explicitly returns exact code lines with source permission; default remains matching file metadata. CSV values are excluded from line search. Schema evidence code requires --detail detailed; sampled types and unknowns retain provenance. Evidence validation reads original versions, does not reparse or repair.
 

@@ -68,9 +68,14 @@ gate applies to remote providers; source and total profile budgets are enforced.
 are redacted by default. A redacted quote may fail exact-evidence validation, deliberately.
 No source is sent automatically during parsing. Imported instructions remain untrusted data.
 
-Responses must pass Pydantic schema, known-asset, exact quote, original line range, and explicit
-read/write syntax checks. Invalid outputs are quarantined. Valid output can be merged explicitly
-as inferred relationships at confidence <= 0.8; never verified. Merged claims are revalidated
+Both Diagnostics panels share preparation, budgeting, evidence validation and explicit acceptance.
+Responses must pass Pydantic schema, exact quote, original selection coordinates, executable
+read/write/operation and resource identity checks. Known assets provide context; executable source
+can establish a proposal for a resource missed by static parsing. Wrong coordinates can be rebound
+only to a unique exact quote inside the selected range, retaining reported and corrected locations.
+Invalid outputs are quarantined with safe structured reasons. Valid resources and relationships
+can be merged explicitly in one transaction as AI-inferred, with confidence <= 0.8; never verified.
+Merged claims are revalidated
 on refresh and omitted after source hashes change. AI does not expand runtime macros.
 
 Retries/fallbacks apply to connection failures, HTTP 429 and 5xx only. Fallbacks never change

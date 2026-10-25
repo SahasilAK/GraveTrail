@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 
 from dataforge.connections import RuntimeConnections, connection_scope
 from dataforge.llm import Adapter, Profile
@@ -69,7 +70,7 @@ def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatc
     else:
         monkeypatch.setenv('DATAFORGE_TEST_API_KEY', '')
         set_credential_environment('DATAFORGE_TEST_API_KEY', 'dummy-sensitive-123')
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
+    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
     def handler(request: pytest.FixtureRequest) -> Any:
         """Handle handler for the test scenario.
 
@@ -260,7 +261,7 @@ def test_json_escaped_secret_is_redacted_before_persistence(tmp_path: Path) -> N
     manager = RuntimeConnections()
     secret = 'dummy"quoted\\secret'
     manager.register('DATAFORGE_TEST_API_KEY', secret)
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
+    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
     transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': json.dumps({'explanation': secret})}}))
     with connection_scope(manager):
         result = assist(store, w, profile, store.files(w)[0]['file_id'], 1, 1, transport=transport)

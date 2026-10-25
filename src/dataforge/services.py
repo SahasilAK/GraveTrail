@@ -375,11 +375,13 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
             "column_usages": [], "diagnostics": [], "asset_aliases": []}
     column_rows = materialize_columns(workspace, run_id, results, resolver, schemas, config)
     statuses = []
+    static_assets, manual_assets = set(), set()
     for metadata, parsed in results:
         fid = metadata["file_id"]
         parsed.metadata["job_id"] = source_job(metadata, config)
         for ref in parsed.assets:
             aid, _ = resolve(ref, metadata, parsed)
+            static_assets.add(aid)
             registry[aid][6] = json.dumps({**{k: v for k, v in parsed.metadata.items() if k not in {"job_id", 'dbt_asset_metadata'}},
                                          **json.loads(registry[aid][6])})
         for i, op in enumerate(parsed.operations):
@@ -389,6 +391,7 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
                 min(op.confidence, .8) if op.method == 'ai-project' else op.confidence, json.dumps(op.warnings)])
             inputs = [resolve(s, metadata, parsed, "input") for s in op.sources]
             outputs = [resolve(t, metadata, parsed, "output" if op.method != "llm" else "reference") for t in op.targets]
+            (manual_assets if op.method == 'llm' else static_assets).update(aid for aid, _ in [*inputs, *outputs])
             for role, refs in [("input", inputs), ("output", outputs)]:
                 for aid, _ in set(refs):
                     rows["operation_assets"].append([workspace, oid, aid, role])
@@ -423,6 +426,8 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
     for aid, schema in schemas.items():
         if aid in registry and registry[aid][4] != "unresolved":
             registry[aid][6] = json.dumps({**schema, **json.loads(registry[aid][6])})
+    for aid in manual_assets - static_assets:
+        registry[aid][6] = json.dumps({**json.loads(registry[aid][6]), 'origin': 'ai_inferred'})
     rows["assets"] = list(registry.values())
     rows["asset_aliases"] = list(aliases)
     rows.update(column_rows)
@@ -501,32 +506,47 @@ def _restore_ai_results(store: Store, workspace: str, results: list[tuple[dict[s
 def restore_manual_ai_results(store: Store, workspace: str, results: list[tuple[dict[str, Any], ParseResult]],
                               config: dict[str, Any]) -> None:
     """Reapply explicit legacy merges without replacing selected project operations."""
-    from dataforge.llm import GroundedResponse, validate_response
+    from dataforge.focused_grounding import resource_key, validate_saved_response
+    from dataforge.llm import GroundedResponse, focused_evidence_key
     from dataforge.models import Operation
 
+    by_file = {m['file_id']: (m, parsed) for m, parsed in results}
+    records = [record for record in store.rows("""SELECT * FROM llm_records WHERE workspace_id=? AND outcome='merged'
+        AND task IN ('sas_lineage','sql_lineage','lineage_validation') ORDER BY created_at,record_id""", [workspace])
+        if record['file_id'] in by_file and json.loads(record['details']).get('content_hash') ==
+        by_file[record['file_id']][0]['content_hash']]
+    if not records:
+        return
     resolver = AssetResolver(workspace, results, config)
-    by_file = {m["file_id"]: (m, parsed) for m, parsed in results}
-    for record in store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND outcome='merged'", [workspace]):
-        if record["task"] not in {"sas_lineage", "sql_lineage", "lineage_validation"}:
-            continue
+    # Build current static identities rather than using yesterday's publication.
+    for metadata, parsed in results:
+        for ref in parsed.assets:
+            resolver.resolve(ref, metadata, parsed)
+        for op in parsed.operations:
+            for role, refs in [('input', op.sources), ('output', op.targets)]:
+                for ref in refs:
+                    resolver.resolve(ref, metadata, parsed, role)
+    current_assets = [dict(zip(['asset_id', 'workspace_id', 'name', 'canonical_name', 'kind', 'temporary', 'metadata'], row))
+                      for row in resolver.registry.values()]
+    for record in records:
         details = json.loads(record["details"])
-        if record["file_id"] not in by_file:
-            continue
         metadata, parsed = by_file[record["file_id"]]
         if parsed.metadata.get('source_kind') == 'dbt':
             continue
-        if metadata["content_hash"] != details["content_hash"]:
-            continue
         if details.get("job_id", "workspace") != source_job(metadata, config):
             continue
-        response = GroundedResponse.model_validate(details["result"])
         content = store.snapshot_content(metadata)
         try:
-            validate_response(response, content, resolver.known_names(metadata), 1, len(content.splitlines()))
+            response = GroundedResponse.model_validate(details["result"])
+            settings = {**config, 'dialect': source_dialect(metadata, config)}
+            grounded, _, _ = validate_saved_response(response, details, workspace,
+                {**metadata, 'raw_content': content}, settings, current_assets)
         except ValueError:
             continue
         for c in response.claims:
-            op = Operation(c.operation, [AssetRef(c.source)], [AssetRef(c.target)],
-                c.quote, c.start_line, c.end_line, "llm", min(c.confidence, .8), warnings=[c.explanation])
-            if not any(existing == op for existing in parsed.operations):
+            refs = grounded['references']
+            op = Operation(c.operation, [refs[resource_key(c.source, settings)]], [refs[resource_key(c.target, settings)]],
+                c.quote, c.start_line, c.end_line, "llm", min(c.confidence, .8), warnings=[c.explanation],
+                evidence_key=focused_evidence_key(c, source_job(metadata, config)))
+            if not any(existing.method == 'llm' and existing.evidence_key == op.evidence_key for existing in parsed.operations):
                 parsed.operations.append(op)

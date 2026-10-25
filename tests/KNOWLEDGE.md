@@ -1,5 +1,12 @@
 # tests/
 
+- `test_focused_assistance.py` — Exact banking MySQL replay through both panels/services; unique evidence correction/ambiguity/bounds, false comment/literal/macro claims, case/SAS/library/job identities, transactional rollback/idempotence/refresh, stale preparation and historical compatibility.
+- `focused_test_profiles.py` — Explicit offline confirmed capacity/disclosure profile factory for focused tests; no production preflight bypass.
+
+`test_diagnostic_review_budget.py` proves complete-body preview/dispatch equality, removal of legacy implicit ceilings, confirmed capacity/disclosure gating, per-task and fallback allocation, retry freshness/privacy checks, redaction (including session credentials), and Streamlit/CLI/MCP budget parity.
+
+`test_first_test_review_budget.py` replays the reported 974-character MySQL range against the parsed 2,114-file banking estate and qwen3.5-4b's reported capacity. The prompt contains only source-referenced known names; complete local validation authority and mock-wire budget equality are preserved. This is an offline budget regression, not a live-model accuracy claim.
+
 `test_dbt_*.py` — Safe import/YAML/templates, model/resource/version/package identity,
 artifact selection/generated evidence, columns, AI exclusion, settings, maintenance,
 authorized reports, populated UI and retail ZIP gold; parser15/schema8.

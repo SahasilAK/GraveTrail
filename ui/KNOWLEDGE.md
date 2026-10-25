@@ -1,5 +1,7 @@
 # ui/
 
+Diagnostics `assistance.py` and `unresolved_review.py` share offline preparation/budget/fingerprint pins. `assistance_result.py` renders both budgets and durable static/proposal/correction/error views with explicit inferred resource/relationship merge. Advisory tasks stay non-mergeable.
+
 Shared Streamlit presentation and provider/assistance forms. Uses dataforge services; source content is loaded lazily.
 
 `analysis_ai.py` exposes request-budget estimates, configured versus advertised output capacity, pending recovery and recent safe request diagnostics. Active workers retain Cancel during HTTP waits/backoff; completed split ancestry is separate from pending work.
@@ -22,7 +24,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `copy_names.py` — Theme-aware v2 comma-separated name lists with individual/list clipboard controls; textContent preserves imported names safely and COPY_JS supplies offline fallback.
 - `provider_settings.py` — Setup order: endpoint, credentials, connection test/discovery, fetched-model selection or manual identifier, then validated save. Works on unsaved drafts; endpoint/reference/auth/version changes and credential actions invalidate lists. Explicit process-environment input clears on submission; session-only connect/clear stays separate. Model check and task/fallback routing remain explicit.
 - `themes.py` — Eleven native presets: unchanged Ocean dark/Ink dark plus nine semantic palettes. Loaded-preset detection includes sidebar colors. TOML-aware atomic config updates, detection and bounded reload acknowledgement. Applies only on explicit request, app-wide.
-- `unresolved_review.py` — Offline bounded diagnostic selector/context preview with adjustable source ranges and explicit hash-pinned review button; uses shared durable result presentation.
+- `unresolved_review.py` — Offline diagnostic selector with exact adjustable source ranges and shared full-request token-budget preview; displays profile/model, estimates/allowances/output/counting/blockers and source-referenced versus total asset counts; disables blocked requests. Explicit hash-pinned review and shared durable result/merge presentation.
 - `workspace_history.py` — Lazy native Settings panel previews bounded history eligibility, archives with retained recovery and restores missing records; all persistence lives in maintenance.py.
 
 Settings graph confidence/status filters participate in common.load_graph cache keys before

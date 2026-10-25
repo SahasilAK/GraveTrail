@@ -172,8 +172,8 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_project_analysis` | `workspace_id` | `file_ids`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id` | Shared static/AI analysis service |
 | `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
 | `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
-| `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options` |
-| `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options` |
+| `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options`; `expected_request` |
+| `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options`; `expected_request` |
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
@@ -307,3 +307,5 @@ Start/preview also accept optional `output_share` (10–50, default 30 for new r
 as the UI/CLI. Omitted fields preserve resumed choices. A committed partial run
 with unresolved required work can resume to retry only those items; completed
 checkpoints and cumulative reservations are retained.
+
+Focused AI previews return budget diagnostics and `request_fingerprint`. Pass it as `expected_request` to either request tool to bind dispatch to that exact prepared selection/profile/context. Both request tools share source-backed resource proposals and explicit `merge_ai_claims` acceptance; advisory tasks cannot merge.

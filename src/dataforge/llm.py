@@ -30,8 +30,7 @@ from dataforge.model_capabilities import (
     merge_descriptors,
     normalize_model,
 )
-from dataforge.models import canonical, stable_id, statements
-from dataforge.parsers.sas import parse_sas, strip_comments
+from dataforge.models import stable_id
 
 if TYPE_CHECKING:
     from dataforge.store import Store
@@ -644,12 +643,13 @@ class Adapter:
             payload.update(stream=True, stream_options={'include_usage': True})
         return path, payload
 
-    def complete(self, system: str, user: str) -> tuple[str, dict]:
+    def complete(self, system: str, user: str, *, prepared_request=None) -> tuple[str, dict]:
         """Submit a system and user prompt using the provider's chat protocol.
 
         Args:
             system: System instruction text.
             user: User prompt text.
+            prepared_request: Optional path/body already built and budgeted for this profile.
 
         Returns:
             Provider response text and usage metadata.
@@ -657,7 +657,7 @@ class Adapter:
         Raises:
             ProviderError: If the provider response has an unsupported shape."""
         p = self.profile
-        path, payload = self.completion_request(p, system, user, stream_analysis=self.stream_analysis)
+        path, payload = prepared_request or self.completion_request(p, system, user, stream_analysis=self.stream_analysis)
         data = self._request("POST", path, payload)
         text, usage, self.completion_metadata = decode_provider_response(p.provider, data, requested_model=p.model)
         return text, usage
@@ -734,45 +734,14 @@ class Adapter:
 
 
 def validate_response(response: GroundedResponse, code: str, known: set[str], first: int, last: int) -> GroundedResponse:
-    """Ensure provider claims exactly match supplied source and asset evidence.
+    """Compatibility API for historical callers; strict original locations only.
 
-    Args:
-        response: Structured provider response to validate.
-        code: Original source text used as evidence.
-        known: Asset names allowed in claims.
-        first: First source line included in the evidence selection.
-        last: Last source line included in the evidence selection.
-
-    Returns:
-        The validated response unchanged.
-
-    Raises:
-        ValueError: If a claim cites an invalid line range, quote, asset, or read/write relationship."""
-    lines = code.splitlines()
-    known = {canonical(x) for x in known}
-    for claim in response.claims:
-        if not first <= claim.start_line <= claim.end_line <= min(last, len(lines)):
-            raise ValueError("Claim line range is outside supplied source evidence")
-        span = "\n".join(lines[claim.start_line - 1:claim.end_line])
-        if claim.quote not in span:
-            raise ValueError("Claim quote is not exact source evidence")
-        cleaned = re.sub(r"--[^\n]*", "", strip_comments(claim.quote))
-        cleaned = re.sub(r"'([^']|'')*'", "''", cleaned)
-        cleaned = re.sub(r'["`\[\]]', "", cleaned)
-        for name in [claim.source, claim.target]:
-            if canonical(name) not in known or not re.search(r"(?<![\w.])" + re.escape(name) + r"(?![\w.])", cleaned, re.I):
-                raise ValueError("Claim asset is not known or is absent from code evidence")
-        src = re.escape(claim.source)
-        tgt = re.escape(claim.target)
-        reads = r"(?:from|join|using|set|merge|modify|data\s*=)\s*" + src + r"(?![\w.])"
-        writes = r"(?:table|view|into|update|data|out\s*=|base\s*=)\s*" + tgt + r"(?![\w.])"
-        same_statement = any(re.search(reads, part, re.I) and re.search(writes, part, re.I)
-                             for part, _, _ in statements(cleaned))
-        # SAS DATA headers and reads span semicolon-delimited statements; bind them by block.
-        same_sas_block = any(canonical(s.name) == canonical(claim.source) and canonical(t.name) == canonical(claim.target)
-            for op in parse_sas(claim.quote).operations for s in op.sources for t in op.targets)
-        if not same_statement and not same_sas_block:
-            raise ValueError("Source and target lack bound read/write evidence in the same statement or SAS block")
+    Known names remain an advisory input. Production validation also resolves
+    host identities and preserves corrections via focused_grounding.
+    """
+    from dataforge.focused_grounding import ground_response
+    extension = '.sas' if re.search(r'(?im)^\s*(?:data|proc)\s', code) else '.sql'
+    ground_response(response, {'raw_content': code, 'extension': extension}, first, last, {}, rebind=False)
     return response
 
 
@@ -809,8 +778,151 @@ def expire_ai_history(store: Store, workspace: str) -> None:
             store.execute('DELETE FROM llm_records WHERE record_id=?', [record['record_id']])
 
 
+def review_budget_message(reason: str) -> str:
+    """Keep actionable preflight guidance identical across review clients."""
+    guidance = {
+        'model_token_capacity_required': 'In Connections & AI, inspect or explicitly confirm capacity for the selected profile/model; stale observations must be refreshed.',
+        'shared_model_context_capacity_required': 'In Connections & AI, confirm the shared context capacity for this model.',
+        'dynamic_route_safe_capacity_confirmation_required': 'In Connections & AI, explicitly confirm a safe capacity for this dynamic route.',
+        'separate_model_output_capacity_required': 'In Connections & AI, confirm output capacity or save a Custom output cap.',
+        'insufficient_model_token_capacity': 'In Connections & AI, check capacity and the saved Custom output cap.',
+        'legacy_source_limit_choice_required': 'In Connections & AI, explicitly choose token capacity or a source-character disclosure limit for this legacy profile.',
+        'explicit_disclosure_limit_required': 'In Connections & AI, configure the explicit source-character disclosure limit.',
+        'explicit_disclosure_limit_exceeded': 'Select fewer source lines or explicitly change this profile’s disclosure limit in Connections & AI.',
+        'complete_request_exceeds_input_budget': 'The complete redacted prompt, schema and known assets exceed the input allowance. Select fewer lines or confirm a larger capacity for this model in Connections & AI.',
+    }
+    return f"{reason}: {guidance.get(reason, 'Check the selected profile’s model limits in Connections & AI.')}"
+
+
+def prepare_assistance(store: Store, workspace: str, profile: Profile, file_id: str,
+                       first: int, last: int, task: str, profile_id: str = "", *,
+                       expected_hash: str | None = None, expected_job: str | None = None) -> dict[str, Any]:
+    """Prepare the exact redacted manual request offline; never call providers or write history."""
+    from dataforge.focused_grounding import GroundingError
+    if task not in TASKS:
+        raise ValueError("Unsupported analysis task")
+    if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
+        raise GroundingError('external_requests_disabled')
+    source = store.file(file_id)
+    from dataforge.dbt.service import is_dbt
+    if is_dbt(source):
+        raise ValueError('dbt currently requires parser analysis')
+    if source["workspace_id"] != workspace:
+        raise ValueError("Source does not belong to this workspace")
+    if source['extension'] not in {'.sql', '.sas'}:
+        raise ValueError('Select an SQL/SAS source for focused assistance')
+    if expected_hash is not None and source["content_hash"] != expected_hash:
+        raise GroundingError('source_changed')
+    lines = source["raw_content"].splitlines()
+    if type(first) is not int or type(last) is not int or not 1 <= first <= last <= len(lines):
+        raise ValueError("Select a valid source line range")
+    if not is_local(profile.base_url) and first == 1 and last == len(lines) and not store.setting(workspace, "allow_full_source", False):
+        raise GroundingError('full_source_disabled')
+    focused = "\n".join(lines[first - 1:last])
+    disclosed_characters = len(focused)
+    if store.setting(workspace, "redact_secrets", True):
+        focused = redact(focused)
+    system_path = PROMPTS / task / "system.md"
+    system = system_path.read_text(encoding="utf-8")
+    template = (PROMPTS / task / "user_template.md").read_text(encoding="utf-8")
+    response_model = TASK_SCHEMAS.get(task, GroundedResponse)
+    schema = response_model.model_json_schema()
+    version = "2" if task in TASK_SCHEMAS else "3"
+    prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
+    settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
+    job = source_job(source, settings)
+    if expected_job is not None and job != expected_job:
+        raise GroundingError('job_changed')
+    known = {a["name"] for a in unambiguous_job_assets(store.assets(workspace), job).values()}
+    from dataforge.ai_analysis_models import AnalysisRequest
+    from dataforge.ai_budget import allocate_analysis_profile, request_budget
+    from dataforge.ai_context_index import referenced_asset_names
+    from dataforge.services import source_dialect
+    settings['dialect'] = source_dialect(source, settings)
+    # Context selection is semantic, never a way to force a budget fit.
+    prompt_known = referenced_asset_names(focused, known)
+    context_scope = {'policy': 'selected_source_references', 'prompt_assets': len(prompt_known),
+                     'available_assets': len(known)}
+    static = store.rows("""SELECT o.kind,s.start_line,s.end_line,
+        (SELECT list(a.name ORDER BY a.name) FROM operation_assets oa JOIN assets a ON oa.asset_id=a.asset_id
+            AND oa.workspace_id=a.workspace_id WHERE oa.workspace_id=o.workspace_id AND oa.operation_id=o.operation_id
+            AND oa.role='input') AS inputs,
+        (SELECT list(a.name ORDER BY a.name) FROM operation_assets oa JOIN assets a ON oa.asset_id=a.asset_id
+            AND oa.workspace_id=a.workspace_id WHERE oa.workspace_id=o.workspace_id AND oa.operation_id=o.operation_id
+            AND oa.role='output') AS outputs
+        FROM statements s JOIN operations o
+        ON s.statement_id=o.statement_id AND s.workspace_id=o.workspace_id
+        WHERE s.workspace_id=? AND s.file_id=? AND s.content_hash=? AND o.method NOT IN ('llm','ai-project')
+        AND s.start_line>=? AND s.end_line<=? ORDER BY s.start_line,o.kind""",
+        [workspace, file_id, source['content_hash'], first, last])
+    findings = store.rows("""SELECT line,severity,message FROM diagnostics
+        WHERE workspace_id=? AND file_id=? AND line BETWEEN ? AND ? ORDER BY line,diagnostic_id""",
+        [workspace, file_id, first, last])
+    user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
+        "content_hash": source['content_hash'], "start_line": first, "end_line": last,
+        "known_assets": prompt_known, "source": focused, "schema": schema, "job_id": job,
+        "dialect": settings['dialect'], "library_mappings": settings['library_mappings'],
+        "static_findings": static, "diagnostics": findings}))
+    if store.setting(workspace, "redact_secrets", True):
+        system, user = redact(system), redact(user)
+    allocation_error = None
+    # Always allocate from saved settings, without transient project UI overrides.
+    profile = profile.model_copy(update={'analysis_input_allowance': None})
+    try:
+        profile, allocation = allocate_analysis_profile(profile, AnalysisRequest())
+    except ValueError as exc:
+        allocation_error, allocation = str(exc), {}
+    path, payload = Adapter.completion_request(profile, system, user)
+    counted = request_budget(profile, json.dumps(payload, ensure_ascii=False, separators=(',', ':')),
+                             profile.max_tokens, disclosed_characters=disclosed_characters)
+    reasons = list(dict.fromkeys([*([allocation_error] if allocation_error else []), *counted.reasons]))
+    diagnostics = {'profile_id': profile_id, 'provider': profile.provider, 'model': profile.model,
+        'estimated_input_tokens': counted.input_count, 'input_allowance': counted.input_limit,
+        'reserved_output': counted.reserved_output, 'counting_method': counted.count_method,
+        'safety_reserve': counted.headroom, 'allocation': allocation, 'context_scope': context_scope,
+        'fits': not reasons, 'blocking_reasons': reasons,
+        'messages': [review_budget_message(reason) for reason in reasons]}
+    fingerprint = stable_id(source['content_hash'], job, profile_id, profile.base_url, profile.provider,
+        json.dumps(settings, sort_keys=True), json.dumps(payload, sort_keys=True), path,
+        str(store.setting(workspace, 'redact_secrets', True)))
+    return {'profile': profile, 'source': source, 'focused': focused, 'system': system, 'user': user,
+            'path': path, 'payload': payload, 'response_model': response_model, 'version': version,
+            'prompt_hash': prompt_hash, 'settings': settings, 'job': job, 'known': known, 'budget': diagnostics,
+            'request_fingerprint': fingerprint}
+
+
+def preview_assistance(store: Store, workspace: str, file_id: str, first: int, last: int,
+                       task: str, *, expected_hash: str | None = None) -> dict[str, Any]:
+    """Preview the routed redacted request offline, without any persistent writes."""
+    chosen = store.setting(workspace, 'task_models', {}).get(task) or store.setting(workspace, 'default_profile', '')
+    rows = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [workspace, chosen])
+    budget = {'profile_id': chosen, 'provider': None, 'model': None, 'estimated_input_tokens': None,
+              'input_allowance': None, 'reserved_output': None, 'counting_method': None,
+              'fits': False, 'blocking_reasons': [], 'messages': []}
+    source = store.file(file_id)
+    code = '\n'.join(source['raw_content'].splitlines()[first - 1:last])
+    if store.setting(workspace, 'redact_secrets', True):
+        code = redact(code)
+    job = source_job(source, {k: store.setting(workspace, k, v) for k, v in ParsingSettings().model_dump().items()})
+    fingerprint = ''
+    try:
+        if not rows:
+            raise ValueError('Configure a default or task-specific provider profile in Connections & AI first')
+        profile = Profile.model_validate_json(rows[0]['config'])
+        budget.update(provider=profile.provider, model=profile.model)
+        prepared = prepare_assistance(store, workspace, profile, file_id, first, last, task, chosen,
+                                      expected_hash=expected_hash)
+        budget, code, job = prepared['budget'], prepared['focused'], prepared['job']
+        fingerprint = prepared['request_fingerprint']
+    except ValueError as exc:
+        budget.update(blocking_reasons=['assistance_preflight_failed'], messages=[str(exc)])
+    return {'code': code, 'budget': budget, 'job_id': job, 'content_hash': source['content_hash'],
+            'file_id': file_id, 'first': first, 'last': last, 'task': task, 'request_fingerprint': fingerprint}
+
+
 def assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str="lineage_validation", profile_id: str="",
-           transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, expected_job: str | None=None) -> dict[str, Any]:
+           transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, expected_job: str | None=None,
+           retry_authorize: Callable[[], None] | None=None, expected_request: str = '') -> dict[str, Any]:
     """Run one privacy-gated AI request while holding workspace request capacity.
 
     Args:
@@ -840,14 +952,17 @@ def assist(store: Store, workspace: str, profile: Profile, file_id: str, first: 
         try:
             stack.enter_context(request_slot(store.home, workspace, resources.llm_concurrency))
         except ValueError:
+            from dataforge.focused_grounding import GroundingError
             return {'record_id': '', 'outcome': 'quarantined', 'reason': 'ValueError',
-                    'result': None, 'usage': {}, 'retryable': False}
+                    'result': None, 'usage': {}, 'retryable': False,
+                    'failure': GroundingError('request_busy').failure}
         stack.enter_context(connection_scope(current_connections()))
         return _assist(store, workspace, profile, file_id, first, last, task, profile_id,
-                       transport, expected_hash, cancelled, expected_job)
+                       transport, expected_hash, cancelled, expected_job, retry_authorize, expected_request)
 
 
-def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str, profile_id: str, transport: httpx.BaseTransport | None, expected_hash: str | None, cancelled: Callable[[], bool] | None, expected_job: str | None=None) -> dict[str, Any]:
+def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str, profile_id: str, transport: httpx.BaseTransport | None, expected_hash: str | None, cancelled: Callable[[], bool] | None, expected_job: str | None=None,
+            retry_authorize: Callable[[], None] | None=None, expected_request: str = '') -> dict[str, Any]:
     """Build, send, validate, and persist one bounded AI assistance request.
 
     Args:
@@ -872,54 +987,51 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
         ValueError: If the task, source, selection, privacy policy, or evidence bounds are invalid."""
     if cancelled and cancelled():
         raise InterruptedError("AI request cancelled before transmission")
-    if task not in TASKS:
-        raise ValueError("Unsupported analysis task")
-    if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
-        raise ValueError("External LLM requests are disabled in Security and privacy")
-    source = store.file(file_id)
-    from dataforge.dbt.service import is_dbt
-    if is_dbt(source):
-        raise ValueError('dbt currently requires parser analysis')
-    if source["workspace_id"] != workspace:
-        raise ValueError("Source does not belong to this workspace")
-    if expected_hash is not None and source["content_hash"] != expected_hash:
-        raise ValueError("Source changed; refresh the evidence preview before requesting assistance")
-    lines = source["raw_content"].splitlines()
-    if not 1 <= first <= last <= len(lines):
-        raise ValueError("Select a valid source line range")
-    if not is_local(profile.base_url) and first == 1 and last == len(lines) and not store.setting(workspace, "allow_full_source", False):
-        raise ValueError("Complete source transmission is disabled; select a statement range or change privacy settings")
-    focused = "\n".join(lines[first - 1:last])
-    budget = min(store.setting(workspace, "max_context_chars", 8000), profile.context_chars)
-    if len(focused) > budget:
-        raise ValueError("Selected source exceeds context budget; choose a smaller line range")
-    if store.setting(workspace, "redact_secrets", True):
-        focused = redact(focused)
-    system_path = PROMPTS / task / "system.md"
-    system = system_path.read_text(encoding="utf-8")
-    template = (PROMPTS / task / "user_template.md").read_text(encoding="utf-8")
-    response_model = TASK_SCHEMAS.get(task, GroundedResponse)
-    schema = response_model.model_json_schema()
-    version = "2" if task in TASK_SCHEMAS else "1"
-    prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
-    settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
-    job = source_job(source, settings)
-    if expected_job is not None and job != expected_job:
-        raise ValueError("Source job changed; refresh the evidence preview before requesting assistance")
-    known = {a["name"] for a in unambiguous_job_assets(store.assets(workspace), job).values()}
-    user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
-                "start_line": first, "end_line": last, "known_assets": sorted(known), "source": focused,
-                "schema": schema, "job_id": job}))
-    if len(system) + len(user) > profile.context_chars:
-        raise ValueError("Request exceeds the profile context budget; select fewer lines or increase its limit")
+    prepared = prepare_assistance(store, workspace, profile, file_id, first, last, task, profile_id,
+        expected_hash=expected_hash, expected_job=expected_job)
+    if expected_request and prepared['request_fingerprint'] != expected_request:
+        raise ValueError('Request preparation changed; refresh the evidence preview before dispatch')
+    diagnostics = prepared['budget']
+    if diagnostics and not diagnostics['fits']:
+        raise ValueError('; '.join(diagnostics['messages']))
+    profile, source = prepared['profile'], prepared['source']
+    focused, system, user = prepared['focused'], prepared['system'], prepared['user']
+    response_model, version = prepared['response_model'], prepared['version']
+    prompt_hash, settings = prepared['prompt_hash'], prepared['settings']
+    job, known = prepared['job'], prepared['known']
+    grounding = None
+    saved_profile = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?',
+                               [workspace, profile_id]) if profile_id else []
+    attempts = 0
+
+    def revalidate(_profile):
+        # Each HTTP attempt, including retries, checks the exact disclosure again.
+        nonlocal attempts
+        if attempts and retry_authorize:
+            retry_authorize()
+        attempts += 1
+        current = prepare_assistance(store, workspace, profile, file_id, first, last, task, profile_id,
+            expected_hash=source['content_hash'], expected_job=job)
+        if not current['budget']['fits']:
+            from dataforge.focused_grounding import GroundingError
+            error = GroundingError('request_budget_exceeded')
+            error.failure['blocking_reasons'] = current['budget']['blocking_reasons']
+            raise error
+        if (current['payload'] != prepared['payload'] or current['path'] != prepared['path'] or
+                current['settings'] != settings or
+                (profile_id and store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?',
+                                           [workspace, profile_id]) != saved_profile)):
+            from dataforge.focused_grounding import GroundingError
+            raise GroundingError('preparation_changed')
+
     start = time.perf_counter()
     usage, raw, validated = {}, "", None
     outcome, reason, retryable = "validated", "", False
     try:
-        with Adapter(profile, transport, cancelled) as adapter:
+        with Adapter(profile, transport, cancelled, before_attempt=revalidate) as adapter:
             if cancelled and cancelled():
                 raise InterruptedError("AI request cancelled before transmission")
-            raw, usage = adapter.complete(system, user)
+            raw, usage = adapter.complete(system, user, prepared_request=(prepared['path'], prepared['payload']))
         if cancelled and cancelled():
             raise ProviderError("AI request cancelled after response; result quarantined")
         raw = redact(raw)
@@ -930,12 +1042,22 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
             settings["dialect"] = source_dialect(source, settings)
             validate_advisory(validated, source, known, first, last, settings)
         else:
-            validate_response(validated, source["raw_content"], known, first, last)
+            from dataforge.focused_grounding import ground_response, resolve_resources
+            grounding = ground_response(validated, source, first, last, settings)
+            resources, _ = resolve_resources(workspace, source, settings, grounding.pop('references'),
+                store.assets(workspace), grounding['persistent_declarations'])
+            grounding['resources'] = resources
     except (ValueError, ProviderError) as exc:
+        from dataforge.focused_grounding import MESSAGES, GroundingError
+        code = 'request_failed' if isinstance(exc, ProviderError) else 'invalid_response'
+        failure = exc.failure if isinstance(exc, GroundingError) else {'code': code, 'message': MESSAGES[code]}
         outcome, reason = "quarantined", type(exc).__name__
         retryable = isinstance(exc, ProviderError) and exc.retryable
     details = {"content_hash": source["content_hash"], "reason": reason, "schema_version": version, "job_id": job,
-               "result": validated.model_dump() if outcome == "validated" else None}
+               "result": validated.model_dump() if outcome == "validated" else None,
+               "selection": {"first": first, "last": last}, "settings": settings, "grounding": grounding,
+               "static_findings": json.loads(user.split('\n', 1)[-1]).get('static_findings', []),
+               "failure": failure if outcome == 'quarantined' else None}
     if store.setting(workspace, "llm_history", False):
         details.update(context=focused, response=raw)
     details = json.loads(redact(json.dumps(details)))
@@ -948,8 +1070,8 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
                        profile.model, outcome, time.perf_counter() - start, json.dumps(usage), json.dumps(details)])
         expire_ai_history(store, workspace)
     return {"record_id": record_id, "outcome": outcome, "reason": reason,
-            "result": validated.model_dump() if outcome == "validated" else None, "usage": usage,
-            "retryable": retryable}
+            "result": details['result'], "usage": usage,
+            "retryable": retryable, "failure": details['failure'], "budget": diagnostics}
 
 
 def merge_claims(store: Store, workspace: str, record_id: str) -> int:
@@ -982,37 +1104,53 @@ def _merge_claims(store: Store, workspace: str, record_id: str) -> int:
 
     Raises:
         ValueError: If the result is unvalidated, stale, unsupported, or no longer evidence-grounded."""
-    records = store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND record_id=? AND outcome='validated'", [workspace, record_id])
-    if not records:
+    from dataforge.focused_grounding import resource_key, validate_saved_response
+    from dataforge.models import Operation, operation_ids
+    records = store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND record_id=?", [workspace, record_id])
+    if not records or records[0]['outcome'] not in {'validated', 'merged'}:
         raise ValueError("Only validated AI records can be merged")
     record = records[0]
     if record["task"] not in {"sas_lineage", "sql_lineage", "lineage_validation"}:
         raise ValueError("Only lineage task records can be merged; advisory results cannot create relationships")
     source = store.file(record["file_id"])
     details = json.loads(record["details"])
-    if source["content_hash"] != details["content_hash"]:
-        raise ValueError("Source changed; run assistance again before merging")
     response = GroundedResponse.model_validate(details["result"])
     config = {key: store.setting(workspace, key, value) for key, value in ParsingSettings().model_dump().items()}
+    from dataforge.services import source_dialect
+    config['dialect'] = source_dialect(source, config)
     job = source_job(source, config)
-    if details.get("job_id", "workspace") != job:
-        raise ValueError("Source job/session assignment changed; request assistance again before merging")
-    assets = {name: asset["asset_id"] for name, asset in unambiguous_job_assets(store.assets(workspace), job).items()}
-    validate_response(response, source["raw_content"], set(assets), 1, len(source["raw_content"].splitlines()))
+    _, resources, assets = validate_saved_response(response, details, workspace, source, config, store.assets(workspace))
+    if record['outcome'] == 'merged':
+        return len(response.claims)
     with store.transaction():
-        for i, c in enumerate(response.claims):
-            sid = stable_id(record_id, str(i))
-            oid = stable_id(sid, "llm")
-            src, tgt = assets[canonical(c.source)], assets[canonical(c.target)]
+        for resource in resources:
+            if resource['row']:
+                row = list(resource['row'])
+                row[6] = json.dumps({**json.loads(row[6]), 'origin': 'ai_inferred'})
+                store.execute("INSERT INTO assets VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", row)
+        for c in response.claims:
+            src, tgt = assets[resource_key(c.source, config)], assets[resource_key(c.target, config)]
+            op = Operation(c.operation, [], [], c.quote, c.start_line, c.end_line, 'llm',
+                           evidence_key=focused_evidence_key(c, job))
+            sid, oid = operation_ids(workspace, source, 0, op)
             store.execute("INSERT INTO statements VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [sid, workspace, source["file_id"], c.start_line, c.end_line, c.quote, source["content_hash"]])
             store.execute("INSERT INTO operations VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [oid, workspace, sid, c.operation, "llm", min(c.confidence, .8), json.dumps([c.explanation])])
-            store.db.executemany("INSERT INTO operation_assets VALUES (?,?,?,?)", [[workspace, oid, src, "input"], [workspace, oid, tgt, "output"]])
+            for aid, role in [(src, 'input'), (tgt, 'output')]:
+                store.execute("INSERT INTO operation_assets SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM operation_assets WHERE workspace_id=? AND operation_id=? AND asset_id=? AND role=?)",
+                              [workspace, oid, aid, role, workspace, oid, aid, role])
             store.execute("INSERT INTO edges VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [stable_id(oid, src, tgt), workspace, src, tgt, oid, sid, source["file_id"], c.operation, "llm", min(c.confidence, .8), "inferred", "llm:" + record_id])
         store.execute("UPDATE llm_records SET outcome='merged' WHERE record_id=?", [record_id])
     return len(response.claims)
 
 
-def assist_task(store: Store, workspace: str, file_id: str, first: int, last: int, task: str, transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, authorize: Callable[[str, Profile], Profile] | None=None, expected_job: str | None=None) -> dict[str, Any]:
+def focused_evidence_key(claim, job):
+    """Stable acceptance identity shared by merge and normal analysis refresh."""
+    return 'focused:' + stable_id(job, claim.source, claim.target, claim.operation,
+                                 str(claim.start_line), str(claim.end_line), claim.quote)
+
+
+def assist_task(store: Store, workspace: str, file_id: str, first: int, last: int, task: str, transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, authorize: Callable[[str, Profile], Profile] | None=None, expected_job: str | None=None,
+                expected_request: str = '') -> dict[str, Any]:
     """Select a task profile, apply same-origin fallback, and run assistance.
 
     Args:
@@ -1040,6 +1178,10 @@ def assist_task(store: Store, workspace: str, file_id: str, first: int, last: in
     if chosen not in profiles:
         raise ValueError("Configure a default or task-specific provider profile first")
     first_profile = profiles[chosen]
+    source = store.file(file_id)
+    expected_hash = expected_hash or source['content_hash']
+    if expected_job is None:
+        expected_job = source_job(source, {k: store.setting(workspace, k, v) for k, v in ParsingSettings().model_dump().items()})
     ids = [chosen, *store.setting(workspace, "fallback_profiles", [])]
     result = None
     for pid in dict.fromkeys(ids):
@@ -1051,8 +1193,12 @@ def assist_task(store: Store, workspace: str, file_id: str, first: int, last: in
             continue
         if authorize:
             profile = authorize(pid, profile)
+        def retry_authorize():
+            if authorize and authorize(pid, profiles[pid]) != profile:
+                raise ValueError('Provider authorization or profile changed; refresh the evidence preview')
         result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
-                        expected_hash=expected_hash, cancelled=cancelled, expected_job=expected_job)
+                        expected_hash=expected_hash, cancelled=cancelled, expected_job=expected_job,
+                        retry_authorize=retry_authorize, expected_request=expected_request if pid == chosen else '')
         if not result["retryable"]:
             return result
     return result
@@ -1109,9 +1255,6 @@ def _transmitted_schema(value: Any) -> Any:
         else:
             result[key] = _transmitted_schema(item)
     return result
-
-
-REVIEW_CONTEXT_CHARS = 2000
 
 
 def _completion_request(p, system, user):

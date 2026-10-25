@@ -368,14 +368,14 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call('review_preview', workspace_id, options, diagnostic_id=diagnostic_id, first=first, last=last)
 
     @server.tool(annotations=network)
-    async def request_diagnostic_review(workspace_id: str, diagnostic_id: str, expected_hash: str, first: int, last: int, expected_job: str = "workspace", options: QueryOptions | None = None) -> CallToolResult:
+    async def request_diagnostic_review(workspace_id: str, diagnostic_id: str, expected_hash: str, first: int, last: int, expected_job: str = "workspace", options: QueryOptions | None = None, expected_request: str = '') -> CallToolResult:
         """request diagnostic review; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
-        return await call('review_request', workspace_id, options, diagnostic_id=diagnostic_id, expected_hash=expected_hash, first=first, last=last, expected_job=expected_job)
+        return await call('review_request', workspace_id, options, diagnostic_id=diagnostic_id, expected_hash=expected_hash, first=first, last=last, expected_job=expected_job, expected_request=expected_request)
 
     @server.tool(annotations=network)
-    async def request_ai_assistance(workspace_id: str, file_id: str, first: int, last: int, task: str, expected_hash: str, expected_job: str = "workspace", options: QueryOptions | None = None) -> CallToolResult:
+    async def request_ai_assistance(workspace_id: str, file_id: str, first: int, last: int, task: str, expected_hash: str, expected_job: str = "workspace", options: QueryOptions | None = None, expected_request: str = '') -> CallToolResult:
         """request ai assistance; exact source hash/job required for explicit AI transmission. Never runs other chunks."""
-        return await call('ai_request', workspace_id, options, file_id=file_id, first=first, last=last, task=task, expected_hash=expected_hash, expected_job=expected_job)
+        return await call('ai_request', workspace_id, options, file_id=file_id, first=first, last=last, task=task, expected_hash=expected_hash, expected_job=expected_job, expected_request=expected_request)
 
     @server.tool(annotations=read)
     async def list_ai_results(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:

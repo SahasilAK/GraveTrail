@@ -12,7 +12,7 @@ identities; PROC SQL remaps shared derivations through SAS namespaces.
 ## Files
 - `__init__.py` — Package marker; no business behavior.
 - `csv.py` — parse_csv/bounded_records extract sampled schema/types/preview and row counts with preallocation width/record limits; values never become code.
-- `sas.py` — parse_sas uses conservative DATA/PROC blocks, quote-aware known-value %LET expressions and library rules; unresolved assignments/runtime macro mutations invalidate stale bindings. Expansion is bounded; dynamic flow/name literals are not guessed; inline data is skipped.
+- `sas.py` — parse_sas uses conservative DATA/PROC blocks, quote-aware known-value %LET expressions and library rules; dataset_ref shares unchanged literal library/implicit WORK normalization with focused evidence validation. Unresolved assignments/runtime macro mutations invalidate stale bindings. Expansion is bounded; dynamic flow/name literals are not guessed; inline data is skipped.
 - `sas_sql.py` — Instance-local configured SQLGlot parser for SELECT FORMAT=/LENGTH= modifiers, CALCULATED aliases and SAS DATETIME(); preserves original evidence through sas.py and diagnoses malformed/ambiguous syntax.
 - `sql.py` — parse_sql uses SQLGlot reachable scopes, DML sources/targets and direct usage; wrapped_sql inspects bounded parameterless PostgreSQL SQL dollar bodies and Snowflake literal EXECUTE IMMEDIATE with original wrapper evidence. Runtime identifiers/binds/control flow stay unresolved; wrapper DDL supplies no unconditional schema. declared_schema records plain typed DDL/invalidation, excluding unused CTEs and unsafe wildcards.
 

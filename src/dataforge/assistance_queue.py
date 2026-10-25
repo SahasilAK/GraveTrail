@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from dataforge.llm import assist_task
+from dataforge.llm import assist_task, preview_assistance
 from dataforge.store import Store
 
 _ELIGIBLE = """FROM diagnostics d JOIN source_files f
@@ -52,6 +52,22 @@ def diagnostic_context(store: Store, workspace: str, diagnostic: str) -> dict[st
             "task": "sql_lineage" if item["extension"] == ".sql" else "sas_lineage"}
 
 
+def preview_review(store: Store, workspace: str, diagnostic: str,
+                   first: int | None = None, last: int | None = None) -> dict[str, Any]:
+    """Preview the routed, complete review request without provider calls or writes."""
+    item = diagnostic_context(store, workspace, diagnostic)
+    first = item['first'] if first is None else first
+    last = item['last'] if last is None else last
+    if type(first) is not int or type(last) is not int or not 1 <= first <= last <= item['line_count']:
+        raise ValueError('Select a valid source line range')
+    source = store.file(item['file_id'])
+    if source['content_hash'] != item['content_hash']:
+        raise ValueError('Source changed; refresh the diagnostic preview')
+    prepared = preview_assistance(store, workspace, item['file_id'], first, last, item['task'],
+                                  expected_hash=item['content_hash'])
+    return {**item, **prepared}
+
+
 def request_review(
     store: Store,
     workspace: str,
@@ -60,6 +76,7 @@ def request_review(
     first: int,
     last: int,
     transport: httpx.BaseTransport | None = None,
+    *, expected_job: str | None = None, expected_request: str = '',
 ) -> dict[str, Any]:
     """Request AI review for a diagnostic only if its source version is still current.
 
@@ -82,4 +99,5 @@ def request_review(
         raise ValueError("Source line bounds must be integers")
     task = "sql_lineage" if item["extension"] == ".sql" else "sas_lineage"
     return assist_task(store, workspace, item["file_id"], first, last, task,
-                       transport=transport, expected_hash=content_hash)
+                       transport=transport, expected_hash=content_hash, expected_job=expected_job,
+                       expected_request=expected_request)

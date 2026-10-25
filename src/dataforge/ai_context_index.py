@@ -21,6 +21,13 @@ def _declaration_text(code):
                   lambda m: ''.join('\n' if c == '\n' else ' ' for c in m[0]), code)
 
 
+def referenced_asset_names(code, known):
+    """Select every known name referenced by this source, independently of budget."""
+    # Reuse project context's quote-aware lexer and comment/literal masking.
+    symbols = {canonical(name) for name in re.findall(r'[#@$]*' + IDENTIFIER, _declaration_text(code))}
+    return sorted(name for name in known if canonical(name) in symbols)
+
+
 @dataclass
 class ContextIndex:
     workspace: str

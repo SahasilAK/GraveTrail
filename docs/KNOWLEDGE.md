@@ -50,7 +50,7 @@ references now enumerate107 executable routes and87 tools; UI has eleven destina
 - `SQL_PARSING.md` — AST lineage/direct usage and parser9 bounded PostgreSQL SQL procedure/Snowflake literal bodies, original enclosing evidence and explicit runtime/DDL-schema exclusions.
 - `TESTING.md` — Tracked current acceptance matrix distinguishing source, dated Windows/Docker/OmniRoute passes and still-open native/hosted/offline-browser gates; commands and historical counts remain separate.
 - `TROUBLESHOOTING.md` — Troubleshooting. Maintained documentation; consult implementation status for verification boundaries.
-- `USER_GUIDE.md` — User guide including All graph, fullscreen/copy/focus/history, direction-scoped evidence and copyable used/unused column lists with conservative schema/wildcard limits.
+- `USER_GUIDE.md` — User guide including All graph, fullscreen/copy/focus/history, direction-scoped evidence and column lists; diagnostic reviews use shared complete-request token previews, confirmed capacity and explicit disclosure migration.
 
 Latest verification/accounting lives in plans/REQUIREMENT_MATRIX.md and IMPLEMENTATION_STATUS;
 older numerical results in guides are historical. Parser9 extends literal SQL/SAS macro coverage; both ZIPs retain128 logical edges/seven layers/all16 sources and original bytes.
@@ -111,3 +111,5 @@ AI_ANALYSIS and LLM_INTEGRATION document shared durable live counters, opt-in mi
 2026-10-24 durable recovery: AI_ANALYSIS owns the save-stage/counter/Continue-versus-new-run contract; LLM_INTEGRATION owns shared envelope/SSE replay, optional reasoning and privacy limits; TESTING and promts results record isolated small_sql synthetic evidence and exact validation.
 
 Live analysis streaming is disabled after the observed wire-overhead regression. Integration, analysis and recovery guides mark reasoning code as retained/inactive; TESTING/results record the non-streaming rollback.
+
+Diagnostics focused AI assistance: USER_GUIDE documents source-backed resource proposals, explicit inferred acceptance and conservative grounding limits. CLI_GUIDE/MCP_INTEGRATION enumerate optional prepared-request fingerprint pins for both entry points.
