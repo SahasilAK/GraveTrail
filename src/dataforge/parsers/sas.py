@@ -10,6 +10,20 @@ from dataforge.parsers.sas_transformations import data_step_derivations, proc_de
 IDENT = r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?"
 
 
+def dataset_ref(name: str, libraries: dict[str, str] | None = None) -> AssetRef:
+    """Share literal SAS library/implicit WORK normalization with evidence checks."""
+    if name.startswith('file:'):
+        return AssetRef(name, kind='file')
+    name = name.strip().rstrip(';')
+    parts = name.split('.')
+    mappings = {key.casefold(): value for key, value in (libraries or {}).items()}
+    if len(parts) == 1:
+        name = 'work.' + name
+    elif parts[0].casefold() in mappings:
+        name = mappings[parts[0].casefold()] + '.' + '.'.join(parts[1:])
+    return AssetRef(name, temporary=name.casefold().startswith('work.'))
+
+
 def strip_comments(text: str) -> str:
     """Replace SAS comments with spaces while preserving quoted text and line breaks.
 
@@ -105,15 +119,7 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
         Returns:
             Asset reference with library mappings and WORK identity applied.
         """
-        if name.startswith("file:"):
-            return AssetRef(name, kind="file")
-        name = name.strip().rstrip(";")
-        parts = name.split(".")
-        if len(parts) == 1:
-            name = "work." + name
-        elif parts[0].casefold() in libraries:
-            name = libraries[parts[0].casefold()] + "." + ".".join(parts[1:])
-        return AssetRef(name, temporary=name.casefold().startswith("work."))
+        return dataset_ref(name, libraries)
 
     def dataset_list(text: str) -> list[AssetRef]:
         """Parse a conservative list of SAS dataset names from a block header.

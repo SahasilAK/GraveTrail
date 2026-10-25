@@ -1,9 +1,9 @@
 """Explicit, focused review of current parser diagnostics; never calls a provider on render."""
 import streamlit as st
 
-from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, request_review
+from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, preview_review, request_review
 from dataforge.store import Store
-from ui.assistance_result import render_result
+from ui.assistance_result import render_budget, render_result
 
 
 def render(store: Store, workspace: str) -> None:
@@ -38,20 +38,20 @@ def render(store: Store, workspace: str) -> None:
         first = st.number_input("Review start line", 1, preview["line_count"], preview["first"], key=key + "_first")
         last = st.number_input("Review end line", int(first), preview["line_count"], max(int(first), preview["last"]), key=key + "_last")
         code = "\n".join(source["raw_content"].splitlines()[int(first) - 1:int(last)])
-        budget = int(store.setting(workspace, "max_context_chars", 8000))
-        over_budget = len(code) > budget
-        st.code(code[:budget], language="sql" if preview["extension"] == ".sql" else "sas")
-        st.caption(f"{preview['relative_path']} · original lines {first}–{last} · {len(code):,} characters · task {preview['task']}. Existing privacy, redaction, profile and context limits apply.")
-        if over_budget:
-            st.warning("Preview is truncated and sending is disabled. Select fewer lines or increase the source context budget in Security and privacy.")
-        configured = bool(store.rows("SELECT 1 FROM llm_profiles WHERE workspace_id=? LIMIT 1", [workspace]))
-        if not configured:
-            st.info("Configure a default or task-specific provider in Connections & AI to request AI review. This local preview needs no provider.")
-        if st.button("Request AI review of this range", disabled=over_budget or not configured, key=key + "_request"):
+        prepared = preview_review(store, workspace, selected, int(first), int(last))
+        budget = prepared['budget']
+        st.code(prepared['code'], language="sql" if preview["extension"] == ".sql" else "sas")
+        st.caption(f"{preview['relative_path']} · original lines {first}–{last} · {len(code):,} source characters · task {preview['task']}.")
+        render_budget(budget)
+        if st.button("Request AI review of this range", disabled=not budget['fits'], key=key + "_request"):
             try:
                 with st.spinner("Reviewing selected diagnostic evidence", show_time=True):
-                    result = request_review(store, workspace, selected, preview["content_hash"], int(first), int(last))
-                st.session_state["review_result_" + workspace] = result["record_id"]
+                    result = request_review(store, workspace, selected, preview["content_hash"], int(first), int(last),
+                                            expected_job=prepared['job_id'], expected_request=prepared['request_fingerprint'])
+                if result['record_id']:
+                    st.session_state["review_result_" + workspace] = result["record_id"]
+                else:
+                    st.warning(result['failure']['message'])
             except ValueError as exc:
                 st.error(f"Review request failed: {exc}")
             except Exception as exc:

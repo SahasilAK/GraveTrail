@@ -317,15 +317,17 @@ def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path: Pa
     from concurrent.futures import ThreadPoolExecutor
 
     import httpx
+    from focused_test_profiles import focused_profile
 
     from dataforge.cleanup import apply_cleanup, cleanup_plan
-    from dataforge.llm import Profile, assist
+    from dataforge.focused_grounding import ground_response
+    from dataforge.llm import assist
 
     store = Store(tmp_path)
     w = populated(store, 'test')
     ready, resume = threading.Event(), threading.Event()
 
-    def validate(*args: Any) -> None:
+    def validate(*args: Any, **kwargs: Any) -> Any:
         """Handle validate for the test scenario.
 
         Args:
@@ -333,8 +335,9 @@ def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path: Pa
         """
         ready.set()
         assert resume.wait(10)
-    monkeypatch.setattr('dataforge.llm.validate_response', validate)
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test')
+        return ground_response(*args, **kwargs)
+    monkeypatch.setattr('dataforge.focused_grounding.ground_response', validate)
+    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test')
     transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': '{}'}}))
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(assist, store, w, profile, store.files(w)[0]['file_id'], 1, 1, transport=transport)

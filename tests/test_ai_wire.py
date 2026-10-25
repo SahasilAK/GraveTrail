@@ -54,3 +54,45 @@ def test_many_claims_store_compactly_even_when_canonical_expansion_exceeds_recor
     response = decode_project_result('project_lineage', payload, u)
     assert len(response.model_dump_json()) > 16 * 1024 * 1024
     assert len(json.dumps(encode_project_result(response))) < 100000
+
+
+def test_truncation_decoder_recovers_only_unambiguous_complete_items():
+    from types import SimpleNamespace
+
+    from dataforge.ai_wire import decode_extractions
+    parts = [SimpleNamespace(part_id=p) for p in ('a', 'b', 'c')]
+    a = {'part_id': 'a', 'coverage': 'complete', 'unresolved': ['nested { \\" string }']}
+    prefix = '{"items":[' + json.dumps(a) + ','
+    diagnostics = {}
+    valid, errors = decode_extractions(prefix + '{"part_id":"b","coverage":"com', parts,
+        allow_truncated=True, diagnostics=diagnostics)
+    assert set(valid) == {'a'} and set(errors) == {'b', 'c'}
+    assert diagnostics['__truncation__']['code'] == 'truncated_extraction_response'
+    for tail in ('{"part_id":"a","coverage":"com', '{"coverage":"com', '{"part_id":"unknown",',
+                 '{"part_id":"b","part_id":"a","coverage":'):
+        with pytest.raises(ValueError):
+            decode_extractions(prefix + tail, parts, allow_truncated=True)
+    with pytest.raises(ValueError):
+        decode_extractions(prefix + '{"part_id":"b",', parts)
+    for bad in ('{"items":[],"items":[]}', '{"items":[{"part_id":"a","part_id":"b"}]}'):
+        with pytest.raises(ValueError):
+            decode_extractions(bad, parts, allow_truncated=True)
+
+
+@pytest.mark.parametrize('suffix', ['}', '],"extra":1}', '],"items":[]}', ']garbage'])
+def test_truncation_decoder_rejects_malformed_envelopes(suffix):
+    from types import SimpleNamespace
+
+    from dataforge.ai_wire import decode_extractions
+    with pytest.raises(ValueError):
+        decode_extractions('{"items":[{"part_id":"a","coverage":"no_operations"}' + suffix,
+            [SimpleNamespace(part_id='a')], allow_truncated=True)
+
+
+def test_truncation_after_items_array_preserves_complete_items():
+    from types import SimpleNamespace
+
+    from dataforge.ai_wire import decode_extractions
+    valid, errors = decode_extractions('{"items":[{"part_id":"a","coverage":"no_operations"}]',
+        [SimpleNamespace(part_id='a')], allow_truncated=True)
+    assert set(valid) == {'a'} and not errors

@@ -1,5 +1,46 @@
 # Testing
 
+## PR 32 CI repair — 2026-10-25
+
+The four dependency-audit matrix entries failed on locked setuptools 84.0.0
+with GHSA-xmj3-9gf7-h52w; push and pull-request triggers showed the same failure
+twice. The generated lock now selects patched setuptools 84.1.0 without changing
+audit policy or unrelated package versions. Full locked requirements and clean
+installed-wheel dependencies audited with no known vulnerabilities under Windows
+Python 3.11 and 3.12. The unpublished local GraveTrail distribution itself has no
+PyPI advisory entry; its third-party dependencies remain audited.
+
+The original-palette test no longer assumes the saved theme must be Ocean dark.
+It still checks the exact original Ocean/Ink colors, while the existing apply/reload
+tests cover all eleven presets. The saved Crimson Forge configuration is unchanged.
+The older dated failures below are historical evidence, not the current assertion.
+Theme/Pillow compatibility, distribution and documentation checks: **37 passed**.
+The prior Linux CI run had **1245 passed, 4 skipped**, with only the stale palette
+assertion failing; its failure cancelled the Windows matrix job. Hosted reruns are
+reported separately from these local checks.
+
+A follow-up Windows Python 3.12 full run had **1243 passed, 5 skipped** and two
+silent-socket deadline harness failures. The harness accelerated preparation by
+200x and could exhaust its deadline before dispatch. Acceleration now starts
+only after the local server receives the request; an injected 200ms preparation
+delay reproduces the old failure and passes with the corrected clock. Existing
+one-request, interruption-before-read-timeout and unknown-accounting assertions
+remain unchanged. Gateway recovery/socket and theme checks: **53 passed**.
+
+## AI visibility verification — 2026-10-24
+
+Final source suite: **1136 passed, 2 skipped, 1 existing theme/config failure** in
+282.65s. `test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` expects
+Ocean dark; the preserved user `.streamlit/config.toml` selects Crimson Forge.
+The focused progress/inspection/recovery/transport/storage group passes **92 tests**
+in 46.30s. Ruff and the strict 42-page documentation build pass.
+Tests cover blocked-provider progress/Cancel, nonblocking preparation polling,
+run identity, partial resume/reuse, exact transport capture, malformed/error bodies,
+history opt-in/redaction/retention, lazy inspection, migration/backup and the mocked
+production async cancellation path. The existing `small` workspace was checked
+through saved results only. No live generation, paid call or accuracy claim.
+Counter, capture and retention definitions: [AI analysis](AI_ANALYSIS.md).
+
 <span id="current-acceptance-summary-2026-10-20"></span>
 
 ## Current acceptance summary — 2026-10-21
@@ -177,7 +218,7 @@ Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The key
 
 New contract/context/transport/validator/reconciliation/orchestration tests use synthetic originals and HTTPX MockTransport. Strict evidence and negative fixtures cover fragments/splices, ambiguous ownership, unused CTEs, scope/role/version mapping, static UPDATE/MERGE gaps, retry/fallback budgeting, truncation, unknown usage and cooperative deadline/cancellation. Fourteen versioned SQL/SAS holdout scripts label expected facts and abstentions separately from prompt examples.
 
-These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-current-limits) records the still-open language-specific live precision, coverage and sample-size targets.
+These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-semantic-quality) records the still-open language-specific live precision, coverage and sample-size targets.
 
 Earlier source verification on 2026-10-20: **738 passed, 2 existing Windows symlink skips** in 178.66 seconds. The actual browser confirmed unchecked defaults, hybrid opt-in/preview, background publication and accepted table/column claims in the report using synthetic mocked extraction. Follow-up AppTest/browser checks cover automatic terminal report refresh and selection. A clean wheel installed in a separate environment ran outside the checkout, loading packaged project prompts/schemas and publishing one table edge/column derivation with durable support through mock HTTP. Ruff, lock and strict Pages validation are recorded with the PR. The bounded two-case live OmniRoute smoke described above verifies requests/usage and AI gap publication, but its sample is too small and was used in prompt development; do not infer a precision percentage.
 
@@ -329,3 +370,101 @@ Both the all-groups/extras locked audit and the actual installed-wheel third-par
 The initial installed UI smoke hit the harness's 1 MB WebSocket frame ceiling on a legitimate 2.5 MB startup frame; the smoke client now permits a bounded 8 MB frame. Imported SQL/SAS is never executed. No live model calls or user-data migrations were required. A Docker runtime build could not run locally because the Docker daemon is unavailable; container source/input regressions pass, and the release build gate remains enabled.
 
 Final remediation source verification: **859 passed, 2 existing Windows symlink-privilege skips** in 151.39 seconds. Ruff/lock and six documentation regressions pass. The fresh installed-wheel smoke passes CLI import/lineage, actual SVG/PNG export, real stdio MCP query, UI health and a rendered session outside the checkout. No provider requests were made.
+
+
+## Resumable AI analysis
+
+Resumable pipeline tests cover project/window separation, automatic rollover, request-level recovery, batch item isolation, owner-thread database access, mixed SQL/SAS/dbt table/column publication, scoped stored-fact linking and bounded resolution. `test_ai_pipeline_qualification.py` reproduces the screenshot task shape. Mock HTTP and synthetic scale evidence establish behavior only; live model precision and native release acceptance remain separate gates.
+
+Final local qualification for this pipeline: **940 passed, 2 existing Windows skips** (`python -m pytest -q`, 183.72 seconds, Python 3.11.16). `ruff check .` and the strict docs build pass (42 public pages). A fresh wheel installed to a separate target and exercised outside the checkout passed mixed SQL/SAS/dbt table+column publication, packaged dbt/resolution prompts and schema9 integrity with zero live calls. Native executable/container and live-provider accuracy were not rerun.
+
+
+## Adaptive AI context and expression components (2026-10-22)
+
+The final source suite passes **963 tests with 2 existing Windows skips** in
+248.62 seconds on Python 3.11.16. Ruff, lock validation and the strict Pages build
+pass. A fresh wheel built from sdist and installed to a separate target exercises
+the packaged extraction/review prompts, 301-dependency expression composition,
+additional component review and zero-network saved-result reuse.
+
+Regressions cover the actual 625-character banking statement under the default
+8,000-source-character allowance; SQL UNION, stateful SAS and large dbt context;
+nested source/projection identities; irreducible minimum capacity; response slot
+limits; quoted names; hidden-source attribution; checkpoint/reopen; and newly
+enabled review rejecting a previously composed expression. The host reconciles
+the original parent once. A real **17 MiB expression** remains below the existing
+JSON record limit through checked source-offset persistence. Support refresh
+preserves its provenance, and 100 same-source report claims require one blob read.
+
+`scripts/qualify_ai_context.py` imports the actual 2,114-script SQL banking archive
+and 86-script SQL project in an isolated temporary home. An offline full preview
+of all **2,200 files** fits the default 8,000-character source allowance and a
+16,384-token combined model window. One qualification snapshot planned 14,507
+tasks, with a maximum 6,811 disclosed source/context characters and 13,260 total
+request characters. Task counts depend on model limits, review settings and
+planning versions. The optional `--execute` mode uses mock HTTP and checks every
+physical envelope, unique task extraction and one publication.
+
+These are source fitting, composition, recovery and persistence checks. Mock
+responses supply known components or explicit partial outcomes; they do not
+establish live-model precision or complete semantic coverage. The user's Test
+workspace and providers are untouched. Static parser algorithms are unchanged;
+native executable and container release checks were not rerun.
+
+
+## Protocol 5 file extraction (2026-10-23)
+
+New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.
+
+
+Protocol-5 offline scale evidence (2026-10-23): SQL 1,002 files / 1,003 parts / 39 requests; SAS 1,002 / 1,003 / 38; dbt 1,002 / 1,003 / 42. All had full processed range coverage and exact deterministic golden table/column/file graphs after interruption/reopen. SQL/SAS retain duplicate-writer boundaries. These are mock transport checks, not live semantic accuracy. Peak measured Python allocations were approximately 106.5 / 57.4 / 97.2 MiB; elapsed times approximately 89 / 91 / 305 seconds with tracing enabled. Actual provider tokens/cost remain unknown.
+
+## Durable response recovery verification (2026-10-24)
+
+The focused regression set adds per-part cancellation/provenance, storage-write
+failure, atomic split-plan interruption, complete-item truncation salvage, eligible
+response replay, current-privacy/integrity/retention/scope gates and lazy durable
+counters. Replay tests reopen isolated stores and assert zero additional transport
+calls, attempts, reservations or reported usage. Raw cleanup and backup/restore
+preserve validated parts. The quarantined-response fixture now actually cuts off
+an item; the consolidation no-resend fixture explicitly enables history. Existing
+acceptance assertions remain intact.
+
+Workspace verification used temporary isolated **small_sql** stores populated from
+the first three SQL files in the bundled compact banking archive. The running user
+store was never opened, restarted, cancelled or modified. Synthetic provider output
+was tied to exact part/source coordinates. Two valid parts survived cancellation;
+Continue dispatched only the third ID. Start fresh created a new run, deliberately
+resent all three IDs, and produced the same three deterministic graph edges. A
+separate retained-response crash after one committed part replayed the other two
+with zero new calls and unchanged one-attempt usage (7 input / 9 output tokens).
+These checks establish persistence and graph mechanics, not model accuracy.
+
+Task 5 follows the explicit user exception: **no new automated live-reasoning tests**.
+Manual synthetic checks exercised byte-split SSE framing, usage-only/terminal events,
+answer/reasoning separation, replay parity, credential splits, the display cap and
+actual mocked asynchronous HTTPX consumption before response completion. The browser
+check confirmed the 300px panel, scroll hold during growth, Jump to latest,
+collapse/expand, interruption and exact absence caption. No live inference was used.
+
+Exact final commands, results, local commits and the preserved user-theme failure
+are recorded in the repository implementation results at
+`docs/promts/2026-10-23-simplify-ai-lineage-results.md` (an internal record, not a published page).
+
+Final durable-recovery validation: **130 focused tests passed in 57.23s**;
+full suite **1170 passed, 2 skipped, 1 existing theme failure in 328.98s**.
+`test_palette_choices_preserve_ocean_and_ink_and_default_to_ocean` expects Ocean dark;
+the preserved user configuration selects Crimson Forge. Ruff and strict docs validation
+passed. No assertion or user configuration was weakened to conceal this mismatch.
+
+
+## Non-streaming analysis rollback (2026-10-24)
+
+A focused regression verifies that LM Studio preview/planning and actual analysis
+transport both use `stream: false`, omit `stream_options`, and save all nine validated
+parts from a mocked ordinary JSON response. The regression failed with `stream: true`
+before the two call sites were changed. Reasoning internals were retained; no new
+live-reasoning tests or live provider calls were added. Existing persistence, replay,
+truncation, cancellation and UI checks remain the preservation gates.

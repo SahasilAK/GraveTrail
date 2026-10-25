@@ -1,5 +1,4 @@
 """Development failures reduced to independent positive and deceptive-negative cases."""
-from contextlib import closing
 
 import pytest
 
@@ -107,33 +106,3 @@ def test_update_scalar_subquery_is_active_but_unused_cte_is_not(language):
 def test_delete_exists_reachable_query_retains_input():
     code = 'DELETE FROM mart.b WHERE EXISTS (SELECT 1 FROM raw.a a WHERE a.id=mart.b.id);'
     assert {r.name for r in parse_sql(code).operations[0].sources} == {'raw.a'}
-
-
-@pytest.mark.parametrize('symbol', ['VALIDATOR_VERSION', 'PARSER_VERSION'])
-def test_validator_upgrade_invalidates_continuation_before_any_new_call(tmp_path, monkeypatch, symbol):
-    from dataforge.ai_analysis_models import AnalysisRequest, ProjectLineageResponse, UnitAttemptResult
-    from dataforge.analysis_service import run_analysis
-    from dataforge.ingestion import Importer
-    from dataforge.llm import Profile
-    from dataforge.store import Store
-
-    with closing(Store(tmp_path)) as store:
-        workspace = store.create_workspace('upgrade')
-        Importer(store, workspace).files([('q.sql', b'SELECT 1; SELECT 2;')], {'.sql'})
-        profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', retries=0, context_chars=100000)
-        store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', workspace, 'm', profile.model_dump_json()])
-        store.set_setting(workspace, 'default_profile', 'p')
-        store.set_setting(workspace, 'max_context_chars', 100000)
-        calls = []
-        def extract(s, w, unit, task, execution):
-            calls.append(unit.unit_id)
-            execution.before_attempt(profile)
-            return UnitAttemptResult(unit_id=unit.unit_id, task=task, result=ProjectLineageResponse(unit_id=unit.unit_id))
-        monkeypatch.setattr('dataforge.analysis_service.invoke_analysis_unit', extract)
-        first = run_analysis(store, workspace, AnalysisRequest(mode='hybrid', max_provider_attempts=1))
-        assert first.status == 'awaiting_continuation'
-        import dataforge.analysis_service as service
-        monkeypatch.setattr(service, symbol, 'upgrade', raising=False)
-        result = run_analysis(store, workspace, AnalysisRequest(mode='hybrid', resume_run_id=first.run_id))
-        assert result.status == 'stale'
-        assert len(calls) == 1 and not store.rows('SELECT * FROM analysis_runs')

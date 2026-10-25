@@ -189,8 +189,10 @@ AGENTS.md
 .streamlit/
 .venv-clean/
 .knowledge-base/
+.streamlit\config.toml
 
 # Local Codex instructions and implementation records
+.superpowers/
 .codex/
 .kbignore
 /plans/**

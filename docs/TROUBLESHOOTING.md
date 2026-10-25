@@ -25,3 +25,8 @@
   comprehensive inspection. Cycles are safe but do not imply an executable schedule.
 - **Recover after failure:** previous committed facts remain. Stop app, back up data home,
   correct the failing input/config and rerun. Restore a stopped-app backup for data recovery.
+
+
+## Resumable AI analysis
+
+A project estimate above 2,000 attempts is distinct from the per-execution ceiling. Auto continuation crosses windows within a finite project allowance. Context failures still require a fitting unit/model/disclosure allowance; provider quotas/credits remain external limits. For wait, restart, unknown-response and allowance actions, see [AI controls and recovery](user-guide/ai-analysis-controls-and-recovery.md).

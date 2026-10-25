@@ -82,13 +82,18 @@ class RuntimeConnections:
             raise ValueError('Only application-prefixed variables may be injected')
         return {name: value for name in names if (value := self.resolve(name))}
 
-    def redact(self, text: str, request_secrets: tuple[str, ...] = ()) -> str:
-        """Redact registered, request, environment, and credential-shaped secret values."""
+    def redaction_values(self, request_secrets: tuple[str, ...] = ()) -> set[str]:
+        """Runtime-only secret values; used to withhold split streaming credentials."""
         secrets = [*request_secrets, *(value[0] for value in self._credentials.values())]
         secrets.extend(os.environ[name] for name in self._resolved if os.environ.get(name))
         secrets.extend(value for name, value in os.environ.items()
                        if re.search(r'(?:KEY|TOKEN|PASSWORD|SECRET)$', name, re.I) and value)
-        for secret in sorted(set(secrets), key=len, reverse=True):
+        return {variant for secret in secrets if secret for variant in
+            (secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1])}
+
+    def redact(self, text: str, request_secrets: tuple[str, ...] = ()) -> str:
+        """Redact registered, request, environment, and credential-shaped secret values."""
+        for secret in sorted(self.redaction_values(request_secrets), key=len, reverse=True):
             variants = {secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1]}
             for variant in sorted(variants, key=len, reverse=True):
                 text = text.replace(variant, '[REDACTED]')

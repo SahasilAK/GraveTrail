@@ -1,227 +1,75 @@
 {
   "$defs": {
-    "AssetCandidate": {
+    "ContextEntry": {
       "additionalProperties": false,
       "properties": {
-        "name": {
+        "entry_id": {
           "maxLength": 500,
           "minLength": 1,
-          "title": "Name",
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "symbol": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Symbol",
           "type": "string"
         },
         "kind": {
-          "default": "table",
-          "enum": [
-            "table",
-            "view",
-            "dataset"
-          ],
+          "default": "resource",
           "title": "Kind",
-          "type": "string"
-        },
-        "role": {
-          "enum": [
-            "read",
-            "write",
-            "declaration"
-          ],
-          "title": "Role",
-          "type": "string"
-        },
-        "evidence": {
-          "$ref": "#/$defs/EvidenceCitation"
-        }
-      },
-      "required": [
-        "name",
-        "role",
-        "evidence"
-      ],
-      "title": "AssetCandidate",
-      "type": "object"
-    },
-    "ColumnCandidate": {
-      "additionalProperties": false,
-      "properties": {
-        "table": {
-          "maxLength": 500,
-          "minLength": 1,
-          "title": "Table",
-          "type": "string"
-        },
-        "column": {
-          "maxLength": 500,
-          "minLength": 1,
-          "title": "Column",
-          "type": "string"
-        },
-        "context": {
-          "maxLength": 100,
-          "minLength": 1,
-          "title": "Context",
-          "type": "string"
-        },
-        "alias": {
-          "default": "",
-          "maxLength": 500,
-          "title": "Alias",
-          "type": "string"
-        },
-        "expression": {
-          "default": "",
-          "maxLength": 20000,
-          "title": "Expression",
-          "type": "string"
-        },
-        "evidence": {
-          "$ref": "#/$defs/EvidenceCitation"
-        }
-      },
-      "required": [
-        "table",
-        "column",
-        "context",
-        "evidence"
-      ],
-      "title": "ColumnCandidate",
-      "type": "object"
-    },
-    "Coverage": {
-      "additionalProperties": false,
-      "properties": {
-        "status": {
-          "default": "partial",
-          "enum": [
-            "complete",
-            "partial",
-            "unsupported",
-            "no_operations"
-          ],
-          "title": "Status",
-          "type": "string"
-        },
-        "unsupported": {
-          "items": {
-            "maxLength": 500,
-            "minLength": 1,
-            "type": "string"
-          },
-          "maxItems": 100,
-          "title": "Unsupported",
-          "type": "array"
-        }
-      },
-      "title": "Coverage",
-      "type": "object"
-    },
-    "DerivationCandidate": {
-      "additionalProperties": false,
-      "properties": {
-        "target_table": {
-          "maxLength": 500,
-          "minLength": 1,
-          "title": "Target Table",
-          "type": "string"
-        },
-        "target_column": {
-          "maxLength": 500,
-          "minLength": 1,
-          "title": "Target Column",
-          "type": "string"
-        },
-        "expression": {
-          "maxLength": 20000,
-          "minLength": 1,
-          "title": "Expression",
-          "type": "string"
-        },
-        "category": {
-          "maxLength": 100,
-          "minLength": 1,
-          "title": "Category",
           "type": "string"
         },
         "scope": {
           "default": "",
-          "maxLength": 500,
           "title": "Scope",
           "type": "string"
         },
-        "branch": {
-          "default": 0,
-          "maximum": 100000,
-          "minimum": 0,
-          "title": "Branch",
-          "type": "integer"
-        },
-        "version": {
-          "anyOf": [
-            {
-              "maxLength": 500,
-              "type": "string"
-            },
-            {
-              "maximum": 100000,
-              "minimum": 0,
-              "type": "integer"
-            }
+        "source_kind": {
+          "enum": [
+            "sql",
+            "sas",
+            "dbt"
           ],
-          "default": "",
-          "title": "Version"
-        },
-        "ordinal": {
-          "default": 0,
-          "maximum": 100000,
-          "minimum": 0,
-          "title": "Ordinal",
-          "type": "integer"
-        },
-        "inputs": {
-          "items": {
-            "$ref": "#/$defs/DerivationInput"
-          },
-          "maxItems": 100,
-          "title": "Inputs",
-          "type": "array"
+          "title": "Source Kind",
+          "type": "string"
         },
         "evidence": {
-          "$ref": "#/$defs/EvidenceCitation"
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          },
+          "title": "Evidence",
+          "type": "array"
         },
-        "expression_start_offset": {
-          "anyOf": [
-            {
-              "minimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
+        "origin": {
+          "enum": [
+            "source_declared",
+            "artifact_declared",
+            "ai_inferred"
           ],
-          "default": null,
-          "title": "Expression Start Offset"
+          "title": "Origin",
+          "type": "string"
         },
-        "expression_end_offset": {
-          "anyOf": [
-            {
-              "minimum": 1,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Expression End Offset"
+        "revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "available": {
+          "default": true,
+          "title": "Available",
+          "type": "boolean"
         }
       },
       "required": [
-        "target_table",
-        "target_column",
-        "expression",
-        "category",
-        "evidence"
+        "entry_id",
+        "symbol",
+        "source_kind",
+        "evidence",
+        "origin"
       ],
-      "title": "DerivationCandidate",
+      "title": "ContextEntry",
       "type": "object"
     },
     "DerivationInput": {
@@ -281,15 +129,448 @@
       "title": "DerivationInput",
       "type": "object"
     },
-    "EvidenceCitation": {
+    "ExtractedDerivation": {
       "additionalProperties": false,
       "properties": {
-        "unit_id": {
+        "fact_id": {
           "maxLength": 500,
           "minLength": 1,
-          "title": "Unit Id",
+          "title": "Fact Id",
           "type": "string"
         },
+        "target_table": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Target Table",
+          "type": "string"
+        },
+        "target_column": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Target Column",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/DerivationInput"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "expression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "category": {
+          "default": "unknown",
+          "title": "Category",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "title": "Scope",
+          "type": "string"
+        },
+        "branch": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Branch",
+          "type": "integer"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "",
+          "title": "Version"
+        },
+        "ordinal": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "status": {
+          "default": "inferred",
+          "enum": [
+            "inferred",
+            "unresolved"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fact_id",
+        "target_table",
+        "target_column",
+        "evidence"
+      ],
+      "title": "ExtractedDerivation",
+      "type": "object"
+    },
+    "ExtractedUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Table",
+          "type": "string"
+        },
+        "column": {
+          "title": "Column",
+          "type": "string"
+        },
+        "context": {
+          "default": "value",
+          "enum": [
+            "value",
+            "value_selection",
+            "row_filter",
+            "join",
+            "partition",
+            "order",
+            "rowset"
+          ],
+          "title": "Context",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "title": "Scope",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "table",
+        "column",
+        "evidence"
+      ],
+      "title": "ExtractedUsage",
+      "type": "object"
+    },
+    "MissingContext": {
+      "additionalProperties": false,
+      "properties": {
+        "symbol": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Symbol",
+          "type": "string"
+        },
+        "kind": {
+          "default": "resource",
+          "title": "Kind",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "title": "Scope",
+          "type": "string"
+        },
+        "operation_id": {
+          "default": "",
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "reason": {
+          "default": "missing_definition",
+          "title": "Reason",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "status": {
+          "default": "unresolved",
+          "title": "Status",
+          "type": "string"
+        },
+        "consumed_fingerprint": {
+          "default": "",
+          "title": "Consumed Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "symbol"
+      ],
+      "title": "MissingContext",
+      "type": "object"
+    },
+    "OperationRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "operation_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Operation Id",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/SourceReference"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "reads": {
+          "items": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "title": "Reads",
+          "type": "array"
+        },
+        "writes": {
+          "items": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "title": "Writes",
+          "type": "array"
+        },
+        "usages": {
+          "items": {
+            "$ref": "#/$defs/ExtractedUsage"
+          },
+          "title": "Usages",
+          "type": "array"
+        },
+        "derivations": {
+          "items": {
+            "$ref": "#/$defs/ExtractedDerivation"
+          },
+          "title": "Derivations",
+          "type": "array"
+        },
+        "scope": {
+          "default": "",
+          "title": "Scope",
+          "type": "string"
+        },
+        "order": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "context_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Context Ids",
+          "type": "array"
+        },
+        "status": {
+          "const": "inferred",
+          "default": "inferred",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "kind",
+        "evidence"
+      ],
+      "title": "OperationRecord",
+      "type": "object"
+    },
+    "PartExtraction": {
+      "additionalProperties": false,
+      "properties": {
+        "part_id": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Part Id",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/OperationRecord"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "title": "Assets",
+          "type": "array"
+        },
+        "definitions": {
+          "items": {
+            "$ref": "#/$defs/ContextEntry"
+          },
+          "title": "Definitions",
+          "type": "array"
+        },
+        "missing_context": {
+          "items": {
+            "$ref": "#/$defs/MissingContext"
+          },
+          "title": "Missing Context",
+          "type": "array"
+        },
+        "unresolved": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unresolved",
+          "type": "array"
+        },
+        "coverage": {
+          "default": "partial",
+          "enum": [
+            "complete",
+            "partial",
+            "unsupported",
+            "no_operations"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "omitted": {
+          "default": false,
+          "title": "Omitted",
+          "type": "boolean"
+        },
+        "superseded_fact_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Superseded Fact Ids",
+          "type": "array"
+        },
+        "superseded_operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Superseded Operation Ids",
+          "type": "array"
+        },
+        "revision": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "protocol_version": {
+          "const": 5,
+          "default": 5,
+          "title": "Protocol Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "part_id"
+      ],
+      "title": "PartExtraction",
+      "type": "object"
+    },
+    "ResourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "identity": {
+          "default": "",
+          "title": "Identity",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "title": "Scope",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "",
+          "title": "Version"
+        },
+        "temporary": {
+          "default": false,
+          "title": "Temporary",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ResourceReference",
+      "type": "object"
+    },
+    "SourceReference": {
+      "additionalProperties": false,
+      "properties": {
         "file_id": {
           "maxLength": 500,
           "minLength": 1,
@@ -302,138 +583,40 @@
           "title": "Content Hash",
           "type": "string"
         },
-        "start_line": {
-          "minimum": 1,
-          "title": "Start Line",
-          "type": "integer"
-        },
-        "end_line": {
-          "minimum": 1,
-          "title": "End Line",
-          "type": "integer"
-        },
         "start_offset": {
           "minimum": 0,
           "title": "Start Offset",
           "type": "integer"
         },
         "end_offset": {
-          "minimum": 1,
+          "minimum": 0,
           "title": "End Offset",
           "type": "integer"
-        },
-        "quote": {
-          "maxLength": 200000,
-          "minLength": 1,
-          "title": "Quote",
-          "type": "string"
         }
       },
       "required": [
-        "unit_id",
         "file_id",
         "content_hash",
-        "start_line",
-        "end_line",
         "start_offset",
-        "end_offset",
-        "quote"
+        "end_offset"
       ],
-      "title": "EvidenceCitation",
-      "type": "object"
-    },
-    "TableRelationship": {
-      "additionalProperties": false,
-      "properties": {
-        "source": {
-          "maxLength": 500,
-          "minLength": 1,
-          "title": "Source",
-          "type": "string"
-        },
-        "target": {
-          "maxLength": 500,
-          "minLength": 1,
-          "title": "Target",
-          "type": "string"
-        },
-        "operation": {
-          "maxLength": 100,
-          "minLength": 1,
-          "title": "Operation",
-          "type": "string"
-        },
-        "evidence": {
-          "$ref": "#/$defs/EvidenceCitation"
-        }
-      },
-      "required": [
-        "source",
-        "target",
-        "operation",
-        "evidence"
-      ],
-      "title": "TableRelationship",
+      "title": "SourceReference",
       "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
-    "unit_id": {
-      "maxLength": 500,
-      "minLength": 1,
-      "title": "Unit Id",
-      "type": "string"
-    },
-    "assets": {
+    "items": {
       "items": {
-        "$ref": "#/$defs/AssetCandidate"
+        "$ref": "#/$defs/PartExtraction"
       },
-      "maxItems": 100,
-      "title": "Assets",
+      "title": "Items",
       "type": "array"
-    },
-    "relationships": {
-      "items": {
-        "$ref": "#/$defs/TableRelationship"
-      },
-      "maxItems": 100,
-      "title": "Relationships",
-      "type": "array"
-    },
-    "columns": {
-      "items": {
-        "$ref": "#/$defs/ColumnCandidate"
-      },
-      "maxItems": 100,
-      "title": "Columns",
-      "type": "array"
-    },
-    "derivations": {
-      "items": {
-        "$ref": "#/$defs/DerivationCandidate"
-      },
-      "maxItems": 100,
-      "title": "Derivations",
-      "type": "array"
-    },
-    "unresolved_symbols": {
-      "items": {
-        "maxLength": 500,
-        "minLength": 1,
-        "type": "string"
-      },
-      "maxItems": 100,
-      "title": "Unresolved Symbols",
-      "type": "array"
-    },
-    "coverage": {
-      "$ref": "#/$defs/Coverage"
     }
   },
   "required": [
-    "unit_id"
+    "items"
   ],
-  "title": "ProjectLineageResponse",
+  "title": "ExtractionEnvelope",
   "type": "object"
 }

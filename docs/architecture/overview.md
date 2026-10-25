@@ -41,3 +41,5 @@ Logical dependency order does not establish runtime execution order.
 
 For implementation conventions and adding parsers, continue to
 [development](../development/index.md).
+
+- [AI pipeline ownership, persistence and flow](ai-analysis-pipeline.md)

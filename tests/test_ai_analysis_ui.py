@@ -11,7 +11,7 @@ def test_ai_controls_preview_offline_and_block_without_profile(tmp_path, monkeyp
     store = get_store(str(tmp_path))
     workspace = store.create_workspace('AI UI')
     Importer(store, workspace).files([('q.sql', b'create table mart.x as select id from raw.a;')], {'.sql'})
-    monkeypatch.setattr('dataforge.analysis_service.invoke_analysis_unit', lambda *a: (_ for _ in ()).throw(
+    monkeypatch.setattr('dataforge.llm.Adapter.complete', lambda *a: (_ for _ in ()).throw(
         AssertionError('UI render sent AI')))
     view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
     view.switch_page('ui/pages/analysis.py').run()
@@ -20,8 +20,8 @@ def test_ai_controls_preview_offline_and_block_without_profile(tmp_path, monkeyp
     assert checkbox.value is False
     checkbox.check().run()
     assert not view.exception
-    assert next(c for c in view.checkbox if c.label == 'Compare with parser').value is True
-    assert next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
+    assert not any(c.label in {'Compare with parser', 'Additional AI review'} for c in view.checkbox)
+    assert next(b for b in view.button if b.label == 'Analyze with AI').disabled
     assert not store.runs(workspace)
     import streamlit as st
     st.cache_resource.clear()
@@ -56,6 +56,30 @@ def test_completed_worker_refreshes_the_whole_report_once(tmp_path, monkeypatch)
     st.cache_resource.clear()
 
 
+def test_failed_worker_selects_bound_run_without_a_result_payload(tmp_path, monkeypatch):
+    import streamlit as st
+
+    import ui.analysis_ai as ai
+    from dataforge.ai_analysis_store import save_run
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    workspace = store.create_workspace('small')
+    Importer(store, workspace).files([('q.sql', b'select 1;')], {'.sql'})
+    save_run(store, workspace, 'failed-run', mode='ai', status='failed')
+    save_run(store, workspace, 'older-choice', mode='ai', status='cancelled')
+    class FailedJobs:
+        def read(self, *args):
+            return {'status': 'failed', 'progress': 0, 'run_id': 'failed-run', 'error': 'RuntimeError'}
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *a: FailedJobs())
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.session_state['ai_analysis_job_' + workspace] = 'job'
+    view.session_state['ai_report_choice_' + workspace] = 'older-choice'
+    view.switch_page('ui/pages/analysis.py').run()
+    assert not view.exception
+    assert view.session_state['ai_report_choice_' + workspace] == 'failed-run'
+    st.cache_resource.clear()
+
+
 def test_pending_worker_elapsed_advances_and_stops_on_completion(tmp_path, monkeypatch):
     import ui.analysis_ai as ai
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
@@ -87,77 +111,200 @@ def test_pending_worker_elapsed_advances_and_stops_on_completion(tmp_path, monke
     st.cache_resource.clear()
 
 
-def test_budget_defaults_are_automatic_editable_and_resettable(tmp_path, monkeypatch):
+def test_active_report_uses_ledger_without_inventory_or_preparation(tmp_path, monkeypatch):
+    import streamlit as st
+
+    import ui.analysis_ai as ai
+    from dataforge.ai_analysis_store import save_run
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     store = get_store(str(tmp_path))
-    w = store.create_workspace('Automatic UI')
-    Importer(store, w).files([('q.sql', b'select 1; select 2;')], {'.sql'})
-    from dataforge.llm import Profile
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', retries=0)
-    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', profile.model_dump_json()])
-    store.set_setting(w, 'default_profile', 'p')
+    workspace = store.create_workspace('small')
+    Importer(store, workspace).files([('q.sql', b'select 1;')], {'.sql'})
+    save_run(store, workspace, 'live', mode='ai', status='extracting', summary={
+        'parts': [{'part_id': 'p', 'file_id': 'f', 'work_kind': 'extraction'}], 'stage': 'extracting',
+        'last_failure': {'failure_category': 'transport_unknown', 'retry_scheduled': True},
+        'recovery_queue': {'p': {'code': 'missing_extraction_item'}}})
+    cancelled = []
+    class PendingJobs:
+        def read(self, *args):
+            return {'status': 'running', 'progress': 0, 'stage': 'Waiting for AI extraction response',
+                    'run_id': 'live', 'cancel_requested': bool(cancelled)}
+        def cancel(self, *args):
+            cancelled.append(1)
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *args: PendingJobs())
     view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.session_state['ai_analysis_job_' + workspace] = 'job'
+    monkeypatch.setattr(store, 'files', lambda *a: (_ for _ in ()).throw(AssertionError('Inventory read')))
+    monkeypatch.setattr(ai, 'preview_analysis', lambda *a, **k: (_ for _ in ()).throw(AssertionError('Preparation repeated')))
     view.switch_page('ui/pages/analysis.py').run()
-    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
     assert not view.exception
-    attempts = next(n for n in view.number_input if n.label == 'Maximum provider attempts')
-    assert attempts.value == 2
-    attempts.set_value(7).run()
-    next(c for c in view.checkbox if c.label == 'Additional AI review').check().run()
-    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 7
-    view.switch_page('ui/pages/dashboard.py').run()
-    view.switch_page('ui/pages/analysis.py').run()
-    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
-    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 7
-    next(c for c in view.checkbox if c.label == 'Additional AI review').check().run()
-    next(b for b in view.button if b.label == 'Reset AI budgets to automatic').click().run()
-    assert not view.exception
-    assert next(n for n in view.number_input if n.label == 'Maximum provider attempts').value == 4
-    import streamlit as st
+    assert any(m.label == 'Files selected' and m.value == '1' for m in view.metric)
+    assert any(m.label == 'Parts planned' and m.value == '1' for m in view.metric)
+    assert any('Retrying batch' in item.value for item in view.warning)
+    assert any(e.label == 'Pending extraction recovery' for e in view.expander)
+    next(b for b in view.button if b.label == 'Cancel AI analysis').click().run()
+    view.run()
+    assert any('Cancellation requested' in i.value for i in view.info)
+    assert len(cancelled) == 1
     st.cache_resource.clear()
 
 
-def test_calculated_context_action_updates_only_context_allowances(tmp_path, monkeypatch):
-    import json
+def test_preparation_database_lock_does_not_block_cancel_render(tmp_path, monkeypatch):
+    import threading
 
-    from dataforge.llm import Profile
+    import streamlit as st
+
+    import ui.analysis_ai as ai
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     store = get_store(str(tmp_path))
-    w = store.create_workspace('Calculated context')
+    workspace = store.create_workspace('small')
+    entered, release = threading.Event(), threading.Event()
+    class PendingJobs:
+        def read(self, *args):
+            return {'status': 'running', 'progress': 0, 'stage': 'Preparing', 'run_id': 'r'}
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *a: PendingJobs())
+    def app(store, workspace):
+        import streamlit as st
+
+        from ui.analysis_ai import progress
+        st.session_state['ai_analysis_job_' + workspace] = 'job'
+        progress(store, workspace)
+    def locked_preparation():
+        with store.lock:
+            entered.set()
+            release.wait(6)
+    worker = threading.Thread(target=locked_preparation)
+    worker.start()
+    try:
+        assert entered.wait(2)
+        view = AppTest.from_function(app, args=(store, workspace), default_timeout=2).run()
+        assert not view.exception
+        assert any(b.label == 'Cancel AI analysis' and not b.disabled for b in view.button)
+        assert any('checkpoint' in c.value.lower() for c in view.caption)
+    finally:
+        release.set()
+        worker.join()
+        st.cache_resource.clear()
+
+
+def test_normal_controls_only_expose_one_optional_run_ceiling(tmp_path, monkeypatch):
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Token UI')
     Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='m', context_chars=500)
-    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'm', profile.model_dump_json()])
-    store.set_setting(w, 'default_profile', 'p')
+    from test_ai_resumable_files import configured
+    configured(store, w)
     view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
     view.switch_page('ui/pages/analysis.py').run()
     next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
-    assert next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
-    next(b for b in view.button if b.label.startswith('Apply calculated context allowance')).click().run()
     assert not view.exception
-    assert not next(b for b in view.button if b.label == 'Analyze with AI + parser').disabled
-    saved = json.loads(store.rows("SELECT config FROM llm_profiles WHERE profile_id='p'")[0]['config'])
-    assert saved['context_chars'] > 500 and saved['max_tokens'] == profile.max_tokens
-    for key in ('external_llm', 'allow_full_source', 'llm_history'):
-        assert store.setting(w, key, False) is False
+    assert [n.label for n in view.number_input] == ['Run output token ceiling (optional)']
+    assert view.number_input[0].value is None
+    view.number_input[0].set_value(16000).run()
+    assert not view.exception
+    assert not next(b for b in view.button if b.label == 'Analyze with AI').disabled
     import streamlit as st
     st.cache_resource.clear()
 
 
-def test_continue_keeps_saved_custom_limits_until_explicit_reset(tmp_path, monkeypatch):
+def test_legacy_report_stays_readable_but_cannot_resume(tmp_path, monkeypatch):
     from dataforge.ai_analysis_models import AnalysisRequest
     from dataforge.ai_analysis_store import save_run
     monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
     store = get_store(str(tmp_path))
-    w = store.create_workspace('Continue custom budget')
+    w = store.create_workspace('Historical UI')
     Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
-    saved = AnalysisRequest(mode='hybrid', max_provider_attempts=7)
-    save_run(store, w, 'pending', mode='hybrid', status='awaiting_continuation', summary={'request': saved.model_dump()})
-    seen = []
-    monkeypatch.setattr('ui.analysis_ai.start', lambda s,w,request: seen.append(request))
+    save_run(store, w, 'old', mode='hybrid', status='awaiting_continuation',
+             summary={'request': AnalysisRequest(mode='hybrid').model_dump()})
     view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
     view.switch_page('ui/pages/analysis.py').run()
-    next(b for b in view.button if b.label == 'Continue AI analysis').click().run()
     assert not view.exception
-    assert seen[0].max_provider_attempts == 7
+    assert not any(b.label == 'Continue AI analysis' for b in view.button)
+    assert any('incompatible protocol' in i.value for i in view.info)
     import streamlit as st
+    st.cache_resource.clear()
+
+
+def test_analyze_reuses_preview_and_shows_cancellable_worker_before_inventory(tmp_path, monkeypatch):
+    import streamlit as st
+    from test_ai_resumable_files import configured
+
+    import ui.analysis_ai as ai
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Start UI')
+    configured(store, w)
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    original = ai.preview_analysis
+    previews, cancellations, starts = [], [], []
+    record = {'status': 'running', 'progress': .1, 'stage': 'Preparing selected sources'}
+    def preview(*args, **kwargs):
+        previews.append(1)
+        return original(*args, **kwargs)
+    class PendingJobs:
+        def start(self, *args, **kwargs):
+            starts.append(1)
+            return {'job_id': 'queued'}
+        def read(self, *args):
+            return record
+        def cancel(self, *args):
+            cancellations.append(args)
+    monkeypatch.setattr(ai, 'analysis_jobs', lambda *args: PendingJobs())
+    monkeypatch.setattr(ai, 'preview_analysis', preview)
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    assert len(previews) == 1
+    next(b for b in view.button if b.label == 'Analyze with AI').click().run()
+    assert not view.exception and len(starts) == 1
+    assert len(previews) == 1, 'Analyze must not repeat the expensive preview'
+    assert any(b.label == 'Cancel AI analysis' for b in view.button)
+    original_files = store.files
+    monkeypatch.setattr(store, 'files', lambda *args: (_ for _ in ()).throw(AssertionError('Worker UI waited on inventory')))
+    next(b for b in view.button if b.label == 'Cancel AI analysis').click().run()
+    assert not view.exception and cancellations == [('queued', w)]
+    monkeypatch.setattr(store, 'files', original_files)
+    record.update(status='cancelled', progress=1, result={'status': 'cancelled'})
+    view.run()
+    assert not view.exception and len(previews) == 1
+    assert not any(p.proto.value == 100 for p in view.get('progress')), 'Cancelled work is not 100% complete'
+    assert next(c for c in view.checkbox if c.label == 'Use AI for analysis').value
+    st.cache_resource.clear()
+
+
+def test_preview_cache_invalidates_for_sources_settings_profile_and_request(tmp_path, monkeypatch):
+    import json
+
+    import streamlit as st
+    from test_ai_resumable_files import configured
+
+    import ui.analysis_ai as ai
+    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
+    store = get_store(str(tmp_path))
+    w = store.create_workspace('Preview freshness')
+    configured(store, w)
+    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
+    original, calls = ai.preview_analysis, []
+    def preview(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(ai, 'preview_analysis', preview)
+    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
+    view.switch_page('ui/pages/analysis.py').run()
+    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
+    view.run()
+    assert len(calls) == 1
+    Importer(store, w).files([('q.sql', b'select 2;')], {'.sql'})
+    view.run()
+    assert len(calls) == 2
+    store.set_setting(w, 'case_sensitive', True)
+    view.run()
+    assert len(calls) == 3
+    config = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
+    config['max_tokens'] = 9000
+    store.execute('UPDATE llm_profiles SET config=?', [json.dumps(config)])
+    view.run()
+    assert len(calls) == 4
+    next(s for s in view.slider if s.label == 'Maximum output share (%)').set_value(40).run()
+    assert not view.exception and len(calls) == 5
     st.cache_resource.clear()

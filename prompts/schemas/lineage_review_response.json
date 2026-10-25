@@ -42,7 +42,6 @@
           "type": "integer"
         },
         "quote": {
-          "maxLength": 200000,
           "minLength": 1,
           "title": "Quote",
           "type": "string"

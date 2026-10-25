@@ -136,3 +136,5 @@ Logical deletion does not guarantee a smaller DuckDB file.
 Read [data management and cleanup](../DATA_MANAGEMENT.md) for category effects,
 backup/restore and recovery limits. For startup/storage issues use
 [configuration](../getting-started/configuration.md) or [troubleshooting](../troubleshooting/help.md).
+
+- [AI analysis flow](ai-analysis-flow.md)

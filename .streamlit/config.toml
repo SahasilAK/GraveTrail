@@ -20,11 +20,14 @@ showWidgetBorder = true
 paddingTop = "2rem"
 paddingBottom = "3rem"
 base = "dark"
-primaryColor = "#2869c7"
-backgroundColor = "#15202e"
-secondaryBackgroundColor = "#1f2e40"
-textColor = "#e7eef7"
-borderColor = "#3b4f65"
-linkColor = "#9abcf0"
-chartCategoricalColors = ["#71a7ee", "#52c5c5", "#bb9cde", "#e1ad66"]
+primaryColor = "#dc2626"
+backgroundColor = "#0a0d12"
+secondaryBackgroundColor = "#1e242e"
+textColor = "#f1f5f9"
+borderColor = "#2e3642"
+linkColor = "#e26465"
+chartCategoricalColors = ["#22c55e", "#3b82f6", "#ef4444", "#f97316"]
 
+[theme.sidebar]
+backgroundColor = "#141821"
+secondaryBackgroundColor = "#1e242e"

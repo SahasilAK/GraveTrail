@@ -24,6 +24,17 @@ class AnalysisRequest(StrictModel):
     max_provider_attempts: int | None = Field(default=None, ge=1, le=2000)
     max_output_tokens_total: int | None = Field(default=None, ge=1000, le=2000000)
     max_seconds: int | None = Field(default=None, ge=30, le=14400)
+    output_share: int = Field(default=30, ge=10, le=50)
+    input_token_limit: int | None = Field(default=None, ge=1, le=2147483647)
+    output_token_limit: int | None = Field(default=None, ge=64, le=2147483647)
+    budget_policy: Literal['model_share', 'legacy'] = 'model_share'
+    max_files_per_request: int | None = Field(default=None, ge=1, le=100)
+    max_parallel_requests: int | None = Field(default=None, ge=1, le=4)
+    max_context_chars: int | None = Field(default=None, ge=500, le=2000000)
+    auto_continue: bool = True
+    project_max_provider_attempts: int | None = Field(default=None, ge=1, le=100000000)
+    project_max_output_tokens_total: int | None = Field(default=None, ge=1000, le=1000000000000)
+    project_max_seconds: int | None = Field(default=None, ge=30, le=31536000)
 
     resume_run_id: str = Field(default='', max_length=100)
     retry_unknown: bool = False
@@ -46,20 +57,32 @@ class ProjectionFocus(StrictModel):
     ordinal_end: int = Field(ge=1)
 
 
+class SourceFocus(StrictModel):
+    """Host-owned source/context window; the immutable parent remains local."""
+    model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
+    parent_id: Name
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=1)
+    context_start: int = Field(ge=0)
+    context_end: int = Field(ge=0)
+
+
 class AnalysisUnit(StrictModel):
     model_config = ConfigDict(extra='forbid', strict=True, frozen=True)
     unit_id: Name
     file_id: Name
     content_hash: Name
     path: str = Field(max_length=4000)
-    extension: Literal['.sql', '.sas']
+    extension: Literal['.sql', '.sas', '.py', '.json']
+    source_kind: Literal['sql', 'sas', 'dbt'] = 'sql'
     job_id: str = Field(default='', max_length=500)
     first: int = Field(ge=1)
     last: int = Field(ge=1)
     start_offset: int = Field(ge=0)
     end_offset: int = Field(ge=1)
-    code: str = Field(min_length=1, max_length=200000)
+    code: str = Field(min_length=1)
     focus: ProjectionFocus | None = None
+    source_focus: SourceFocus | None = None
 
     @model_validator(mode='after')
     def ordered(self):
@@ -67,6 +90,10 @@ class AnalysisUnit(StrictModel):
             raise ValueError('Unit coordinates must delimit its exact code')
         if self.last - self.first != self.code.count('\n'):
             raise ValueError('Unit line coordinates must match code')
+        if self.source_focus:
+            f = self.source_focus
+            if not self.start_offset <= f.start_offset < f.end_offset <= self.end_offset or f.context_end < f.context_start:
+                raise ValueError('Invalid original source/context window')
         return self
 
 
@@ -78,7 +105,7 @@ class EvidenceCitation(StrictModel):
     end_line: int = Field(ge=1)
     start_offset: int = Field(ge=0)
     end_offset: int = Field(ge=1)
-    quote: str = Field(min_length=1, max_length=200000)
+    quote: str = Field(min_length=1)
 
     @model_validator(mode='after')
     def ordered(self):
@@ -136,13 +163,14 @@ class DerivationInput(StrictModel):
 class DerivationCandidate(StrictModel):
     target_table: Name
     target_column: Name
-    expression: str = Field(min_length=1, max_length=20000)
+    expression: str = Field(min_length=1)
+    fragment: bool = False
     category: str = Field(min_length=1, max_length=100)
     scope: str = Field(default='', max_length=500)
     branch: int = Field(default=0, ge=0, le=100000)
     version: Version = ''
     ordinal: int = Field(default=0, ge=0, le=100000)
-    inputs: list[DerivationInput] = Field(default_factory=list, max_length=100)
+    inputs: list[DerivationInput] = Field(default_factory=list)
     evidence: EvidenceCitation
     expression_start_offset: int | None = Field(default=None, ge=0)
     expression_end_offset: int | None = Field(default=None, ge=1)
@@ -233,7 +261,7 @@ class NormalizedFact(StrictModel):
     branch: int = 0
     version: Version = ''
     ordinal: int = 0
-    inputs: list[DerivationInput] = Field(default_factory=list,max_length=100)
+    inputs: list[DerivationInput] = Field(default_factory=list)
     operation: str = ''
     status: Literal['verified','inferred','unresolved'] = 'inferred'
     origin: Literal['parser','ai','both'] = 'ai'
@@ -254,6 +282,9 @@ class ValidationReport(StrictModel):
     unresolved: list[ClaimDecision] = Field(default_factory=list)
     coverage: Coverage = Field(default_factory=Coverage)
     reviewed_candidates: list[Name] = Field(default_factory=list)
+    resolution_rounds: int = Field(default=0, ge=0, le=2)
+    resolution_done: bool = False
+    fragments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class ReconciliationReport(StrictModel):
@@ -290,3 +321,136 @@ class AnalysisReport(StrictModel):
     counts: dict[str,int] = Field(default_factory=dict)
     usage_known: bool = False
     reasons: list[str] = Field(default_factory=list)
+
+
+# Protocol 5: independently inferred file extraction. Legacy contracts above
+# remain readable for historical runs and manual assistance.
+EXTRACTION_VERSION = 5
+
+
+class SourceReference(StrictModel):
+    file_id: Name
+    content_hash: Name
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(ge=0)
+
+    @model_validator(mode='after')
+    def ordered(self):
+        if self.end_offset < self.start_offset:
+            raise ValueError('Reversed source reference')
+        return self
+
+
+class FilePart(SourceReference):
+    part_id: Name
+    source_kind: Literal['sql', 'sas', 'dbt']
+    part_index: int = Field(ge=0)
+    scope: str = ''
+    context_ids: list[str] = Field(default_factory=list)
+    context_hashes: list[str] = Field(default_factory=list)
+    context_references: list[SourceReference] = Field(default_factory=list)
+    context_omissions: list[str] = Field(default_factory=list)
+    overlap: list[SourceReference] = Field(default_factory=list)
+    work_kind: Literal['extraction', 'context_completion', 'consolidation'] = 'extraction'
+
+
+class ResourceReference(StrictModel):
+    name: Name
+    identity: str = ''
+    scope: str = ''
+    version: Version = ''
+    temporary: bool = False
+
+
+class ExtractedUsage(StrictModel):
+    table: Name
+    column: str
+    context: Role = 'value'
+    scope: str = ''
+    evidence: list[SourceReference]
+
+
+class ExtractedDerivation(StrictModel):
+    fact_id: Name
+    target_table: Name
+    target_column: Name
+    inputs: list[DerivationInput] = Field(default_factory=list)
+    expression: SourceReference | None = None
+    evidence: list[SourceReference]
+    category: str = 'unknown'
+    scope: str = ''
+    branch: int = Field(default=0, ge=0)
+    version: Version = ''
+    ordinal: int = Field(default=0, ge=0)
+    status: Literal['inferred', 'unresolved'] = 'inferred'
+
+
+class OperationRecord(StrictModel):
+    operation_id: Name
+    kind: Name
+    evidence: list[SourceReference]
+    reads: list[ResourceReference] = Field(default_factory=list)
+    writes: list[ResourceReference] = Field(default_factory=list)
+    usages: list[ExtractedUsage] = Field(default_factory=list)
+    derivations: list[ExtractedDerivation] = Field(default_factory=list)
+    scope: str = ''
+    order: int | None = Field(default=None, ge=0)
+    limitations: list[str] = Field(default_factory=list)
+    context_ids: list[str] = Field(default_factory=list)
+    status: Literal['inferred'] = 'inferred'
+
+
+class ContextEntry(StrictModel):
+    entry_id: Name
+    symbol: Name
+    kind: str = 'resource'
+    scope: str = ''
+    source_kind: Literal['sql', 'sas', 'dbt']
+    evidence: list[SourceReference]
+    origin: Literal['source_declared', 'artifact_declared', 'ai_inferred']
+    revision: int = Field(default=0, ge=0)
+    available: bool = True
+
+
+class MissingContext(StrictModel):
+    symbol: Name
+    kind: str = 'resource'
+    scope: str = ''
+    operation_id: str = ''
+    reason: str = 'missing_definition'
+    evidence: list[SourceReference] = Field(default_factory=list)
+    status: str = 'unresolved'
+    consumed_fingerprint: str = ''
+
+
+class PartExtraction(StrictModel):
+    part_id: Name
+    operations: list[OperationRecord] = Field(default_factory=list)
+    assets: list[ResourceReference] = Field(default_factory=list)
+    definitions: list[ContextEntry] = Field(default_factory=list)
+    missing_context: list[MissingContext] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+    coverage: Literal['complete', 'partial', 'unsupported', 'no_operations'] = 'partial'
+    omitted: bool = False
+    superseded_fact_ids: list[str] = Field(default_factory=list)
+    superseded_operation_ids: list[str] = Field(default_factory=list)
+    revision: int = Field(default=0, ge=0)
+    protocol_version: Literal[5] = EXTRACTION_VERSION
+
+
+class FileExtraction(StrictModel):
+    file_id: Name
+    content_hash: Name
+    source_kind: Literal['sql', 'sas', 'dbt']
+    part_ids: list[str]
+    operations: list[OperationRecord] = Field(default_factory=list)
+    assets: list[ResourceReference] = Field(default_factory=list)
+    unresolved: list[str] = Field(default_factory=list)
+    processed: bool = True
+    semantic_coverage: str = 'partial'
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    protocol_version: Literal[5] = EXTRACTION_VERSION
+
+
+class ExtractionEnvelope(StrictModel):
+    items: list[PartExtraction]
