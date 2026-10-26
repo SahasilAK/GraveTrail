@@ -1,3 +1,27 @@
+<p align="center">
+  <a href="https://sahasilak.github.io/GraveTrail/"><strong>🚀 Explore the live GraveTrail documentation →</strong></a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/images/banner.svg" alt="GraveTrail engineering hub — Nothing stays buried. Every dependency leaves a trail." width="960">
+</p>
+
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.11%2B-244766" alt="Python 3.11 or newer"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-b6532c" alt="Apache License 2.0"></a>
+  <a href="https://github.com/SahasilAK/GraveTrail/actions/workflows/tests.yml"><img src="https://github.com/SahasilAK/GraveTrail/actions/workflows/tests.yml/badge.svg" alt="Application tests"></a>
+  <a href="https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml"><img src="https://github.com/SahasilAK/GraveTrail/actions/workflows/docs.yml/badge.svg" alt="Documentation build and Pages deployment"></a>
+  <a href="https://github.com/SahasilAK/GraveTrail/releases/latest"><img src="https://img.shields.io/github/v/release/SahasilAK/GraveTrail?display_name=tag" alt="Latest release"></a>
+</p>
+
+<p align="center">
+  <a href="https://sahasilak.github.io/GraveTrail/"><strong>Documentation hub</strong></a> ·
+  <a href="docs/getting-started/quick-start.md">Quick start</a> ·
+  <a href="docs/CLI_GUIDE.md">CLI</a> ·
+  <a href="docs/MCP_INTEGRATION.md">MCP</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
+
 # Nothing stays buried. Every dependency leaves a trail.
 
 <a name="gravetrail"></a>
@@ -13,10 +37,19 @@ unfamiliar pipelines, reviewing changes or planning migrations.
 
 <a name="from-scattered-scripts-to-source-evidence"></a>
 
+![Illustrative lineage: two source tables flow through staging to a reporting table, with source evidence attached](docs/assets/diagrams/lineage.svg)
+
+*A workflow illustration, not an application screenshot. Actual results come from your imported files.*
+
+<details>
+<summary><strong>See GraveTrail with the included SQL project</strong></summary>
+
 ![Current GraveTrail Lineage view tracing the supplied SQL sample upstream](docs/assets/images/gravetrail-lineage-explorer.png)
 
 *Real application, disposable workspace, repository sample data. Try the
 [interactive lineage example](docs/examples/interactive-lineage.md).*
+
+</details>
 
 ## Follow the questions
 
