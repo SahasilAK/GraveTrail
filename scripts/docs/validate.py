@@ -104,6 +104,19 @@ def inspect_inventory(site: Path, expected: set[str], optional: set[str] | None 
     return errors
 
 
+def inspect_legacy_routes(site: Path, routes: dict[str, list[str]]) -> list[str]:
+    """Preserve existing public routes and heading bookmarks after reorganization."""
+    errors = []
+    for name, anchors in routes.items():
+        page = site / name
+        if not page.is_file():
+            errors.append(f"Missing legacy page: {name}")
+            continue
+        ids = Links(page.read_text(encoding='utf-8')).ids
+        errors.extend(f"Missing legacy anchor: {name}#{anchor}" for anchor in anchors if anchor not in ids)
+    return errors
+
+
 def validate(config_path: Path, site: Path) -> None:
     """Validate the rendered site's inventory, links, search index, and repo links.
 
@@ -128,7 +141,9 @@ def validate(config_path: Path, site: Path) -> None:
     theme = Path(material.__file__).parent / "templates"
     optional = {path.relative_to(theme).as_posix() for path in (theme / "assets").rglob("*") if path.is_file()}
     site = site.resolve()
-    errors = inspect_inventory(site, expected, optional) + inspect_site(site, urlsplit(config.site_url).path)
+    legacy = json.loads((config_path.parent / 'scripts/docs/legacy_routes.json').read_text(encoding='utf-8'))
+    errors = (inspect_inventory(site, expected, optional)
+              + inspect_site(site, urlsplit(config.site_url).path) + inspect_legacy_routes(site, legacy))
     search = json.loads((site / "search/search_index.json").read_text(encoding="utf-8"))
     allowed_urls = {name.removesuffix("index.html") for name in expected if name.endswith(".html")}
     for item in search["docs"]:

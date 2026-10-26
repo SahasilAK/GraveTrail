@@ -44,6 +44,7 @@ body { -webkit-font-smoothing: antialiased; }
 .md-header { background: color-mix(in srgb, var(--gt-paper) 88%, transparent); color: var(--gt-ink);
   backdrop-filter: blur(22px) saturate(1.4); box-shadow: none; border-bottom: 1px solid var(--gt-line); }
 .md-header__title { font-weight: 650; letter-spacing: -.035em; }
+.md-header__inner { column-gap: .55rem; }
 .md-header__button.md-logo img { width: 1.35rem; height: 1.35rem; }
 .md-tabs { color: var(--gt-ink); background: var(--gt-paper); border-bottom: 1px solid var(--gt-line); }
 .md-tabs__link { font-size: .72rem; opacity: .75; }
@@ -82,11 +83,25 @@ body { -webkit-font-smoothing: antialiased; }
 .md-footer-copyright { color: var(--gt-muted); }
 .gt-theme-picker > label { display: none !important; }
 .gt-theme-select { font: inherit; font-size: .7rem; color: var(--gt-ink); background: var(--gt-surface);
-  border: 1px solid var(--gt-line); border-radius: .5rem; min-height: 2rem; padding: .25rem .5rem; cursor: pointer; }
+  border: 1px solid var(--gt-line); border-radius: .6rem; min-height: 2.2rem; padding: .3rem .65rem; cursor: pointer; }
+@media (min-width: 60em) {
+  .md-search { padding: 0; }
+  .md-search__form { height: 2.2rem; border: 1px solid var(--gt-line); border-radius: .6rem; }
+  .md-search__input { height: 2.2rem; }
+  .md-search__icon { top: .5rem; }
+  .gt-theme-select { width: 9.4rem; }
+  [dir] .md-header__source { margin-inline-start: .25rem; }
+  .md-header .md-source { min-height: 2.2rem; align-items: center; }
+}
+@media (max-width: 59.984em) {
+  .md-header__inner { column-gap: .25rem; }
+  [dir] .md-header__title { margin-inline: 0; }
+}
 @media (max-width: 30em) { .gt-theme-select { max-width: 8rem; font-size: .65rem; } }
 /* The landing page leads with the engineering question, then the real product. */
 .gt-hero { max-width: 49rem; margin: 0 auto; text-align: center; padding: 3.5rem 1rem 2.3rem; }
 .md-typeset .gt-hero h1 { font-size: clamp(2.8rem,6.5vw,4.7rem); line-height: 1.02; letter-spacing: -.055em; margin: .3rem 0 1.3rem; }
+.md-typeset .gt-hero .gt-tagline { font-size: clamp(1.7rem,4.2vw,3.1rem); line-height: 1.15; letter-spacing: -.035em; margin: .7rem 0 1.4rem; }
 .gt-hero p { max-width: 35rem; margin: 1.2rem auto; font-size: 1rem; line-height: 1.65; color: var(--gt-muted); }
 .gt-hero .gt-local { font-size: .69rem; margin-top: 1.4rem; }
 .gt-product { margin: .5rem auto 3rem; max-width: 59rem; }
@@ -101,8 +116,21 @@ body { -webkit-font-smoothing: antialiased; }
 .gt-start > div { min-width: 0; }
 .md-typeset .gt-start h2 { margin-top: 0; }
 .gt-start .highlight { margin: 0; }
-.gt-guides { display: grid; grid-template-columns: 1fr 1fr; column-gap: 3rem; margin: 1.5rem 0 3rem; }
-.gt-guides a { display: block; padding: 1rem 0; border-bottom: 1px solid var(--gt-line); font-weight: 550; }
+.gt-guides { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem; margin: 1.5rem 0 3rem; }
+.md-typeset .gt-guide-card { position: relative; display: flex; flex-direction: column; gap: .45rem;
+  min-width: 0; padding: 1.2rem 3rem 1.2rem 1.2rem; border: 1px solid var(--gt-line); border-radius: .9rem;
+  color: var(--gt-ink); background: color-mix(in srgb, var(--gt-surface) 55%, var(--gt-paper));
+  transition: background-color 140ms ease, border-color 140ms ease; }
+.gt-guide-title { font-size: 1rem; font-weight: 600; line-height: 1.3; letter-spacing: -.02em; }
+.gt-guide-description { color: var(--gt-muted); font-size: .78rem; line-height: 1.55; }
+.gt-guide-arrow { position: absolute; inset-block-start: 1.1rem; inset-inline-end: 1.2rem;
+  color: var(--gt-link); font-size: 1.1rem; line-height: 1.3; }
+.md-typeset .gt-guide-card:hover { text-decoration: none; }
+@media (hover: hover) and (pointer: fine) {
+  .md-typeset .gt-guide-card:hover { border-color: var(--gt-link); background: var(--gt-surface); }
+}
+.md-typeset .gt-guide-card:focus-visible { border-radius: .9rem; }
+.md-typeset .gt-guide-card:active { background: var(--gt-surface); border-color: var(--gt-link); transition: none; }
 @media (max-width: 60em) { .gt-questions { gap: 1.2rem; } }
 @media (max-width: 48em) {
   .gt-hero { padding: 1.5rem 0 1rem; }
@@ -114,7 +142,7 @@ body { -webkit-font-smoothing: antialiased; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .md-typeset .md-button { transition: none; }
+  .md-typeset .md-button, .md-typeset .gt-guide-card { transition: none; }
   .md-typeset .md-button:active { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) { .md-header { background: var(--gt-paper); backdrop-filter: none; } }
@@ -122,7 +150,13 @@ body { -webkit-font-smoothing: antialiased; }
   .md-header { background: var(--gt-paper); backdrop-filter: none; border-bottom-color: var(--gt-ink); }
   .md-tabs__link { opacity: 1; }
   .md-typeset .md-button { border-color: currentColor; }
+  .md-typeset .gt-guide-card { border-color: var(--gt-ink); }
 }
 
 .gt-wordmark-trail { color: var(--gt-link); }
 body[data-md-color-scheme] .md-sidebar { background: var(--gt-sidebar, transparent); }
+
+.gt-lineage-demo { display: block; width: 100%; height: 700px; border: 1px solid var(--gt-line); border-radius: .6rem; background: #fff; margin: 1.2rem 0; }
+@media (max-width: 600px) { .gt-lineage-demo { height: 760px; } }
+.md-banner { background: var(--gt-surface); color: var(--gt-ink); border-bottom: 1px solid var(--gt-line); }
+.md-banner a { color: var(--gt-link); text-decoration: underline; }

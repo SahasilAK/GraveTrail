@@ -8,57 +8,33 @@ hide:
 
 # Nothing stays buried.
 
-## Every dependency leaves a trail.
+## Every dependency leaves a trail. { .gt-tagline }
 
-Understand the SQL, SAS and dbt pipelines in front of you. Follow a table’s dependencies
-all the way back to the original statements, in a workspace that keeps your source local.
+<!-- Compatibility anchors for sections now linked from this page. -->
+<span id="understand-your-datas-trail"></span>
+<span id="nothing-stays-buried-every-dependency-leaves-a-trail"></span>
+<span id="dbt-projects-models-and-macro-impact"></span>
+<span id="how-can-my-tools-use-the-evidence"></span>
+
+
+GraveTrail helps data engineers, analysts and architects understand SQL, SAS and
+dbt projects. Turn source code and supported project artifacts into explorable
+lineage, dependency relationships and the source evidence behind them.
 
 [Build your first lineage](getting-started/quick-start.md){ .md-button .md-button--primary }
-[Explore the guides](user-guide/index.md){ .md-button }
+[Explore a live example](examples/interactive-lineage.md){ .md-button }
 
-Local storage. No LLM required. Imported code is never executed.
+Local static analysis. No AI account required. Imported code is never executed.
 { .gt-local }
 
 </div>
 
-## dbt projects, models and macro impact
-
-Import multiple models, property YAML, sources, seeds, snapshots and supplied package
-code together. Follow logical model dependencies across versions and schemas, inspect
-macro consumers, and trace supported SQL column expressions. Already-generated dbt
-manifests can supply declared dependencies and compiled SQL with exact JSON evidence.
-
-dbt uses local static analysis: templates, Python and dbt commands are never executed.
-Dynamic macros retain partial coverage; Python and semantic resources have explicit
-dependency/metadata limits.
-
-[Explore dbt support and limits](DBT_SUPPORT.md){ .md-button }
-
 <figure class="gt-product" markdown>
 
-![GraveTrail’s redesigned Lineage workspace with grouped navigation and the supplied SQL project](assets/images/gravetrail-lineage-explorer.png)
+![Current GraveTrail Lineage view tracing the safe SQL fixture upstream](assets/images/gravetrail-lineage-explorer.png)
 
-<figcaption>A real SQL project. Original source behind every established relationship.</figcaption>
+<figcaption>Follow the dependencies. Open the evidence. Decide where to investigate next.</figcaption>
 </figure>
-
-## Local analysis first. AI when you choose.
-
-**The local parser is the primary, default option.** Generate table lineage,
-column usage and supported transformations without giving source to an AI provider.
-No model connection, API key or AI token usage is needed. Leave **Use AI for
-analysis** unchecked in **Analysis → Run**.
-
-For large or complex systems where you want additional coverage, optional
-**AI + parser (hybrid)** analysis compares locally established facts with
-source-backed AI proposals. It sends selected source and relevant context to your
-configured provider, subject to your privacy controls. A local gateway may forward
-that source upstream. Large projects can also use local parsing alone.
-
-Both workflows are built in. AI can help investigate gaps; it does not guarantee
-complete or universally correct lineage. Review evidence, omissions and unresolved
-coverage before relying on the results.
-
-[Compare the analysis options](AI_ANALYSIS.md){ .md-button }
 
 ## Begin with the question in front of you
 
@@ -67,83 +43,112 @@ coverage before relying on the results.
 
 ### Where does this table come from?
 
-Follow upstream dependencies across persistent tables and temporary stages. Open a
-relationship to inspect the original statement and line range.
+Explore inputs across persistent tables and supported temporary steps. Open the
+original statement and line range to understand the relationship.
 
-[Explore lineage and evidence](user-guide/index.md)
+[Explore lineage and evidence](user-guide/explore.md)
 
 </div>
 <div markdown>
 
 ### What depends on this change?
 
-Trace downstream impact, inspect direct column usage, and search related source.
-Follow output expressions in the separate [Transformation lineage view](TRANSFORMATION_LINEAGE.md),
-with original evidence and explicit SQL/SAS coverage boundaries.
-Export an offline graph or a report to share your findings.
+Follow consumers, direct column usage and supported transformations. Use findings
+to plan a migration or review a change, then verify against runtime behavior.
 
-[Investigate your project](USER_GUIDE.md)
+[Investigate columns and impact](user-guide/columns.md)
 
 </div>
 <div markdown>
 
-### How can my tools use the evidence?
+### What is hiding in this dbt project?
 
-Query stored analysis through the CLI or MCP with explicit permissions, freshness
-metadata and bounded responses. Optional AI stays behind your privacy controls.
+Inspect models, versions, sources and macro consumers. Supplied manifests can add
+declared dependencies and compiled SQL evidence without executing dbt.
 
-[Connect your tools](integrations/index.md)
+[Follow the dbt tutorial](examples/dbt.md)
 
 </div>
 </div>
 
-<div class="gt-start" markdown>
-<div markdown>
+## Local analysis first. AI when you choose.
+
+Static analysis runs locally after installation without an API key, AI account
+or paid model service. Large projects can use it too. Unsupported syntax and
+runtime-dependent behavior remain visible coverage boundaries.
+
+Optional AI **independently extracts** inferred lineage from selected files. It
+sends source and authorized context to the configured provider. A locally addressed
+gateway can forward requests upstream. AI does not guarantee complete or correct lineage.
+
+[Understand analysis and disclosure](concepts/local-and-ai.md){ .md-button }
+[Configure optional AI](AI_ANALYSIS.md){ .md-button }
+
+## Choose your project
+
+| Project | Start with | Know the boundary |
+| --- | --- | --- |
+| SQL | [SQL workflow](project-types/sql.md) | Dialect-specific syntax, dynamic SQL and unknown schema |
+| SAS | [SAS workflow](project-types/sas.md) | Bounded DATA/PROC SQL and known-value macros; no execution |
+| dbt | [dbt workflow](project-types/dbt.md) | Source/enriched/artifact modes; no Jinja, package download or warehouse execution |
 
 ## A useful first run, on your machine.
 
-Install from source with Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Try an included SQL or SAS project, then trace `pub.all_kpis` through seven dependency layers.
+These guides describe development commit **1864dc8**. dbt and the current AI pipeline
+postdate release v0.0.1. Use [the pinned installation](getting-started/installation.md)
+to reproduce the examples rather than assuming an older binary has the same controls.
 
-[Follow the walkthrough](getting-started/quick-start.md)
-
-</div>
-<div markdown>
-
-```sh
-git clone https://github.com/SahasilAK/GraveTrail.git
-cd GraveTrail
-uv sync --locked --extra dev
-uv run gravetrail-ui
-```
-
-Using pip, Docker or a native bundle? Read the [installation reference](SETUP_AND_DEPLOYMENT.md)
-for supported workflows and verification limits.
-
-</div>
-</div>
+1. [Install and launch](getting-started/installation.md).
+2. [Import a SQL sample and build static lineage](getting-started/quick-start.md).
+3. [Inspect evidence](user-guide/evidence.md) and [review coverage](concepts/evidence-and-coverage.md).
+4. [Export and reopen findings](user-guide/exports.md).
 
 ## A place for every part of your work
 
-Import in **Sources**, run **Analysis**, then investigate in **Lineage**, **Columns**
-or **Engineering tools**. Workspace preferences, AI connections, data management and
-automation each have a focused destination.
-
-<div class="gt-guides" markdown>
-
-[Getting started](getting-started/index.md)
-[Workspace and UI reference](USER_GUIDE.md)
-[Architecture and parsing coverage](architecture/overview.md)
-[Integrations and privacy](integrations/index.md)
-[Deployment and recovery](deployment/index.md)
-[Development and testing](development/index.md)
-[Troubleshooting](troubleshooting/help.md)
-[Contributing](development/contributing.md)
-
-</div>
+<nav class="gt-guides" aria-label="Documentation sections">
+  <a class="gt-guide-card" href="getting-started/">
+    <span class="gt-guide-title">Getting started</span>
+    <span class="gt-guide-description">Install GraveTrail and trace your first project.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="user-guide/">
+    <span class="gt-guide-title">User guides</span>
+    <span class="gt-guide-description">Explore lineage, inspect evidence and export findings.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="concepts/">
+    <span class="gt-guide-title">Concepts and limits</span>
+    <span class="gt-guide-description">Understand evidence, coverage and analysis boundaries.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="examples/">
+    <span class="gt-guide-title">Examples</span>
+    <span class="gt-guide-description">Follow practical SQL, SAS and dbt walkthroughs.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="integrations/">
+    <span class="gt-guide-title">CLI and MCP</span>
+    <span class="gt-guide-description">Connect your tools and automate lineage workflows.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="development/">
+    <span class="gt-guide-title">Developer documentation</span>
+    <span class="gt-guide-description">Walk through the code, architecture and extension points.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="deployment/">
+    <span class="gt-guide-title">Deployment and recovery</span>
+    <span class="gt-guide-description">Set up your environment and recover project data.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+  <a class="gt-guide-card" href="troubleshooting/help/">
+    <span class="gt-guide-title">Troubleshooting</span>
+    <span class="gt-guide-description">Find answers by symptom and get back to work.</span>
+    <span class="gt-guide-arrow" aria-hidden="true">→</span>
+  </a>
+</nav>
 
 !!! info "Follow the evidence, including its limits"
-    GraveTrail performs static analysis. Unsupported syntax, dynamic macros and ambiguous
-    identities remain diagnostic boundaries. Optional project AI facts remain inferred
-    after local validation and publication; manual assistance uses a separate explicit merge. Read the [SQL](SQL_PARSING.md) and
-    [SAS](SAS_PARSING.md) coverage before drawing conclusions from missing edges.
+    A graph describes established analysis relationships, not observed warehouse
+    execution. Missing edges can mean missing coverage. Installation, optional AI,
+    local static analysis and HTML exports have different [network boundaries](concepts/local-and-ai.md).

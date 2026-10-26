@@ -1,50 +1,56 @@
-# Development
+# Develop GraveTrail
 
-GraveTrail is a Python 3.11+ application with a Streamlit presentation layer and shared
-services for the UI, CLI and MCP server. Start with the
-[contribution guide](contributing.md) for the edit/test workflow, or the
-[architecture](../ARCHITECTURE.md) for ownership boundaries.
+<!-- Compatibility anchors for sections now linked from this page. -->
+<span id="development"></span>
+<span id="engineering-contracts"></span>
+<span id="find-the-responsible-layer"></span>
+<span id="guides-by-task"></span>
 
-## Find the responsible layer
 
-| Area | Responsibility |
-| --- | --- |
-| `src/dataforge/` | Domain models, storage, ingestion, parsers, graph traversal, exports, LLM adapters and services |
-| `ui/` and `app.py` | Presentation, session controls and application entry point |
-| `prompts/` | Versioned assistance templates and schemas used by the application |
-| `tests/` | Unit, integration, protocol, security and Streamlit AppTest coverage |
-| `scripts/` and `.github/workflows/` | Verification, packaging and automation |
+GraveTrail is a local Python application for inspecting SQL, SAS and dbt dependencies with
+retained source evidence. Streamlit, the CLI and MCP are clients of shared services. The
+Python package remains named `dataforge`; the distribution and primary commands use
+`gravetrail`.
 
-Browse the [source tree](https://github.com/SahasilAK/GraveTrail/tree/main/src/dataforge)
-and [test tree](https://github.com/SahasilAK/GraveTrail/tree/main/tests)
-for concrete examples. Repository-specific contribution instructions are in the
-[contribution guide](contributing.md).
+These developer pages describe the source baseline
+[`1864dc8`](https://github.com/SahasilAK/GraveTrail/tree/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414)
+on `codex/resumable-ai-lineage`, rather than assuming local `main` or release `v0.0.1`
+contains the same interfaces. The baseline is 48 commits ahead of local `main` (`d809c33`).
+dbt support and current independent AI postdate v0.0.1; current behavior must be read against
+this pinned source. Python examples describe **internal developer APIs**, not a stability
+promise for third-party packages. Use the [CLI guide](../CLI_GUIDE.md) and
+[MCP guide](../MCP_INTEGRATION.md) for supported automation surfaces.
 
-## Engineering contracts
+## A useful first hour
 
-- Imported scripts and embedded instructions are data and must never execute.
-- Parsers return operations and diagnostics in `ParseResult`; analysis services own
-  persistence and cross-file resolution. Keep Streamlit out of domain modules.
-- Every relationship must retain original file/version, exact statement, line range
-  and method. Ambiguous identities remain unresolved.
-- Storage queries use parameters, and filesystem operations stay inside validated,
-  explicitly allowed or fixed managed paths with bounded resources.
-- Runtime keys stay in session connections or named read-only launch references.
-  Session credentials must not enter files, job journals or global process environment.
-- UI, CLI and MCP reuse services and enforce their independent access grants. One
-  owning DuckDB process opens each data home.
+1. [Set up a disposable checkout and follow one import](getting-started.md). Run the small
+   persisted workflow before exploring the largest modules.
+2. Read [how the system works](../architecture/overview.md) and the
+   [contracts at each boundary](../architecture/contracts.md).
+3. Find the owning subsystem in the [code map](code-map.md). Use the complete
+   [source inventory](source-inventory.md) to locate individual files and exports.
+4. Use the [technology guide](technology.md) to understand each dependency's actual role,
+   then the [internal API examples](internal-api.md) to follow stored evidence.
+5. Make a focused change using [extension recipes](extending.md) and the
+   [contribution workflow](contributing.md).
 
-## Guides by task
+## Choose a reading path
 
-| Task | Reference |
-| --- | --- |
-| Add a parser, provider or exporter | [Extending the app](../EXTENDING_THE_APP.md) |
-| Understand storage and evidence | [Data model](../DATA_MODEL.md) and [lineage engine](../LINEAGE_ENGINE.md) |
-| Run meaningful regression checks | [Testing](../TESTING.md) |
-| Build wheels, containers or native bundles | [Build and release](../BUILD_AND_RELEASE.md) |
-| Investigate safety boundaries | [Security](../SECURITY.md) and [data management](../DATA_MANAGEMENT.md) |
-| Review verification requirements and release gates | [Testing](../TESTING.md) and [build verification](../BUILD_AND_RELEASE.md) |
+| Your task | Start here | Then inspect |
+| --- | --- | --- |
+| Fix SQL or SAS lineage | [Parser recipe](extending.md#extend-a-parser) | `models.py`, parser regression tests, `services.py` publication |
+| Add dbt resource support | [dbt recipe](extending.md#extend-dbt-support) | discovery, resources, resolution, evidence and artifacts |
+| Investigate graph or column results | [Code map](code-map.md#facts-and-investigation) | exact asset IDs, graph limits, schema and column coverage |
+| Change AI extraction/recovery | [AI architecture](../architecture/ai-analysis-pipeline.md) | coordinator, validation, durable requests and publication |
+| Add an automation operation | [Transport recipe](extending.md#add-a-service-operation-and-transport) | shared service policy, CLI/MCP adapters and parity tests |
+| Change settings or storage | [Boundary contracts](../architecture/contracts.md) | validators, revisions, migration/backup/restore tests |
+| Change the website | [Documentation maintenance](documentation.md) | docs group, navigation, publication allowlist and strict build |
 
-Keep documentation claims tied to what was actually tested. A mocked provider response,
-successful build or source-level test does not establish live provider availability,
-native artifact compatibility or a successful hosted deployment.
+## Working rules
+
+Imported programs are data. Keep parsing and investigation free of execution. Preserve file
+identity, source hash, exact statement text and original coordinates when changing a result.
+Unknown or ambiguous relationships need diagnostics and coverage markers. Keep Streamlit in
+the presentation layer; CLI and MCP must reuse policy-checked services. Use a disposable data
+home and a single owning DuckDB process. Runtime credentials belong to request/session scopes
+or named environment references, never stored profile values or job journals.

@@ -53,10 +53,11 @@ Large selected limits can still be slow; agent response budgets apply separately
 
 ## Automatic AI continuation qualification (2026-10-20)
 
-`uv run --locked python scripts/benchmark_ai_analysis.py --scale-units 1000`
-exercises simple synthetic SQL units through real adapter/mock HTTP, bounded
-executions and durable store reopen. This Windows/Python 3.11 run used a Custom
-100-attempt ceiling and automatic output/time allowances:
+**Historical pre-protocol-5 measurement.** The 2026-10-20 benchmark used simple SQL
+units, real adapter/mock HTTP, bounded executions and durable reopen on Windows/Python
+3.11, with a Custom 100-attempt ceiling and automatic output/time allowances. Current
+`--scale-units` runs use the independent file pipeline and do not reproduce these retired
+execution-window counts:
 
 | Measurement | Observed |
 | --- | ---: |
@@ -94,12 +95,31 @@ across durable continuation without repeats.
 
 ## Resumable AI analysis
 
-A 2026-10-21 synthetic mock-transport qualification processed 2,001 distinct units/physical requests across automatic windows in one Start with one publication: 171.007 seconds with tracemalloc, 60,722,523 peak Python bytes and 791 maximum unit-record bytes. This is local scheduling/storage evidence, not a provider latency or accuracy benchmark. Reproduce with `python scripts/benchmark_ai_analysis.py --scenario scale --units 2001 --files 7 --max-files-per-request 1 --max-parallel-requests 2 --output pipeline-scale.json`. The planner also has a 2,200-file/6,238-unit synthetic regression.
+**Historical pre-protocol-5 measurement:** the 2026-10-21 mock qualification processed
+2,001 distinct units/physical requests across automatic windows in one Start with one
+publication: 171.007 seconds with tracemalloc, 60,722,523 peak Python bytes and 791 maximum
+unit-record bytes. It qualified the then-current scheduler, not provider latency/accuracy.
+Its file-count/parallel-window options are rejected by the current benchmark. Current
+scale/reopen qualification uses `scripts/qualify_ai_context.py`; see the protocol 5 results
+below. The older 2,200-file/6,238-unit planning result is also historical.
 
 
 ## Protocol 5 file extraction (2026-10-23)
 
-New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+New project builds use independent file extraction, token-budgeted packing, saved parts,
+one frozen-context completion wave, bounded file consolidation and deterministic linking.
+Each build has one active physical request. Static parsing and manual assistance remain
+independent; historical execution-window/reviewer measurements above do not describe
+current controls. See [AI analysis](AI_ANALYSIS.md) and
+[pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+For current offline scale/recovery qualification, run:
+
+```powershell
+uv run --locked python scripts/qualify_ai_context.py --family all --files 1000
+```
+
+This uses synthetic independent gold and mock transport, not a live provider.
 
 Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures. The oracle scores table, column and file relationships separately and catches semantic omissions despite complete model JSON. Mock results do not establish live-model accuracy; live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.
 

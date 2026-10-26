@@ -4,10 +4,11 @@ This repository builds its Markdown documentation with Material for MkDocs. GitH
 Actions validates the site on pull requests and deploys the static output from `main`.
 GitHub Pages does not run the Streamlit application, Python services, or your workspaces.
 
-The header's **Color theme** selector offers four coordinated appearances: **Porcelain · light**,
-**Celadon · light**, **Ink · dark** and **Aubergine · dark**. Your selection persists in this
-browser across guide pages and reloads. A first visit follows the system appearance with
-Porcelain or Ink. The app offers these same palettes alongside its existing themes.
+**Crimson Forge** is the default documentation theme for visitors without a saved preference.
+The header's **Color theme** selector includes **Ink dark**, **Celadon light** and the
+additional palettes supplied by the shared theme registry. Your selection persists in this
+browser across guide pages and reloads. The app and documentation share the palette registry;
+inspect the selector for the available names.
 
 ## Prerequisites
 
@@ -151,7 +152,7 @@ For adding pages and updating dependencies, see [documentation maintenance](../d
 ## Optional repository metadata
 
 After the site is deployed, maintainers may set the repository **About → Website** to
-the verified deployment URL. Suggested description: “Local-first SQL and SAS lineage
+the verified deployment URL. Suggested description: “SQL, SAS and dbt lineage
 with source evidence, direct column usage, CLI and MCP.” Suggested topics:
-`data-lineage`, `data-engineering`, `sql`, `sas`, `streamlit`, `duckdb`, `mcp`.
+`data-lineage`, `data-engineering`, `sql`, `sas`, `dbt`, `streamlit`, `duckdb`, `mcp`.
 These are recommendations; building the documentation does not change repository settings.

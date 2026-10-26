@@ -2,18 +2,20 @@
 
 Build and inspect a seven-layer lineage graph from the supplied sample project.
 This is the primary, default workflow: local parsing sends no source to an AI
-provider and needs no LLM, API key or AI token usage. Both local and optional
-[AI/hybrid analysis](../AI_ANALYSIS.md) are available in the app. Add AI comparison
-when you want additional coverage in complex projects; project size alone does
-not require it, and AI does not guarantee complete lineage.
+provider and needs no LLM, API key or AI token usage. Optional [AI analysis](../AI_ANALYSIS.md) independently extracts inferred facts; it
+is a separate choice with provider disclosure, not a requirement for project size.
 
 ## 1. Install and launch
+
+These steps describe development commit **1864dc8**, including features newer than
+release v0.0.1. Read [installation choices](installation.md) before using an older binary.
 
 Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/), then run:
 
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
+git checkout 1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414
 uv sync --locked --extra dev
 uv run gravetrail-ui --home ./.dataforge
 ```
@@ -67,6 +69,11 @@ Open **Columns** for direct column references; ambiguous references
 and unexpanded wildcards retain their uncertainty. Export CSV/JSON reports, an
 offline interactive HTML graph or the relevant source ZIP from the available controls.
 Source exports can contain private code, so review them before sharing.
+
+Download the interactive HTML graph and open the saved file in a browser. Try
+Fit, zoom, pan, search and relationship selection. This snapshot does not restore
+a workspace or run fresh analysis; reopen the same home to continue working. See
+[exports and sharing](../user-guide/exports.md) and [coverage limits](../concepts/evidence-and-coverage.md).
 
 ## Try the dbt sample
 

@@ -27,6 +27,8 @@
   });
   palette.append(select);
   palette.classList.add("gt-theme-picker");
+  // Keep reading and keyboard order aligned with the search-first toolbar.
+  palette.parentElement.querySelector('[data-md-component="search"]')?.after(palette);
   inputs.forEach(input => { input.tabIndex = -1; input.setAttribute("aria-hidden", "true"); });
   // Also follow an automatic system appearance change, without another preference store.
   new MutationObserver(sync).observe(document.body, { attributes: true,

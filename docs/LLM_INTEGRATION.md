@@ -6,9 +6,9 @@ unchecked to send no source to an AI provider and incur no AI token usage. A sav
 provider connection does not automatically enable AI extraction.
 
 For additional coverage in large or complex systems, optional
-[AI + parser (hybrid) analysis](AI_ANALYSIS.md) compares local facts with validated
-AI proposals. Selected source/context is sent to the configured provider; a local
-gateway may forward it upstream. Both capabilities are built in. AI cannot ensure
+[AI analysis](AI_ANALYSIS.md) independently extracts inferred facts from selected source.
+Selected source/context is sent to the configured provider; a local
+gateway may forward it upstream. Parser and AI builds are separate choices. AI cannot ensure
 that every dependency is populated correctly; inspect evidence and unresolved coverage.
 
 Analysis → Diagnostics → Unresolved review queue derives at most 100 current SQL/SAS warning/error items.
@@ -150,7 +150,9 @@ share admission. Busy calls refuse rather than queue. The assistance chunk previ
 choose one complete statement/SAS block chunk and explicitly request it. No next chunk runs
 automatically. Unknown or interactive SAS procedures retain context through QUIT; oversized
 units require a larger budget or different selection. Source/profile budgets still apply.
-Cancellation callbacks stop retries and response processing cooperatively. Project builds also
+These shared admission limits are not project-build parallelism controls: each project
+build has one active physical request. Cancellation callbacks stop retries and response
+processing cooperatively. Project builds also
 monitor silent network waits; see [gateway waiting and recovery](#request-timeout-gateway-waiting-and-recovery).
 Local cancellation does not prove upstream processing stopped.
 
@@ -178,9 +180,37 @@ Current bounded acceptance on 2026-10-17 passed discovery (915 models), connecti
 
 ## Project analysis
 
-[AI project analysis](AI_ANALYSIS.md) adds explicit `hybrid` and experimental `ai` builds through Analysis, CLI and MCP. Parser mode stays offline by default. Project tasks `project_lineage` and `lineage_review` route independently of the five manual tasks and use strict canonical contracts with protocol v2 evidence references and version 3 prompts. Each physical HTTP retry/fallback rechecks current source/privacy/authorization and reserves output tokens. Truncated output is quarantined even if its JSON appears valid and empty; absent usage remains unknown.
+[AI project analysis](AI_ANALYSIS.md) offers `parser` and `ai` builds through Analysis,
+CLI and MCP. Parser mode stays offline by default. AI uses the `project_lineage` route
+and protocol 5 file extraction, independently of parser lineage and manual assistance.
+It validates structure, exact source ownership/hashes/ranges and resource identities;
+accepted AI facts remain inferred and do not require parser semantic approval. Parser
+results do not fill AI omissions. Hybrid comparison and additional review are unavailable
+for new builds.
 
-Remote project builds require complete-source permission for cumulative chunk disclosure. Preview counts the entire system/JSON/catalog/schema envelope against profile and workspace context limits; the complete envelope can exceed configured allowances. Selected-model capability discovery, Automatic/Custom controls and explicit calculated context remedies are described in [AI project analysis](AI_ANALYSIS.md#token-capacity-and-disclosure). Compact transmitted schemas retain all validation rules; large projects automatically roll over bounded execution windows within a frozen finite project allowance, reusing completed extraction/review checkpoints. Oversized requests can use validated independent projection groups or static PROC SQL statement boundaries; host validation still uses original source. Review sizing is provisional before extraction and exact for saved pending batches. Larger indivisible source/catalog combinations may still need an explicit allowance change. Normal preview, settings reads, browsing and export send zero requests. Source-backed candidates still need deterministic semantic acceptance; reviewer agreement cannot promote unsupported claims. These project-build checks have mock transport evidence, not a qualified live precision result.
+Preview discloses selected files and project closure, including dbt configuration/macros,
+and counts the complete request envelope against known token capacity and disclosure
+limits. Whole files are preferred; oversized files use contiguous exact ranges. Valid
+items persist independently, followed by at most one frozen-context completion wave,
+bounded split-file consolidation and deterministic linking of saved operations. Requests
+run sequentially within a build, with no execution windows or file-count/parallel-request
+controls. Each physical attempt reserves output against the same durable run ledger.
+
+Remote cumulative disclosure still requires complete-source permission. Freshness,
+source/privacy and authorization are rechecked before dispatch. Truncated responses enter
+bounded item recovery, and unknown usage remains unknown. After bounded recovery,
+validated work can publish with explicit incomplete coverage; unresolved items can be
+retried while reusing successes. Fatal errors and stale inputs retain the prior graph.
+Normal preview, settings reads, browsing and export send no requests. See
+[token capacity and disclosure](AI_ANALYSIS.md#token-capacity-and-disclosure) and
+[AI controls/recovery](user-guide/ai-analysis-controls-and-recovery.md).
+
+Project parts/definitions preserve exact original text. The manual-assistance source
+redaction step does not sanitize these outgoing project payloads; captured copies and
+responses have separate credential redaction. Project packing uses known model token
+capacity plus any explicit profile source-character restriction, rather than the legacy
+workspace manual-chunk character setting. See
+[secure disclosure](SECURE_CONFIGURATION.md#project-ai-disclosure-and-revocation).
 
 ## Request timeout, gateway waiting and recovery
 
@@ -245,7 +275,12 @@ request sizes require a budget/configuration change. See [controls and recovery]
 
 ## Protocol 5 file extraction (2026-10-23)
 
-New project builds use independent AI extraction from exact file parts, token-budgeted items envelopes, persisted file records, one frozen-context completion wave, bounded file consolidation and deterministic operation-graph publication. Static analysis and manual assistance remain independent. Older hybrid/review/window/project-resolution descriptions on this page are historical and do not define new project builds. See [AI analysis](AI_ANALYSIS.md) and [pipeline architecture](architecture/ai-analysis-pipeline.md).
+New project builds use independent AI extraction from exact file parts, token-budgeted
+items envelopes, persisted file records, one frozen-context completion wave, bounded
+file consolidation and deterministic operation-graph publication. Static analysis and
+manual assistance remain independent. Legacy hybrid/review protocols cannot resume as
+new protocol 5 builds. See [AI analysis](AI_ANALYSIS.md) and
+[pipeline architecture](architecture/ai-analysis-pipeline.md).
 
 The 2026-10-24 allocation update replaces the automatic 8,192-output ceiling with
 a pinned 10–50% output-share preference (default 30%). Shared windows reserve safety

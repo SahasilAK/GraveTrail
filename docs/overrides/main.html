@@ -1,4 +1,8 @@
 {% extends "base.html" %}
+{% block announce %}
+  Development docs · <strong>1864dc8</strong> · dbt and current AI postdate v0.0.1.
+  <a href="{{ 'getting-started/installation/' | url }}">Use the documented checkout</a>.
+{% endblock %}
 {% block extrahead %}
   {{ super() }}
   <style>{{ config.extra.palette_css | safe }}</style>

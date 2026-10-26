@@ -1,5 +1,10 @@
 # Optional AI analysis
 
+This page describes development commit **1864dc8**. The independent extraction
+pipeline postdates release v0.0.1; use [the source installation](getting-started/installation.md).
+For the user workflow see [controls and recovery](user-guide/ai-analysis-controls-and-recovery.md);
+for provider disclosure see [local analysis and optional AI](concepts/local-and-ai.md).
+
 Static parser analysis is the offline default. AI analysis independently extracts
 structured lineage from actual selected file contents. SQL, SAS and dbt are
 separate build families; dbt SQL, YAML, macros, Python, seeds and supplied artifacts

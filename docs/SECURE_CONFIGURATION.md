@@ -68,10 +68,36 @@ requires application-level access controls before a multi-user deployment.
 
 ## Project AI disclosure and revocation
 
-[Project analysis](AI_ANALYSIS.md) is a run-level opt-in. A selected complete file transmitted through multiple units still counts as complete-source disclosure for remote routes. Enable external and complete-source permission deliberately; loopback gateways may forward data. Relevant declaration context comes only from the selected immutable source scope.
+[Project analysis](AI_ANALYSIS.md) is a run-level opt-in. A complete file transmitted through
+multiple parts still counts as complete-source disclosure for remote routes. Selecting a
+dbt member expands to its disclosed admitted project closure, including configuration,
+macros and supplied artifacts. Relevant definition context stays within that pinned scope.
+Project extraction transmits exact original source parts/context; do not assume the manual
+assistance redaction step sanitizes those parts. Remove secrets before import or withhold
+source/network permission. Loopback gateways may forward requests upstream.
 
-Each physical extraction/review/retry/fallback checks current source, privacy, route/credential authorization, cancellation and run budget. Source, session keys and full request bodies are excluded from job journals. Full prompt/response history remains opt-in; accepted minimal evidence must survive ordinary history expiry. Context preview counts prompt/schema/JSON overhead; increasing both workspace and profile limits is an explicit disclosure decision. No settings import, preview, browse or export starts provider work automatically. A sent/timeout request may already have incurred usage; restart never resumes billing automatically.
+Each physical extraction/completion/consolidation/retry checks current source, privacy,
+route/credential authorization, cancellation and run limits. Job journals omit source,
+session keys and full bodies. Minimal validated evidence persists separately from optional
+full request/response captures, which have their own size/retention limits and retained-copy
+redaction. Full-envelope token fitting includes instructions/schema/context/framing.
+An explicit profile source-character restriction still applies; model token capacity does
+not grant broader disclosure. Preview, settings reads, browsing and export start no provider
+work. A lost response may already have incurred usage; reopening never starts paid work.
 
 ## Automatic AI allowance boundaries
 
-Model-limit discovery is explicit and stores only allowlisted capacity metadata, bound to recipient/model/auth/reference identity. Metadata observation refresh alone preserves runtime credentials; changed capacity values change execution identity. Existing saved profile limits remain Custom. Automatic calculations and offline preview do not send source, call token-count APIs, raise privacy caps or grant external/full-source permission. The explicit calculated-context action changes only context allowances. Continue reauthorizes each attempt; unknown in-flight work never retries without an explicit choice.
+Model-limit discovery is explicit and stores allowlisted capacity metadata bound to
+recipient/model/auth/reference identity. Metadata refresh alone preserves runtime
+credentials; changed capacity values change execution identity. Saved Custom limits remain.
+Automatic calculation and offline preview send no source, make no token-count API calls
+and grant no network/full-source permissions. The pinned output share/exact overrides
+must fit real model capacity. Legacy profiles require an explicit choice of token capacity
+or a retained character disclosure limit. Unknown-outcome retries require configured opt-in
+or explicit acknowledgement; compatible resume retains cumulative reservations.
+
+The persisted workspace `max_context_chars` and `llm_chunk_chars` support manual assistance
+chunk previews. They are not project file-packing caps. Protocol 5 checks the profile's
+`source_limit_policy`/`source_disclosure_chars` when explicitly configured, plus the full
+request's token allowance. Changing a legacy workspace character setting alone does not
+limit an exact-source project request; review the actual project disclosure and profile.

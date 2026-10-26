@@ -1,6 +1,10 @@
 # docs/architecture/
 
-`overview.md` maps the static pipeline in Mermaid and links canonical root architecture/data-model/parser/security references. Source paths remain compatible; website routes are lowercased by the publication hook.
+`overview.md` maps static/dbt and protocol-5 AI preparation, durable checkpointing, atomic publication and policy-checked clients with Mermaid, source/test links and evidence/query distinctions. Links pin the full 1864dc8 baseline. Website routes remain lowercased by the publication hook.
+
+`contracts.md` defines admission, parser facts, identity/schema, publication, storage/recovery, AI/secret, transport/source-disclosure and export trust boundaries with concrete I/O/failure examples and regression evidence. Python interfaces are internal.
+
+Overview embeds two standalone accessible SVGs in assets/diagrams for offline context and request/persistence flow. Current independent validate_extraction checks provenance/structure/consistency without static semantic approval; legacy ai_semantic/focused grounding are distinct. AI publication retains complete=False and semantic_coverage_not_proven.
 
 Direct usage and the separate bounded column transformation service have distinct contracts.
 

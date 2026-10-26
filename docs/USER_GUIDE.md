@@ -2,7 +2,8 @@
 
 For multi-model dbt repositories, choose **Sources → Project type → dbt project**.
 Import configured models, property YAML and macros together, then run parser analysis.
-See [dbt project support](DBT_SUPPORT.md) for artifact selection, resource impact and limits.
+See [the dbt workflow](project-types/dbt.md), [retail example](examples/dbt.md) and
+[dbt support reference](DBT_SUPPORT.md) for artifact selection, resource impact and limits.
 
 Create or switch workspaces in the sidebar. Every workspace has its own source inventory,
 analysis, settings and provider profiles. Workspaces reopen automatically after restart.
@@ -15,11 +16,11 @@ sending source to an AI provider. No model connection, API key or AI token usage
 needed, including for large projects.
 
 When you want additional coverage in a large or complex system, optionally enable
-AI and keep **Compare with parser** selected. This hybrid workflow validates and
-compares AI proposals with parser results. It sends selected source/context to your
+AI. This workflow independently extracts validated inferred facts from selected files.
+Parser results do not fill AI omissions. It sends selected source/context to your
 configured provider under the privacy controls. Review evidence, omissions and
 unresolved cases; AI cannot guarantee complete or universally correct lineage.
-See [AI project analysis](AI_ANALYSIS.md) for both capabilities and their limits.
+See [AI project analysis](AI_ANALYSIS.md) for the build flow and limits.
 
 ## Find your way around
 
@@ -343,11 +344,29 @@ download software, fonts or external image resources.
 
 ## Build lineage with optional AI
 
-On **Analysis**, **Use AI for analysis** is initially unchecked. When enabled, **Compare with parser** is selected by default for a hybrid build; disabling comparison selects experimental AI-generated mode. **Additional AI review** is optional. Inspect the offline disclosure/context/budget preview, then start the explicit AI analysis action. A preview or ordinary page rerun never sends requests.
+On **Analysis**, **Use AI for analysis** is initially unchecked. Enable it to preview the
+selected family, provider/model, disclosed files, file parts and estimated token/request
+counts. Choose **Analyze with AI** explicitly to start independent AI extraction.
+Preview and ordinary page reruns send no requests. Hybrid comparison and additional AI
+review are unavailable in this checkout. An explicit static build uses static results.
 
-Use **Connections & AI** to configure the route and deliberate privacy/context settings. Remote processing of a complete file across chunks still requires complete-source permission. The compact schema retains all validation rules. Larger source/catalog/request envelopes can exceed context budgets; adjust both workspace Privacy and profile context limits explicitly when preview identifies that limit. Cancellation/failure/stale checks keep the previous committed graph. Inspect the saved comparison/report for acceptance, rejection and unresolved coverage. See the full [AI project analysis guide](AI_ANALYSIS.md).
+Use **Connections & AI** to configure the provider and deliberate privacy settings.
+Remote processing of a complete file across parts still requires complete-source
+permission. Confirm unknown model capacity before dispatch. The saved report distinguishes
+processing progress, inferred facts and unresolved semantic coverage. After bounded item
+recovery, available validated work can publish with incomplete coverage; fatal errors,
+stale inputs and cancellation preserve the previous committed graph. See the full
+[AI project analysis guide](AI_ANALYSIS.md).
 
 
 ## Resumable AI analysis
 
-Enable AI to set maximum files per request and parallel requests before Analyze. SQL, SAS and dbt share the resumable pipeline; execution windows can continue automatically within the project allowance. See [AI flow](user-guide/ai-analysis-flow.md) and [controls/recovery](user-guide/ai-analysis-controls-and-recovery.md).
+SQL, SAS and dbt use independent AI file extraction with token-budgeted packing. Each
+build has one active physical request. **AI budget overrides** controls a 10–50% maximum
+output share (default 30%) and optional exact token overrides. Allocation is pinned for
+resume; file-count, parallel-request and execution-window controls are unavailable.
+Compatible resumes reuse saved successes and retain cumulative attempt/output reservations.
+Unknown responses may have been billed and require the configured recovery policy or
+explicit retry acknowledgement. **Retry unresolved AI work** retries only unfinished
+items after partial publication. See [AI flow](user-guide/ai-analysis-flow.md) and
+[controls/recovery](user-guide/ai-analysis-controls-and-recovery.md).
