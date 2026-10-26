@@ -254,3 +254,18 @@ def test_release_notes_always_retain_changes_and_installation_guidance() -> None
         assert "PR #7" in notes and "abc123 fix: export" in notes
         assert "SHA256SUMS" in notes and "gravetrail.exe" in notes
         assert ("AI-generated" in notes) == bool(summary)
+
+
+def test_standalone_release_test_gate_fetches_inventory_history() -> None:
+    """The reusable release test job needs the pinned documentation baseline."""
+    import yaml
+
+    workflows = Path(__file__).resolve().parents[1] / ".github/workflows"
+    publisher = yaml.safe_load((workflows / "publish-release.yml").read_text(encoding="utf-8"))
+    assert publisher["jobs"]["builds"]["uses"] == "./.github/workflows/release.yml"
+    release = yaml.safe_load((workflows / "release.yml").read_text(encoding="utf-8"))
+    steps = release["jobs"]["native"]["steps"]
+    test_index = next(i for i, step in enumerate(steps) if step.get("run") == "uv run pytest -q")
+    checkout = next(step for step in steps[:test_index]
+                    if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout.get("with", {}).get("fetch-depth") == 0

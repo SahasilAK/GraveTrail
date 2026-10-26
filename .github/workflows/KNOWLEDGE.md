@@ -7,7 +7,7 @@ including the nested upload action in the Pages composite; test commands also in
 ## Files
 - `tests.yml` — Pull-request-only uv lock install, Ruff and pytest on Windows/Linux Python 3.12; branch pushes do not launch duplicate test runs. Node enables JS syntax regression. Full Git history is fetched so inventory validation can inspect the pinned application baseline.
 - `security.yml` — Read-only push/PR/weekly/manual scans: checksum-pinned Gitleaks checks full reachable history and archived tracked files/nested ZIPs using root .gitleaks.toml; pinned pip-audit checks every locked group/extra across Windows/Linux Python 3.11/3.12. Findings fail jobs; secrets are redacted and checkout credentials are not persisted.
-- `release.yml` — Version-tag/manual native Windows/Linux/macOS builds, suite and real wheel/executable smoke; Linux container build/persistence; checksummed Actions artifacts. No remote runs/publication implied.
+- `release.yml` — Version-tag/manual native Windows/Linux/macOS builds, suite and real wheel/executable smoke; Linux container build/persistence; checksummed Actions artifacts. Native jobs fetch full Git history for inventory tests, including calls from the standalone publisher. No remote runs/publication implied.
 
 - `docs.yml` — Read-only PR inventory-freshness, strict build, legacy-route and publication inspection in a locked docs-only environment; full Git history supplies the documented source baseline. Relevant main pushes (including shared palette registry changes)/manual main runs upload only site/; deploy alone has Pages/OIDC write using the github-pages environment. Pages must be enabled separately.
 
