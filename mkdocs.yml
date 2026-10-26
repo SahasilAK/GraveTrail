@@ -1,5 +1,5 @@
 site_name: GraveTrail
-site_description: Nothing stays buried. Every dependency leaves a trail. Local SQL, SAS and dbt lineage with original evidence, model dependencies and macro impact.
+site_description: Understand SQL, SAS and dbt projects with explorable lineage, dependency relationships and original source evidence. Local static analysis, optional AI.
 site_url: https://sahasilak.github.io/GraveTrail/
 repo_url: https://github.com/SahasilAK/GraveTrail
 repo_name: SahasilAK/GraveTrail
@@ -43,6 +43,15 @@ extra:
     - assets/images/gravetrail-workspace-dashboard.png
     - assets/images/gravetrail-lineage-explorer.png
     - assets/images/gravetrail-source-evidence.png
+    - assets/examples/lineage.html
+    - assets/images/gravetrail-source-import.png
+    - assets/images/gravetrail-analysis-results.png
+    - assets/images/gravetrail-columns.png
+    - assets/images/gravetrail-export-controls.png
+    - assets/images/gravetrail-dbt-resources.png
+    - assets/images/lineage-example.png
+    - assets/diagrams/system-boundaries.svg
+    - assets/diagrams/analysis-sequence.svg
 markdown_extensions:
   - admonition
   - attr_list
@@ -71,49 +80,81 @@ nav:
   - Home: index.md
   - Get started:
       - getting-started/index.md
-      - First lineage: getting-started/quick-start.md
-      - Install & operate: SETUP_AND_DEPLOYMENT.md
-      - Configuration: getting-started/configuration.md
-  - User guide:
+      - Installation: getting-started/installation.md
+      - First lineage tutorial: getting-started/quick-start.md
+      - Configuration basics: getting-started/configuration.md
+  - Concepts:
+      - concepts/index.md
+      - Projects and workspaces: concepts/projects-and-workspaces.md
+      - Lineage and columns: concepts/lineage-and-columns.md
+      - Evidence and coverage: concepts/evidence-and-coverage.md
+      - Local analysis and optional AI: concepts/local-and-ai.md
+  - User guides:
       - user-guide/index.md
+      - Import sources: user-guide/sources.md
+      - Run analysis: user-guide/analysis.md
+      - Explore lineage and impact: user-guide/explore.md
+      - Inspect evidence: user-guide/evidence.md
+      - Columns and transformations: user-guide/columns.md
+      - Exports and sharing: user-guide/exports.md
+      - Workspaces and recovery: DATA_MANAGEMENT.md
       - UI reference: USER_GUIDE.md
-      - dbt projects: DBT_SUPPORT.md
-      - AI project analysis: AI_ANALYSIS.md
-      - AI analysis flow: user-guide/ai-analysis-flow.md
-      - AI controls & recovery: user-guide/ai-analysis-controls-and-recovery.md
-      - Column transformations: TRANSFORMATION_LINEAGE.md
-      - Data management & recovery: DATA_MANAGEMENT.md
-  - Integrations:
+  - Project types:
+      - project-types/index.md
+      - SQL workflow: project-types/sql.md
+      - SAS workflow: project-types/sas.md
+      - dbt workflow: project-types/dbt.md
+      - SQL coverage: SQL_PARSING.md
+      - SAS coverage: SAS_PARSING.md
+      - dbt reference: DBT_SUPPORT.md
+      - Transformation reference: TRANSFORMATION_LINEAGE.md
+  - Examples:
+      - examples/index.md
+      - SQL tutorial: examples/sql.md
+      - SAS tutorial: examples/sas.md
+      - dbt tutorial: examples/dbt.md
+      - Interactive lineage: examples/interactive-lineage.md
+  - Optional AI:
+      - Analysis overview: AI_ANALYSIS.md
+      - Current extraction flow: user-guide/ai-analysis-flow.md
+      - Controls and recovery: user-guide/ai-analysis-controls-and-recovery.md
+      - Providers and disclosure: LLM_INTEGRATION.md
+      - Secure configuration: SECURE_CONFIGURATION.md
+  - Reference:
       - integrations/index.md
       - CLI: CLI_GUIDE.md
       - MCP: MCP_INTEGRATION.md
       - Capability matrix: CLI_MCP_CAPABILITIES.md
       - Agent workflows: AGENT_WORKFLOWS.md
       - Response budgets: TOKEN_OPTIMIZATION.md
-      - LLM providers: LLM_INTEGRATION.md
-      - Secure configuration: SECURE_CONFIGURATION.md
-  - Architecture:
-      - architecture/overview.md
-      - System overview: ARCHITECTURE.md
-      - AI pipeline: architecture/ai-analysis-pipeline.md
-      - Data model: DATA_MODEL.md
-      - Lineage engine: LINEAGE_ENGINE.md
-      - SQL coverage: SQL_PARSING.md
-      - SAS coverage: SAS_PARSING.md
-      - Prompt engineering: PROMPT_ENGINEERING.md
       - Security: SECURITY.md
-      - Performance: PERFORMANCE.md
-  - Deploy:
-      - deployment/index.md
-      - Build & release: BUILD_AND_RELEASE.md
-      - GitHub Pages: deployment/github-pages.md
   - Develop:
       - development/index.md
+      - Newcomer walkthrough: development/getting-started.md
+      - Architecture: architecture/overview.md
+      - Contracts and persistence: architecture/contracts.md
+      - Subsystem code map: development/code-map.md
+      - Complete source inventory: development/source-inventory.md
+      - Internal API examples: development/internal-api.md
+      - Technology and process: development/technology.md
+      - Extension guides: development/extending.md
       - Contributing: development/contributing.md
-      - Implementation guide: IMPLEMENTATION_GUIDE.md
-      - Extending GraveTrail: EXTENDING_THE_APP.md
-      - Testing: TESTING.md
-      - Documentation: development/documentation.md
-  - Troubleshooting:
-      - troubleshooting/help.md
+      - Documentation maintenance: development/documentation.md
+      - Screenshot recipes: development/screenshots.md
+      - Detailed references:
+          - System overview: ARCHITECTURE.md
+          - AI pipeline: architecture/ai-analysis-pipeline.md
+          - Data model: DATA_MODEL.md
+          - Lineage engine: LINEAGE_ENGINE.md
+          - Implementation guide: IMPLEMENTATION_GUIDE.md
+          - Extending GraveTrail: EXTENDING_THE_APP.md
+          - Testing and qualification: TESTING.md
+          - Prompt engineering: PROMPT_ENGINEERING.md
+          - Performance: PERFORMANCE.md
+  - Operate and troubleshoot:
+      - deployment/index.md
+      - Installation and operations reference: SETUP_AND_DEPLOYMENT.md
+      - Build and release: BUILD_AND_RELEASE.md
+      - GitHub Pages: deployment/github-pages.md
+      - Troubleshooting and FAQ: troubleshooting/help.md
       - Troubleshooting reference: TROUBLESHOOTING.md

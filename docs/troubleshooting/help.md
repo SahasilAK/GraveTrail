@@ -14,6 +14,7 @@ installation, containers and packaged launchers.
 | Port 8501 already used | Stop the intended previous owner or use `gravetrail-ui --port 8502`. |
 | Browser does not open | Open the loopback URL printed by the launcher and inspect terminal output. |
 | `storage_busy` or DuckDB lock | Stop the process owning that exact home before starting a separate UI/CLI/MCP process. Do not delete database/WAL/lock files. |
+| Unexpectedly empty assets after interrupted restart | Preserve the stopped home/WAL; see the [verified secondary-index recovery issue](../TROUBLESHOOTING.md#missing-assets-after-an-interrupted-process). |
 | Previously analyzed workspace missing | Check the explicit home. Source and installed launchers can have different defaults; reopen the original home with `--home`. |
 | Integrity or migration failure | Stop the owner, retain the failed home and sanitized logs, then restore a compatible backup into a new directory. |
 

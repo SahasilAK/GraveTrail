@@ -1,9 +1,9 @@
 # docs/assets/
 
-Public visual assets; every published file must also be named in mkdocs.yml extra.public_assets. Knowledge maps are excluded from the site.
+Public assets require individual mkdocs.yml extra.public_assets registration. The hook rejects unsafe paths/symlinks and arbitrary HTML; only the reviewed self-contained example is admitted by exact SHA-256. Maps and local proof/intermediate files are excluded.
 
-## Subfolders
-- `images/` — [images/KNOWLEDGE.md](images/KNOWLEDGE.md): original branding and real fixture screenshots.
-- `diagrams/` — [diagrams/KNOWLEDGE.md](diagrams/KNOWLEDGE.md): illustrative lineage SVG.
-- `stylesheets/` — [stylesheets/KNOWLEDGE.md](stylesheets/KNOWLEDGE.md): theme and homepage styling.
-- `javascripts/` — [javascripts/KNOWLEDGE.md](javascripts/KNOWLEDGE.md): accessible native palette selector.
+- `images/` — supplied branding and real safe-fixture application/example captures; [map](images/KNOWLEDGE.md).
+- `diagrams/` — accessible editable standalone lineage/context/request SVGs; core diagrams render without a CDN; [map](diagrams/KNOWLEDGE.md).
+- `examples/` — reviewed inert-data interactive HTML snapshot with bounded inline script/CSP; [map](examples/KNOWLEDGE.md).
+- `stylesheets/` — semantic theme, learning-path/cards and responsive demo styling; [map](stylesheets/KNOWLEDGE.md).
+- `javascripts/` — native accessible persisted palette selection; [map](javascripts/KNOWLEDGE.md).

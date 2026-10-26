@@ -45,6 +45,8 @@ Counter, capture and retention definitions: [AI analysis](AI_ANALYSIS.md).
 
 ## Current acceptance summary — 2026-10-21
 
+Dated acceptance snapshot; current implementation/controls are described in the later protocol 5 and recovery sections. Counts below are historical verification runs.
+
 dbt extension validation: **910 tests passed, 2 skipped** on Windows/Python 3.11.16.
 `tests/test_dbt_*.py` covers safe imports, static templates/resources, manifest v12,
 catalog v1/run-results v6, identities, columns, settings, access, maintenance and UI.
@@ -216,9 +218,11 @@ Run `uv run pytest tests/test_parity_*.py` and the full `uv run pytest`. The key
 
 ## AI project analysis qualification — 2026-10-20
 
+Historical pre-protocol-5 qualification: the comparison/review path described here is retired for new builds. Preserve these measurements as dated evidence, not current controls or live accuracy.
+
 New contract/context/transport/validator/reconciliation/orchestration tests use synthetic originals and HTTPX MockTransport. Strict evidence and negative fixtures cover fragments/splices, ambiguous ownership, unused CTEs, scope/role/version mapping, static UPDATE/MERGE gaps, retry/fallback budgeting, truncation, unknown usage and cooperative deadline/cancellation. Fourteen versioned SQL/SAS holdout scripts label expected facts and abstentions separately from prompt examples.
 
-These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. AI-generated mode is experimental; hybrid comparison is the initial choice. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-semantic-quality) records the still-open language-specific live precision, coverage and sample-size targets.
+These checks prove bounded application behavior, not live-model accuracy. No live project-analysis precision gate, current native binary smoke or private ZIP disclosure is claimed here. Historical manual OmniRoute evidence above does not qualify the new project workflow. At that dated checkpoint, the UI initially selected hybrid comparison; new builds reject it. The [AI project analysis guide](AI_ANALYSIS.md#evidence-and-semantic-quality) records the still-open language-specific live precision, coverage and sample-size targets.
 
 Earlier source verification on 2026-10-20: **738 passed, 2 existing Windows symlink skips** in 178.66 seconds. The actual browser confirmed unchecked defaults, hybrid opt-in/preview, background publication and accepted table/column claims in the report using synthetic mocked extraction. Follow-up AppTest/browser checks cover automatic terminal report refresh and selection. A clean wheel installed in a separate environment ran outside the checkout, loading packaged project prompts/schemas and publishing one table edge/column derivation with durable support through mock HTTP. Ruff, lock and strict Pages validation are recorded with the PR. The bounded two-case live OmniRoute smoke described above verifies requests/usage and AI gap publication, but its sample is too small and was used in prompt development; do not infer a precision percentage.
 
@@ -231,6 +235,8 @@ uv run --locked python scripts/benchmark_ai_analysis.py --project-gold --output 
 It scores the parser baseline against separate `evaluation_gold.json` operation/scope/version/role labels and optionally both synthetic archive manifests. `--predictions saved.json` scores explicit saved predictions; this remains unqualified saved evidence. Live evaluation requires `--live`, explicit `--cases`, `DATAFORGE_AI_BENCHMARK_LIVE=1`, an existing named credential reference and bounded attempt/time options. The synthetic live route is fixed to loopback OmniRoute `auto/best-reasoning`. No live qualification follows from offline or mock scores. Gold/expected files are scorer inputs and never model context.
 
 ## Supplied banking archive evaluation — 2026-10-21
+
+Historical pre-protocol-5 archive evaluation. Hybrid/review scores below describe that earlier implementation and do not qualify current independent file extraction.
 
 The new `scripts/benchmark_lineage_archives.py` checks all source checksums before
 evaluation and scores per-script table pairs against the separately supplied manifest.
@@ -324,6 +330,8 @@ and warm rebuilds complete with 2,114 and 2,201 cache hits respectively in isola
 
 ## Automatic capacity and continuation qualification
 
+Historical pre-protocol-5 capacity/continuation evidence. Current token allocation, compatible resume and bounded partial recovery are defined in [AI analysis](AI_ANALYSIS.md). The current scale command uses the file pipeline, rather than reproducing retired reviewer/window behavior.
+
 Focused tests cover allowlisted/unknown model metadata, combined/separate context, UTF-8 estimates, full-envelope limits, legacy Custom origins, UI edit/reset, compact evidence references, 16 MB canonical expansion, per-file aggregate snapshots, staged partial outcomes, reopen/resume, changed configuration and unknown in-flight retry. A deadline between extraction and review must repeat no extraction. Run `uv run --locked python scripts/benchmark_ai_analysis.py --scale-units 1000 --output /path/to/report.json` for synthetic mock-transport execution, durable reopen, exact request coverage, atomic publication, peak Python memory and maximum unit-record size. It never uses a live provider. These are lifecycle/storage checks, not live-model precision measurements.
 
 Budget UI regressions also cover page navigation retaining a nondefault Custom value,
@@ -333,11 +341,15 @@ when the primary has a transient failure.
 
 ## Semantic paging and review batch regressions
 
+Historical pre-protocol-5 review/partition qualification. These retained regression contracts do not describe the current file-part extraction path.
+
 `tests/test_ai_analysis_scaling.py` exercises exact original source segments, projection ordinals, retained JOIN/WHERE dependency roles, rejected cross-focus claims, conservative indivisible constructs, static PROC SQL boundaries, oversized singleton review candidates and clean reopen between review batches. A real adapter/mock HTTP round trip processes every projection of a wide query once across explicit executions, publishing one original writer. These checks qualify host orchestration and validation, not live-model accuracy. Native crash durability and live precision remain separate release gates.
 
 Latest source verification after semantic paging/review batches: **801 passed, 2 existing Windows skips** in 439.67 seconds. The final scaling regressions separately passed **28 tests**, including real extraction/review adapter paths with mock HTTP. A fresh installed wheel outside the checkout loads the conditional focus prompt and passes both the 36-output/one-writer and 24-candidate/no-repeat continuation checks. The repeated 1,000-unit lifecycle qualification is recorded in [performance](PERFORMANCE.md#automatic-ai-continuation-qualification-2026-10-20). No live provider precision claim follows from these results.
 
 ## Host expression citation enhancement (2026-10-21)
+
+Historical wire/prompt/validator checkpoint; current protocol 5 accepts original file-part references without requiring parser-generated expression citations.
 
 Extraction wire v3 / prompt 4 lets the model select an app-issued source expression reference instead of reproducing expression text and calculating offsets. Parser 14 / validator 3 check the exact original occurrence so identical UNION expressions and SAS assignment versions cannot swap locations. References hydrate before strict canonical/semantic validation. Review stays wire v2 / prompt 3, legacy expression responses remain supported and compact canonical v2 storage needs no migration.
 
@@ -352,6 +364,8 @@ Verification for this enhancement: **848 passed, 2 existing Windows skips** in 1
 Historical status before the Pillow remediation below: post-push CI exposed dependency advisories in the preexisting lock. Updating only Certifi from `2026.7.22` to `2026.10.19` removes `PYSEC-2026-4320`; **62 transport/connection/capability tests pass** after this update. The current all-groups dependency audit still reports **eight Pillow 12.3.0 advisories**, fixed in Pillow 13.0.0. Streamlit 1.66.0 requires `pillow>=9.2.0,<13`, so the supported resolver cannot select that fix. No version override, ignored advisory or disabled audit is added. Dependency CI remains a release blocker pending a compatible upstream dependency resolution. This is separate from citation validation. See [Pillow release notes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html) and [Streamlit package metadata](https://pypi.org/pypi/streamlit/1.66.0/json).
 
 ## One-hour timeout and visible waits (2026-10-21)
+
+Historical timeout/UI observation. Current provider profiles also support cancellable **Wait until stopped**; see [current recovery controls](user-guide/ai-analysis-controls-and-recovery.md).
 
 Profile validation and the provider UI accept request timeouts through 3,600 seconds, reject 3,601, and preserve saved/default values. Regression tests cover save/reopen, remaining-execution deadline clamping, job start/stage/finish timestamps, elapsed timer advancement/freeze, legacy polling and waiting/validation stages for extraction and review. Native manual-request spinners use elapsed timing; no provider heartbeat is inferred.
 
@@ -374,12 +388,24 @@ Final remediation source verification: **859 passed, 2 existing Windows symlink-
 
 ## Resumable AI analysis
 
-Resumable pipeline tests cover project/window separation, automatic rollover, request-level recovery, batch item isolation, owner-thread database access, mixed SQL/SAS/dbt table/column publication, scoped stored-fact linking and bounded resolution. `test_ai_pipeline_qualification.py` reproduces the screenshot task shape. Mock HTTP and synthetic scale evidence establish behavior only; live model precision and native release acceptance remain separate gates.
+Current regressions cover independent SQL, SAS and dbt builds, exact file parts,
+token-budgeted packing, durable request/attempt accounting, independent sibling checkpoints,
+context completion, file consolidation, deterministic linking and bounded partial recovery.
+Each build selects one family; a mixed SQL/SAS/dbt selection is rejected. Compatible resume
+reuses successes. Historical rollover/resolution tests qualify retained contracts only.
+Mock evidence does not establish live-model precision or native release acceptance.
+
+```powershell
+uv run --locked pytest tests/test_ai_build_contract.py tests/test_ai_resumable_files.py tests/test_ai_batching.py tests/test_ai_context_index.py tests/test_ai_partial_recovery.py tests/test_ai_inspection.py -q
+uv run --locked python scripts/qualify_ai_context.py --family all --files 1000
+```
 
 Final local qualification for this pipeline: **940 passed, 2 existing Windows skips** (`python -m pytest -q`, 183.72 seconds, Python 3.11.16). `ruff check .` and the strict docs build pass (42 public pages). A fresh wheel installed to a separate target and exercised outside the checkout passed mixed SQL/SAS/dbt table+column publication, packaged dbt/resolution prompts and schema9 integrity with zero live calls. Native executable/container and live-provider accuracy were not rerun.
 
 
 ## Adaptive AI context and expression components (2026-10-22)
+
+Historical pre-protocol-5 source-focus/review qualification. The commands, task counts and 8,000-character default below describe that earlier implementation, not current file packing.
 
 The final source suite passes **963 tests with 2 existing Windows skips** in
 248.62 seconds on Python 3.11.16. Ruff, lock validation and the strict Pages build

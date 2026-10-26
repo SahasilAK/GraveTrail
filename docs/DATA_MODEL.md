@@ -9,6 +9,9 @@ Version 8 adds `dbt_projects`, `dbt_resources`, `dbt_relationships`,
 Logical dbt asset identity includes root/package/type/name/version; physical bindings
 remain context-qualified metadata. Evidence records source hashes, offsets, origins and
 optional JSON Pointers. Normalized snapshots retain historical source reachability.
+Version 9 adds durable AI request/attempt/context/link journals; version 10 adds separate
+opt-in `ai_inspection_artifacts` request/response capture. Protocol 5 file/part results reuse
+the run/unit tables rather than requiring another schema migration.
 Do not edit schema destructively or delete runtime data to resolve a migration error.
 
 ```mermaid
@@ -95,13 +98,32 @@ Project network waits do not hold database transactions. Accepted facts and supp
 
 Accepted claim payloads also retain compact source references with original encoding; detailed reports restore exact immutable quotes. Metadata-only reports omit payloads without reading source blobs. In-memory host operation metadata excludes duplicate fact arrays for wide projections.
 
-AI source tasks also retain a bounded `unit_spec` in planned/staged unit rows. It pins original coordinates and optional projection bounds/ordinals without copying source text. Validated checkpoints retain reviewed candidate IDs after each review batch. Clean continuation reconstructs the same source plan and skips completed batches; partial task publication is not allowed. This uses the existing migration 6/7 tables and needs no additional migration.
-
-Extraction protocol v4 expression references are transient model citations. The host resolves them to exact original expression text/coordinates before storing the existing compact canonical v2 payload; no new table or migration is required. Parser 14 / validator 4 and extraction prompt/schema hashes invalidate incompatible cached or paused work while preserving the previously published graph. Review remains protocol v2.
+Historical pre-protocol-5 tasks retained bounded `unit_spec` source/projection coordinates,
+reviewed candidate IDs and compact canonical v2 payloads. Protocol v4 expression references
+were resolved to original expression coordinates before legacy semantic validation.
+Those stored contracts remain readable, but their review/partition execution and paused-run
+continuation are not the current build path. New protocol 5 parts cite original file/hash/
+character ranges directly and retain explicit incomplete coverage after bounded recovery.
 
 
 ## Resumable AI analysis
 
 Migration 9 adds `ai_analysis_requests`, `ai_analysis_attempts`, `ai_context_dependencies` and `ai_link_checkpoints`. They store request/item membership, independent dispatch outcomes/reservations, relevant source dependencies and staged link reports. They are included in cleanup, integrity and whole-home backup/restore. See [AI persistence and ownership](architecture/ai-analysis-pipeline.md).
 
-Adaptive source/context views extend unit_spec with an immutable source_focus range and indexed context interval. Validation checkpoints retain fragment identities, covered expression ranges, bounded inputs and reviewed component IDs. Compatible components are composed and validated against the complete original before becoming accepted facts. Large exact expression strings use checked _expression_source_span offsets in claim/checkpoint/snapshot JSON; legacy inline expressions remain readable. Typed support refresh hydrates those offsets, and detailed reports read each immutable source once. These additions reuse schema9 tables and require no migration.
+Historical adaptive records can contain `source_focus`, indexed context intervals, fragment
+and reviewed-component IDs, plus checked `_expression_source_span` offsets. Retained readers
+and maintenance must preserve them; they do not define current extraction or review.
+
+Current part checkpoints use `context_hash='extraction5'`, exact original source identity
+and a serialized `PartExtraction`. Finalized files use `unit_id='file5:'+file_id` with a
+`FileExtraction`. Both reuse `ai_analysis_units`, with the existing 16 MiB JSON record bound.
+Original parts survive completion/consolidation and failed refinement. Run summaries pin
+protocol/source/settings/model/allocation and hold recovery/split membership. Request and
+attempt journals retain batch membership and every reservation/outcome across resume.
+After bounded failure, saved partial/unresolved items remain distinct from completed work;
+available validated details can publish atomically with incomplete coverage.
+
+Optional `ai_inspection_artifacts` captures are separate from validated checkpoints: 4 MiB
+per artifact, 64 MiB per run and at most seven days (or shorter workspace retention).
+Credential redaction on retained copies does not reconstruct missing payloads or
+alter original source evidence. See [request inspection](AI_ANALYSIS.md#inspecting-request-inputs-and-outputs).

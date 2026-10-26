@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Preserve the exact reviewed bytes used by the documentation publication digest.
+docs/assets/examples/lineage.html text eol=lf
