@@ -7,7 +7,7 @@ Developer path for pinned application source1864dc8887ac8342a8ef8b369cc8a2e8b5d2
 - `code-map.md` — curated subsystem paths/key exports, ownership/boundaries, edit triggers and pinned source/tests.
 - `source-inventory.md` — mechanically generated first-party source/UI/tool/test/resource/config inventory; AST summaries/top-level symbols/test counts without app imports.
 - `technology.md` — real pyproject constraints/import roles, optionality, packaging/workflows and compatibility override.
-- `internal-api.md` — actual signatures, I/O/errors, original versions, graph/direct/derivation columns, exports, policies and AI lifecycle.
+- `internal-api.md` — signatures, I/O/errors, original versions, graph/direct/derivation columns, exports, policies and AI lifecycle; internal/public boundary, retained historical helpers/readers and publication-version freshness rules.
 - `extending.md` — parser/dbt/provider/AI/transport/export/settings/schema/UI recipes and positive/negative regression boundaries.
 - `contributing.md` — bounded safe changes, focused/full checks, inventory maintenance, disposable homes and review submission.
 - `documentation.md` — navigation/assets, docs-only lock/build, digest-reviewed HTML, baseline routes/headings and artifact/publication checks.

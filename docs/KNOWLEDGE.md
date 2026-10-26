@@ -1,6 +1,6 @@
 # docs/
 
-Public learning paths plus retained technical references. Homepage hero: “Nothing stays buried.” as H1, then “Every dependency leaves a trail.” as a smaller prominent subtitle. Product explanation follows directly beneath it. mkdocs.yml navigation and named public assets define publication; context maps, private plans/prompts/reviews, runtime data and arbitrary HTML stay excluded. Developer links pin application baseline1864dc8; numerical historical measurements are not current accuracy claims.
+Public learning paths plus retained technical references. Homepage hero: “Nothing stays buried.” as H1, then “Every dependency leaves a trail.” as a smaller prominent subtitle. Product explanation follows directly beneath it. mkdocs.yml navigation and named public assets define publication; context maps, private plans/prompts/reviews, runtime data and arbitrary HTML stay excluded. Developer links pin application baseline1864dc8; numerical historical measurements are not current accuracy claims. IMPLEMENTATION_GUIDE names shared theme_configuration as the eleven-preset owner; development/internal-api defines historical compatibility and publication-version freshness.
 
 ## Subfolders
 - `getting-started/` — install, first static lineage and configuration; [map](getting-started/KNOWLEDGE.md).

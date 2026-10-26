@@ -4,11 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import networkx as nx
 
-from dataforge.ai_analysis_store import _run, load_validation_checkpoint
 from dataforge.models import canonical
 
 
@@ -256,18 +255,8 @@ def to_publication_results(linked, inventory):
     return output
 
 
-def load_link_snapshot(store, workspace, run_id, units, context_hashes):
-    _run(store, workspace, run_id)
-    facts = []
-    for unit in units:
-        checkpoint = load_validation_checkpoint(store, workspace, run_id, unit, context_hashes[unit.unit_id])
-        if not checkpoint:
-            raise ValueError('missing_required_unit_checkpoint')
-        facts.extend(checkpoint[0].accepted)
-    return facts
-
-
 def link_stored_facts(facts, *, case_sensitive=False):
+    """Link historical normalized checkpoints; protocol 5 uses link_file_extractions."""
     def norm(name):
         return name.strip() if case_sensitive or any(c in name for c in '\"`[') else canonical(name)
     def identity(fact, name):
@@ -316,19 +305,3 @@ def link_stored_facts(facts, *, case_sensitive=False):
                                             sort_keys=True).encode()).hexdigest()
     return {'fingerprint': fingerprint, 'table_links': sorted(tables), 'column_links': links,
             'unresolved': unresolved, 'cycles': cycles, 'complete': not unresolved}
-
-
-def compose_dbt_publication(projects, results, *, mode):
-    """Keep structural inventory; persisted project snapshots use the chosen AI facts."""
-    by_file = {m['file_id']: (m, parsed) for m, parsed in results}
-    composed = []
-    for project in projects:
-        files = tuple(by_file[m['file_id']] for m, _ in project.file_results)
-        accepted_pairs = {(s.identity, t.identity) for _, p in files for op in p.operations
-                          for s in op.sources for t in op.targets if s.identity and t.identity}
-        relations = tuple(r for r in project.relationships if mode == 'hybrid' or r.kind not in
-                          {'data_read', 'artifact_dependency'} or
-                          ('dbt:' + r.source_id, 'dbt:' + r.target_id) in accepted_pairs)
-        composed.append(replace(project, file_results=files, relationships=relations,
-                                coverage={**project.coverage, 'ai_mode': mode, 'columns': 'partial'}))
-    return composed

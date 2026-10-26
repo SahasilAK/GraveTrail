@@ -20,18 +20,25 @@ from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 from dataforge.store import Store
 
-PARSER_VERSION = "15"
+PARSER_VERSION = "16"
 log = logging.getLogger(__name__)
 
 
 def analysis_is_current(store: Store, workspace: str) -> bool:
-    """Check whether the latest completed analysis matches current files and settings."""
+    """Require current publication semantics, files and settings for static and AI runs.
+
+    Historical publications without a recorded parser version require reanalysis.
+    AI publications also use this version for normalization and materialization.
+    """
     from dataforge.dbt.service import dbt_settings_current
     files = store.files(workspace)
-    runs = store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+    runs = store.rows("SELECT run_id,snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+    publication = store.rows('SELECT run_id,parser_version FROM column_analysis WHERE workspace_id=?', [workspace])
     config = ParsingSettings.model_validate({key: store.setting(workspace, key, default)
         for key, default in ParsingSettings().model_dump().items()}).model_dump()
-    return bool(runs) and dbt_settings_current(store, workspace) and all(f['parsing_status'] != 'pending' for f in files) and (
+    return bool(runs and publication) and publication[0]['run_id'] == runs[0]['run_id'] and (
+        publication[0]['parser_version'] == PARSER_VERSION
+    ) and dbt_settings_current(store, workspace) and all(f['parsing_status'] != 'pending' for f in files) and (
         json.loads(runs[0]['snapshot'])['files'] == {f['relative_path']: f['content_hash'] for f in files}
         and json.loads(runs[0]['configuration']) == config)
 
@@ -230,10 +237,10 @@ def source_dialect(metadata: dict[str, Any], config: dict[str, Any]) -> str:
 def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] | None=None, force: bool=False,
                              progress: Callable[[float, str], None] | None=None,
                              cancelled: Callable[[], bool] | None=None) -> tuple[list[tuple[dict[str, Any], ParseResult]], dict[str, Any], dict[str, Any]]:
-    """Collect parser results offline without publishing or restoring selected AI facts.
+    """Compatibility preparation for historical publication fixtures and saved facts.
 
-    The orchestrator snapshots/CAS-checks inputs. Unselected accepted representations
-    remain intact, while selected extraction always starts with a parser-only cache.
+    Protocol-5 execution uses independent file extraction instead. Unselected accepted
+    representations remain intact; selected extraction uses a parser-only cache.
 
     Raises:
         ValueError: If the supplied value violates the operation constraints."""
@@ -490,17 +497,6 @@ def compare_runs(first: dict[str, Any], second: dict[str, Any]) -> dict[str, Any
     return {"added_assets": sorted(bset - aset), "removed_assets": sorted(aset - bset),
             "added_edges": sorted(be - ae), "removed_edges": sorted(ae - be),
             "changed_files": sorted(k for k in set(a["files"]) | set(b["files"]) if a["files"].get(k) != b["files"].get(k))}
-
-
-def _restore_ai_results(store: Store, workspace: str, results: list[tuple[dict[str, Any], ParseResult]], config: dict[str, Any]) -> None:
-    """Revalidate previously merged AI claims against the current parsed source results."""
-    from dataforge.ai_analysis_store import load_accepted_file_results
-
-    accepted = load_accepted_file_results(store, workspace, config)
-    for index, (metadata, parsed) in enumerate(results):
-        if metadata['file_id'] in accepted:
-            results[index] = accepted[metadata['file_id']]
-    restore_manual_ai_results(store, workspace, results, config)
 
 
 def restore_manual_ai_results(store: Store, workspace: str, results: list[tuple[dict[str, Any], ParseResult]],

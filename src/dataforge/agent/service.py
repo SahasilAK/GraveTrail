@@ -1234,9 +1234,9 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
 
         Raises:
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
+        self._workspace(w, source=True)
         if include_matches:
             from dataforge.reporting import code_matches
-            self._workspace(w, source=True)
             matches = code_matches(self.store, w, query, opts.max_items + 1)
             return self._page(w, opts, ['code_matches', query], matches[:opts.max_items],
                 boundaries=['items'] if len(matches) > opts.max_items else [], analysis_current=self._current(w))

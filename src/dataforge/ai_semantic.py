@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import re
-from dataclasses import asdict, replace
+from dataclasses import replace
 from functools import lru_cache
 
 import sqlglot
@@ -217,31 +216,6 @@ def proc_sql_spans(code):
         result.append((start, start + len(raw)))
         cursor = start + len(raw)
     return tuple(result)
-
-
-def merge_publication_operations(operations):
-    """Several foci remain one original writer, with sparse accepted facts combined."""
-    merged = {}
-    for op in operations:
-        if op.evidence_key not in merged:
-            merged[op.evidence_key] = op
-            continue
-        prior = merged[op.evidence_key]
-        pairs = []
-        for current in (prior, op):
-            pairs.extend((current.sources[a], current.targets[b]) for a, b in (current.table_pairs or []))
-        for field in ("sources", "targets", "usages", "derivations"):
-            values = getattr(prior, field) + getattr(op, field)
-            unique = {
-                json.dumps(asdict(v) if not isinstance(v, dict) else v, sort_keys=True): v for v in values
-            }
-            setattr(prior, field, list(unique.values()))
-        prior.table_pairs = list(
-            dict.fromkeys((prior.sources.index(a), prior.targets.index(b)) for a, b in pairs)
-        )
-        if op.method != "ai-project":
-            prior.method, prior.confidence = op.method, op.confidence
-    return list(merged.values())
 
 
 def unit_dialect(unit, settings):

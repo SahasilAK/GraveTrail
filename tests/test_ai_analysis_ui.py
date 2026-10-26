@@ -111,6 +111,14 @@ def test_pending_worker_elapsed_advances_and_stops_on_completion(tmp_path, monke
     st.cache_resource.clear()
 
 
+def test_successful_ai_report_with_no_last_failure_explains_inferred_coverage():
+    from dataforge.analysis_service import recovery_message
+
+    assert recovery_message({'status': 'committed', 'last_failure': None,
+        'reasons': ['semantic_coverage_not_proven']}) == (
+        'Published AI lineage remains inferred; semantic completeness is not proven.')
+
+
 def test_active_report_uses_ledger_without_inventory_or_preparation(tmp_path, monkeypatch):
     import streamlit as st
 

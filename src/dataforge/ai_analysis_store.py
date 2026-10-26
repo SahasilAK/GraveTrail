@@ -219,21 +219,6 @@ def save_claim_decisions(store, workspace, run_id, claims, *, supports=()):
             support.get('claim_id', ''), support.get('engine', 'ai'), support.get('record_id'), _json(support.get('payload', {}))])
 
 
-def inherited_context_sources(store, workspace, file_ids):
-    """Carry declaration dependencies with preserved per-file representations."""
-    remaining, sources = set(file_ids), {}
-    for run in store.rows("SELECT run_id,manifest,accepted_results FROM ai_analysis_runs WHERE workspace_id=? AND status='committed' ORDER BY created_at DESC,run_id DESC", [workspace]):
-        represented = {item['metadata']['file_id'] for item in _accepted_items(store, workspace, run, hydrate=False)}
-        if remaining & represented:
-            manifest = json.loads(run['manifest'])
-            for entry in manifest if isinstance(manifest, list) else manifest.get('sources', []):
-                sources[(entry['file_id'], entry['content_hash'])] = entry
-            remaining -= represented
-        if not remaining:
-            break
-    return list(sources.values())
-
-
 def load_accepted_file_results(store, workspace, config=None):
     """Latest committed representation per file; stale evidence is never rehydrated."""
     inventory = {m['file_id']: m for m in store.files(workspace)}

@@ -48,7 +48,7 @@ elif mode == "Run":
         selected = st.multiselect("Files to analyze (leave empty for all)", list(paths), format_func=paths.get,
                                   key=key, persist_state="session")
         ai_request, ready = controls(store, w, selected or None)
-        label = ('Analyze with AI + parser' if ai_request.mode == 'hybrid' else 'Analyze with AI') if ai_request else ('Analyze selected' if selected else 'Analyze all files')
+        label = 'Analyze with AI' if ai_request else ('Analyze selected' if selected else 'Analyze all files')
         run = st.button(label, type="primary", icon=":material/play_arrow:", disabled=not ready)
         rebuild, validate = False, False
         with st.expander("Rebuild & validation"):

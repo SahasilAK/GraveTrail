@@ -16,7 +16,8 @@ def test_inventory_covers_first_party_python_and_resources() -> None:
     } <= paths
     git_files = inventory.git_paths(inventory.ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
     assert {name for name in git_files if name.endswith(".py")
-            and name.startswith(("src/", "ui/", "scripts/", "tests/"))} <= paths
+            and name.startswith(("src/", "ui/", "scripts/", "tests/"))
+            and (inventory.ROOT / name).is_file()} <= paths
     assert not any("__pycache__" in path or path.endswith("KNOWLEDGE.md") for path in paths)
     rendered = inventory.render_inventory(inventory.ROOT)
     assert all(f"`{path}`" in rendered for path in paths)

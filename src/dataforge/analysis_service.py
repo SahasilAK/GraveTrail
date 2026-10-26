@@ -77,7 +77,7 @@ def _hash(value):
 
 def recovery_message(summary):
     """Explain observed connection state without speculating about upstreams."""
-    detail = summary.get('last_failure', {})
+    detail = summary.get('last_failure') or {}
     category = detail.get('failure_category')
     if summary.get('status') == 'committed' and (summary.get('unresolved_work') or 'required_work_unresolved' in summary.get('reasons', [])):
         return 'Available validated lineage was published with incomplete coverage. Retry unresolved work to continue; saved successes are reused.'

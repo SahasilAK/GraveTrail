@@ -12,7 +12,7 @@ Store, Importer, LineageGraph, exports and explicit opt-in grounded AI; imported
 - `contracts.py` — AccessPolicy, QueryOptions, AgentSettings, AgentError and compact JSON;
   credential-free workspace revocation snapshots support polling while DuckDB is busy.
 - `service.py` — AgentService routes workspace/import/build/search/lineage/columns/source/
-  impact/batch/export/jobs; column_catalog and column_lineage page shared transformation queries with source-gated expressions/code and per-derivation paths. Applies scope, source disclosure, freshness, budgets and audit.
+  impact/batch/export/jobs; column_catalog and column_lineage page shared transformation queries with source-gated expressions/code and per-derivation paths. Every content search requires source permission, including metadata-only match responses; files query remains path-only. Applies scope, version-aware freshness, budgets and audit.
 - `paging.py` — Query/revision-bound cursors and whole-record serialized character budgets.
 - `jobs.py` — Two-worker local jobs, one per workspace; atomic JSON journals, heartbeat expiry,
   bounded status/results and explicit terminal states; Windows reader/replacement retries.
