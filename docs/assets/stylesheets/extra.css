@@ -158,5 +158,3 @@ body[data-md-color-scheme] .md-sidebar { background: var(--gt-sidebar, transpare
 
 .gt-lineage-demo { display: block; width: 100%; height: 700px; border: 1px solid var(--gt-line); border-radius: .6rem; background: #fff; margin: 1.2rem 0; }
 @media (max-width: 600px) { .gt-lineage-demo { height: 760px; } }
-.md-banner { background: var(--gt-surface); color: var(--gt-ink); border-bottom: 1px solid var(--gt-line); }
-.md-banner a { color: var(--gt-link); text-decoration: underline; }
