@@ -40,7 +40,7 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 ## Focused assistance and privacy
 - `llm.py`, `llm_resources.py` — Profile/Adapter protocols/discovery/chat, bounded request admission/chunks, request-local redaction and focused assistance; saved validation remains a compatibility API.
 - `focused_grounding.py`, `assistance_queue.py` — Source/hash/job-pinned manual diagnostic assistance, exact grounding and explicit inferred merges; rendering stays offline.
-- `connections.py` — Session-local credentials, expiration and explicit process-environment bindings. sanitize handles shared references, cycles and depth without input mutation; never persist credentials.
+- `connections.py`, `credentials.py` — Scoped session/environment/saved references and redaction. Explicit Windows keyring backend forces local-machine persistence; other OS stores fail closed pending qualification. Namespace binds home/workspace/profile/recipient; no source fallback or global saved-key cache. Disconnect retains saved keys; native writes only through explicit local UI save.
 - `provider_service.py`, `ai_service.py` — Origin/reference-authorized profiles/routing, isolated credentials, preview/request/history and idempotent explicit merges. Fallbacks reauthorize their own credentials; profile edits invalidate bindings.
 - `logging_config.py` — Safe event metadata allowlist; no raw source or credentials.
 

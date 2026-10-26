@@ -228,7 +228,8 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                 manager = RuntimeConnections()
                 manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True))
                 service.runtime_connections[(workspace_id, profile_id)] = manager
-                service.runtime_profiles[(workspace_id, profile_id)] = profile.model_dump_json()
+                from dataforge.model_capabilities import runtime_profile
+                service.runtime_profiles[(workspace_id, profile_id)] = runtime_profile(profile)
             if background:
                 service._workspace(workspace_id, write=True)
                 if action == 'analyze' and arguments.get('mode', 'parser') != 'parser':

@@ -5,6 +5,8 @@ Local evidence-backed SQL/SAS/CSV/dbt engineering workspace. Python 3.11+, Strea
 
 Application entry: `app.py`; installed/frozen UI entry: `dataforge.launcher:main`; automation entry: `dataforge.cli:app`. Start a disposable home with `uv run gravetrail-ui --home <path>`. One process owns a DuckDB home; do not open it concurrently through independent UI/CLI/MCP processes.
 
+API credentials default to session memory. Optional keyring persistence explicitly approves Windows Credential Manager with current-user/local-machine persistence; session/saved references bind data home/workspace/profile/recipient. Legacy environment references remain available, and agents need exact launch grants for saved references.
+
 ## Subfolders
 - `.github/` — test/security/docs/release workflows and contribution templates; [map](.github/KNOWLEDGE.md).
 - `.streamlit/` — UI defaults; [map](.streamlit/KNOWLEDGE.md).

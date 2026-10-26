@@ -2,6 +2,8 @@
 
 Unit, persisted-workflow, protocol/security, AppTest and distribution/documentation regressions. Use temporary isolated Store homes and mocks; ordinary tests require no live provider keys. Full per-file inventory/key helpers are in docs/development/source-inventory.md, generated from AST without executing tests.
 
+`test_local_credentials.py` uses fake native stores for session/saved source isolation, failure cleanup, home/workspace/profile/recipient scope, disconnect/delete, restore, UI lifecycle, exact agent/MCP/background grants and durable redaction. Backend construction tests never read real entries; native qualification is separately recorded in docs/BUILD_AND_RELEASE.md.
+
 Audit regressions: `test_agent_service.py` denies all content-search modes after source revocation
 while path inventory stays readable. `test_dbt_ai_analysis.py` covers default/selected/forced
 static builds after AI omissions; `test_dbt_analysis.py` checks parser-upgrade cache rebuilding.

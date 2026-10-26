@@ -12,6 +12,7 @@ from dataforge.ai_budget import allocate_analysis_profile
 from dataforge.ai_context import inventory_revision
 from dataforge.analysis_service import analysis_report, preview_analysis, recovery_message, run_analysis
 from dataforge.connections import current_connections
+from dataforge.credentials import credential_source
 from dataforge.llm import analysis_routes
 from dataforge.settings_service import revision
 from ui.analysis_inspection import render_inspection
@@ -32,7 +33,8 @@ def _preview_with_status(store, workspace, request, status, activity, started):
         manager = current_connections()
         bound = manager.for_profile(pid, profile) if hasattr(manager, 'for_profile') else manager
         cache_key = (str(store.home), request.model_dump_json(), inventory_revision(store, workspace),
-                     revision(store, workspace), profile.model_dump_json(), bool(not profile.key_env or bound.resolve(profile.key_env)))
+                     revision(store, workspace), profile.model_dump_json(),
+                     bool(not profile.key_env or bound.available(profile.key_env) or credential_source(profile.key_env) == 'saved'))
     except ValueError:
         pass
     cached = st.session_state.get('ai_preview_' + workspace)

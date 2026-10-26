@@ -18,6 +18,13 @@ uv run gravetrail-ui --home ./.dataforge
 ```
 
 Open [http://127.0.0.1:8501](http://127.0.0.1:8501). Keep the terminal running.
+
+This checkout adds `keyring>=25.7,<26` for optional **Remember on this device** API keys.
+Locked Windows installs include `pywin32-ctypes` and keyring's `jaraco.*` dependencies.
+The frozen build explicitly collects keyring and win32ctypes. Windows Credential Manager
+uses current-user/local-machine persistence; macOS/Linux native stores remain disabled
+until verified, including in headless/container installs. Session-only and environment
+references still work without an available native store. See [secure configuration](../SECURE_CONFIGURATION.md).
 The explicit home is persistent and Git-ignored; an absolute directory can keep data
 outside the checkout. Pass the same home when switching to CLI/MCP. **Stop the UI with
 Ctrl+C first:** one process owns each DuckDB home.

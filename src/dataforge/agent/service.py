@@ -191,6 +191,9 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                 self.audit(workspace_id, action, exc.code)
             raise
         except (ValueError, TypeError, ValidationError) as exc:
+            from dataforge.credentials import CredentialError
+            if isinstance(exc, CredentialError):
+                raise AgentError('credential_unavailable', str(exc)) from None
             raise AgentError("invalid_argument", "Invalid request arguments", reason=type(exc).__name__) from None
         except OSError:
             raise AgentError("io_error", "Local file operation failed; check access and available storage") from None
@@ -533,7 +536,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             raise AgentError('forbidden', 'Cleanup preview is outside the permitted workspace')
         if not backup_first:
             raise AgentError('validation_failed', 'General cleanup requires a full-home backup; pass the explicit backup option')
-        return apply_cleanup(self.store, preview, confirmation, backup_first)
+        return apply_cleanup(self.store, preview, confirmation, backup_first,
+                             allowed_credential_refs=self.policy.allowed_credential_refs)
 
     def _history_preview(self, w: str, opts: QueryOptions, keep_runs: int=20, keep_imports: int=20, batch_size: int=25) -> dict[str, Any]:
         """Preview history retention and derive a token for the current plan.

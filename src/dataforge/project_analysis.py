@@ -3,6 +3,7 @@ from dataforge.agent.contracts import AgentError
 from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.analysis_service import analysis_report, preview_analysis, run_analysis
 from dataforge.connections import RuntimeConnections
+from dataforge.credentials import credential_source
 from dataforge.provider_service import authorize_provider
 
 READS = {'analysis_preview', 'analysis_report'}
@@ -14,15 +15,26 @@ class _BoundConnections(RuntimeConnections):
         super().__init__()
         self.service, self.workspace = service, workspace
         self.profile_id, self.profile = profile_id, profile
+        self._workspace = (service.store.home, workspace)
+        self._profile = (profile_id, profile)
 
     def for_profile(self, profile_id, profile):
         return _BoundConnections(self.service, self.workspace, profile_id, profile)
 
     def resolve(self, name):
         if self.profile is not None and self.profile.key_env == name:
+            if credential_source(name) == 'saved':
+                self.service._workspace(self.workspace, source=True)
+                authorize_provider(self.service.store, self.service.policy, self.workspace, self.profile)
             manager = self.service._runtime_manager(self.workspace, self.profile_id, self.profile)
             if manager is not None and manager.registered('DATAFORGE_RUNTIME_CREDENTIAL'):
                 return manager.resolve('DATAFORGE_RUNTIME_CREDENTIAL')
+            if manager is not None:
+                secret = manager.for_workspace(self.service.store.home, self.workspace).for_profile(
+                    self.profile_id, self.profile).resolve(name)
+                if secret:
+                    self._request_secrets.add(secret)
+                return secret
         return super().resolve(name)
 
     def redact(self, text, request_secrets=()):

@@ -302,7 +302,7 @@ endpoint and fetch available models before saving. Select a **Fetched models** e
 the editable model identifier or type one manually, then **Save provider profile**.
 Changing the endpoint, credential reference or authentication discards previous model choices.
 
-Under **Session-only credential (optional)**, enter the masked **Runtime credential** and choose
+Select **This session only** (the default); under **API key**, enter the masked **Runtime credential** and choose
 **Connect for this session**. It stays in that browser session's runtime manager and is
 passed directly to adapters. **Clear runtime credentials** removes these in-memory values.
 This session action does not save entered keys to DuckDB, files, exports or the OS environment.
@@ -531,7 +531,14 @@ resource budgets and parameterized storage SQL protect ingestion boundaries. Sou
 originals deliberately retain complete content and may themselves contain secrets.
 Protect homes, exports and backups using OS permissions and encryption where required.
 
-Entered credentials remain in memory; launch variables remain read-only. Profiles allow
+Session-entered credentials remain in memory. Explicit **Remember on this device** keys use
+`keyring>=25.7,<26` with the approved Windows backend forced to local-machine persistence.
+The wheel declares native backend dependencies and the frozen build explicitly collects
+keyring/win32ctypes; headless containers and unqualified macOS/Linux stores fail closed to
+an explicit session-only choice. Saved keys last until deleted, have no independent master
+password, and remain accessible to software with the same OS-user privileges. Settings
+rendering does not decrypt them. See [secure configuration](SECURE_CONFIGURATION.md) for
+disconnect/delete, namespace, restore and launch-grant rules. Profiles allow
 non-secret preferences only. Redaction is best effort; never deliberately import secrets
 or send them to providers. External LLM requests require privacy gates and explicit user
 action; opening an assistance panel does not send code. Retained AI bodies are opt-in.

@@ -114,11 +114,13 @@ def test_masked_ui_credential_is_cleared_without_persistence(tmp_path: Path, mon
     next(t for t in app.text_input if t.label == 'Runtime credential').set_value('ui-dummy-secret')
     next(b for b in app.button if b.label == 'Connect for this session').click().run()
     assert not app.exception
-    assert app.session_state['runtime_connections'].resolve('DATAFORGE_OLLAMA_API_KEY') == 'ui-dummy-secret'
+    manager = app.session_state['runtime_connections']
+    reference = next(name for name in manager._credentials if name.startswith('DATAFORGE_SESSION_'))
+    assert manager.resolve(reference) == 'ui-dummy-secret'
     assert not next(t for t in app.text_input if t.label == 'Runtime credential').value
     next(b for b in app.button if b.label == 'Clear runtime credentials').click().run()
     assert not app.exception
-    assert app.session_state['runtime_connections'].resolve('DATAFORGE_OLLAMA_API_KEY') == ''
+    assert manager.resolve(reference) == ''
 
 
 def test_environment_credential_is_used_without_retaining_session_copy(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -28,22 +28,27 @@ without requiring a saved profile or selected model. **Fetched models** fills th
 model identifier; **Test model connection** optionally validates that model. Azure deployments
 use manual entry and the model test.
 
-Enter a masked **Runtime credential** under **Session-only credential (optional)** and choose **Connect for this
-session**, or provision the named variable before startup. A session's `RuntimeConnections`
+Choose **This session only**, enter a masked **Runtime credential** under **API key**, then
+**Connect for this session**; use **Environment reference (advanced)** for a named launch
+variable. A session's `RuntimeConnections`
 manager holds entered keys in memory and passes them directly to provider adapters through
 a context-local scope; the process environment is never changed for session credentials.
 **Clear runtime credentials** removes session entries. Launch variables remain read-only
 and available, so clearing a session entry does not disconnect a startup-provisioned key.
-Re-enter credentials in a fresh session/restart unless supplied at launch.
+Re-enter session credentials after restart unless supplied at launch. **Remember on this device**
+explicitly saves an encrypted native key until deleted, using qualified Windows Credential
+Manager local-machine persistence. Other OS stores remain disabled pending local-only
+verification. Saved-key replacement/deletion and session disconnect/reconnect are separate
+actions; exact saved references also require independent CLI/MCP launch grants.
 Alternatively, **Optional: Set environment variable here** sets the actual named variable
 in the running app's process environment, including before a new profile is saved. That
 value is shared across its sessions until exit; the input clears on submission and no `.env`
 file or permanent OS setting is written. See [secure configuration](SECURE_CONFIGURATION.md).
 
-New provider references default to `DATAFORGE_` names, such as `DATAFORGE_OPENAI_API_KEY`,
+Session/saved references are scoped opaque `DATAFORGE_` names. Advanced environment references include `DATAFORGE_OPENAI_API_KEY`,
 `DATAFORGE_ANTHROPIC_API_KEY` and `DATAFORGE_DATABRICKS_TOKEN`. Explicit legacy references
 remain compatible without rewriting unrelated environment variables. Profiles persist only
-validated non-secret preferences and credential variable names. Secret-bearing URL userinfo
+validated non-secret preferences and opaque credential/environment references. Secret-bearing URL userinfo
 and authentication query parameters are rejected. Entered key values are not persisted in
 DuckDB, files, exports, build outputs or logs; provider-echoed known credentials are redacted
 before durable result storage. Imported originals deliberately preserve exact bytes and may

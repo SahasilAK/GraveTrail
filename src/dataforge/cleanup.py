@@ -240,7 +240,8 @@ def cleanup_plan(store: Store, workspace: str='', category: str='lineage', file_
         return plan
 
 
-def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, backup_first: bool=True) -> dict[str, Any]:
+def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, backup_first: bool=True,
+                  *, allowed_credential_refs: tuple[str, ...] | None = None) -> dict[str, Any]:
     """Apply a current cleanup preview after explicit confirmation and backup.
 
     Args:
@@ -269,6 +270,18 @@ def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, back
         if backup_first:
             from dataforge.database_maintenance import _backup
             backup_path = str(_backup(store))
+        if category in {'workspace', 'application'}:
+            from dataforge.credentials import CredentialError, NativeCredentials, credential_source
+            from dataforge.llm import Profile
+            rows = store.rows('SELECT workspace_id,profile_id,config FROM llm_profiles' +
+                (' WHERE workspace_id=?' if category == 'workspace' else ''), [workspace] if category == 'workspace' else [])
+            profiles = [(row, Profile.model_validate_json(row['config'])) for row in rows]
+            references = {p.saved_key_ref or p.key_env for _, p in profiles
+                          if p.saved_key_ref or credential_source(p.key_env) == 'saved'}
+            if allowed_credential_refs is not None and references - set(allowed_credential_refs):
+                raise CredentialError('Approve every saved reference at launch before deleting its workspace.')
+            for row, profile in profiles:
+                NativeCredentials().delete(store.home, row['workspace_id'], row['profile_id'], profile)
         with store.transaction():
             for table, (where, params) in _selection(store, workspace, category, preview.get('file_ids'), preview.get('run_id')).items():
                 store.execute(f'DELETE FROM {table} WHERE {where}', params)

@@ -28,3 +28,5 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `EXTENDING_THE_APP.md`, `IMPLEMENTATION_GUIDE.md`, `REVIEW.md` — retained extension/implementation/historical review references; current developer path is development/.
 
 Keep public claims tied to source or recorded checks. Static analysis executes no imports/programs; AI is explicit and semantically inferred. A mocked protocol result, artifact build, hosted deployment and true offline browser check prove different things. Legacy route/heading preservation is enforced by scripts/docs/legacy_routes.json and validator; do not delete old headings casually.
+
+Local credential lifecycle is canonical in SECURE_CONFIGURATION.md; BUILD_AND_RELEASE.md records disposable native Windows, installed-wheel/frozen and fake-backend qualification separately. Session-default behavior, unavailable macOS/Linux native stores, until-deleted persistence and independent CLI/MCP reference grants must remain explicit.

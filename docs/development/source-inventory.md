@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **393 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **395 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -34,7 +34,7 @@ python scripts/docs/inventory.py --check
 | --- | ---: |
 | [Entry points and package](#entry-points-and-package) | 5 |
 | [Static parsing and identity](#static-parsing-and-identity) | 11 |
-| [Storage and configuration](#storage-and-configuration) | 12 |
+| [Storage and configuration](#storage-and-configuration) | 13 |
 | [Graphs, columns and exports](#graphs-columns-and-exports) | 9 |
 | [AI and provider services](#ai-and-provider-services) | 31 |
 | [dbt](#dbt) | 14 |
@@ -51,7 +51,7 @@ python scripts/docs/inventory.py --check
 | [Tests: dbt](#tests-dbt) | 13 |
 | [Tests: automation](#tests-automation) | 14 |
 | [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 27 |
-| [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 24 |
+| [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 25 |
 
 ## Entry points and package
 
@@ -86,6 +86,7 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/cleanup.py) | Previewed, dependency-aware runtime cleanup. No caller-supplied SQL or paths. | `GRAPH`, `WORKSPACE_TABLES`, `CATEGORIES`, `checked_path`, `assert_idle`, `maintenance_guard`, `cleanup_plan`, `apply_cleanup` |
 | [`src/dataforge/configuration.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/configuration.py) | Validated workspace identity and safe, versioned configuration portability. | `ParsingSettings`, `WorkspaceIdentity`, `VisualizationSettings`, `LLMResourceSettings`, `AnalysisPreferences`, `PortableSettings`, `WorkspaceConfiguration`, `export_workspace_configuration`, `import_workspace_configuration` |
 | [`src/dataforge/connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/connections.py) | Session credentials and explicit process-environment credential entry. | `DEFAULT_KEY_ENV`, `set_credential_environment`, `RuntimeConnections`, `current_connections`, `connection_scope` |
+| `src/dataforge/credentials.py` **new** | Application-owned native credentials; no discovery, fallback or secret serialization. | `SAVED_PREFIX`, `SESSION_PREFIX`, `CredentialError`, `credential_source`, `credential_reference`, `owns_reference`, `approved_backend`, `NativeCredentials` |
 | [`src/dataforge/database_maintenance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/database_maintenance.py) | Exclusive-owner backup, safe restore to a new home and read-only integrity inspection. | `MAX_BACKUP_BYTES`, `MAX_FILES`, `RUNTIME_DIRS`, `MANAGED_FILE`, `inspect_database`, `checkpoint`, `backup`, `restore_backup` |
 | [`src/dataforge/ingestion.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ingestion.py) | Bounded input discovery and immutable source inventory. Never executes source. | `UPSERT_SOURCE`, `Limits`, `ImportReport`, `safe_relative`, `decode`, `Importer` |
 | [`src/dataforge/logging_config.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/logging_config.py) | Structured application events with an explicit safe metadata allowlist. | `JsonFormatter`, `configure_logging`, `save_application_logging` |
@@ -531,6 +532,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_first_test_review_budget.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_first_test_review_budget.py) | The reported first_test selection must not carry an entire unrelated estate. | 1 test functions; helpers/constants: `ARCHIVE`, `REPORTED_FILE` |
 | [`tests/test_image_artifacts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_image_artifacts.py) | Shared UI/CLI/MCP image scope, authorization and artifact contracts. | 8 test functions; helpers/constants: `workspace`, `read` |
 | [`tests/test_inventory_controls.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_inventory_controls.py) | No module docstring; inspect the linked source. | 2 test functions |
+| `tests/test_local_credentials.py` **new** | No module docstring; inspect the linked source. | 14 test functions; helpers/constants: `FakeBackend`, `vault`, `profile`, `saved_profile` |
 | [`tests/test_logging.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_logging.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_model_capabilities.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_model_capabilities.py) | Provider metadata is capacity evidence, never a spend authorization. | 12 test functions |
 | [`tests/test_navigation_redesign.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_navigation_redesign.py) | Focused routes must preserve context without performing work on navigation. | 8 test functions; helpers/constants: `workspace`, `app` |
