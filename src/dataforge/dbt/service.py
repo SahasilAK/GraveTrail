@@ -139,18 +139,23 @@ def discover_dbt_snapshots(files, read_source, stored_settings):
 
 
 def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled=None):
+    from dataforge.services import PARSER_VERSION
+
     files = [m for m in store.files(workspace) if is_dbt(m)]
     by_id = {m['file_id']: m for m in files}
     stored_settings = store.setting(workspace, 'dbt', {})
     snapshots = discover_dbt_snapshots(files, lambda ref: store.snapshot_content(by_id[ref.file_id]), stored_settings)
     previous = {r.snapshot.project_id: r for r in load_committed_dbt_results(store, workspace)}
+    publication = store.rows('SELECT parser_version FROM column_analysis WHERE workspace_id=?', [workspace])
+    current_parser = bool(publication) and publication[0]['parser_version'] == PARSER_VERSION
     projects, analyzed, cached = [], 0, 0
     for snapshot in snapshots:
         if cancelled and cancelled():
             raise InterruptedError('dbt analysis cancelled; previous lineage retained')
         selected = file_ids is None or bool(set(file_ids) & {s.file_id for s in snapshot.sources})
         old = previous.get(snapshot.project_id)
-        if old and old.snapshot.fingerprint == snapshot.fingerprint and not (force and selected):
+        if (old and current_parser and not old.coverage.get('ai_mode')
+                and old.snapshot.fingerprint == snapshot.fingerprint and not (force and selected)):
             result = old
             cached += len(snapshot.sources)
         elif selected or old:

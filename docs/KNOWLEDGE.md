@@ -1,6 +1,6 @@
 # docs/
 
-Public learning paths plus retained technical references. Homepage hero: “Nothing stays buried.” as H1, then “Every dependency leaves a trail.” as a smaller prominent subtitle. Product explanation follows directly beneath it. mkdocs.yml navigation and named public assets define publication; context maps, private plans/prompts/reviews, runtime data and arbitrary HTML stay excluded. Developer links pin application baseline1864dc8; numerical historical measurements are not current accuracy claims.
+Public learning paths plus retained technical references. Homepage hero: “Nothing stays buried.” as H1, then “Every dependency leaves a trail.” as a smaller prominent subtitle. Product explanation follows directly beneath it. mkdocs.yml navigation and named public assets define publication; context maps, private plans/prompts/reviews, runtime data and arbitrary HTML stay excluded. Developer links pin application baseline1864dc8; numerical historical measurements are not current accuracy claims. IMPLEMENTATION_GUIDE names shared theme_configuration as the eleven-preset owner; development/internal-api defines historical compatibility and publication-version freshness.
 
 ## Subfolders
 - `getting-started/` — install, first static lineage and configuration; [map](getting-started/KNOWLEDGE.md).
@@ -28,3 +28,5 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `EXTENDING_THE_APP.md`, `IMPLEMENTATION_GUIDE.md`, `REVIEW.md` — retained extension/implementation/historical review references; current developer path is development/.
 
 Keep public claims tied to source or recorded checks. Static analysis executes no imports/programs; AI is explicit and semantically inferred. A mocked protocol result, artifact build, hosted deployment and true offline browser check prove different things. Legacy route/heading preservation is enforced by scripts/docs/legacy_routes.json and validator; do not delete old headings casually.
+
+Local credential lifecycle is canonical in SECURE_CONFIGURATION.md; BUILD_AND_RELEASE.md records disposable native Windows, installed-wheel/frozen and fake-backend qualification separately. Session-default behavior, unavailable macOS/Linux native stores, until-deleted persistence and independent CLI/MCP reference grants must remain explicit.

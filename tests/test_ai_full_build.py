@@ -68,4 +68,9 @@ def test_independent_three_file_chain_publishes_and_relinks_without_provider(tmp
     store = Store(tmp_path)
     after = [p.to_dict() for _, p in to_publication_results(link_file_extractions(load_file_extractions(store, workspace, result.run_id), {}), inventory)]
     assert before == after
+    from dataforge.services import analysis_is_current
+    if family != 'dbt':
+        assert analysis_is_current(store, workspace)
+    monkeypatch.setattr('dataforge.services.PARSER_VERSION', 'future-parser')
+    assert not analysis_is_current(store, workspace)
     store.close()

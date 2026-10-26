@@ -5,6 +5,65 @@ import pytest
 from dataforge.parsers.sql import parse_sql
 
 
+@pytest.mark.parametrize('code,expected', [
+    ('SELECT "A".left_id, "a".right_id FROM raw.left_table "A" '
+     'JOIN raw.right_table "a" ON "A".left_id="a".right_id',
+     {('raw.left_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('SELECT A.left_id, a.right_id FROM raw.left_table "A" '
+     'JOIN raw.right_table "a" ON true',
+     {('raw.right_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('SELECT "A".left_id FROM raw.left_table a', set()),
+    ('SELECT "a".left_id FROM raw.left_table A', {('raw.left_table', 'left_id')}),
+    ('SELECT "A".left_id FROM raw.left_table "A" WHERE EXISTS '
+     '(SELECT "a".right_id FROM raw.right_table "a" WHERE "a".right_id="A".left_id)',
+     {('raw.left_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('SELECT "A".left_id FROM raw.left_table "A" WHERE EXISTS '
+     '(SELECT "A".right_id FROM raw.right_table "A")',
+     {('raw.left_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('WITH "A" AS (SELECT left_id FROM raw.left_table), '
+     '"a" AS (SELECT right_id FROM raw.right_table) '
+     'SELECT "A".left_id, "a".right_id FROM "A" JOIN "a" ON true',
+     {('raw.left_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('UPDATE dst SET id="A".left_id FROM raw.left_table "A" '
+     'JOIN raw.right_table "a" ON "A".left_id="a".right_id',
+     {('raw.left_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('DELETE FROM dst USING raw.left_table "A", raw.right_table "a" '
+     'WHERE "A".left_id="a".right_id',
+     {('raw.left_table', 'left_id'), ('raw.right_table', 'right_id')}),
+    ('MERGE INTO dst "A" USING raw.right_table "a" ON "A".left_id="a".right_id '
+     'WHEN MATCHED THEN UPDATE SET id="a".right_id',
+     {('dst', 'left_id'), ('raw.right_table', 'right_id')}),
+])
+def test_postgres_direct_usage_preserves_quoted_alias_identity(code, expected):
+    result = parse_sql(code, 'postgres')
+    assert result.operations
+    assert {(u.table, u.column) for op in result.operations for u in op.usages} == expected
+    if not expected:
+        assert any('Unresolved column alias' in d.message for d in result.diagnostics)
+
+
+@pytest.mark.parametrize('dialect,alias,reference', [
+    ('postgres', 'MiXeD', '"mixed"'),
+    ('snowflake', 'MiXeD', '"MIXED"'),
+    ('tsql', '[MiXeD]', '[mixed]'),
+    ('duckdb', '"MiXeD"', '"mixed"'),
+])
+def test_direct_alias_normalization_follows_dialect(dialect, alias, reference):
+    result = parse_sql(f'SELECT {reference}.id FROM raw.src AS {alias}', dialect)
+    assert [(u.table, u.column) for op in result.operations for u in op.usages] == [('raw.src', 'id')]
+
+
+@pytest.mark.parametrize('code,dialect,expected', [
+    ('SELECT x.id FROM raw.src x, UNNEST(x.array)', 'bigquery',
+     {('raw.src', 'array'), ('raw.src', 'id')}),
+    ('SELECT id FROM raw.src, (VALUES (1))', 'postgres', set()),
+])
+def test_anonymous_query_sources_keep_conservative_usage(code, dialect, expected):
+    result = parse_sql(code, dialect)
+    assert result.operations
+    assert {(u.table, u.column) for op in result.operations for u in op.usages} == expected
+
+
 def names(refs: Any) -> Any:
     """Handle names for the test scenario.
 

@@ -5,6 +5,8 @@ Local evidence-backed SQL/SAS/CSV/dbt engineering workspace. Python 3.11+, Strea
 
 Application entry: `app.py`; installed/frozen UI entry: `dataforge.launcher:main`; automation entry: `dataforge.cli:app`. Start a disposable home with `uv run gravetrail-ui --home <path>`. One process owns a DuckDB home; do not open it concurrently through independent UI/CLI/MCP processes.
 
+API credentials default to session memory. Optional keyring persistence explicitly approves Windows Credential Manager with current-user/local-machine persistence; session/saved references bind data home/workspace/profile/recipient. Legacy environment references remain available, and agents need exact launch grants for saved references.
+
 ## Subfolders
 - `.github/` — test/security/docs/release workflows and contribution templates; [map](.github/KNOWLEDGE.md).
 - `.streamlit/` — UI defaults; [map](.streamlit/KNOWLEDGE.md).
@@ -19,7 +21,7 @@ Application entry: `app.py`; installed/frozen UI entry: `dataforge.launcher:main
 ## Root files
 - `app.py` — navigation, selected workspace/home, shared UI frame and session connection scope; domain decisions stay in services.
 - `pyproject.toml` / `uv.lock` — dependency/build/entrypoint/test/lint contracts and generated exact lock. Temporary Pillow metadata override also lives in `dependency-overrides.txt`; see SECURITY.md before changing it.
-- `README.md` — “Nothing stays buried. Every dependency leaves a trail.” headline, product introduction, pinned-version onboarding and real fixture imagery; public docs entry point.
+- `README.md` — branded banner, live-docs link, status badges and quick navigation; “Nothing stays buried. Every dependency leaves a trail.” headline, product introduction, illustrative lineage, expandable real fixture screenshot and pinned-version onboarding; public docs entry point.
 - `mkdocs.yml` — explicit navigation/asset publication list, theme and strict site configuration. Docs builder checks inventory, routes/headings, links/search and exact output contents.
 - `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE` — contribution entry, security/reporting/compatibility policy and license.
 - `Dockerfile`, `compose.yaml`, `.dockerignore` — container build/runtime/ownership and build-context policy; platform evidence is separate from source configuration.

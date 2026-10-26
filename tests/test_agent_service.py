@@ -165,6 +165,12 @@ def test_source_opt_in_revocation_and_literal_search(engine: Any) -> None:
     assert explicit["items"][0]["start_line"] == explicit["items"][0]["end_line"] == 1
     assert "code" not in json.dumps(service.call("search_code", w, query="select"))
     store.set_setting(w, "agent_access", {"allow_source": False, "allow_write": False})
+    for include_matches in (False, True):
+        for query in ("select", "no-such-source-literal"):
+            with pytest.raises(AgentError) as denied:
+                service.call("search_code", w, query=query, include_matches=include_matches)
+            assert denied.value.code == "forbidden"
+    assert service.call("files", w, query=store.files(w)[0]["relative_path"])["items"]
     standard = service.call("columns", w, asset="raw.orders", options={"detail_level": "standard"})
     assert all("expression" not in row for row in standard["items"])
     for action, arguments in [("source", {"file_id": fid, "full": True}), ("analyze", {}),

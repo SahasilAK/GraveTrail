@@ -6,6 +6,20 @@ permissions, source disclosure, pagination and sanitized errors; calling a low-l
 in Python does not automatically apply those policies. Start with the
 [complete working example](getting-started.md#trace-one-source-to-one-output).
 
+The supported integration boundary is the CLI/MCP interface, including documented legacy
+`dataforge` commands and `root_paths` settings. Internal orchestration helpers can be removed
+when unused. Historical record readers, migrations and wire decoding remain compatible;
+their database tables are retained. `services.prepare_analysis_results` and
+`ai_linking.link_stored_facts` remain tested compatibility helpers for historical publication
+fixtures/checkpoints. New project analysis uses protocol-5 file extraction and
+`link_file_extractions`; benchmark scripts still use `ai_reconciliation.normalize_parser_facts`.
+New project requests keep SSE/reasoning streaming disabled; replay decoders remain tested.
+
+Freshness requires the publication's recorded parser version to match the running version,
+as well as unchanged inputs/settings. This applies to static and AI publications because
+both use shared normalization/materialization. Historical publications without a recorded
+version require reanalysis; their committed graph remains readable.
+
 ## Import and parse
 
 ```python

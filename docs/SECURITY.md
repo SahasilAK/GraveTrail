@@ -46,14 +46,25 @@ Protocol 5 project extraction sends exact original parts and authorized definiti
 including the disclosed dbt project closure; it does not apply that manual source-redaction
 step. Retained payload copies and provider responses have credential redaction, which does
 not sanitize the outgoing project source. Protect imports and grant disclosure accordingly.
-Profiles retain validated non-secret settings and environment variable references,
-never entered key values. Masked runtime entry stays in the active browser session's
+Profiles retain validated non-secret settings and opaque session/saved/environment references,
+never entered key values. **This session only** is the default. Masked runtime entry stays in the active browser session's
 `RuntimeConnections`; adapters receive it through a context-local scope. Clearing runtime
-credentials removes session entries, while explicitly named launch environment credentials
-remain available. Fresh sessions require re-entry for session overrides; environment
+credentials removes session entries; **Disconnect this session** also suppresses its selected
+saved reference. Explicit environment variables themselves remain in the process. Fresh sessions require re-entry for session overrides; environment
 credentials remain available across sessions until the owning process exits.
 Application-controlled names use `DATAFORGE_`; legacy explicitly named references are read-only.
 Session entry never mutates the global process environment or writes a `.env` file.
+**Remember on this device** explicitly saves an encrypted OS credential until deleted. The
+qualified backend is Windows Credential Manager via `keyring`, forced to user-scoped
+local-machine persistence (2), never enterprise/roaming. Backend discovery and plaintext,
+unknown, cloud or insecure fallbacks are rejected. macOS Keychain/Linux Secret Service remain
+disabled until their local-only behavior is verified. Locked/missing/unavailable keys fail
+closed; choose session-only storage explicitly. No separate master-password lock or protection
+from malware running as the same OS user is promised. Settings pages do not decrypt saved keys.
+Saved references bind data home, workspace, profile and full recipient/auth/version identity;
+CLI/MCP must independently receive each exact reference at launch. **Delete saved key** is
+separate from disconnect and does not revoke the provider key. Profile/workspace deletion
+cleans only owned entries; failure retains references for retry. Restores clear saved bindings.
 The separate **Optional: Set environment variable here** form explicitly sets a
 `DATAFORGE_` variable in the running app's `os.environ`. This value is shared across the
 owning process's sessions and future child processes until exit; it is not persisted to

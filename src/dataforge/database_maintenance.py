@@ -327,7 +327,7 @@ def _restore_backup(archive_path: str | Path, destination: str | Path) -> Path:
         database = staging / 'dataforge.duckdb'
         if not database.is_file():
             raise ValueError('Backup has no database')
-        connection = duckdb.connect(str(database), read_only=True, config={'enable_external_access': False})
+        connection = duckdb.connect(str(database), config={'enable_external_access': False})
         try:
             versions = connection.execute('SELECT version FROM schema_migrations ORDER BY version').fetchall()
             if versions not in ([(i,) for i in range(1, 11)], [(1,), (2,), (3,), (4,), (6,), (7,), (8,), (9,), (10,)], [(i,) for i in range(1, 10)], [(1,), (2,), (3,), (4,), (6,), (7,), (8,), (9,)], [(1,), (2,), (3,), (4,)], [(1,), (2,), (3,), (4,), (5,)],
@@ -364,6 +364,14 @@ def _restore_backup(archive_path: str | Path, destination: str | Path) -> Path:
                 return [dict(zip(names, values)) for values in cursor.fetchall()]
             if not _inspect_database(staging, rows)['ok']:
                 raise ValueError('Backup integrity check failed')
+            # Restoring metadata never grants access to keys in the original OS store.
+            for row in rows('SELECT profile_id,config FROM llm_profiles'):
+                config = json.loads(row['config'])
+                if config.get('saved_key_ref') or config.get('key_env', '').startswith('DATAFORGE_SAVED_'):
+                    config['saved_key_ref'] = ''
+                    config['key_env'] = 'DATAFORGE_SESSION_REBIND_REQUIRED'
+                    connection.execute('UPDATE llm_profiles SET config=? WHERE profile_id=?',
+                        [json.dumps(config), row['profile_id']])
         finally:
             connection.close()
         # Atomic rename into a previously nonexistent directory, on the same filesystem.

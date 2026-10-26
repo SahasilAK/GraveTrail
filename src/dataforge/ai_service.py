@@ -172,9 +172,9 @@ class AIOperations:
             if profile.key_env:
                 if credentials is not None:
                     reference = 'DATAFORGE_RUNTIME_CREDENTIAL' if credentials.registered('DATAFORGE_RUNTIME_CREDENTIAL') else profile.key_env
-                    secret = credentials.resolve(reference)
+                    secret = credentials.for_workspace(self.store.home, w).for_profile(pid, profile).resolve(reference)
                 else:
-                    secret = manager.resolve(profile.key_env)
+                    secret = manager.for_workspace(self.store.home, w).for_profile(pid, profile).resolve(profile.key_env)
                 if not secret:
                     raise AgentError('credential_unavailable', 'Approved provider credential unavailable')
                 manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)

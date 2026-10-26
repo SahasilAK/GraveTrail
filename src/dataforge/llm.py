@@ -74,6 +74,7 @@ class Profile(BaseModel):
     model: str = Field(min_length=1, max_length=250)
     name: str = "Default"
     key_env: str = ""
+    saved_key_ref: str = Field(default='', pattern=r'^(?:DATAFORGE_SAVED_[A-F0-9]{64}_[A-F0-9]{32})?$')
     auth: Literal["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"] = "auto"
     timeout: float = Field(default=30, ge=1, le=3600)
     connect_timeout: float = Field(default=5, ge=.05, le=60)
@@ -956,7 +957,7 @@ def assist(store: Store, workspace: str, profile: Profile, file_id: str, first: 
             return {'record_id': '', 'outcome': 'quarantined', 'reason': 'ValueError',
                     'result': None, 'usage': {}, 'retryable': False,
                     'failure': GroundingError('request_busy').failure}
-        stack.enter_context(connection_scope(current_connections()))
+        stack.enter_context(connection_scope(current_connections().for_profile(profile_id, profile)))
         return _assist(store, workspace, profile, file_id, first, last, task, profile_id,
                        transport, expected_hash, cancelled, expected_job, retry_authorize, expected_request)
 

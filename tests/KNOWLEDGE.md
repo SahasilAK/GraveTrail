@@ -2,6 +2,18 @@
 
 Unit, persisted-workflow, protocol/security, AppTest and distribution/documentation regressions. Use temporary isolated Store homes and mocks; ordinary tests require no live provider keys. Full per-file inventory/key helpers are in docs/development/source-inventory.md, generated from AST without executing tests.
 
+`test_local_credentials.py` uses fake native stores for session/saved source isolation, failure cleanup, home/workspace/profile/recipient scope, disconnect/delete, restore, UI lifecycle, exact agent/MCP/background grants and durable redaction. Backend construction tests never read real entries; native qualification is separately recorded in docs/BUILD_AND_RELEASE.md.
+
+Audit regressions: `test_agent_service.py` denies all content-search modes after source revocation
+while path inventory stays readable. `test_dbt_ai_analysis.py` covers default/selected/forced
+static builds after AI omissions; `test_dbt_analysis.py` checks parser-upgrade cache rebuilding.
+`test_sql.py` covers dialect/quoted/correlated/DML aliases and anonymous source safety.
+`test_workflow.py` checks reopened old/missing-version API/image/Excel freshness;
+`test_ai_full_build.py` retains the single SQL/SAS/dbt publication/reopen test and AI version checks.
+The byte-identical `test_ai_saved_publication.py` was removed.
+`test_ai_analysis_ui.py` checks successful reports with a null last failure;
+`test_docs_inventory.py` inventories only files still present after an unstaged deletion.
+
 ## Subfolders
 - `fixtures/` — deterministic input/expected evidence including scenario, vendor/dialect, dbt and AI cases; [map](fixtures/KNOWLEDGE.md).
 - `sample_data/` — supplied SQL/SAS and synthetic dbt project ZIPs and gold/manifest boundaries; [map](sample_data/KNOWLEDGE.md).

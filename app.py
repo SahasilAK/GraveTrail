@@ -75,5 +75,5 @@ sync_context(store, st.session_state["workspace"])
 st.session_state.setdefault("runtime_connections", RuntimeConnections())
 with st.container(key="app_workspace"):
     eyebrow("Workspace / " + options[st.session_state["workspace"]])
-    with connection_scope(st.session_state["runtime_connections"]):
+    with connection_scope(st.session_state["runtime_connections"].for_workspace(store.home, st.session_state['workspace'])):
         page.run()

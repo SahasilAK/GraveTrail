@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 from test_ai_resumable_files import configured
 
 from dataforge.ai_analysis_models import AnalysisRequest
@@ -10,7 +11,8 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_dbt_ai_omission_stays_absent_and_explicit_static_build_uses_static_results(tmp_path):
+@pytest.mark.parametrize('selection', ['all', 'project', 'force'])
+def test_dbt_ai_omission_stays_absent_and_explicit_static_build_uses_static_results(tmp_path, selection):
     store = Store(tmp_path)
     w = store.create_workspace('dbt extraction choice')
     configured(store, w)
@@ -32,6 +34,9 @@ def test_dbt_ai_omission_stays_absent_and_explicit_static_build_uses_static_resu
     assert result.status == 'committed' and not result.complete
     assert len(store.edges(w)) == 1
     assert store.rows('SELECT count(*) AS n FROM dbt_resources')[0]['n'] == 3
-    analyze(store, w, force=True)
+    file_ids = [next(f['file_id'] for f in store.files(w) if f['relative_path'] == 'models/use.sql')] if selection == 'project' else None
+    rebuilt = analyze(store, w, file_ids=file_ids, force=selection == 'force')
+    assert rebuilt['analyzed'] == 4 and rebuilt['cached'] == 0
     assert len(store.edges(w)) == 2
+    assert analyze(store, w)['cached'] == 4
     store.close()

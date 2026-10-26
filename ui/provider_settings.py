@@ -1,13 +1,26 @@
 """Provider profiles and task routing. Secrets remain environment references."""
 import json
 import time
+import uuid
 
+import duckdb
 import streamlit as st
 
 from dataforge.agent.contracts import AccessPolicy, AgentError
 from dataforge.ai_budget import profile_recommendations
 from dataforge.configuration import LLMResourceSettings
-from dataforge.connections import DEFAULT_KEY_ENV, current_connections, set_credential_environment
+from dataforge.connections import (
+    DEFAULT_KEY_ENV,
+    connection_scope,
+    current_connections,
+    set_credential_environment,
+)
+from dataforge.credentials import (
+    CredentialError,
+    NativeCredentials,
+    credential_reference,
+    credential_source,
+)
 from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
 from dataforge.llm_resources import request_slot
 from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
@@ -31,26 +44,44 @@ def render(store: Store, workspace: str) -> None:
     provider = st.selectbox("Provider", list(PROVIDERS), index=list(PROVIDERS).index(config.get("provider", "Ollama")), key=f"provider_kind_{workspace}_{selection}")
     config = config if config.get('provider') == provider else {}
     prefix = f"provider_setup_{workspace}_{selection}_{provider}"
+    profile_id = selection if existing else st.session_state.setdefault(prefix + '_id', uuid.uuid4().hex)
     models_key = prefix + '_models'
     model_key = prefix + '_model'
     fetched_key = prefix + '_fetched'
     url = st.text_input("API base URL", config.get("base_url", PROVIDERS[provider]), key=prefix + '_url')
 
     st.subheader("Credentials")
-    key_env = st.text_input("Credential environment variable name", config.get("key_env", '' if provider in {'Ollama', 'LM Studio'} else DEFAULT_KEY_ENV[provider]),
+    sources = ['This session only', 'Remember on this device', 'Environment reference (advanced)']
+    source_key = prefix + '_source'
+    saved_source = credential_source(config['key_env']) if config.get('key_env') else 'session'
+    storage = st.selectbox('Credential source', sources, index={'session': 0, 'saved': 1, 'environment': 2}[saved_source], key=source_key)
+    env_ref = config.get('key_env', '') if saved_source == 'environment' else ''
+    environment_name = st.text_input("Credential environment variable name", env_ref or ('' if provider in {'Ollama', 'LM Studio'} else DEFAULT_KEY_ENV[provider]),
                             placeholder=DEFAULT_KEY_ENV[provider], key=prefix + '_key_env')
-    st.caption("Only the variable name is saved with the profile. Use an existing environment value or enter it below.")
+    try:
+        recipient = Profile(provider=provider, base_url=url, model='credential-binding',
+            auth=st.session_state.get(prefix + '_auth', config.get('auth', 'auto')),
+            api_version=st.session_state.get(prefix + '_api_version', config.get('api_version', '2024-10-21')))
+    except ValueError:
+        recipient = None
+    session_ref = credential_reference(store.home, workspace, profile_id, recipient) if recipient else ''
     manager = current_connections()
-    if key_env:
-        secret_key = prefix + '_environment_secret_' + key_env
+    saved_ref = config.get('saved_key_ref') or (config.get('key_env', '') if saved_source == 'saved' else '')
+    key_env = (environment_name if storage == sources[2] else
+               saved_ref if storage == sources[1] and saved_ref else
+               session_ref if manager.registered(session_ref) or credential_source(config.get('key_env', '')) == 'session' else '')
+    st.caption('Environment references are an advanced automation option. Values are never imported into saved storage.')
+    if environment_name:
+        secret_key = prefix + '_environment_secret_' + environment_name
         notice_key = secret_key + '_notice'
 
         def set_environment() -> None:
             """Set the entered credential in the process environment and clear cached models."""
             secret = st.session_state.pop(secret_key, '')
             try:
-                set_credential_environment(key_env, secret)
-                manager.clear(key_env)
+                set_credential_environment(environment_name, secret)
+                manager.clear(environment_name)
+                st.session_state[source_key] = sources[2]
                 st.session_state.pop(models_key, None)
                 st.session_state.pop(fetched_key, None)
                 st.session_state[notice_key] = True
@@ -58,7 +89,7 @@ def render(store: Store, workspace: str) -> None:
                 st.session_state[notice_key] = False
 
         with st.expander("Optional: Set environment variable here"):
-            st.caption(f"Sets {key_env} in the running app's environment. Shared across this app's sessions until the app stops. No .env file, saved credential or log entry; the input clears on submission.")
+            st.caption(f"Sets {environment_name} in the running app's environment and selects the environment source. Shared across this app's sessions until the app stops. No .env file or saved credential; the input clears on submission.")
             with st.form(secret_key + '_form'):
                 st.text_input("Environment credential value (optional)", type="password", key=secret_key,
                               max_chars=16384, autocomplete="off")
@@ -68,27 +99,112 @@ def render(store: Store, workspace: str) -> None:
                 st.success("Environment variable set for the running app. Credential input cleared.")
             elif notice is False:
                 st.warning("Use a DATAFORGE_ variable name and a nonempty, single-line credential without null characters. Input cleared; environment unchanged.")
-    st.caption("Credential status: " + ("available" if manager.resolve(key_env) else "disconnected / optional for local endpoints"))
-    with st.expander("Session-only credential (optional)"):
+    st.caption('Credential status: ' + ('session override available' if manager.registered(key_env) else
+        'saved reference configured; availability checked only on explicit connect/use' if credential_source(key_env) == 'saved' else
+        'available' if manager.available(key_env) else 'disconnected / optional for local endpoints'))
+    with st.expander("API key"):
         def connect() -> None:
             """Register the entered credential for this browser session only."""
+            secret = st.session_state.pop('runtime_secret', '')
             try:
-                manager.register(key_env, st.session_state.pop('runtime_secret', ''))
+                reference = key_env or session_ref
+                manager.register(reference, secret)
+                if existing:
+                    stored = Profile.model_validate_json(existing['config'])
+                    if stored.key_env != reference:
+                        stored.key_env = reference
+                        policy = AccessPolicy(allow_write=True, allow_config_write=True,
+                            allowed_credential_refs=tuple(x for x in (reference, stored.saved_key_ref) if x))
+                        save_profile(store, policy, workspace, stored, revision(store, workspace), profile_id)
                 st.session_state.pop(models_key, None)
                 st.session_state.pop(fetched_key, None)
-            except ValueError:
-                st.session_state['connection_notice'] = 'Use a DATAFORGE_ variable name and a nonempty credential.'
+            except (ValueError, AgentError, duckdb.Error):
+                manager.disconnect(key_env or session_ref)
+                st.session_state['connection_notice'] = 'Session connection failed. Use a valid recipient and nonempty credential; save recipient changes first. Input cleared.'
         st.text_input("Runtime credential", type="password", key="runtime_secret", autocomplete="off")
         st.button("Connect for this session", on_click=connect)
+        st.caption('A session override never replaces the saved key.')
+        if storage == sources[1]:
+            def save_key():
+                secret = st.session_state.pop('runtime_secret', '')
+                reference = ''
+                try:
+                    if not existing:
+                        raise CredentialError('Save the provider profile first, then explicitly save its key.')
+                    # Save against the stored recipient; draft endpoint edits require saving the profile first.
+                    stored = Profile.model_validate_json(existing['config'])
+                    if recipient is None or any(getattr(stored, field) != getattr(recipient, field)
+                            for field in ('provider', 'base_url', 'auth', 'api_version')):
+                        raise CredentialError('Save recipient changes with This session only first, then save the key.')
+                    reference = NativeCredentials().save(store.home, workspace, profile_id, stored, secret)
+                    updated = stored.model_copy(update={'key_env': reference, 'saved_key_ref': reference})
+                    policy = AccessPolicy(allow_write=True, allow_config_write=True,
+                        allowed_credential_refs=(reference, stored.key_env, stored.saved_key_ref))
+                    save_profile(store, policy, workspace, updated, revision(store, workspace), profile_id)
+                    manager.disconnect(stored.key_env)
+                    manager.reconnect(reference)
+                    st.session_state.pop(models_key, None)
+                    st.session_state.pop(fetched_key, None)
+                    st.session_state['connection_notice'] = 'Key saved until deleted. Input cleared.'
+                except (ValueError, AgentError, duckdb.Error) as exc:
+                    if reference:
+                        try:
+                            NativeCredentials().delete(store.home, workspace, profile_id,
+                                stored.model_copy(update={'key_env': reference, 'saved_key_ref': reference}))
+                        except CredentialError:
+                            st.session_state['connection_notice'] = f'Save failed; remove orphan GraveTrail entry {reference} in OS settings.'
+                            return
+                    st.session_state['connection_notice'] = str(exc) if isinstance(exc, CredentialError) else 'Save failed; choose This session only. Input cleared.'
+            st.button('Save / replace saved key', on_click=save_key, disabled=not existing)
+            st.caption('Encrypted OS storage until deleted. No separate master-password lock; software running as your OS user may access it.')
+        if existing and saved_ref:
+            st.caption('Application-owned saved reference for explicit CLI/MCP launch authorization:')
+            st.code(saved_ref, language=None)
+            def connect_saved():
+                try:
+                    stored = Profile.model_validate_json(existing['config']).model_copy(update={'key_env': saved_ref})
+                    manager.reconnect(saved_ref)
+                    if not manager.for_profile(profile_id, stored).resolve(stored.key_env):
+                        raise CredentialError('Saved key is missing; save a key or choose This session only.')
+                    save_profile(store, AccessPolicy(allow_write=True, allow_config_write=True,
+                        allowed_credential_refs=(saved_ref,)), workspace, stored, revision(store, workspace), profile_id)
+                    st.session_state[source_key] = sources[1]
+                    st.session_state.pop(models_key, None)
+                    st.session_state.pop(fetched_key, None)
+                    st.session_state['connection_notice'] = 'Saved key selected and connected for this session.'
+                except (CredentialError, AgentError, duckdb.Error) as exc:
+                    manager.disconnect(saved_ref)
+                    st.session_state['connection_notice'] = str(exc) if isinstance(exc, CredentialError) else 'Saved connection failed. Choose This session only.'
+            st.button('Connect saved key for this session', on_click=connect_saved)
+            def delete_key():
+                try:
+                    stored = Profile.model_validate_json(existing['config'])
+                    NativeCredentials().delete(store.home, workspace, profile_id, stored)
+                    manager.disconnect(stored.key_env)
+                    stored.key_env = credential_reference(store.home, workspace, profile_id, stored)
+                    stored.saved_key_ref = ''
+                    store.execute('UPDATE llm_profiles SET config=? WHERE workspace_id=? AND profile_id=?',
+                        [stored.model_dump_json(), workspace, profile_id])
+                    st.session_state[source_key] = sources[0]
+                    st.session_state['connection_notice'] = 'Saved key deleted locally. Revoke it separately at the provider if needed.'
+                except CredentialError as exc:
+                    st.session_state['connection_notice'] = str(exc)
+            st.button('Delete saved key', on_click=delete_key)
+            st.caption('Deleting local storage does not revoke the API key at the provider.')
+        if st.button('Disconnect this session'):
+            manager.disconnect(key_env or session_ref)
+            st.session_state.pop(models_key, None)
+            st.session_state.pop(fetched_key, None)
+            st.rerun()
         if st.button("Clear runtime credentials"):
-            manager.clear()
+            manager.disconnect(key_env or session_ref)
             st.session_state.pop('runtime_secret', None)
             st.session_state.pop(models_key, None)
             st.session_state.pop(fetched_key, None)
             st.rerun()
         if notice := st.session_state.pop('connection_notice', None):
             st.warning(notice)
-        st.caption("Session credentials stay in this browser session's memory until cleared. They do not change the environment.")
+        st.caption("Session credentials live in this app session's memory until cleared or the process ends. Browser disconnection does not guarantee immediate or forensic memory erasure.")
 
     draft_model = st.session_state.get(model_key, config.get('model', 'connection-check'))
     draft_caps = st.session_state.get(models_key, {}).get('capabilities', {}).get(draft_model)
@@ -138,7 +254,7 @@ def render(store: Store, workspace: str) -> None:
         structured = st.checkbox("Request JSON output where supported", value=config.get("structured", True), key=prefix + '_structured')
         api_version = st.text_input("Azure API version", config.get("api_version", "2024-10-21"), key=prefix + '_api_version')
         quota_group = config.get('quota_group', '')  # Historical profile round-trip only.
-    values = dict(provider=provider, base_url=url, key_env=key_env, auth=auth, timeout=timeout,
+    values = dict(provider=provider, base_url=url, key_env=key_env, saved_key_ref=saved_ref, auth=auth, timeout=timeout,
                   read_timeout=read_timeout, wait_until_stopped=wait_until_stopped, connect_timeout=connect_timeout, unknown_retries=unknown_retries,
                   retries=retries, max_tokens=max_tokens, context_chars=context,
                   context_mode=context_mode, output_mode=output_mode,
@@ -167,7 +283,7 @@ def render(store: Store, workspace: str) -> None:
             resources = LLMResourceSettings.model_validate({k: store.setting(workspace, k, v)
                 for k, v in LLMResourceSettings().model_dump().items()})
             with st.spinner('Waiting for connection response', show_time=True), request_slot(
-                    store.home, workspace, resources.llm_concurrency), Adapter(profile) as adapter:
+                    store.home, workspace, resources.llm_concurrency), connection_scope(manager.for_profile(profile_id, profile)), Adapter(profile) as adapter:
                 if discover:
                     catalog = adapter.model_catalog()
                     models = [item.id for item in catalog]
@@ -221,7 +337,7 @@ def render(store: Store, workspace: str) -> None:
         try:
             if not is_local(url) and not store.setting(workspace, 'external_llm', False):
                 raise ValueError('External requests are disabled')
-            with st.spinner('Waiting for model limits', show_time=True), Adapter(profile) as adapter:
+            with st.spinner('Waiting for model limits', show_time=True), connection_scope(manager.for_profile(profile_id, profile)), Adapter(profile) as adapter:
                 descriptor = adapter.model_details(model)
             saved_catalog = st.session_state.setdefault(models_key, {'signature': signature, 'models': []})
             saved_catalog.setdefault('capabilities', {})[model] = descriptor.capabilities.model_dump()
@@ -272,16 +388,24 @@ def render(store: Store, workspace: str) -> None:
     if st.button("Save provider profile", type="primary"):
         try:
             profile = Profile(name=name, model=model, model_capabilities=capabilities, **values)
-            policy = AccessPolicy(allow_write=True, allow_config_write=True, allowed_credential_refs=(key_env,) if key_env else ())
+            policy = AccessPolicy(allow_write=True, allow_config_write=True, allowed_credential_refs=tuple(x for x in (key_env, saved_ref) if x))
             with store.lock:
-                save_profile(store, policy, workspace, profile.model_dump(), revision(store, workspace), selection if existing else '')
+                save_profile(store, policy, workspace, profile.model_dump(), revision(store, workspace), selection if existing else '',
+                    new_profile_id=profile_id)
+            if not existing:
+                st.session_state.pop(prefix + '_id', None)
             st.success("Provider profile saved")
             st.rerun()
         except (ValueError, AgentError):
             st.error("Profile configuration is invalid. Check the endpoint, model and environment variable name.")
     if existing and st.button("Remove profile"):
-        store.execute("DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?", [workspace, selection])
-        st.rerun()
+        try:
+            NativeCredentials().delete(store.home, workspace, selection, Profile.model_validate_json(existing['config']))
+            manager.disconnect(config.get('key_env', ''))
+            store.execute("DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?", [workspace, selection])
+            st.rerun()
+        except CredentialError as exc:
+            st.error(str(exc))
     if names:
         st.subheader("Task-specific model routing")
         with st.form("task_routing"):

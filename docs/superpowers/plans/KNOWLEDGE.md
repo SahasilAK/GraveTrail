@@ -1,5 +1,7 @@
 # docs/superpowers/plans/
 
+- `2026-10-26-local-credentials.md` — Scoped native credential implementation plan and verification ledger; explicit Windows approval, fake-backend safety tests, lifecycle/grants/packaging and native disposable-entry qualification.
+
 - `2026-10-25-unified-diagnostic-assistance.md` — Investigation, shared focused preparation/grounding/resource acceptance plan, constraints and offline verification ledger; both Diagnostics panels and CLI/MCP share the implementation.
 
 `2026-10-24-diagnostic-review-budget.md` records shared review budgeting, the first_test workspace-catalog follow-up, 204-test final verification and live validation handoff to the user.

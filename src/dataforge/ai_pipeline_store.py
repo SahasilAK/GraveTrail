@@ -93,15 +93,3 @@ def batch_attempts(store, workspace, run_id, batch_id):
     rows = store.rows('SELECT * FROM ai_analysis_attempts WHERE workspace_id=? AND run_id=? AND batch_id=?',
                      [workspace, run_id, batch_id])
     return sorted(rows, key=lambda r: (json.loads(r['details']).get('attempt_number', 0), r['attempt_id']))
-
-
-def save_context_dependencies(store, workspace, run_id, unit_id, dependencies):
-    _run(store, workspace, run_id)
-    store.execute('INSERT INTO ai_context_dependencies VALUES (?,?,?,?) ON CONFLICT(run_id,unit_id) DO UPDATE SET dependencies=excluded.dependencies',
-        [workspace, run_id, unit_id, _json(dependencies)])
-
-
-def save_link_checkpoint(store, workspace, run_id, fingerprint, report):
-    _run(store, workspace, run_id)
-    store.execute('INSERT INTO ai_link_checkpoints VALUES (?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET fingerprint=excluded.fingerprint,report=excluded.report',
-        [workspace, run_id, fingerprint, _json(report)])

@@ -28,6 +28,21 @@ models:
         (f'{prefix}/macros/money.sql', b'{% macro money(x) %}{{ x }} / 100{% endmacro %}')]
 
 
+def test_parser_upgrade_rebuilds_dbt_results_before_marking_current(tmp_path, monkeypatch):
+    from dataforge.services import analysis_is_current
+
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('dbt upgrade')
+        Importer(store, w).files(fixture_entries(), set(), source_kind='dbt')
+        analyze(store, w)
+        assert analysis_is_current(store, w)
+        monkeypatch.setattr('dataforge.services.PARSER_VERSION', 'future-parser')
+        assert not analysis_is_current(store, w)
+        rebuilt = analyze(store, w)
+        assert rebuilt['analyzed'] == 6 and rebuilt['cached'] == 0
+        assert analysis_is_current(store, w)
+
+
 def test_three_model_project_has_logical_outputs_and_original_evidence(tmp_path):
     with closing(Store(tmp_path)) as store:
         workspace = store.create_workspace('dbt')
