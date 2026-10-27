@@ -250,6 +250,12 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         output_scope = scope
         while output_scope.parent and output_scope in output_scope.parent.set_operation_scopes:
             output_scope = output_scope.parent
+        if any(isinstance(node, exp.SetOperation) and node.args.get('distinct')
+               for node in output_scope.expression.walk()):
+            coverage.append('Set duplicate-selection context is not resolved')
+        for owner in (query, output_scope.expression):
+            if owner.args.get('limit') is not None or owner.args.get('offset') is not None:
+                coverage.append('Row limiting/offset selection context is not resolved')
         names = output_names(output_scope)
         if isinstance(tree, (exp.Insert, exp.Create)) and not scope_key and isinstance(tree.this, exp.Schema):
             columns = tree.this.expressions
@@ -277,6 +283,9 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if any(s.expression.find(exp.Star) is not None for s in leaves):
                 coverage.append("Set operation wildcard positions require trusted schema expansion")
         mapping = {name: source for name, (_, source) in scope.selected_sources.items()}
+        if any(isinstance(source, exp.Table) and source.args.get('sample') is not None
+               for source in mapping.values()):
+            coverage.append('Table sampling selection context is not resolved')
         projection_aliases = [(position, name_key(identifier(p.args["alias"])))
                               for position, p in enumerate(query.expressions) if isinstance(p, exp.Alias)]
 
@@ -439,7 +448,42 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                 if join.args.get("using") or join.args.get("method") == "NATURAL":
                     record["coverage"].append("JOIN USING/NATURAL matching context is not resolved")
             if query.args.get("group") is not None:
-                dependencies(query.args["group"], "value_selection", record)
+                group = query.args['group']
+                for grouping in group.expressions:
+                    positional = grouping.is_int or isinstance(grouping, exp.Neg) and grouping.this.is_int
+                    if positional:
+                        position = int(grouping.sql())
+                        if (dialect.__class__.__name__.casefold() not in {
+                                'dialect', 'postgres', 'duckdb', 'snowflake', 'bigquery'}
+                                or not 1 <= position <= len(query.expressions)):
+                            record['coverage'].append('GROUP BY position cannot be established for this dialect')
+                            continue
+                        selected = query.expressions[position - 1]
+                        selected = selected.this if isinstance(selected, exp.Alias) else selected
+                        # This is a source expression, not a reference to a SELECT alias.
+                        resolving_context = False
+                        dependencies(selected, 'value_selection', record)
+                        resolving_context = True
+                    else:
+                        dependencies(grouping, 'value_selection', record)
+                if any(value for key, value in group.args.items() if key != 'expressions'):
+                    record['coverage'].append('Extended grouping context is not resolved')
+            distinct = query.args.get('distinct')
+            if distinct is not None:
+                if distinct.args.get('on') is not None:
+                    dependencies(distinct.args['on'], 'value_selection', record)
+                    record['coverage'].append('DISTINCT ON row choice is not resolved')
+                else:
+                    resolving_context = False
+                    for selected in query.expressions:
+                        selected = selected.this if isinstance(selected, exp.Alias) else selected
+                        if selected.is_star:
+                            record['coverage'].append('DISTINCT wildcard selection requires a known output layout')
+                        else:
+                            dependencies(selected, 'value_selection', record)
+                    resolving_context = True
+                for source in mapping.values():
+                    add_input(record, source, '', 'rowset')
             if query.args.get("order") is not None:
                 record["coverage"].append("Query-level ordering context is not resolved")
             record["coverage"] = list(dict.fromkeys(record["coverage"]))

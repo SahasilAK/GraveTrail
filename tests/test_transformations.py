@@ -41,6 +41,25 @@ def asset_id(store: Any, workspace: Any, name: str) -> Any:
     return next(a['asset_id'] for a in store.assets(workspace) if a['name'] == name)
 
 
+def test_group_by_ordinal_downstream_and_parser_upgrade(tmp_path, monkeypatch):
+    from dataforge import services
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, 'CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src GROUP BY 1')
+    try:
+        result = trace_columns(store, w, asset_id(store, w, 'src'), 'a', direction='downstream')
+        assert {d['target']['column_name'] for d in result['derivations']} == {'a', 's'}
+        assert analyze(store, w)['analyzed'] == 0
+        monkeypatch.setattr(services, 'PARSER_VERSION', 'future-parser')
+        assert any(c['reason'] == 'reanalysis_required' for c in trace_columns(
+            store, w, asset_id(store, w, 'src'), 'a')['coverage'])
+        assert analyze(store, w)['analyzed'] == 1
+        assert not any(c['reason'] == 'reanalysis_required' for c in trace_columns(
+            store, w, asset_id(store, w, 'src'), 'a')['coverage'])
+    finally:
+        store.close()
+
+
 def test_derivation_parser_cache_roundtrip() -> None:
     """Verify that derivation parser cache roundtrip."""
     derivation = {'target_table': 'b', 'target_column': 'id', 'expression': 'id',
