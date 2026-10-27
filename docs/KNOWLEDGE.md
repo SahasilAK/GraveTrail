@@ -6,7 +6,7 @@ The public landing page and site description include dbt; the User guide navigat
 DBT_SUPPORT.md. Getting started has a separate dbt retail sample walkthrough and explicit parser-only limits.
 
 `TRANSFORMATION_LINEAGE.md` — dedicated page workflow, tested SQL/SAS subset, dependency
-roles, bounded exports/queries and parser11/migration5 upgrade/recovery boundaries. Published
+roles, bounded exports/queries and parser16 coverage/unused-name rules with migration5 recovery. Published
 through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CLI/MCP
 references now enumerate107 executable routes and87 tools; UI has eleven destinations.
 

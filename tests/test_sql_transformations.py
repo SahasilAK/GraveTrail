@@ -13,6 +13,24 @@ def test_group_by_ordinal_preserves_selection_dependencies(dialect):
     assert records[0]['expression'] == 'a AS "Key"'
 
 
+@pytest.mark.parametrize('position', ['(1)', '((1))'])
+def test_parenthesized_group_ordinal_preserves_dependencies(position):
+    records = derivations(f'CREATE TABLE dst AS SELECT a,SUM(b) AS s FROM src GROUP BY {position}', 'duckdb')
+    assert inputs(records[1], 'value_selection') == {('src', 'a')}
+
+
+@pytest.mark.parametrize('position', ['+1', '+ /* exact source */ 1', '(+1)'])
+def test_unary_plus_grouping_does_not_invent_ordinal_dependencies(position):
+    record = derivations(f'CREATE TABLE dst AS SELECT SUM(b) AS s FROM src GROUP BY {position}', 'duckdb')[0]
+    assert inputs(record, 'value_selection') == set()
+    assert record['status'] == 'unresolved' and record['coverage']
+
+
+def test_query_level_sampling_has_coverage():
+    record = derivations('CREATE TABLE dst AS SELECT a FROM src USING SAMPLE 1 ROWS', 'duckdb')[0]
+    assert record['status'] == 'unresolved' and record['coverage']
+
+
 @pytest.mark.parametrize('group', ['0', '3', '-1'])
 def test_invalid_group_ordinal_has_coverage(group):
     records = derivations(f'CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src GROUP BY {group}')

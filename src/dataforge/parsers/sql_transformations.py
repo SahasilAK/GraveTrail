@@ -207,6 +207,16 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         share_destination(scope)
 
     ranges = _projection_ranges(code, dialect)
+    # SQLGlot drops unary plus. Preserve that distinction when classifying
+    # GROUP BY positions, including parentheses/comments around the number.
+    plus_positions = set()
+    previous = None
+    for token in dialect.tokenize(code):
+        if token.text == '(':
+            continue
+        if previous is not None and previous.text == '+':
+            plus_positions.add(token.start)
+        previous = token
     records = []
     branch_counts = {}
 
@@ -256,6 +266,8 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         for owner in (query, output_scope.expression):
             if owner.args.get('limit') is not None or owner.args.get('offset') is not None:
                 coverage.append('Row limiting/offset selection context is not resolved')
+            if owner.args.get('sample') is not None:
+                coverage.append('Query sampling selection context is not resolved')
         names = output_names(output_scope)
         if isinstance(tree, (exp.Insert, exp.Create)) and not scope_key and isinstance(tree.this, exp.Schema):
             columns = tree.this.expressions
@@ -450,8 +462,13 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if query.args.get("group") is not None:
                 group = query.args['group']
                 for grouping in group.expressions:
+                    while isinstance(grouping, exp.Paren):
+                        grouping = grouping.this
                     positional = grouping.is_int or isinstance(grouping, exp.Neg) and grouping.this.is_int
                     if positional:
+                        if grouping.meta.get('start') in plus_positions:
+                            record['coverage'].append('Unary-plus grouping syntax is not resolved as a position')
+                            continue
                         position = int(grouping.sql())
                         if (dialect.__class__.__name__.casefold() not in {
                                 'dialect', 'postgres', 'duckdb', 'snowflake', 'bigquery'}

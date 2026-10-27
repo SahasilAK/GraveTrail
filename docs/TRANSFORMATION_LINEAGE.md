@@ -45,6 +45,8 @@ SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL and Sn
 syntax cases; supported syntax is bounded by the fixtures, not by SQLGlot's full dialect list.
 Positional GROUP BY dependencies resolve for generic SQL, PostgreSQL, DuckDB, Snowflake
 and BigQuery. Other dialects and invalid positions retain explicit coverage gaps.
+Parentheses around positions are preserved; normalized unary-plus grouping syntax
+stays unresolved rather than being mistaken for a position.
 DISTINCT records duplicate-selection inputs. DISTINCT ON records selectors and an unresolved
 row-choice boundary. Duplicate-eliminating UNION, LIMIT/OFFSET and table sampling retain
 explicit boundaries; UNION ALL retains separate value branches. dbt uses the same reachable
@@ -77,7 +79,8 @@ Unresolved writes remain visible beside known derivations and stop chaining thro
 values. The service visits bounded column/effect states rather than enumerating every possible path;
 omitted path-step records carry their own truncation marker.
 A column used as both a value and a filter or join key retains both `value` and
-`row_selection` impact paths; derivation records remain unique.
+`row_selection` impact paths; derivation records remain unique. Cycles retain their
+boundary while newly discovered effect states can propagate within the traversal limits.
 
 Columns shows unused declared columns only with current, complete direct-reference
 coverage. Ambiguous references, parser diagnostics, failed sources, unexpanded wildcards

@@ -78,6 +78,22 @@ def test_downstream_preserves_value_and_filter_effects(tmp_path, context):
         store.close()
 
 
+def test_cycle_propagates_new_effect_states_to_other_outputs(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, '''CREATE TABLE b AS SELECT id FROM a WHERE id>0;
+        CREATE TABLE a AS SELECT id FROM b; CREATE TABLE c AS SELECT id FROM a;''')
+    try:
+        result = trace_columns(store, w, asset_id(store, w, 'a'), 'id', direction='downstream', depth=10)
+        output = next(d for d in result['derivations'] if d['target']['table'] == 'c')
+        assert {p['effect'] for p in result['paths'] if p['derivation_id'] == output['derivation_id']} == {
+            'value', 'row_selection'}
+        assert any(c['reason'] == 'cycle' for c in result['coverage'])
+        assert not result['complete'] and len(result['paths']) < 20
+    finally:
+        store.close()
+
+
 def test_repaired_roles_survive_reopen_cache_and_failed_publication(tmp_path):
     from dataforge.transformations import trace_columns
 

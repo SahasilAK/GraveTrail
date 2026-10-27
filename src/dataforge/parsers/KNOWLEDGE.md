@@ -25,7 +25,7 @@ SAS parse_sas accepts sql_dialect for PROC SQL only; default/extension/folder pr
 resolved in services.source_dialect. SAS DATA/PROC static rules are unchanged.
 
 SQL preserves SQL Server #/## identifier flags, top-level SELECT INTO set-query targets and
-Teradata volatile parenthesized CTAS inputs; current parser cache version11.
+Teradata volatile parenthesized CTAS inputs; current parser cache version16.
 
 SAS rule blocks slice original source by line-anchored offsets, preserving exact whitespace
 and same-line boundaries; inline data cannot redirect matching evidence offsets.

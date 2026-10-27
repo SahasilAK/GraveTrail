@@ -95,7 +95,7 @@ Graph images: graph_images.py serializes inert SVG from exports.graph_data paths
 - `analysis_service.py` — Offline preview, physical-attempt budgeting, cache revalidation, optional bounded review and atomic freshness-checked publication. Failures preserve the previous graph.
 - `project_analysis.py` — AgentService mixin for policy-gated project preview/build/report and job cancellation; exact profile-bound session credentials.
 
-Current parser cache is14; migration6 adds project provenance without replacing legacy
+Current parser cache is16; migration6 adds project provenance without replacing legacy
 direct/column tables. Operation evidence_key/table_pairs retain one original writer and
 explicit accepted edges. Graph/column/artifact queries preserve unresolved boundaries and
 original source-version scope. Full AI bodies remain history opt-in; retention removes them

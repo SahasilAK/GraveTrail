@@ -290,7 +290,6 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
         cid, level, effect, ancestors = queue.popleft()
         if cid in ancestors:
             boundary('cycle', column_id=cid)
-            continue
         if (cid, effect) in visited:
             continue
         visited.add((cid, effect))
@@ -404,7 +403,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                         result['truncated'] = True
                     if item[0] in item[3]:
                         boundary('cycle', column_id=item[0])
-                    elif (item[0], item[2]) not in scheduled:
+                    if (item[0], item[2]) not in scheduled:
                         if len(scheduled) >= limit * 2:
                             boundary('item_limit')
                             result['truncated'] = True
