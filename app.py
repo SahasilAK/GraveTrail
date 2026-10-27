@@ -9,10 +9,25 @@ from ui.presentation import ICON_PATH, apply_style, brand_title, eyebrow, sync_c
 
 configure_logging()
 st.set_page_config(page_title="GraveTrail | Engineering workspace", page_icon=str(ICON_PATH), layout="wide")
+store = None
 try:
-    store = get_store(current_home())
+    home = current_home()
+    store = get_store(home)
+    log_level = store.setting("__application__", "log_level", "INFO")
+    workspaces = store.workspaces()
+    if not workspaces:
+        store.create_workspace("My workspace", "Local engineering workspace")
+        workspaces = store.workspaces()
 except (ValueError, OSError, duckdb.Error):
     st.error("Cannot open configured storage. Check DATAFORGE_HOME, DATAFORGE_STORAGE_LOCATIONS and database access.")
+    if store is not None:
+        st.caption("If DuckDB stopped after a database error, reconnect storage before retrying the operation.")
+        if st.button("Reconnect storage"):
+            store.close()
+            get_store.clear(home)
+            st.session_state.pop("cleanup_preview", None)
+            st.session_state.pop("cleanup_confirmation", None)
+            st.rerun()
     st.stop()
 if notice := st.session_state.pop("storage_notice", None):
     st.success(notice)
@@ -20,11 +35,7 @@ if result := st.session_state.pop("cleanup_result", None):
     st.success("Cleanup committed. Retained files, if any, can be retried after checking access.")
     with st.expander("Cleanup result"):
         st.json(result)
-configure_logging(store.setting("__application__", "log_level", "INFO"))
-workspaces = store.workspaces()
-if not workspaces:
-    store.create_workspace("My workspace", "Local engineering workspace")
-    workspaces = store.workspaces()
+configure_logging(log_level)
 
 apply_style()
 

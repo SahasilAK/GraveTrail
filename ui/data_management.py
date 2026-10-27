@@ -100,7 +100,9 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
                 except (ValueError, OSError) as exc:
                     st.error('Cleanup refused: ' + str(exc))
                 except duckdb.Error:
-                    st.error('Cleanup failed because database storage is unavailable. Check database access and retry with a fresh preview.')
+                    st.session_state.pop('cleanup_preview', None)
+                    st.error('Cleanup stopped after a database error. Reload the page and reconnect storage before creating a fresh preview.')
+                    return
         if st.button('Rebuild lineage'):
             try:
                 with st.spinner('Rebuilding stored lineage'):

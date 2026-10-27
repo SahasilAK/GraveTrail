@@ -22,6 +22,56 @@ WORKSPACE_TABLES = (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records',
                     'history_archives', 'temporary_recovery', 'llm_profiles', 'settings', 'workspaces')
 CATEGORIES = ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'cache', 'reset',
               'workspace', 'orphans', 'application')
+_INDEX_REBUILD_KEY = 'cleanup_index_rebuild'
+
+
+def _recover_cleanup_indexes(store: Store) -> None:
+    """Finish an interrupted index rebuild using identifiers only, never stored SQL."""
+    indexes = store.setting('__application__', _INDEX_REBUILD_KEY, [])
+    if not indexes:
+        return
+    if not isinstance(indexes, list) or len(indexes) > 1000:
+        raise ValueError('Invalid cleanup index recovery record')
+    statements = []
+    identifier = r'[a-zA-Z_][a-zA-Z_0-9]*'
+    for index in indexes:
+        if (not isinstance(index, dict) or not isinstance(index.get('name'), str)
+                or not re.fullmatch(identifier, index['name'])
+                or index.get('table') not in (*WORKSPACE_TABLES, 'parse_cache', 'prompt_versions')
+                or not isinstance(index.get('columns'), list) or not 1 <= len(index['columns']) <= 64
+                or any(not isinstance(column, str) or not re.fullmatch(identifier, column)
+                       for column in index['columns'])):
+            raise ValueError('Invalid cleanup index recovery record')
+        columns = ','.join('"' + column + '"' for column in index['columns'])
+        statements.append(f'CREATE INDEX IF NOT EXISTS "{index["name"]}" ON main."{index["table"]}" ({columns})')
+    with store.transaction():
+        for statement in statements:
+            store.execute(statement)
+        store.execute('DELETE FROM settings WHERE workspace_id=? AND key=?', ['__application__', _INDEX_REBUILD_KEY])
+
+
+def _rebuild_cleanup_indexes(store: Store, tables: list[str]) -> None:
+    """Journal and rebuild app-table nonunique column indexes before destructive DML."""
+    _recover_cleanup_indexes(store)
+    if not tables:
+        return
+    marks = ','.join('?' for _ in tables)
+    records = store.rows(f'''SELECT index_name,table_name,expressions FROM duckdb_indexes()
+        WHERE database_name=current_database() AND schema_name='main' AND table_name IN ({marks})
+        AND NOT is_unique ORDER BY index_name''', tables)
+    indexes = []
+    for record in records:
+        columns = re.fullmatch(r'\[([a-zA-Z_][a-zA-Z_0-9]*(?:,\s*[a-zA-Z_][a-zA-Z_0-9]*)*)\]', record['expressions'])
+        if columns and re.fullmatch(r'[a-zA-Z_][a-zA-Z_0-9]*', record['index_name']):
+            indexes.append({'name': record['index_name'], 'table': record['table_name'],
+                            'columns': [column.strip() for column in columns[1].split(',')]})
+    if indexes:
+        # DuckDB needs DROP committed before CREATE; retain recovery metadata in that same commit.
+        with store.transaction():
+            store.set_setting('__application__', _INDEX_REBUILD_KEY, indexes)
+            for index in indexes:
+                store.execute('DROP INDEX main."' + index['name'] + '"')
+        _recover_cleanup_indexes(store)
 
 
 def checked_path(home: Path, relative: str | Path) -> Path:
@@ -289,6 +339,11 @@ def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, back
         if backup_first:
             from dataforge.database_maintenance import _backup
             backup_path = str(_backup(store))
+        selected = _selection(store, workspace, category, preview.get('file_ids'), preview.get('run_id'))
+        _rebuild_cleanup_indexes(store, list(selected))
+        current = cleanup_plan(store, workspace, category, preview.get('file_ids'), preview.get('run_id'))
+        if current['token'] != preview.get('token'):
+            raise ValueError('Storage indexes were repaired; refresh the cleanup preview before deleting data')
         if category in {'workspace', 'application'}:
             from dataforge.credentials import CredentialError, NativeCredentials, credential_source
             from dataforge.llm import Profile
@@ -302,7 +357,7 @@ def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, back
             for row, profile in profiles:
                 NativeCredentials().delete(store.home, row['workspace_id'], row['profile_id'], profile)
         with store.transaction():
-            for table, (where, params) in _selection(store, workspace, category, preview.get('file_ids'), preview.get('run_id')).items():
+            for table, (where, params) in selected.items():
                 store.execute(f'DELETE FROM {table} WHERE {where}', params)
             if category in {'sources', 'lineage', 'ai', 'reset'}:
                 for source in store.files(workspace):

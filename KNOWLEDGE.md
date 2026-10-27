@@ -19,7 +19,7 @@ API credentials default to session memory. Optional keyring persistence explicit
 - `plans/` — optional ignored local implementation/evidence records; only its map is tracked; [map](plans/KNOWLEDGE.md).
 
 ## Root files
-- `app.py` — navigation, selected workspace/home, shared UI frame and session connection scope; displays cleanup results after rerun and selects a surviving/default workspace before rendering its selector. Domain decisions stay in services.
+- `app.py` — navigation, selected workspace/home, shared UI frame and session connection scope; guards cached storage reads with explicit reconnect after fatal errors, displays cleanup results after rerun and selects a surviving/default workspace before rendering its selector. Domain decisions stay in services.
 - `pyproject.toml` / `uv.lock` — dependency/build/entrypoint/test/lint contracts and generated exact lock. Temporary Pillow metadata override also lives in `dependency-overrides.txt`; see SECURITY.md before changing it.
 - `README.md` — branded banner, live-docs link, status badges and quick navigation; “Nothing stays buried. Every dependency leaves a trail.” headline, product introduction, illustrative lineage, expandable real fixture screenshot and pinned-version onboarding; public docs entry point.
 - `mkdocs.yml` — explicit navigation/asset publication list, theme and strict site configuration. Docs builder checks inventory, routes/headings, links/search and exact output contents.
