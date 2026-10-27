@@ -431,11 +431,37 @@ def column_report(store: Store, workspace: str, asset_id: str) -> list[dict]:
     return rows
 
 
-def column_names(rows: list[dict[str, Any]], metadata: dict[str, Any]) -> tuple[list[str], list[str] | None]:
+def column_usage_coverage(store: Store, workspace: str, asset_id: str) -> dict[str, Any]:
+    """Establish direct-usage coverage before deriving unused declared columns.
+
+    Diagnostics without reliable asset attribution conservatively affect the workspace.
+    Reasons contain no source text, so callers can expose them under summary access.
+    """
+    with store.lock:
+        if not store.rows('SELECT 1 FROM assets WHERE workspace_id=? AND asset_id=?', [workspace, asset_id]):
+            raise ValueError('Asset does not exist in this workspace')
+        reasons = []
+        if not analysis_is_current(store, workspace):
+            reasons.append('Analysis is missing or out of date; run Analysis to refresh direct references.')
+        versions = store.rows('SELECT parser_version FROM column_analysis WHERE workspace_id=?', [workspace])
+        if not versions or versions[0]['parser_version'] != PARSER_VERSION:
+            reasons.append('Reanalysis is required for the current parser version.')
+        if store.rows("SELECT 1 FROM source_files WHERE workspace_id=? AND parsing_status='failed' LIMIT 1", [workspace]):
+            reasons.append('A source failed parsing; direct usage coverage is incomplete.')
+        if store.rows("SELECT 1 FROM diagnostics WHERE workspace_id=? AND severity<>'info' LIMIT 1", [workspace]):
+            reasons.append('Analysis diagnostics include unresolved references or unsupported syntax.')
+        if store.rows("""SELECT 1 FROM column_usages WHERE workspace_id=? AND asset_id=?
+                         AND (column_name='*' OR status='unresolved') LIMIT 1""", [workspace, asset_id]):
+            reasons.append('Wildcard or unresolved direct references prevent a complete column list.')
+        return {'complete': not reasons, 'reasons': reasons}
+
+
+def column_names(rows: list[dict[str, Any]], metadata: dict[str, Any], *,
+                 coverage_complete: bool = False) -> tuple[list[str], list[str] | None]:
     """Return used column names and unused declared columns when coverage is complete."""
     names = {r["column_name"] for r in rows}
     used = sorted(names - {"*"}, key=str.casefold)
-    if metadata.get("schema_status") != "declared" or "*" in names:
+    if not coverage_complete or metadata.get("schema_status") != "declared" or "*" in names:
         return used, None
     declared = {c["name"] for c in metadata["columns"]}
     if not names <= declared:

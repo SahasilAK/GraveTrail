@@ -2,7 +2,7 @@ import json
 
 import streamlit as st
 
-from dataforge.services import column_names, column_report
+from dataforge.services import column_names, column_report, column_usage_coverage
 from ui.common import choose_asset, context, downloads, load_graph, source_viewer, title
 from ui.copy_names import copy_names
 
@@ -13,7 +13,8 @@ asset = choose_asset(graph, "columns")
 if asset:
     rows = column_report(store, w, asset)
     metadata = json.loads(graph.nodes[asset].get("metadata", "{}"))
-    used, unused = column_names(rows, metadata)
+    coverage = column_usage_coverage(store, w, asset)
+    used, unused = column_names(rows, metadata, coverage_complete=coverage['complete'])
     wildcard = any(r["column_name"] == "*" for r in rows)
     needle = st.text_input("Filter columns", placeholder="Column name or comma-separated names")
     terms = [term.strip().casefold() for term in needle.split(",") if term.strip()]
@@ -24,6 +25,8 @@ if asset:
         st.metric("Referencing files", len({r["file_id"] for r in rows}), border=True)
     if wildcard:
         st.warning("Wildcard coverage is unknown. No columns are invented without a trustworthy schema.")
+    if not coverage['complete']:
+        st.warning('Direct reference coverage is incomplete. ' + ' '.join(coverage['reasons']))
     if metadata.get("schema_status") == "declared":
         st.caption("A consistent imported SQL declaration supplies the schema. Wildcard expansions are labeled inferred; they do not verify the live database schema.")
         panel = st.expander("Declared schema and evidence", on_change="rerun", key="column_schema_panel")
@@ -45,7 +48,7 @@ if asset:
     if unused_panel.open:
         with unused_panel:
             if unused is None:
-                st.info("Unused columns cannot be determined without a complete, consistent declared schema and resolved wildcard coverage.")
+                st.info("Unused columns require a consistent declared schema and current, complete direct reference coverage.")
             elif unused:
                 st.caption("Declared columns with no known direct references in analyzed sources. This does not establish that they are unused in the live system.")
                 copy_names(unused, f"unused_column_names_{w}_{asset}")
