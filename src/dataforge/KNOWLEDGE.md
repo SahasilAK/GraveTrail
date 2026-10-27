@@ -51,7 +51,7 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 - `graph_images.py`, `image_worker.py`, `graph_image_service.py` — Inert SVG, bounded resvg workers and committed filtered graph snapshots with revision/coverage/safe filenames.
 - `artifacts.py` — Selection/format allowlists, original-version artifacts and checked scoped base64 reads; source permission rechecked at retrieval.
 - `theme_configuration.py` — Eleven native presets and shared UI/graph/site tokens, contrast and atomic TOML updates preserving layout. UI picker: ui/themes.py.
-- `cleanup.py`, `maintenance.py` — Preview-bound cleanup/history, active-work guards, mandatory full-home backups, recovery journals and integrity-checked new-home restore. Historical AI tables/readers are retained.
+- `cleanup.py`, `maintenance.py` — Preview-bound cleanup/history, active-work guards with bounded validated job journals, mandatory full-home backups, recovery journals and integrity-checked new-home restore. Column cleanup preserves table-edge supports. Historical AI tables/readers are retained.
 - `launcher.py`, `storage_locations.py` — Writable runtime homes, validated startup allowlists, bundled UI paths and lazy Streamlit startup; Windows mutex protects UI/CLI/MCP/worker lifetime.
 - `cli.py`, `build.py`, `__init__.py` — CLI/distribution entry points and package version. GraveTrail and documented legacy dataforge commands/import/storage identifiers stay compatible.
 

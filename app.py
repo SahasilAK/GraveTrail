@@ -16,6 +16,10 @@ except (ValueError, OSError, duckdb.Error):
     st.stop()
 if notice := st.session_state.pop("storage_notice", None):
     st.success(notice)
+if result := st.session_state.pop("cleanup_result", None):
+    st.success("Cleanup committed. Retained files, if any, can be retried after checking access.")
+    with st.expander("Cleanup result"):
+        st.json(result)
 configure_logging(store.setting("__application__", "log_level", "INFO"))
 workspaces = store.workspaces()
 if not workspaces:

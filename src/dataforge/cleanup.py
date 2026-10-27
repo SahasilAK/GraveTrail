@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import stat
 import time
@@ -55,6 +56,25 @@ def _job_files(store: Store) -> list[Path]:
     return paths
 
 
+def _job_record(store: Store, path: Path) -> dict[str, Any]:
+    """Refuse malformed journals instead of guessing whether a job is idle."""
+    checked_path(store.home, path.relative_to(store.home))
+    if path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError('Job journal exceeds maintenance limit')
+    try:
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if (not isinstance(record, dict)
+                or not isinstance(record.get('workspace_id'), str)
+                or not re.fullmatch(r'[a-f0-9]{32}', record['workspace_id'])
+                or not isinstance(record.get('status'), str) or not record['status']
+                or type(record.get('updated_at')) not in (int, float)
+                or not math.isfinite(record['updated_at']) or record['updated_at'] < 0):
+            raise ValueError('Invalid job fields')
+    except (ValueError, OverflowError):
+        raise ValueError('Job journal is invalid; repair it before maintenance') from None
+    return record
+
+
 def assert_idle(store: Store, workspace: str='') -> None:
     """Also catch queued imports and provider requests which do not own analysis_lock.
 
@@ -68,10 +88,7 @@ def assert_idle(store: Store, workspace: str='') -> None:
     if has_active_requests(store.home, workspace):
         raise ValueError('An active AI request blocks cleanup')
     for path in _job_files(store):
-        checked_path(store.home, path.relative_to(store.home))
-        if path.stat().st_size > 16 * 1024 * 1024:
-            raise ValueError('Job journal exceeds maintenance limit')
-        record = json.loads(path.read_text(encoding='utf-8'))
+        record = _job_record(store, path)
         if (not workspace or record['workspace_id'] == workspace) and record['status'] not in {'completed', 'failed', 'interrupted', 'cancelled'}:
             if time.time() - record['updated_at'] <= 30:
                 raise ValueError('An active job blocks cleanup')
@@ -109,7 +126,7 @@ def _files(store: Store, workspace: str, category: str) -> list[dict[str, Any]]:
     files = []
     if category in {'jobs', 'workspace', 'application'}:
         for path in _job_files(store):
-            record = json.loads(checked_path(store.home, path.relative_to(store.home)).read_text(encoding='utf-8'))
+            record = _job_record(store, path)
             if category == 'application' or record['workspace_id'] == workspace:
                 if record['status'] in {'completed', 'failed', 'interrupted', 'cancelled'} or time.time() - record['updated_at'] > 30:
                     files.append(path)
@@ -189,6 +206,8 @@ def _selection(store: Store, workspace: str, category: str, file_ids: list[str] 
     selected = {}
     for table in tables:
         where, params = ('TRUE', []) if global_scope else ('workspace_id=?', [workspace])
+        if category == 'columns' and table == 'analysis_fact_support':
+            where += " AND fact_type IN ('usage','derivation')"
         if table == 'source_files' and file_ids:
             if len(file_ids) > 10000 or not set(file_ids) <= {f['file_id'] for f in store.files(workspace)}:
                 raise ValueError('Selected files do not belong to this workspace')

@@ -1,6 +1,7 @@
 """Human cleanup controls; policy and mutations stay in shared services."""
 import uuid
 
+import duckdb
 import streamlit as st
 
 from dataforge.cleanup import CATEGORIES, apply_cleanup, cleanup_plan
@@ -21,12 +22,25 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
     st.subheader('Cleanup preview' if mode == 'cleanup' else 'Backups & integrity', icon=':material/shield:')
     st.caption('Preview dependencies before removal. Backups contain private source data; keep a copy outside this runtime home.')
     if mode == 'cleanup':
+        if (not st.session_state.get('save_temporary_cleanup_preference')
+                and store.setting(workspace, 'auto_cleanup_temporary', False)):
+            try:
+                plan = temporary_plan(store, workspace)
+                if plan['files']:
+                    st.json(cleanup_temporary(store, workspace, plan['files']))
+            except (ValueError, OSError, duckdb.Error):
+                st.caption('Automatic staging cleanup deferred while storage is busy or paths are unsafe.')
         names = {row['workspace_id']: row['name'] for row in store.workspaces()}
         metrics = []
-        for category in ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs'):
-            plan = cleanup_plan(store, workspace, category)
-            metrics.append({'Category': category, 'Records affected': sum(plan['records'].values()),
-                            'Logical bytes estimate': plan['logical_bytes_estimate'], 'Managed file bytes': plan['file_bytes']})
+        try:
+            for category in ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs'):
+                plan = cleanup_plan(store, workspace, category)
+                metrics.append({'Category': category, 'Records affected': sum(plan['records'].values()),
+                                'Logical bytes estimate': plan['logical_bytes_estimate'], 'Managed file bytes': plan['file_bytes']})
+        except (ValueError, OSError, duckdb.Error):
+            st.session_state.pop('cleanup_preview', None)
+            st.error('Cannot safely inspect cleanup storage. Check database access, job journals and redirected runtime paths.')
+            return
         st.dataframe(metrics, hide_index=True, alt='Calculated cleanup scope and logical storage estimates by category')
         st.caption('Categories overlap because dependencies are included. Logical JSON row estimates differ from DuckDB disk space. No embedding index or runtime knowledge base is currently implemented; repository documentation is always preserved.')
         category = st.selectbox('Cleanup category', CATEGORIES, format_func=lambda v: {
@@ -49,10 +63,17 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
             runs = [r['run_id'] for r in store.runs(workspace)]
             run_id = st.selectbox('Specific analysis run (optional)', [None, *runs], format_func=lambda r: r or 'All unreferenced history')
         phrase = 'RESET GRAVETRAIL' if category == 'application' else 'CLEAN SHARED DATA' if shared else names[workspace]
+        preview = st.session_state.get('cleanup_preview')
+        if preview and (preview['category'] != category or preview['workspace_id'] != ('' if shared else workspace)
+                        or sorted(preview['file_ids']) != sorted(file_ids or []) or preview['run_id'] != run_id):
+            st.session_state.pop('cleanup_preview', None)
+            st.session_state.pop('cleanup_confirmation', None)
         if st.button('Preview cleanup', type='primary'):
+            st.session_state.pop('cleanup_preview', None)
+            st.session_state.pop('cleanup_confirmation', None)
             try:
                 st.session_state['cleanup_preview'] = cleanup_plan(store, '' if shared else workspace, category, file_ids, run_id)
-            except (ValueError, OSError):
+            except (ValueError, OSError, duckdb.Error):
                 st.error('Cannot safely inspect these runtime paths. Check storage access and redirected paths.')
         preview = st.session_state.get('cleanup_preview')
         if preview and preview['category'] == category and preview['workspace_id'] == ('' if shared else workspace):
@@ -71,14 +92,15 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
                     if category == 'cache':
                         st.cache_data.clear()
                     st.session_state.pop('cleanup_preview', None)
-                    st.success('Cleanup committed. Retained files, if any, can be retried after checking access.')
-                    st.json(result)
+                    st.session_state['cleanup_result'] = result
                     if category in {'workspace', 'application'}:
                         st.session_state['runtime_connections'].clear()
-                        st.session_state.pop('workspace', None)
-                        st.rerun()
+                    # The app shell selects a surviving workspace before rendering its widget.
+                    st.rerun()
                 except (ValueError, OSError) as exc:
                     st.error('Cleanup refused: ' + str(exc))
+                except duckdb.Error:
+                    st.error('Cleanup failed because database storage is unavailable. Check database access and retry with a fresh preview.')
         if st.button('Rebuild lineage'):
             try:
                 with st.spinner('Rebuilding stored lineage'):
@@ -91,19 +113,19 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
         if st.button('Check integrity and storage'):
             try:
                 st.json(inspect_database(store))
-            except (ValueError, OSError):
+            except (ValueError, OSError, duckdb.Error):
                 st.error('Integrity inspection failed. Check filesystem access and runtime path safety.')
         if st.button('Checkpoint database'):
             try:
                 st.json(checkpoint(store))
-            except (ValueError, OSError):
+            except (ValueError, OSError, duckdb.Error):
                 st.error('Checkpoint refused. Wait for active work to finish.')
         if st.button('Create runtime backup'):
             try:
                 path = backup(store)
                 st.success('Backup created: ' + str(path))
                 st.download_button('Download runtime backup', path.read_bytes(), path.name, 'application/zip')
-            except (ValueError, OSError):
+            except (ValueError, OSError, duckdb.Error):
                 st.error('Backup refused. Wait for active jobs or check storage access and backup size limits.')
         st.caption('Restore validates checksums and schema into a new directory. The active home is never overwritten; restart with DATAFORGE_HOME pointing to the restored directory.')
         archives = sorted((store.home / 'backups').glob('*.zip'))
@@ -122,13 +144,10 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
             automatic = st.checkbox('Automatically clear expired recovery staging files when opening cleanup settings',
                                     value=store.setting(workspace, 'auto_cleanup_temporary', False))
             st.caption('Opt-in; only app-created staging files older than 24 hours, at most 100 / 25 MB per visit. A recoverable database copy is retained. Active jobs block deletion.')
-            if st.form_submit_button('Save temporary cleanup preference'):
+            if st.form_submit_button('Save temporary cleanup preference', key='save_temporary_cleanup_preference'):
                 from dataforge.settings_service import save_ui_settings
-                save_ui_settings(store, workspace, 'temporary_cleanup', {'enabled': automatic})
-        if automatic:
-            try:
-                plan = temporary_plan(store, workspace)
-                if plan['files']:
-                    st.json(cleanup_temporary(store, workspace, plan['files']))
-            except (ValueError, OSError):
-                st.caption('Automatic staging cleanup deferred while storage is busy or paths are unsafe.')
+                try:
+                    save_ui_settings(store, workspace, 'temporary_cleanup', {'enabled': automatic})
+                    st.rerun()
+                except (ValueError, OSError, duckdb.Error):
+                    st.error('Could not save the temporary cleanup preference. Check database access and active jobs.')

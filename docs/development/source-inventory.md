@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **395 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **396 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -51,7 +51,7 @@ python scripts/docs/inventory.py --check
 | [Tests: dbt](#tests-dbt) | 13 |
 | [Tests: automation](#tests-automation) | 14 |
 | [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 27 |
-| [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 25 |
+| [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 26 |
 
 ## Entry points and package
 
@@ -524,6 +524,7 @@ python scripts/docs/inventory.py --check
 | --- | --- | --- |
 | [`tests/test_archive_qualification.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_archive_qualification.py) | Archive gold is scorer-only; missing column labels never become an accuracy pass. | 7 test functions; helpers/constants: `archive` |
 | [`tests/test_assistance_queue.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_assistance_queue.py) | No module docstring; inspect the linked source. | 6 test functions; helpers/constants: `queued` |
+| `tests/test_data_management_cleanup.py` **new** | Exercise cleanup through the real application and disposable storage homes. | 11 test functions; helpers/constants: `cleanup_app`, `choose_category`, `preview_and_confirm` |
 | [`tests/test_diagnostic_review_budget.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_diagnostic_review_budget.py) | Diagnostic previews and dispatch size the same complete, privacy-gated request. | 17 test functions; helpers/constants: `configure`, `preview` |
 | [`tests/test_distribution.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_distribution.py) | Distribution boundaries: writable homes, immutable assets and artifact integrity. | 10 test functions |
 | `tests/test_docs_inventory.py` **new** | The developer inventory covers first-party files without importing application code. | 4 test functions |
