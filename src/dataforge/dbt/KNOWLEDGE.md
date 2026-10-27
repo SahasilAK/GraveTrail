@@ -1,5 +1,8 @@
 # dbt/
 
+`analysis.parse_model_query` uses shared SQL reachable scopes, excluding unused CTE
+column facts while preserving reachable intermediate steps and model identities.
+
 Offline, bounded dbt project inspection; never evaluates Jinja/Python, runs dbt or opens profiles.
 
 - `imports.py` — DbtImportOptions/preview_dbt_import; configured path admission and exclusions before reads.

@@ -78,6 +78,27 @@ def test_catalog_trace_paging_and_source_gate(engine: Any) -> None:
         service.call("column_lineage", w, asset="mart.totals", column="total", options={"detail_level": "detailed"})
 
 
+def test_shared_agent_preserves_mixed_paths_and_usage_coverage(engine):
+    from dataforge.transformations import trace_columns
+
+    service, store, w = engine
+    Importer(store, w).files([('mixed.sql', b'''CREATE TABLE dst AS SELECT a FROM src WHERE a>0;
+        CREATE TABLE fin AS SELECT a FROM dst;''')], {'.sql'})
+    analyze(store, w)
+    source = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'src')
+    direct = trace_columns(store, w, source, 'a', direction='downstream')
+    response = service.call('column_lineage', w, asset=source, column='a', direction='downstream')
+    for row in response['items']:
+        assert row['paths'] == [p for p in direct['paths'] if p['derivation_id'] == row['derivation_id']]
+        assert {p['effect'] for p in row['paths']} == {'value', 'row_selection'}
+    usage = service.call('columns', w, asset=source)
+    assert usage['usage_coverage'] == {'complete': True, 'reasons': []}
+    Importer(store, w).files([('ambiguous.sql', b'SELECT a FROM src JOIN other ON src.a=other.a;')], {'.sql'})
+    analyze(store, w)
+    usage = service.call('columns', w, asset=source)
+    assert not usage['usage_coverage']['complete'] and usage['usage_coverage']['reasons']
+
+
 def test_scope_constants_limits_and_mcp_parity(engine: Any) -> None:
     """Verify that scope constants limits and mcp parity.
 

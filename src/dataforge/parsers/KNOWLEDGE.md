@@ -2,6 +2,11 @@
 
 Pure static parsers returning ParseResult. Add positive/negative fixtures and bump services.PARSER_VERSION for semantic changes. No imported code is executed.
 
+Parser16: `sql.reachable_scopes` is shared with dbt, preserving DML activation and excluding
+unused CTEs. Grouping ordinals resolve in qualified dialects; DISTINCT retains selection
+roles and row modifiers/set duplicate selection retain explicit coverage. SAS output options
+apply after statement renaming; repeated selection statements/options remain unresolved.
+
 - `sql_transformations.py` — SQLGlot projection spans, scope/branch-preserving derivations,
   dependency roles and explicit unsupported boundaries; schema hooks defer to materialization.
 - `sas_transformations.py` — ordered DATA assignment versions, bounded single SET and

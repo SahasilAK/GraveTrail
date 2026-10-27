@@ -37,6 +37,13 @@ def test_column_lists_and_comma_filter_use_complete_direct_report(tmp_path: Path
     assert set(app.dataframe[0].value["column_name"]) == {"id", "name"}
     next(s for s in app.text_input if s.label == "Filter columns").set_value("not_present").run()
     assert any(p.label == "Unused columns (1)" for p in app.expander)
+    Importer(store, w).files([('ambiguous.sql', b'SELECT id FROM raw.a a JOIN raw.b b ON a.id=b.id;')], {'.sql'})
+    analyze(store, w)
+    app.run()
+    assert not app.exception
+    assert any(p.label == 'Unused columns' for p in app.expander)
+    assert not any(p.label.startswith('Unused columns (') for p in app.expander)
+    assert any('Direct reference coverage is incomplete' in warning.value for warning in app.warning)
     import streamlit as st
     st.cache_resource.clear()
 

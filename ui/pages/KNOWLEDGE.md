@@ -1,5 +1,8 @@
 # ui/pages/
 
+Columns checks shared usage coverage before computing unused names; unresolved or stale
+coverage displays reasons and suppresses unused claims while retaining known references.
+
 dbt: builder chooses project/mode/artifact paths; analysis displays coverage;
 explorer adds resource/macro impact alongside the shared logical graph and column IDs.
 

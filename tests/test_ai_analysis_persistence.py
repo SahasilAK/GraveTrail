@@ -7,6 +7,31 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
+def test_offline_ai_publication_retains_roles_and_coverage(tmp_path):
+    from dataforge.services import prepare_analysis_results, publish_analysis_results
+    from dataforge.transformations import trace_columns
+
+    store = Store(tmp_path / 'home')
+    try:
+        w = store.create_workspace('AI roles')
+        Importer(store, w).files([('a.sql', b'CREATE TABLE dst AS SELECT a FROM src WHERE a>0;')], {'.sql'})
+        results, config, counts = prepare_analysis_results(store, w)
+        operation = results[0][1].operations[0]
+        operation.method = 'ai-project'
+        operation.derivations[0]['coverage'] = ['semantic_coverage_not_proven']
+        publish_analysis_results(store, w, results, config, counts)
+        source = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'src')
+        trace = trace_columns(store, w, source, 'a', direction='downstream')
+        step = trace['derivations'][0]
+        assert step['status'] == 'inferred'
+        assert step['coverage'] == ['semantic_coverage_not_proven']
+        assert {i['role'] for i in step['inputs']} == {'value', 'row_filter'}
+        assert {p['effect'] for p in trace['paths']} == {'value', 'row_selection'}
+        assert not trace['complete']
+    finally:
+        store.close()
+
+
 def test_unresolved_table_support_is_inspectable_boundary():
     nodes = [{'asset_id': n, 'name': n} for n in ['a', 'b', 'c']]
     edges = [{'source_id': s, 'target_id': t, 'edge_id': s+t, 'status': status}

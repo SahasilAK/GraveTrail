@@ -78,6 +78,32 @@ def test_downstream_preserves_value_and_filter_effects(tmp_path, context):
         store.close()
 
 
+def test_repaired_roles_survive_reopen_cache_and_failed_publication(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, '''CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src WHERE a>0 GROUP BY 1;
+        CREATE TABLE fin AS SELECT a FROM dst;''')
+    source = asset_id(store, w, 'src')
+    before = trace_columns(store, w, source, 'a', direction='downstream')
+    assert {d['target']['column_name'] for d in before['derivations']} == {'a', 's'}
+    assert {p['effect'] for p in before['paths']} == {'value', 'row_selection'}
+    store.close()
+    store = Store(tmp_path / 'home')
+    try:
+        assert trace_columns(store, w, source, 'a', direction='downstream') == before
+        assert analyze(store, w)['analyzed'] == 0
+        cached = trace_columns(store, w, source, 'a', direction='downstream')
+        # A cached parse is republished under a fresh analysis run.
+        assert [{k: v for k, v in d.items() if k != 'run_id'} for d in cached['derivations']] == [
+            {k: v for k, v in d.items() if k != 'run_id'} for d in before['derivations']]
+        assert cached['paths'] == before['paths']
+        with pytest.raises(InterruptedError):
+            analyze(store, w, force=True, cancelled=lambda: True)
+        assert trace_columns(store, w, source, 'a', direction='downstream') == cached
+    finally:
+        store.close()
+
+
 def test_derivation_parser_cache_roundtrip() -> None:
     """Verify that derivation parser cache roundtrip."""
     derivation = {'target_table': 'b', 'target_column': 'id', 'expression': 'id',

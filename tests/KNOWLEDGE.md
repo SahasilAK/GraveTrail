@@ -1,5 +1,9 @@
 # tests/
 
+Column upgrade regressions pin grouping ordinals/DISTINCT/modifier boundaries, mixed impact
+effects, coverage-aware unused lists, unreachable dbt CTE exclusion, SAS option order,
+reopen/cache/cancelled publication, and offline AI role/provenance preservation (parser16).
+
 `test_dbt_*.py` — Safe import/YAML/templates, model/resource/version/package identity,
 artifact selection/generated evidence, columns, AI exclusion, settings, maintenance,
 authorized reports, populated UI and retail ZIP gold; parser15/schema8.

@@ -2,6 +2,11 @@
 
 Static facts, persistence, analysis and export APIs. Keep UI imports out of this package. Related tables and data flow are in docs/DATA_MODEL.md.
 
+Parser16 refreshes column selection facts and shared SQL/dbt scope reachability.
+`transformations.trace_columns` retains both effects for mixed value/filter inputs while
+deduplicating derivations. `services.column_usage_coverage` checks freshness, diagnostics
+and wildcards; `column_names` requires explicit complete coverage for unused names.
+
 `transformations.py` — materialize_columns, column_catalog and trace_columns: indexed,
 workspace/job/scoped column identities, revision-bound expressions/roles, bounded traversal,
 unknown-writer alternatives and cycle/limit/coverage markers. `models.column_key` shares
