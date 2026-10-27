@@ -2,7 +2,6 @@
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.optimizer.scope import traverse_scope
 
 from dataforge.dbt.evidence import evidence
 from dataforge.dbt.models import DbtLimits, DbtProjectResult, DbtRelationship
@@ -10,7 +9,7 @@ from dataforge.dbt.resolution import asset_ref, resolve_bindings, resolve_refere
 from dataforge.dbt.resources import DATA_TYPES, collect_resources, scan_python_model
 from dataforge.dbt.templates import ReferenceCall, scan_template
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, file_asset
-from dataforge.parsers.sql import parse_sql
+from dataforge.parsers.sql import parse_sql, reachable_scopes
 from dataforge.parsers.sql_transformations import extract_transformations
 
 
@@ -22,7 +21,7 @@ def parse_model_query(query, *, output, dialect, primary_evidence, relation_map,
         if not isinstance(tree, (exp.Select, exp.SetOperation)):
             raise ValueError('dbt model requires one query')
         derivations = extract_transformations(tree, query, sqlglot.Dialect.get_or_raise(dialect or None),
-            list(traverse_scope(tree) or []), exp.to_table(output.name))
+            reachable_scopes(tree), exp.to_table(output.name))
     except (sqlglot.errors.SqlglotError, ValueError, RecursionError):
         return ParseResult(assets=[output], diagnostics=[Diagnostic('Unsupported dbt query; column coverage is partial')])
     operations = result.operations or [Operation('SELECT', [], [], query, 1, 1)]
