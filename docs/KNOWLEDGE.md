@@ -25,6 +25,7 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `AI_ANALYSIS.md`, `LLM_INTEGRATION.md`, `PROMPT_ENGINEERING.md`, `SECURE_CONFIGURATION.md` — independent protocol5 extraction/recovery, providers, source disclosure, credentials and focused assistance. Legacy semantic-grounding APIs do not approve current independent extraction semantics.
 - `CLI_GUIDE.md`, `MCP_INTEGRATION.md`, `AGENT_WORKFLOWS.md`, `CLI_MCP_CAPABILITIES.md`, `TOKEN_OPTIMIZATION.md` — tested automation reference tables, permissions, jobs and bounded progressive disclosure.
 - `TESTING.md`, `PERFORMANCE.md`, `BUILD_AND_RELEASE.md`, `SECURITY.md` — verification scope, labeled workload evidence, packaging/platform gates and security.
+- `BUILD_AND_RELEASE.md` documents default unsigned standalone releases, the legacy development alias, and the separately provisioned signed production path; changing signing status does not change runtime functionality.
 - `EXTENDING_THE_APP.md`, `IMPLEMENTATION_GUIDE.md`, `REVIEW.md` — retained extension/implementation/historical review references; current developer path is development/.
 
 Keep public claims tied to source or recorded checks. Static analysis executes no imports/programs; AI is explicit and semantically inferred. A mocked protocol result, artifact build, hosted deployment and true offline browser check prove different things. Legacy route/heading preservation is enforced by scripts/docs/legacy_routes.json and validator; do not delete old headings casually.
