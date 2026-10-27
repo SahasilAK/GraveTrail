@@ -179,36 +179,31 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
-# contanis my intial promt for build 
-docs/prompts 
-docs/plans
-AGENTS.md
-
 # DataForge local runtime and analysis artifacts
 .dataforge/
 .streamlit/
 .venv-clean/
-.knowledge-base/
-.streamlit\config.toml
 
-# Local Codex instructions and implementation records
-.superpowers/
+# Local agent instructions, context maps, and tool state
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+KNOWLEDGE.md
 .codex/
+.claude/
+.superpowers/
+.knowledge-base/
 .kbignore
-/plans/**
 
-# Keep project knowledge maps versioned, including maps in local-context folders.
-!/plans/**/
-!/plans/**/KNOWLEDGE.md
-!/docs/prompts/
-/docs/prompts/**
-!/docs/prompts/**/
-!/docs/prompts/**/KNOWLEDGE.md
-!/docs/plans/
-/docs/plans/**
-!/docs/plans/**/
-!/docs/plans/**/KNOWLEDGE.md
+# Development plans and app-building prompts
+/plans/
+/planning/
+/docs/plans/
+/docs/prompts/
+/docs/superpowers/
+
+# Generated build output
+.build/
+
+# Keep maintained build tooling versioned (build/ above ignores directories).
 !/scripts/build/
-/scripts/build/**
-!/scripts/build/**/
-!/scripts/build/**/KNOWLEDGE.md
