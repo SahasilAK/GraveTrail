@@ -1,5 +1,8 @@
 """Release inputs and downloaded builds must fail closed before publication."""
+import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -254,6 +257,7 @@ def test_release_notes_always_retain_changes_and_installation_guidance() -> None
         assert "PR #7" in notes and "abc123 fix: export" in notes
         assert "SHA256SUMS" in notes and "gravetrail.exe" in notes
         assert ("AI-generated" in notes) == bool(summary)
+        assert 'Unsigned release:' in notes
 
 
 def test_standalone_release_test_gate_fetches_inventory_history() -> None:
@@ -269,3 +273,81 @@ def test_standalone_release_test_gate_fetches_inventory_history() -> None:
     checkout = next(step for step in steps[:test_index]
                     if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout.get("with", {}).get("fetch-depth") == 0
+
+
+def release_policy(tmp_path, *, mode=None, ref='refs/heads/main', dry_run='true', signing=None):
+    """Execute the workflow's actual preflight Bash without builds or GitHub writes."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.load((root / '.github/workflows/publish-release.yml').read_text(), Loader=yaml.BaseLoader)
+    policy = next((step for step in workflow['jobs']['prepare']['steps'] if step.get('id') == 'policy'), None)
+    assert policy is not None, 'Release mode must be validated before resolving versions or building'
+    default = workflow['on']['workflow_dispatch']['inputs']['release_mode']['default']
+    output = tmp_path / 'output'
+    summary = tmp_path / 'summary'
+    environment = dict(os.environ, RELEASE_MODE=mode or default, GITHUB_REF=ref, DEFAULT_BRANCH='main',
+                       DRY_RUN=dry_run, GITHUB_OUTPUT=output.as_posix(), GITHUB_STEP_SUMMARY=summary.as_posix(),
+                       WINDOWS_SIGNING_THUMBPRINT='', WINDOWS_TIMESTAMP_URL='', WINDOWS_PUBLISHER='')
+    environment.update(signing or {})
+    bash = (str(Path(shutil.which('git')).resolve().parents[1] / 'bin/bash.exe') if sys.platform == 'win32'
+            else shutil.which('bash'))
+    result = subprocess.run([bash, '--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', policy['run']],
+                            env=environment, cwd=tmp_path, capture_output=True, text=True, timeout=15)
+    return result, output.read_text() if output.exists() else '', summary.read_text() if summary.exists() else ''
+
+
+@pytest.mark.parametrize('mode', [None, 'unsigned', 'development'])
+@pytest.mark.parametrize('dry_run', ['true', 'false'])
+def test_unsigned_release_policy_requires_no_signing_setup(tmp_path, mode, dry_run):
+    result, output, summary = release_policy(tmp_path, mode=mode, dry_run=dry_run)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output == 'build_mode=development\n'
+    assert 'unsigned' in summary.lower()
+
+
+def test_signed_release_policy_explains_missing_configuration(tmp_path):
+    result, output, _ = release_policy(tmp_path, mode='production')
+    assert result.returncode != 0
+    assert output == ''
+    assert all(name in result.stdout for name in (
+        'WINDOWS_SIGNING_THUMBPRINT', 'WINDOWS_TIMESTAMP_URL', 'WINDOWS_PUBLISHER', 'unsigned', 'windows-production'))
+
+
+def test_configured_signed_release_preserves_production_mode(tmp_path):
+    result, output, _ = release_policy(tmp_path, mode='production', signing={
+        'WINDOWS_SIGNING_THUMBPRINT': 'a' * 40, 'WINDOWS_TIMESTAMP_URL': 'https://timestamp.example.test',
+        'WINDOWS_PUBLISHER': 'Example publisher',
+    })
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output == 'build_mode=production\n'
+
+
+@pytest.mark.parametrize('mode,ref,dry_run', [
+    ('unsigned', 'refs/heads/feature', 'false'), ('production', 'refs/heads/feature', 'true'),
+    ('unexpected', 'refs/heads/main', 'true'),
+])
+def test_release_policy_rejects_wrong_branch_or_unknown_mode(tmp_path, mode, ref, dry_run):
+    result, output, _ = release_policy(tmp_path, mode=mode, ref=ref, dry_run=dry_run)
+    assert result.returncode != 0
+    assert output == ''
+
+
+def test_unsigned_release_validation_remains_branch_safe(tmp_path):
+    result, output, _ = release_policy(tmp_path, mode='unsigned', ref='refs/heads/feature')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert output == 'build_mode=development\n'
+
+
+def test_release_build_and_publish_jobs_use_validated_mode():
+    import yaml
+
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.load((root / '.github/workflows/publish-release.yml').read_text(), Loader=yaml.BaseLoader)
+    inputs = workflow['on']['workflow_dispatch']['inputs']
+    assert inputs['release_mode']['default'] == 'unsigned'
+    assert set(inputs['release_mode']['options']) == {'unsigned', 'development', 'production'}
+    jobs = workflow['jobs']
+    assert jobs['prepare']['outputs']['build_mode'] == '${{ steps.policy.outputs.build_mode }}'
+    assert jobs['builds']['with']['release_mode'] == '${{ needs.prepare.outputs.build_mode }}'
+    assert jobs['publish']['env']['RELEASE_MODE'] == '${{ needs.prepare.outputs.build_mode }}'

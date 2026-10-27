@@ -204,6 +204,13 @@ The publish workflow builds Windows x64 only; existing direct native/archive, Py
 and Docker build targets remain available. No macOS notarization or Linux packaging
 was added.
 
+Leave **release_mode** set to **unsigned** (the default) to build without a signing
+certificate or dedicated signing runner. This uses the regular hosted Windows runner
+and creates the complete application, unsigned installer and portable ZIP. Signing
+status does not change the application's functionality. Select **production** only
+after configuring publisher signing as described below; **development** remains a
+compatibility alias for unsigned releases.
+
 Choose either:
 
 - Enter **version** as an exact stable `X.Y.Z`, without `v`; this overrides release_type.
@@ -262,13 +269,21 @@ may prevent an older application opening it; restore a compatible backup before
 rolling back. Installed processes hold a named Windows mutex; setup/uninstall ask
 the user to close GraveTrail and never forcibly close live analysis.
 
-Two modes are explicit:
+Two signing paths are explicit:
 
-- **development** (default): unsigned `gravetrail-VERSION-windows-amd64-setup-unsigned.exe`
-  and an unsigned portable ZIP. This mode requires no certificate or paid service.
+- **unsigned** (default; **development** is a compatibility alias): unsigned
+  `gravetrail-VERSION-windows-amd64-setup-unsigned.exe` and an unsigned portable ZIP.
+  This mode requires no certificate, paid signing service or self-hosted signing runner.
+  The workflow maps it to the existing internal `development` build/evidence mode.
 - **production**: `gravetrail-VERSION-windows-amd64-setup.exe`, a signed application,
   signed installer and signed uninstaller. Missing identity, key, timestamp or failed
   trust checks stop the release; no unsigned downgrade is permitted.
+
+If a run reports missing `WINDOWS_SIGNING_THUMBPRINT`, `WINDOWS_TIMESTAMP_URL` or
+`WINDOWS_PUBLISHER`, it was launched in signed **production** mode. Rerun with
+**unsigned**, or supply those environment variables and the signing runner before
+selecting production. The workflow lists the missing variables and setup location;
+it never silently changes a requested signed release to unsigned.
 
 Production external setup (not provisioned by this change):
 

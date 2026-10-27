@@ -141,6 +141,8 @@ class Store:
                 from dataforge.ai_inspection import INSPECTION_SCHEMA
                 self.db.execute(INSPECTION_SCHEMA)
                 self.db.execute('INSERT INTO schema_migrations(version) VALUES (10)')
+        from dataforge.cleanup import _recover_cleanup_indexes
+        _recover_cleanup_indexes(self)
         from dataforge.ai_inspection import cleanup_payloads
         cleanup_payloads(self)
 
