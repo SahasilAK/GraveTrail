@@ -60,6 +60,24 @@ def test_group_by_ordinal_downstream_and_parser_upgrade(tmp_path, monkeypatch):
         store.close()
 
 
+@pytest.mark.parametrize('context', ['WHERE s.a > 0', 'JOIN other o ON s.a=o.a'])
+def test_downstream_preserves_value_and_filter_effects(tmp_path, context):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, f'''CREATE TABLE dst AS SELECT s.a FROM src s {context};
+        CREATE TABLE fin AS SELECT a FROM dst;''')
+    try:
+        result = trace_columns(store, w, asset_id(store, w, 'src'), 'a', direction='downstream')
+        assert len(result['derivations']) == 2
+        for step in result['derivations']:
+            assert {p['effect'] for p in result['paths'] if p['derivation_id'] == step['derivation_id']} == {
+                'value', 'row_selection'}
+        limited = trace_columns(store, w, asset_id(store, w, 'src'), 'a', direction='downstream', limit=1)
+        assert limited['truncated'] and not limited['complete']
+    finally:
+        store.close()
+
+
 def test_derivation_parser_cache_roundtrip() -> None:
     """Verify that derivation parser cache roundtrip."""
     derivation = {'target_table': 'b', 'target_column': 'id', 'expression': 'id',

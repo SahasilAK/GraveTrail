@@ -301,7 +301,6 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             clause = '''EXISTS (SELECT 1 FROM column_dependencies i WHERE i.workspace_id=d.workspace_id
                 AND i.derivation_id=d.derivation_id AND i.source_column_id=?)'''
             params = [cid]
-        remaining = max(1, limit - len(emitted))
         steps = store.rows('''SELECT d.* EXCLUDE(expression),substr(d.expression,1,12000) AS expression,
             length(d.expression)>12000 AS expression_truncated,s.start_line,s.end_line,s.content_hash AS source_hash,
             f.relative_path,o.method''' + (',substr(s.code,1,12000) AS code,length(s.code)>12000 AS source_truncated'
@@ -310,17 +309,17 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             JOIN source_files f ON d.file_id=f.file_id AND d.workspace_id=f.workspace_id
             JOIN operations o ON d.operation_id=o.operation_id AND d.workspace_id=o.workspace_id
             WHERE d.workspace_id=? AND d.run_id=? AND ''' + clause + '''
-            ORDER BY d.statement_id,d.ordinal,d.branch,d.derivation_id LIMIT ?''', [w, run_id, *params, remaining + 1])
+            ORDER BY d.statement_id,d.ordinal,d.branch,d.derivation_id LIMIT ?''', [w, run_id, *params, limit + 1])
         if not steps:
             continue
         if level >= depth:
             boundary('depth_limit', column_id=cid)
             result['truncated'] = True
             continue
-        if len(steps) > remaining:
+        if len(steps) > limit:
             boundary('item_limit')
             result['truncated'] = True
-            steps = steps[:remaining]
+            steps = steps[:limit]
         ambiguous = direction == 'upstream' and len({s['operation_id'] for s in steps}) > 1
         if ambiguous:
             boundary('multiple_writers', column_id=cid, message='Writer order is unknown; alternatives are not chained')
@@ -356,11 +355,11 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                 boundary('coverage_diagnostic', derivation_id=did, message=warning)
             if step['status'] == 'unresolved':
                 boundary('unresolved_derivation', derivation_id=did)
-            row_effect = effect == 'row_selection'
-            if direction == 'downstream' and not row_effect:
-                row_effect = bool(store.rows('''SELECT 1 FROM column_dependencies WHERE workspace_id=?
-                    AND derivation_id=? AND source_column_id=? AND role IN ('row_filter','join') LIMIT 1''', [w, did, cid]))
-            next_effect = 'row_selection' if row_effect else 'value'
+            effects = {effect}
+            if direction == 'downstream' and effect != 'row_selection':
+                roles = store.rows('''SELECT DISTINCT role FROM column_dependencies WHERE workspace_id=?
+                    AND derivation_id=? AND source_column_id=?''', [w, did, cid])
+                effects = {'row_selection' if item['role'] in ROW_ROLES else 'value' for item in roles}
             if did not in emitted:
                 if len(emitted) >= limit:
                     boundary('item_limit')
@@ -379,19 +378,24 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                     'inputs': [_ref(i) | {'role': i['role']} for i in inputs],
                     'evidence': evidence, 'coverage': json.loads(step['coverage'])})
                 emitted.add(did)
-            if len(result['paths']) < limit * 2:
-                result['paths'].append({'derivation_id': did, 'column_id': target['column_id'],
-                    'parent_column_id': cid, 'depth': level + 1, 'effect': next_effect})
-            else:
-                boundary('path_limit')
-                result['truncated'] = True
+            for next_effect in sorted(effects):
+                path = {'derivation_id': did, 'column_id': target['column_id'],
+                        'parent_column_id': cid, 'depth': level + 1, 'effect': next_effect}
+                if path in result['paths']:
+                    continue
+                if len(result['paths']) < limit * 2:
+                    result['paths'].append(path)
+                else:
+                    boundary('path_limit')
+                    result['truncated'] = True
             if not multiple_writers and step['status'] != 'unresolved':
                 if direction == 'upstream':
                     following = [(i['column_id'], level + 1,
                         'row_selection' if effect == 'row_selection' or i['role'] in ROW_ROLES else 'value',
                         (*ancestors, cid)) for i in inputs]
                 else:
-                    following = [(target['column_id'], level + 1, next_effect, (*ancestors, cid))]
+                    following = [(target['column_id'], level + 1, next_effect, (*ancestors, cid))
+                                 for next_effect in sorted(effects)]
                 for item in following:
                     if len(discovered_edges) < limit * 4:
                         discovered_edges.add((cid, item[0]))
