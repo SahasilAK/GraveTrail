@@ -181,14 +181,13 @@ cython_debug/
 .cursorindexingignore
 # DataForge local runtime and analysis artifacts
 .dataforge/
-.streamlit/
+/.streamlit/**
 .venv-clean/
 
-# Local agent instructions, context maps, and tool state
+# Local agent instructions and tool state
 AGENTS.md
 CLAUDE.md
 GEMINI.md
-KNOWLEDGE.md
 .codex/
 .claude/
 .superpowers/
@@ -196,14 +195,30 @@ KNOWLEDGE.md
 .kbignore
 
 # Development plans and app-building prompts
-/plans/
-/planning/
-/docs/plans/
-/docs/prompts/
-/docs/superpowers/
+/plans/**
+/planning/**
+/docs/plans/**
+/docs/prompts/**
+/docs/superpowers/**
 
 # Generated build output
 .build/
 
 # Keep maintained build tooling versioned (build/ above ignores directories).
 !/scripts/build/
+
+# Keep per-folder knowledge maps versioned within planning folders.
+!/plans/**/
+!/plans/**/KNOWLEDGE.md
+!/planning/**/
+!/planning/**/KNOWLEDGE.md
+!/docs/plans/**/
+!/docs/plans/**/KNOWLEDGE.md
+!/docs/prompts/**/
+!/docs/prompts/**/KNOWLEDGE.md
+!/docs/superpowers/**/
+!/docs/superpowers/**/KNOWLEDGE.md
+
+# Preserve Streamlit knowledge maps alongside ignored local settings.
+!/.streamlit/**/
+!/.streamlit/**/KNOWLEDGE.md
