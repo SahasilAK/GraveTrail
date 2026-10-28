@@ -302,3 +302,24 @@ download software, fonts or external image resources.
 On **Analysis**, **Use AI for analysis** is initially unchecked. When enabled, **Compare with parser** is selected by default for a hybrid build; disabling comparison selects experimental AI-generated mode. **Additional AI review** is optional. Inspect the offline disclosure/context/budget preview, then start the explicit AI analysis action. A preview or ordinary page rerun never sends requests.
 
 Use **Connections & AI** to configure the route and deliberate privacy/context settings. Remote processing of a complete file across chunks still requires complete-source permission. The compact schema retains all validation rules. Larger source/catalog/request envelopes can exceed context budgets; adjust both workspace Privacy and profile context limits explicitly when preview identifies that limit. Cancellation/failure/stale checks keep the previous committed graph. Inspect the saved comparison/report for acceptance, rejection and unresolved coverage. See the full [AI project analysis guide](AI_ANALYSIS.md).
+
+
+## Column lineage graph
+
+In **Columns**, choose an asset and switch between **Direct references** and
+**Lineage graph**. Choose a column and direction. Arrows point from inputs through
+transformation boxes to outputs. Solid edges carry values; dashed edges show
+selection, filter, join, rowset, partition and order context. Select a graph box or
+edge, or use the keyboard-accessible **Transformation step** selector, to inspect
+logic. Multiple writers remain separate choices.
+
+**Transformation logic** shows expression, statement preview, roles, effects and
+coverage. **Analyzed source file** opens the exact historical file used by Analysis,
+with original line numbers, 200-line pages, search and original-byte download.
+Changed or unavailable historical versions are explicitly reported. Compiled dbt
+expressions identify unavailable original-source coordinate mapping.
+
+The display fits at most 600 nodes and 1,200 edges, retaining whole transformation
+units. Omission counts do not change trace completeness. The **Steps and paths**
+table and exports retain the full bounded trace of up to 200 derivations.
+The previous Transformation lineage route still opens the same renderer.

@@ -50,3 +50,7 @@ Budget values have non-widget session storage so navigation cannot discard Custo
 `analysis_ai.py` preview identifies semantic source tasks, original-context projection paging and provisional review sizing. Existing Custom controls/Continue remain; the shared service owns per-batch checkpoints and final atomic publication.
 
 Provider request timeout accepts1–3600seconds without changing saved/default values. analysis_ai progress uses journal start/stage/finish timestamps for two-second total/wait elapsed refresh and frozen terminal duration; queued state stays distinct. Assistance/review/provider checks use native show_time spinners.
+
+- `column_graph.py` — Selectable local SVG component and validated scene-keyed selections.
+- `column_lineage.py` — Shared trace controls, graph, logic/file inspector and exports.
+- `column_references.py` — Direct usage and coverage summaries used by Columns.

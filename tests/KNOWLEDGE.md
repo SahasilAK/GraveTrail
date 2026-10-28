@@ -119,3 +119,6 @@ Navigation uses a non-minimum custom budget to detect widget cleanup; Continue p
 Timeout/progress regressions cover3600 acceptance/3601 rejection, remaining-run clamping, saved provider UI reopen, journal timer ordering, clock advancement/frozen completion, legacy status and extraction/review waiting-stage order.
 
 - `test_pillow_compatibility.py` — Exact runtime/project/installer pin parity, sole expected upstream metadata exception, Streamlit image resize/encoding modes and public icon/array rendering. Distribution tests ensure companion manifest/wheel/sdist/Docker inputs and no ignored context leakage.
+
+- `test_column_graph.py`, `test_column_graph_ui.py`, `test_column_evidence.py` — Scene caps, safe selection, lazy UI and historical source.
+- `test_column_parser_followup.py` — Nested scopes and bounded PostgreSQL mutations.

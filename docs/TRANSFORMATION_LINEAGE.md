@@ -115,3 +115,32 @@ a complete pre-upgrade home with the matching prior application version.
 The [AI project analysis](AI_ANALYSIS.md) workflow can propose direct usage and scoped transformations, then validates them against complete original units. It uses a new accepted project path; legacy advisory/manual LLM operations do not gain transformation merge rights. AI additions remain inferred, preserving exact expressions, branch/version, ordinal and value versus row-context roles.
 
 The initial extra structural verification is limited to fixture-backed static SQL UPDATE/MERGE assignments. Unsupported variants stay unresolved. Additional AI review cannot fill missing semantic proof. Unresolved derivations stop upstream/downstream chaining; unknown writer order remains a boundary even when one possible writer is accepted. Hybrid is the default AI comparison option; AI-generated mode is experimental and has no measured live accuracy claim.
+
+
+## Column graph and parser 19 follow-up
+
+Columns offers Direct references and Lineage graph views. Graph boxes retain
+column/derivation identity, UNION branches, scopes and SAS versions. Display caps
+are separate from trace coverage. Source files load lazily from exact analyzed
+hashes; the graph component receives no expression or source text. Re-run Analysis
+after this parser upgrade.
+
+Intermediate set-operation LIMIT/OFFSET/sampling is marked incomplete. Unused CTE
+UNION DISTINCT does not contaminate active projections or stop their traces.
+
+PostgreSQL UPDATE support: single target; simultaneous SET of literals, NULL,
+boolean, target columns and arithmetic (+, -, *, /, %); optional comparison,
+AND/OR/NOT/IS predicates. Old inputs have statement-scoped prior-value identities.
+Prior rows, unchanged columns, partial writes and writer order remain unresolved.
+FROM, WITH, tuple assignment, DEFAULT, functions, subqueries, RETURNING, other
+modifiers and other dialects remain unsupported.
+
+PostgreSQL INSERT VALUES support: one literal row and explicit unique target
+columns, including NULL/boolean/negative numbers. Exact target order and evidence
+are retained. Existing rows and omitted-column defaults remain unresolved; a
+literal insert never proves the entire table column constant. Multiple rows,
+omitted lists, DEFAULT, expressions/functions, conflicts, RETURNING and subqueries
+remain unsupported.
+
+References: [PostgreSQL UPDATE](https://www.postgresql.org/docs/current/sql-update.html)
+and [PostgreSQL INSERT](https://www.postgresql.org/docs/current/sql-insert.html).

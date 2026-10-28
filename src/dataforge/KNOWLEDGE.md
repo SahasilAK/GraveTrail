@@ -118,3 +118,6 @@ Parser14/validator3 add exact projection/SAS assignment occurrence checks. Extra
 Profile timeout cap is3600seconds; current run deadlines still clamp HTTP waits. analysis_service emits source-free waiting/validation stages around extraction/review. Existing saved/default profiles are unchanged.
 
 Build Python artifacts now include dependency-overrides.txt in manifest alongside wheel/sdist; native locked export stays authoritative. Exact Streamlit/Pillow exception and installer/removal policy live in SECURITY.md.
+
+- `column_graph.py` — Pure bounded column/derivation scene, SCC layout and source-free selection payload.
+- `column_evidence.py` — Workspace/run-validated lazy historical source lookup.
