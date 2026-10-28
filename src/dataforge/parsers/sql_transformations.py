@@ -293,7 +293,10 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         update = _postgres_update(tree, code, dialect, target)
         if update is not None:
             return [*update, _record(target_name, '*', root_scope, code, 'partial_write', [
-                'UPDATE prior rows and unchanged columns are not established'], ordinal=len(update))]
+                'UPDATE prior rows and unchanged columns are not established'], ordinal=len(update)),
+                _record(target_name, '*', 'update:prior', code, 'partial_write', [
+                    'UPDATE operation prior state is not established'],
+                    target_version='prior', ordinal=len(update) + 1)]
     if isinstance(tree, exp.Insert) and isinstance(tree.expression, exp.Values):
         inserted = _postgres_values(tree, code, dialect, target) if target is not None else None
         if inserted is not None:

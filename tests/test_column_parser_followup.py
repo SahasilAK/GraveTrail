@@ -194,6 +194,9 @@ def test_mutation_prior_values_are_isolated_across_operations_and_reopen(tmp_pat
         prior = [i for d in result['derivations'] for i in d['inputs']]
         assert all(i['column_id'] not in targets and i['scope'] == 'update:prior' and i['version'] == 'prior' for i in prior)
         assert len({i['column_id'] for i in prior if i['role'] == 'rowset'}) == 2
+        prior_trace = trace_columns(store, workspace, target, prior[0]['column_id'])
+        assert not prior_trace['complete']
+        assert any(c['reason'] == 'unresolved_scope' for c in prior_trace['coverage'])
         assert all(sql.find(d['expression']) >= 0 and d['evidence']['source_hash'] for d in result['derivations'])
         assert not any(c['reason'] == 'cycle' for c in result['coverage'])
         assert not trace_columns(store, workspace, target, 'untouched')['complete']

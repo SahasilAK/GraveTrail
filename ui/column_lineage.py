@@ -12,6 +12,7 @@ from dataforge.transformations import column_catalog, trace_columns
 from ui.column_graph import column_graph_view, resolve_selection
 
 
+@st.fragment
 def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
     w = workspace
     if not analysis_is_current(store, w):
