@@ -37,4 +37,4 @@ Parser13: PROC SQL validates bounded adjacent SAS date/time/datetime constants a
 
 Parser14 retains private original expression offsets for SQL projections and SAS assignment versions so semantic validation cannot swap identical text between branches/versions. Literal wrapper rebinding drops inner-only offsets. Private coordinates never replace original full-operation evidence.
 
-Parser version 19 repairs nested set modifier coverage and adds bounded PostgreSQL mutation facts with explicit partial-write coverage.
+Parser version 20 repairs nested set modifier coverage and adds bounded PostgreSQL mutation facts with explicit partial-write coverage.

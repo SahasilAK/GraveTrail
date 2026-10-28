@@ -11,8 +11,9 @@ from dataforge.store import Store
 from dataforge.transformations import trace_columns
 
 
-def records(sql, dialect=""):
-    return [d for op in parse_sql(sql, dialect).operations for d in op.derivations]
+def records(sql, dialect="", *, named=False):
+    return [d for op in parse_sql(sql, dialect).operations for d in op.derivations
+            if not named or d['target_column'] != '*']
 
 
 @pytest.mark.parametrize("modifier,dialect", [("LIMIT 1", ""), ("OFFSET 1", ""),
@@ -89,7 +90,7 @@ def test_unused_union_cte_dbt_materialization(tmp_path):
 
 
 def test_update_assignments_use_simultaneous_operation_prior_values():
-    result = records('UPDATE t SET a = b, b = a WHERE active=1', 'postgres')
+    result = records('UPDATE t SET a = b, b = a WHERE active=1', 'postgres', named=True)
     assert [d['target_column'] for d in result] == ['a', 'b']
     assert [d['expression'] for d in result] == ['a = b', 'b = a']
     assert [[i['column'] for i in d['inputs'] if i['role'] == 'value'] for d in result] == [['b'], ['a']]
@@ -101,7 +102,7 @@ def test_update_assignments_use_simultaneous_operation_prior_values():
 
 
 def test_update_literal_and_simple_arithmetic_keep_exact_evidence():
-    result = records('UPDATE t AS x SET a = -12, b = (x.c /* old */ + 2)', 'postgres')
+    result = records('UPDATE t AS x SET a = -12, b = (x.c /* old */ + 2)', 'postgres', named=True)
     assert [d['target_column'] for d in result] == ['a', 'b']
     assert [d['expression'] for d in result] == ['a = -12', 'b = (x.c /* old */ + 2)']
     assert result[0]['category'] == 'constant'
@@ -128,7 +129,7 @@ def test_unsupported_updates_remain_explicit_whole_statement_boundaries(sql, dia
 
 def test_insert_single_literal_row_maps_explicit_order_and_exact_spans():
     sql = 'INSERT INTO t ("B", a, c, d) VALUES (NULL, \'a,b\', -12.5, TRUE)'
-    result = records(sql, 'postgres')
+    result = records(sql, 'postgres', named=True)
     assert [d['target_column'] for d in result] == ['"B"', 'a', 'c', 'd']
     assert [d['expression'] for d in result] == ['NULL', "'a,b'", '-12.5', 'TRUE']
     assert all(d['category'] == 'constant' and d['inputs'] == [] for d in result)
@@ -257,3 +258,16 @@ def test_bounded_mutations_preserve_scene_evidence_and_agent_redaction(tmp_path)
             assert len(summary['items']) == 2
             assert all('expression' not in d and 'code' not in d['evidence'] for d in summary['items'])
             assert 'PRIVATE_LITERAL_415' not in json.dumps(summary)
+
+
+@pytest.mark.parametrize('write', ['UPDATE t SET a=b', 'INSERT INTO t(a) VALUES (1)'])
+def test_unassigned_known_target_columns_keep_prior_row_boundary(tmp_path, write):
+    with closing(Store(tmp_path)) as store:
+        workspace = store.create_workspace('unassigned column')
+        store.set_setting(workspace, 'dialect', 'postgres')
+        Importer(store, workspace).files([('partial.sql', f'{write}; CREATE TABLE fin AS SELECT untouched FROM t'.encode())], {'.sql'})
+        analyze(store, workspace)
+        target = next(a['asset_id'] for a in store.assets(workspace) if a['name'] == 't')
+        result = trace_columns(store, workspace, target, 'untouched')
+        assert not result['complete']
+        assert any(c['reason'] == 'unresolved_scope' for c in result['coverage'])

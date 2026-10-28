@@ -292,10 +292,14 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
     if isinstance(tree, exp.Update) and target is not None:
         update = _postgres_update(tree, code, dialect, target)
         if update is not None:
-            return update
+            return [*update, _record(target_name, '*', root_scope, code, 'partial_write', [
+                'UPDATE prior rows and unchanged columns are not established'], ordinal=len(update))]
     if isinstance(tree, exp.Insert) and isinstance(tree.expression, exp.Values):
         inserted = _postgres_values(tree, code, dialect, target) if target is not None else None
-        return inserted if inserted is not None else [_record(target_name, '*', root_scope, code, coverage=[
+        if inserted is not None:
+            return [*inserted, _record(target_name, '*', root_scope, code, 'partial_write', [
+                'INSERT VALUES prior target rows and omitted-column defaults are not established'], ordinal=len(inserted))]
+        return [_record(target_name, '*', root_scope, code, coverage=[
             'Unsupported INSERT VALUES column transformation'])]
     if isinstance(tree, (exp.Update, exp.Merge, exp.Delete)):
         return [_record(target_name, "*", root_scope, code, coverage=[

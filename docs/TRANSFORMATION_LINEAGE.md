@@ -117,7 +117,7 @@ The [AI project analysis](AI_ANALYSIS.md) workflow can propose direct usage and 
 The initial extra structural verification is limited to fixture-backed static SQL UPDATE/MERGE assignments. Unsupported variants stay unresolved. Additional AI review cannot fill missing semantic proof. Unresolved derivations stop upstream/downstream chaining; unknown writer order remains a boundary even when one possible writer is accepted. Hybrid is the default AI comparison option; AI-generated mode is experimental and has no measured live accuracy claim.
 
 
-## Column graph and parser 19 follow-up
+## Column graph and parser 20 follow-up
 
 Columns offers Direct references and Lineage graph views. Graph boxes retain
 column/derivation identity, UNION branches, scopes and SAS versions. Display caps
@@ -144,3 +144,5 @@ remain unsupported.
 
 References: [PostgreSQL UPDATE](https://www.postgresql.org/docs/current/sql-update.html)
 and [PostgreSQL INSERT](https://www.postgresql.org/docs/current/sql-insert.html).
+
+Supported mutation operations also publish an unresolved partial-write scope boundary, so a known unassigned target column cannot appear to have complete lineage.
