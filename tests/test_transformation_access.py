@@ -220,6 +220,7 @@ def test_transformation_ui_native_flow_and_workspace_context(tmp_path: Path, mon
     assert view.get("popover")
     assert {d.proto.label for d in view.get("download_button")} >= {"Download JSON", "Download CSV"}
     assert not view.code  # Original source is loaded only inside the evidence inspector.
+    next(s for s in view.selectbox if s.label == "Transformation step").select_index(1).run()
     view.session_state["transformation_inspector_" + w + "_" + asset] = True
     view.session_state["transformation_step_" + w + "_" + asset] = 999
     from dataforge.transformations import column_catalog
@@ -236,7 +237,7 @@ def test_transformation_ui_native_flow_and_workspace_context(tmp_path: Path, mon
         """
         return [{**row, "column_id": "revision-" + row["column_id"]} for row in column_catalog(*args, **kwargs)]
 
-    monkeypatch.setattr("dataforge.transformations.column_catalog", changed_column_ids)
+    monkeypatch.setattr("ui.column_lineage.column_catalog", changed_column_ids)
     view.run()
     assert not view.exception and any("gross + 1" in code.value for code in view.code)
     assert view.session_state["transformation_column_" + w + "_" + asset].startswith("revision-")
