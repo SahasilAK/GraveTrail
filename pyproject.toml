@@ -24,9 +24,11 @@ dependencies = [
   "resvg-py>=0.5,<0.6",
   "pyyaml>=6.0.3,<7",
   "jinja2>=3.1.6,<4",
+  "keyring>=25.7,<26",
 ]
 
 [project.optional-dependencies]
+ai-tokenizers = ["tiktoken>=0.12,<1"]
 dev = ["pytest>=8,<10", "ruff>=0.14,<1"]
 build = ["pyinstaller>=6.22,<7"]
 
@@ -57,7 +59,7 @@ exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*
 
 [tool.hatch.build.targets.sdist]
 include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "/dependency-overrides.txt", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
-exclude = ["docs/prompts/**", "docs/plans/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
+exclude = ["docs/prompts/**", "docs/plans/**", "docs/superpowers/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]
 ".streamlit/config.toml" = ".streamlit/config.toml"

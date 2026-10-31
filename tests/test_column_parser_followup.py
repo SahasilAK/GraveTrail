@@ -16,6 +16,56 @@ def records(sql, dialect="", *, named=False):
             if not named or d['target_column'] != '*']
 
 
+@pytest.mark.parametrize('dialect,alias,reference,status', [
+    ('postgres', '"X"', 'x', 'unresolved'),
+    ('postgres', 'MiXeD', '"mixed"', 'verified'),
+    ('snowflake', 'mixed', '"MIXED"', 'verified'),
+    ('snowflake', '"mixed"', 'mixed', 'unresolved'),
+])
+@pytest.mark.parametrize('source', ['src AS {alias}', '(SELECT a FROM src) AS {alias}'])
+def test_transformation_aliases_follow_dialect_quoting(dialect, alias, reference, status, source):
+    sql = f'CREATE TABLE dst AS SELECT {reference}.a FROM {source.format(alias=alias)}'
+    output = next(d for d in records(sql, dialect) if d['target_table'] == 'dst')
+    assert output['status'] == status
+    assert bool(output['inputs']) == (status == 'verified')
+
+
+def test_colliding_normalized_aliases_do_not_verify_or_drop_sources():
+    output = records('CREATE TABLE dst AS SELECT x.a FROM src AS x '
+                     'JOIN other AS X ON x.id = X.id', 'postgres')[-1]
+    assert output['status'] == 'unresolved'
+    assert {i['table'] for i in output['inputs'] if i['role'] == 'rowset'} == {'src', 'other'}
+    assert not any(i['role'] == 'value' for i in output['inputs'])
+
+
+@pytest.mark.parametrize('alias,reference,status', [
+    ('mixed', '"MIXED"', 'verified'),
+    ('"mixed"', 'mixed', 'unresolved'),
+])
+def test_intermediate_columns_follow_snowflake_quoting(alias, reference, status):
+    sql = f'CREATE TABLE dst AS WITH c AS (SELECT a AS {alias} FROM src) SELECT {reference} FROM c'
+    output = records(sql, 'snowflake')[-1]
+    assert output['status'] == status
+    if status == 'verified':
+        assert output['inputs'][0]['column'] == alias
+    else:
+        assert not output['inputs']
+
+
+def test_snowflake_intermediate_quote_matching_preserves_trace_identity(tmp_path):
+    with closing(Store(tmp_path)) as store:
+        workspace = store.create_workspace('Quoted intermediate')
+        store.set_setting(workspace, 'dialect', 'snowflake')
+        Importer(store, workspace).files([('quoted.sql', b'CREATE TABLE dst AS '
+            b'WITH c AS (SELECT a AS mixed FROM src) SELECT "MIXED" FROM c')], {'.sql'})
+        analyze(store, workspace)
+        target = next(a['asset_id'] for a in store.assets(workspace) if a['name'] == 'dst')
+        result = trace_columns(store, workspace, target, '"MIXED"')
+        assert result['complete'] and len(result['derivations']) == 2
+        assert any(i['table'] == 'src' and i['column_name'] == 'a'
+                   for d in result['derivations'] for i in d['inputs'])
+
+
 @pytest.mark.parametrize("modifier,dialect", [("LIMIT 1", ""), ("OFFSET 1", ""),
                                              ("USING SAMPLE 1 ROWS", "duckdb")])
 @pytest.mark.parametrize("side", ["left", "right"])

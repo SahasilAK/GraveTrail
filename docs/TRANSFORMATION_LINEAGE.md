@@ -112,18 +112,31 @@ a complete pre-upgrade home with the matching prior application version.
 
 ## Optional project AI extraction
 
-The [AI project analysis](AI_ANALYSIS.md) workflow can propose direct usage and scoped transformations, then validates them against complete original units. It uses a new accepted project path; legacy advisory/manual LLM operations do not gain transformation merge rights. AI additions remain inferred, preserving exact expressions, branch/version, ordinal and value versus row-context roles.
+The [AI project analysis](AI_ANALYSIS.md) workflow independently extracts direct usage and
+scoped transformations from exact original file parts. Structural/evidence validation
+checks source ownership, hashes, ranges and identities without requiring parser semantic
+approval. Accepted facts remain inferred, preserving expression, branch/version, ordinal
+and value versus row-context roles. Manual advisory tasks do not gain transformation
+merge rights, and parser results do not fill AI omissions.
 
-The initial extra structural verification is limited to fixture-backed static SQL UPDATE/MERGE assignments. Unsupported variants stay unresolved. Additional AI review cannot fill missing semantic proof. Unresolved derivations stop upstream/downstream chaining; unknown writer order remains a boundary even when one possible writer is accepted. Hybrid is the default AI comparison option; AI-generated mode is experimental and has no measured live accuracy claim.
+Unresolved derivations stop confident chaining; conflicting writers/order remain boundaries.
+Hybrid/additional-review execution is retired. Processed ranges and schema-valid output do
+not establish semantic completeness or live-model accuracy. dbt Python column derivations,
+dynamic Jinja and unsupported compiled-to-original mappings remain partial. Current
+protocol 5 qualification uses independent nonempty mock fixtures; live accuracy remains
+separate evidence.
 
-
-## Column graph and parser 20 follow-up
+## Column graph and parser 21 follow-up
 
 Columns offers Direct references and Lineage graph views. Graph boxes retain
 column/derivation identity, UNION branches, scopes and SAS versions. Display caps
 are separate from trace coverage. Source files load lazily from exact analyzed
 hashes; the graph component receives no expression or source text. Re-run Analysis
 after this parser upgrade.
+
+Table aliases and intermediate output columns follow the selected SQL dialect's
+quoted and unquoted identifier rules. Equivalent intermediate references retain
+the producer's column identity so traces remain connected.
 
 Intermediate set-operation LIMIT/OFFSET/sampling is marked incomplete. Unused CTE
 UNION DISTINCT does not contaminate active projections or stop their traces.

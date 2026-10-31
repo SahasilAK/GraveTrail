@@ -11,4 +11,6 @@ Generated Pydantic JSON response schema; test equality with GroundedResponse and
 
 `project_lineage_wire_response.json` and `lineage_review_wire_response.json` are generated v2 transport contracts from ai_wire; canonical response schemas stay readable for durable v1 accepted data.
 
-Extraction wire schema is v3: optional expression_reference, with strict legacy expression/offset decoding. Review wire schema remains v2; test_ai_wire enforces generated/runtime equality for both.
+Extraction wire schema is v4, including dependency fragments and optional expression_reference, with strict legacy expression/offset decoding. Local canonical expressions/inputs can exceed bounded wire limits after validated host composition. Review wire schema remains v2; test_ai_wire enforces generated/runtime equality for both.
+
+project_lineage_response.json now describes protocol-5 ExtractionEnvelope/PartExtraction, with exact SourceReference, operations/scopes/roles and explicit fact/operation supersession; no silent 100-item arrays. lineage_review_response.json is historical only.

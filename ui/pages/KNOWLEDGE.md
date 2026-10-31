@@ -29,6 +29,10 @@ Tests: AppTest route/state/guard checks plus real-browser review of graph, theme
 responsive layouts, first import/analysis journey and actual offline HTML download.
 Hidden source/AI/tree/maintenance bodies are gated. Business rules stay in src/dataforge.
 
+Analysis Run renders the active AI progress fragment and Cancel before inventory reads; nonterminal jobs skip full controls/preparation until completion. Offline preview reuse and persistent budget widgets are owned by `ui/analysis_ai.py`. New requests expose parser or AI; the obsolete hybrid button label is removed.
+
 Explorer Export prepares fitted SVG/PNG through services.export_graph_image; summarizes scope/appearance, explains pan/zoom independence and metadata privacy, and keeps generation errors in place. Images are built only on Prepare and are not cached.
+
+AI analysis uses shared durable response/part counters and an independent transient reasoning fragment; selected-run Continue and explicit new-run Start fresh are rendered by ui.analysis_ai.
 
 Columns contains lazy Direct references/Lineage graph views. transformations.py is a compatibility route; its sidebar duplicate is hidden.

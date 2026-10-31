@@ -69,13 +69,19 @@ profiles and privacy permissions. Use a runtime backup when you need recovery of
 
 Deterministic analysis works with no provider profile. To enable assistance, choose a
 provider, endpoint, model and authentication method in **Connections & AI → Providers & routing**.
-Enter a credential in the masked session control or reference a named launch variable.
+Choose **This session only** (default), **Remember on this device** (explicit encrypted native
+storage), or **Environment reference (advanced)**. Save a profile before saving its key.
 Saving a profile stores non-secret preferences and the reference name, never the key value.
 New credential reference names use the `DATAFORGE_` prefix; explicitly configured legacy
 launch references remain compatible and read-only.
 
-Entered credentials stay in session memory and may need re-entry after restart. Clearing
-session credentials does not remove credentials supplied by the launching environment.
+Session credentials need re-entry after restart. Browser disconnection does not guarantee
+immediate or forensic memory erasure. Saved keys remain until deleted; Windows Credential
+Manager is qualified with current-user/local-machine persistence. macOS/Linux persistence
+is disabled pending native verification; use session storage there. Settings never decrypt
+keys just to show status. Disconnect disables the selected credential in this session;
+delete removes the saved key locally without revoking it at the provider. Legacy environment
+profiles remain compatible and are never automatically imported into persistent storage.
 Do not put key values in commands, committed files, provider URLs or exported configurations.
 
 Requests require explicit action and the applicable privacy permissions. A loopback

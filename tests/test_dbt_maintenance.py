@@ -28,8 +28,6 @@ def test_dbt_catalog_and_original_evidence_survive_whole_home_restore(tmp_path):
 def test_lineage_cleanup_preserves_dbt_import_classification(tmp_path):
     import json
 
-    import pytest
-
     from dataforge.ai_context import prepare_analysis
     from dataforge.cleanup import apply_cleanup, cleanup_plan
     with closing(Store(tmp_path)) as store:
@@ -39,8 +37,8 @@ def test_lineage_cleanup_preserves_dbt_import_classification(tmp_path):
         analyze(store, w)
         apply_cleanup(store, cleanup_plan(store, w, 'lineage'), 'cleanup dbt')
         assert all(json.loads(f['metadata'])['source_kind'] == 'dbt' for f in store.files(w))
-        with pytest.raises(ValueError, match='parser analysis'):
-            prepare_analysis(store, w, {'mode': 'hybrid'})
+        prepared = prepare_analysis(store, w, {'mode': 'hybrid'})
+        assert all(source.source_kind == 'dbt' for source in prepared.sources)
         analyze(store, w)
         assert len(store.rows('SELECT * FROM dbt_projects')) == 1
 

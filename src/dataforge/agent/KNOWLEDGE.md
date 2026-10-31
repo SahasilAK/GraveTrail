@@ -1,5 +1,7 @@
 # src/dataforge/agent/
 
+Saved provider references need the same exact human launch credential-ref grants as environment references; no vault enumeration or raw-key tools. Credential failures return sanitized credential_unavailable errors. Workspace cleanup also requires each saved ref before native deletion; detached jobs journal references/policy only.
+
 Direct-column responses expose source-free `usage_coverage` completeness/reasons before
 display filtering. Column lineage retains multiple effect paths per derivation under
 existing detail/source permissions and response limits.
@@ -16,7 +18,7 @@ Store, Importer, LineageGraph, exports and explicit opt-in grounded AI; imported
 - `contracts.py` — AccessPolicy, QueryOptions, AgentSettings, AgentError and compact JSON;
   credential-free workspace revocation snapshots support polling while DuckDB is busy.
 - `service.py` — AgentService routes workspace/import/build/search/lineage/columns/source/
-  impact/batch/export/jobs; column_catalog and column_lineage page shared transformation queries with source-gated expressions/code and per-derivation paths. Applies scope, source disclosure, freshness, budgets and audit.
+  impact/batch/export/jobs; column_catalog and column_lineage page shared transformation queries with source-gated expressions/code and per-derivation paths. Every content search requires source permission, including metadata-only match responses; files query remains path-only. Applies scope, version-aware freshness, budgets and audit.
 - `paging.py` — Query/revision-bound cursors and whole-record serialized character budgets.
 - `jobs.py` — Two-worker local jobs, one per workspace; atomic JSON journals, heartbeat expiry,
   bounded status/results and explicit terminal states; Windows reader/replacement retries.
@@ -37,7 +39,7 @@ never a destructive cleanup tool. CLI applies fresh saved previews with explicit
 
 - `cli_settings.py` — explicit settings/schema and workspace identity/configuration Typer adapters; no arbitrary key execution.
 
-- `cli_ai.py` — Explicit providers/routing/runtime-reference and AI/review/result Typer adapters; hidden credentials are per invocation only.
+- `cli_ai.py` — Explicit providers/routing/runtime-reference and AI/review/result Typer adapters; hidden credentials are per invocation only. AI/review requests accept optional --expected-request from shared offline preview fingerprints; MCP tools expose the same pin.
 - `cli_reports.py` — Stored reports, managed artifacts, permitted local history/staging/backup operations; bounded JSON preview loading. export paths --format xlsx offers explicit evidence/source options; MCP export_dependency_paths shares them and retrieves bytes through get_export.
 
 Long provider/request/merge operations avoid holding Store.lock across network or analysis waits;
@@ -61,3 +63,13 @@ billable resume after owner restart. Exact profile bindings isolate shared crede
 Project preview/start accept nullable automatic execution limits, pinned `resume_run_id` and explicit `retry_unknown`. Actual HTTP SDK regression covers bounded start, poll and continuation; resumed parser-default entry routes to the original AI mode with source/network checks.
 
 Job journals add created_at/started_at/stage_started_at/finished_at epoch times. Heartbeats preserve stage timers; terminal completion freezes elapsed time. Legacy journals remain readable; no source/credential timer metadata.
+
+AI build/preview share nullable files/request and parallel maxima, auto continuation, lifetime attempts/output/seconds and existing execution/resume/retry fields across CLI/MCP/UI. Permissions remain source/network gated.
+
+Project build/preview also accept nullable max_context_chars (500–2,000,000), explicitly overriding saved source-character allowances per build; model capacity and permissions remain binding.
+
+Protocol5 supersedes older hybrid/window/character options above. MCP start/preview accept parser/ai, source selection, optional run ceiling and optional output_share/input_token_limit/output_token_limit. Omitted allocation fields preserve pinned resume choices; explicit incompatible changes fail. Committed partial runs may retry unresolved work through the same permission-gated service without repeating successes.
+
+Jobs progress binds run identity before preparation; read exposes cancel_requested from the existing marker until worker acknowledgement. Journals remain free of source/provider payloads.
+
+`jobs.ReasoningBuffer` keeps a transient, redacted 64 KiB display plus bounded redaction context, keyed by job/workspace/run/attempt; progress.reasoning updates no durable per-token journal. Jobs.reasoning_snapshot/discard_reasoning support the UI; disposal clears buffers.

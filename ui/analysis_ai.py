@@ -7,8 +7,16 @@ import streamlit as st
 
 from dataforge.agent.jobs import TERMINAL, Jobs
 from dataforge.ai_analysis_models import AnalysisRequest
-from dataforge.analysis_service import analysis_report, preview_analysis, run_analysis
+from dataforge.ai_analysis_progress import analysis_progress
+from dataforge.ai_budget import allocate_analysis_profile
+from dataforge.ai_context import inventory_revision
+from dataforge.analysis_service import analysis_report, preview_analysis, recovery_message, run_analysis
 from dataforge.connections import current_connections
+from dataforge.credentials import credential_source
+from dataforge.llm import analysis_routes
+from dataforge.settings_service import revision
+from ui.analysis_inspection import render_inspection
+from ui.analysis_reasoning import reasoning_panel
 
 
 @st.cache_resource(max_entries=8)
@@ -18,6 +26,21 @@ def analysis_jobs(home):
 
 def _preview_with_status(store, workspace, request, status, activity, started):
     """Show actual local preparation work; the native timer ticks between callbacks."""
+    cache_key = None
+    try:
+        pid, profile = analysis_routes(store, workspace, 'project_lineage')[0]
+        allocate_analysis_profile(profile, request)  # Expired metadata cannot reuse a ready preview.
+        manager = current_connections()
+        bound = manager.for_profile(pid, profile) if hasattr(manager, 'for_profile') else manager
+        cache_key = (str(store.home), request.model_dump_json(), inventory_revision(store, workspace),
+                     revision(store, workspace), profile.model_dump_json(),
+                     bool(not profile.key_env or bound.available(profile.key_env) or credential_source(profile.key_env) == 'saved'))
+    except ValueError:
+        pass
+    cached = st.session_state.get('ai_preview_' + workspace)
+    if cache_key is not None and cached and cached['key'] == cache_key:
+        status.update(label='Ready · Reusing unchanged offline preview', state='complete')
+        return cached['preview']
     stages = {}
     last_update = 0
 
@@ -40,6 +63,8 @@ def _preview_with_status(store, workspace, request, status, activity, started):
                       state='error', expanded=True)
         raise
     blocked = not preview['valid']
+    if not blocked and cache_key is not None:
+        st.session_state['ai_preview_' + workspace] = {'key': cache_key, 'preview': preview}
     status.update(label=('Needs attention' if blocked else 'Ready') + ' · Elapsed: ' +
                   str(timedelta(seconds=int(monotonic() - started))),
                   state='error' if blocked else 'complete', expanded=blocked)
@@ -47,104 +72,79 @@ def _preview_with_status(store, workspace, request, status, activity, started):
 
 
 def controls(store, workspace, file_ids):
-    if not st.checkbox('Use AI for analysis', key='ai_build_' + workspace):
+    if not st.checkbox('Use AI for analysis', key='ai_build_' + workspace, persist_state='session'):
         return None, True
-    compare = st.checkbox('Compare with parser', value=True, key='ai_compare_' + workspace)
-    review = st.checkbox('Additional AI review', key='ai_review_' + workspace)
-    if not compare:
-        st.warning('AI-generated mode is experimental. Unsupported claims remain unresolved; parser-only relationships are omitted.')
-    refresh = st.checkbox('Refresh saved AI extraction', key='ai_refresh_' + workspace)
-    base = dict(mode='hybrid' if compare else 'ai', file_ids=file_ids,
-                additional_ai_review=review, refresh_ai=refresh)
+    st.caption('AI extracts actual file contents independently. Every fact remains inferred; semantic completeness is not proven.')
+    with st.expander('AI spending limit'):
+        ceiling = st.number_input('Run output token ceiling (optional)', min_value=1000, max_value=2000000,
+            value=None, key='ai_run_output_' + workspace, persist_state='session',
+            help='Reserved output across every physical attempt, including retries and resumes. Leave blank for no run ceiling.')
+    with st.expander('AI budget overrides'):
+        share = st.slider('Maximum output share (%)', 10, 50, 30, key='ai_output_share_' + workspace, persist_state='session',
+            on_change=lambda: st.session_state.update({'ai_slider_override_' + workspace: True}),
+            help='A maximum output allowance, not a request to generate that many tokens. Shared windows divide usable context; separate windows use a fraction of output capacity.')
+        input_override, output_override = None, None
+        with st.expander('Advanced token overrides'):
+            override = st.checkbox('Override per-request token allowances', key='ai_exact_override_' + workspace, persist_state='session')
+            st.caption('Moving the slider explicitly selects this run’s allowance instead of the saved Custom default. Exact overrides take precedence. Model limits always apply; saved profiles are not changed.')
+            if override:
+                input_override = st.number_input('Effective input tokens (optional)', min_value=1, max_value=2147483647,
+                    value=None, key='ai_exact_input_' + workspace, persist_state='session')
+                output_override = st.number_input('Maximum output tokens per request (optional)', min_value=64, max_value=2147483647,
+                    value=None, key='ai_exact_output_' + workspace, persist_state='session')
+        request = AnalysisRequest(mode='ai', file_ids=file_ids, max_output_tokens_total=ceiling,
+            output_share=share, input_token_limit=input_override, output_token_limit=output_override)
+        try:
+            profile = analysis_routes(store, workspace, 'project_lineage')[0][1]
+            slider_clamps = []
+            if output_override is None and st.session_state.get('ai_slider_override_' + workspace):
+                slider_profile, slider_allocation = allocate_analysis_profile(profile.model_copy(update={'output_mode': 'automatic'}), request)
+                slider_clamps = slider_allocation['clamps']
+                request = request.model_copy(update={'output_token_limit': slider_profile.max_tokens})
+            _, allocation = allocate_analysis_profile(profile, request)
+            st.metric('Effective input allowance (tokens)', f"{allocation['input_allowance']:,}")
+            st.metric('Maximum output allowance per request (tokens)', f"{allocation['output_allowance']:,}")
+            st.caption(f"Model/route capacity: context {allocation['context_capacity'] or 'unreported'}, "
+                f"input {allocation['input_capacity'] or 'unreported'}, output {allocation['output_capacity'] or 'unreported'}. "
+                f"Source: {allocation['source']}; windows: {allocation['window']}. "
+                + ('Dynamic route: manually confirmed limits apply.' if allocation['dynamic'] else ''))
+            explanations = {'saved_custom_output_limit': 'The saved Custom output allowance is the current default; move the slider or use Advanced to change this run.',
+                'model_output_limit': 'The model output limit clamps the requested allowance. Effective values will stay fixed above this limit.',
+                'model_input_limit': 'The model input limit clamps the available input.',
+                'shared_context_limit': 'The shared context window clamps the requested output.',
+                'available_input_limit': 'The available model input allowance clamps the exact input override.'}
+            for reason in dict.fromkeys(allocation['clamps'] + slider_clamps):
+                st.caption(explanations[reason])
+            for note in allocation['notes']:
+                st.caption(note)
+        except ValueError:
+            st.caption('Effective allowances need confirmed model limits. Dynamic routes require a route-safe manual capacity override in provider settings.')
     status = st.status('Preparing AI analysis…', expanded=False)
-    status.caption('Local preparation only. Model requests start when you choose Analyze.')
-    activity = status.empty()
-    started = monotonic()
+    status.caption('Offline preparation. Model requests start when you choose Analyze.')
     try:
-        automatic = _preview_with_status(store, workspace, AnalysisRequest(**base), status, activity, started)
-    except ValueError as exc:
-        status.warning(str(exc))
-        return AnalysisRequest(**base), False
-    except Exception:
-        status.error('Could not prepare AI analysis. Try again or review your source selection and provider settings.')
-        return AnalysisRequest(**base), False
-    overrides = {}
-    with st.expander('AI request budget'):
-        def reset():
-            for suffix in ('attempts', 'output', 'seconds'):
-                st.session_state.pop('ai_custom_' + suffix + '_' + workspace, None)
-                st.session_state.pop('ai_custom_value_' + suffix + '_' + workspace, None)
-            st.session_state['ai_budget_reset_' + workspace] = True
-        st.button('Reset AI budgets to automatic', on_click=reset)
-        fields = [('attempts', 'max_provider_attempts', 'Maximum provider attempts', 1, 2000, 1),
-                  ('output', 'max_output_tokens_total', 'Maximum reserved output tokens', 1000, 2000000, 1000),
-                  ('seconds', 'max_seconds', 'Execution time budget (seconds)', 30, 14400, 1)]
-        for suffix, field, label, low, high, step in fields:
-            key = 'ai_' + suffix + '_' + workspace
-            custom_key = 'ai_custom_' + suffix + '_' + workspace
-            value_key = 'ai_custom_value_' + suffix + '_' + workspace
-            custom = st.session_state.get(custom_key, False)
-            if custom:
-                st.session_state[key] = st.session_state.get(value_key, st.session_state.get(key, low))
-            else:
-                st.session_state[key] = automatic['recommended'][field]
-            def edited(custom_key=custom_key, value_key=value_key, key=key):
-                st.session_state[custom_key] = True
-                st.session_state[value_key] = st.session_state[key]
-            value = st.number_input(label, low, high, step=step, key=key, on_change=edited)
-            overrides[field] = value if custom else None
-            st.caption(label + ': ' + ('Custom' if custom else 'Automatic'))
-        st.caption('Automatic values include retries, fallback and optional review. Each execution stays within application limits; larger projects continue explicitly. In-flight requests may already be billed.')
-    request = AnalysisRequest(**base, **overrides)
-    try:
-        preview = (_preview_with_status(store, workspace, request, status, activity, started)
-                   if any(value is not None for value in overrides.values()) else automatic)
-        st.caption(f"{preview['files']} selected files · {preview['units']} source tasks · "
-                   f"at most {preview['max_provider_attempts']} provider attempts including retries and fallback.")
-        if preview.get('semantic_pages'):
-            st.caption(f"{preview['semantic_pages']} projection tasks retain original shared SQL context and validate against the complete source.")
-        if preview.get('review_sizing_provisional'):
-            st.caption('Review sizing is provisional until extraction produces candidates. Additional batches continue within the saved execution limits; completed batches are reused.')
-        if preview['routes']:
-            st.dataframe([{'Task': task, 'Provider': p['provider'], 'Model': p['model']}
-                          for task, profiles in preview['routes'].items() for p in profiles],
-                         hide_index=True, alt='Configured AI routes for this build')
-        st.caption('Selected SQL/SAS source and relevant declarations are sent to these routes. A local gateway such as OmniRoute may forward requests. AI additions remain inferred.')
-        if preview.get('excluded_routes'):
-            names = {p['profile_id']: p['name'] for p in store.rows(
-                'SELECT profile_id,name FROM llm_profiles WHERE workspace_id=?', [workspace])}
-            excluded = sorted({(names.get(p['profile_id'], p['profile_id']), p['reason'].replace('_', ' '))
-                               for p in preview['excluded_routes']})
-            st.caption('Skipped fallback profiles: ' + '; '.join(name + ': ' + reason for name, reason in excluded))
-
-        if preview.get('remaining_units'):
-            st.info(f"This execution covers {preview['selected_new_units']} units needing AI work; {preview['remaining_units']} continue later. The current graph remains until all units finish.")
-        st.caption('Input estimates use conservative UTF-8 bytes plus framing and capacity headroom; reported usage is shown after execution.')
-        if preview['blocked']:
-            reasons = sorted({b['reason'] for b in preview['blocked']})
-            status.warning('; '.join(r.replace('_', ' ') for r in reasons))
-            st.warning('AI build needs attention: ' + '; '.join(r.replace('_', ' ') for r in reasons))
-            st.caption('Complete statements and validated projection groups preserve their required context. Model capacity, source disclosure allowance and execution limits are checked separately.')
-            affected = {b.get('unit_id') for b in preview['blocked'] if b.get('unit_id')}
-            if affected:
-                paths = {a['path'] for a in preview.get('allowances', []) if a['unit_id'] in affected}
-                st.caption('Affected source selection: ' + ', '.join(sorted(paths)))
-            required = max((a['required_characters'] for a in preview.get('allowances', []) if not a['valid']), default=0)
-            if 'complete_prompt_exceeds_context_budget' in reasons and 0 < required <= 100000:
-                if st.button(f'Apply calculated context allowance ({required:,} characters)'):
-                    from dataforge.analysis_service import apply_context_allowance
-                    from dataforge.settings_service import revision
-                    apply_context_allowance(store, workspace, request, required, revision(store, workspace))
-                    st.rerun()
-        with st.expander('Source disclosure preview', on_change='rerun', key='ai_disclosure_' + workspace) as panel:
-            if panel.open:
-                st.dataframe(preview['disclosure'], hide_index=True, alt='Selected source files and immutable hashes to be disclosed')
-        return request, preview['valid']
+        preview = _preview_with_status(store, workspace, request, status, status.empty(), monotonic())
+        if not preview['valid']:
+            st.warning('AI build needs attention: ' + '; '.join(b['reason'].replace('_', ' ') for b in preview['blocked']))
+            return request, False
+        st.write(f"Family: {preview['source_kind']} · Files: {preview['files']} · Parts: {preview['parts']} · Estimated requests: {preview['estimated_requests']}")
+        st.caption(f"Estimated tokens: {preview['estimated_input_tokens']:,} input / {preview['estimated_output_tokens']:,} reserved output. "
+                   f"Counting: {preview['estimate_method']}. Completion and consolidation may require additional requests.")
+        for profiles in preview['routes'].values():
+            for profile in profiles:
+                st.caption(profile['provider'] + ' · ' + profile['model'])
+        st.json(preview['limits'], expanded=False)
+        with st.expander('Request budget estimates'):
+            st.caption('Output allowance is configured per request. Advertised model capacity may vary with gateway routing. '
+                       'Packing reports eligible work, input utilization, expected output and any limiting budget.')
+            st.json(preview.get('packing', []), expanded=False)
+        with st.expander('Source disclosure preview'):
+            st.dataframe(preview['disclosure'], hide_index=True, alt='Pinned selected sources and hashes')
+        return request, True
     except ValueError as exc:
         status.warning(str(exc))
         return request, False
     except Exception:
-        status.error('Could not prepare AI analysis. Try again or review your source selection and provider settings.')
+        status.error('Could not prepare AI analysis. Review source selection and provider settings.')
         return request, False
 
 
@@ -156,6 +156,68 @@ def start(store, workspace, request):
     st.session_state['ai_analysis_job_' + workspace] = job['job_id']
 
 
+def render_status(snapshot):
+    """Use identical ledger definitions for running and saved analysis."""
+    st.write(f"Run: {snapshot['run_id']} · Status: {snapshot['status']} · Stage: {snapshot['stage']}")
+    if snapshot.get('current_activity'):
+        st.caption('Latest activity: ' + snapshot['current_activity'])
+    for group, prefix in [('files', 'Files'), ('parts', 'Parts')]:
+        with st.container(horizontal=True):
+            for name, value in snapshot[group].items():
+                label = {'completed': 'Validated parts saved', 'reused': 'Saved parts reused',
+                         'remaining': 'Parts needing recovery'}.get(name, f'{prefix} {name}') if group == 'parts' else f'{prefix} {name}'
+                st.metric(label, 'Unknown' if value is None else str(value), border=True)
+    for group in ('requests', 'attempts'):
+        st.write(group.title() + ': ' + ' · '.join(f'{("Responses handled" if key == "processed" else key.replace("_", " "))}: {value}' for key, value in snapshot[group].items()))
+    responses = snapshot['responses']
+    st.caption(f"Responses received: {responses['received']} · Responses handled: {responses['handled']} · Responses saved; validation pending: {responses['saved_validation_pending']}")
+    if not snapshot['parts']['completed']:
+        st.caption('No reusable extraction parts saved yet. Receiving or handling a response does not complete an extraction.')
+    for reason in sorted(set(snapshot['replay_unavailable'].values())):
+        st.caption('Response replay unavailable: ' + reason + '. Validated parts remain reusable; unfinished work may require an explicit retry.')
+    for outcome in snapshot['request_outcomes']:
+        st.caption(f"Request {outcome['request_id']}: {outcome['saved']} / {outcome['expected']} validated parts saved · {outcome['status']}")
+        for diagnostic in outcome['diagnostics']:
+            st.caption(f"{diagnostic['code']} · {diagnostic.get('recovery_action', 'validation pending')}")
+    st.caption(f"Pending recovery parts: {snapshot['recovery_pending']}. Failed attempts do not mean failed files. Reused parts are saved successes, not skipped work.")
+    tokens = snapshot['tokens']
+    def value(key):
+        return 'Unknown' if tokens[key] is None else f'{tokens[key]:,}'
+    st.caption(f"Initial estimated input tokens: {value('estimated_input')} · Reserved output across attempts: {value('reserved_output')}")
+    st.caption(f"Provider-reported tokens: {value('actual_input')} input / {value('actual_output')} output. "
+               f"Known subtotals: {tokens['reported_input']:,} input / {tokens['reported_output']:,} output; unknown attempts are excluded from these subtotals.")
+    estimate = snapshot.get('initial_estimate') or {}
+    st.caption(f"Initial estimated requests: {estimate.get('requests', 'Unknown')}. Completion, consolidation and recovery may add work; totals can grow. No provider-internal progress is available while waiting.")
+    for name, stage in snapshot['stages'].items():
+        st.progress(stage['completed'] / max(1, stage['planned']),
+            text=f"{name.replace('_', ' ').title()}: {stage['completed']} / {stage['planned']} saved parts")
+    if snapshot['current']:
+        st.write('Current request / attempt')
+        st.json(snapshot['current'], expanded=False)
+    if snapshot['activity']:
+        with st.expander('Recent activity'):
+            st.dataframe(snapshot['activity'], hide_index=True, alt='Recent bounded analysis activity')
+    with st.expander('Counter definitions'):
+        st.caption('Files completed have finalized processed extraction records. Partial files have saved work but are not completed; unfinished files have none. '
+            'Parts planned include extraction, completion and consolidation, excluding superseded split parents. Completed parts have valid saved checkpoints; remaining includes unresolved work. '
+            'Queued requests are durable planned batches without an in-flight attempt; future batches are not yet requests. Received attempts may still fail validation. '
+            'Unknown attempts may have reached the provider. Output reservation is an allowance, not actual usage. Processing completion does not prove semantic completeness.')
+    render_diagnostics(snapshot)
+
+
+def render_diagnostics(summary):
+    """The same safe failure and recovery evidence during execution and afterwards."""
+    if summary.get('reasons') or summary.get('last_failure'):
+        st.warning(recovery_message({**summary, 'reasons': summary.get('reasons') or []}))
+    if summary.get('last_failure'):
+        with st.expander('Connection diagnostics'):
+            st.json(summary['last_failure'])
+    if summary.get('recovery_queue'):
+        with st.expander('Pending extraction recovery'):
+            st.caption('Saved successes are retained. Bounded recovery uses smaller batches and backoff; unresolved work can be retried after partial publication. Cancel retains saved progress.')
+            st.json(summary['recovery_queue'], expanded=False)
+
+
 @st.fragment(run_every=2)
 def progress(store, workspace):
     job_id = st.session_state.get('ai_analysis_job_' + workspace)
@@ -163,7 +225,13 @@ def progress(store, workspace):
         return
     jobs = analysis_jobs(str(store.home))
     record = jobs.read(job_id, workspace)
-    st.progress(float(record['progress']), text=record.get('stage', record['status']))
+    reasoning_panel(jobs, job_id, workspace, record.get('run_id'), record['status'] not in TERMINAL)
+    if record.get('result', {}).get('status') == 'committed':
+        st.progress(1., text='Publication complete')
+    elif record['status'] not in TERMINAL and not record.get('run_id'):
+        st.progress(float(record['progress']), text=record.get('stage', record['status']))
+    else:
+        st.write(record.get('stage', record['status']))
     started = record.get('started_at')
     if started is not None:
         ended = record.get('finished_at', record.get('updated_at', started)) if record['status'] in TERMINAL else time()
@@ -175,28 +243,53 @@ def progress(store, workspace):
     elif record['status'] == 'queued':
         st.caption('Queued — waiting for an analysis worker.')
     if record['status'] not in TERMINAL:
-        if st.button('Cancel AI analysis', key='ai_cancel_' + workspace):
+        cancel_key = 'ai_cancel_pending_' + job_id
+        if record.get('cancel_requested') or st.session_state.get(cancel_key):
+            st.info('Cancellation requested. Waiting for the worker to acknowledge; saved work is retained.')
+        if st.button('Cancel AI analysis', key='ai_cancel_' + workspace,
+                     disabled=record.get('cancel_requested', False) or st.session_state.get(cancel_key, False)):
             jobs.cancel(job_id, workspace)
+            st.session_state[cancel_key] = True
             st.info('Cancellation requested. The last committed lineage stays available.')
+        if record.get('run_id'):
+            # Preparation/publication may hold the DB lock; never wait on it in
+            # the control fragment, which must remain free to process Cancel.
+            if store.lock.acquire(blocking=False):
+                try:
+                    snapshot = analysis_progress(store, workspace, record['run_id'])
+                    render_status(snapshot)
+                    render_inspection(store, workspace, record['run_id'])
+                except ValueError:
+                    st.caption('Preparing this run; durable work planning is not yet available.')
+                finally:
+                    store.lock.release()
+            else:
+                st.caption('Worker is preparing or saving a checkpoint. Counters refresh when it releases storage; Cancel remains available.')
         return
     result = record.get('result', {})
+    run_id = result.get('run_id') or record.get('run_id')
     if result.get('status') == 'committed':
-        st.success('AI analysis committed. Open lineage or inspect the validation report below.')
+        if result.get('counts', {}).get('unresolved_parts'):
+            st.warning('Available validated lineage published with incomplete coverage. Unresolved work can be retried from the report.')
+        else:
+            st.success('AI analysis committed. Open lineage or inspect the validation report below.')
     elif result.get('status') == 'awaiting_continuation':
-        st.info('Analysis paused with saved progress. Continue below; the current graph remains available.')
+        st.info(recovery_message(result))
     else:
         st.warning('AI analysis did not publish a new graph: ' + ', '.join(result.get('reasons', [record['status']])))
-    if result.get('run_id'):
-        st.session_state['ai_analysis_report_' + workspace] = result['run_id']
+    if run_id:
+        st.session_state['ai_analysis_report_' + workspace] = run_id
     refresh_key = 'ai_analysis_refreshed_' + workspace
     if st.session_state.get(refresh_key) != job_id:
         # A fragment refreshes only its own progress area. Refresh the outer
         # report/metrics once after publication so it cannot show staged counts.
         st.session_state[refresh_key] = job_id
-        if result.get('run_id'):
-            st.session_state['ai_report_choice_' + workspace] = result['run_id']
+        if run_id:
+            st.session_state['ai_report_choice_' + workspace] = run_id
         st.rerun(scope='app')
     if st.button('Dismiss progress', key='ai_dismiss_' + workspace):
+        if hasattr(jobs, 'discard_reasoning'):
+            jobs.discard_reasoning(job_id)
         st.session_state.pop('ai_analysis_job_' + workspace, None)
         st.rerun()
 
@@ -212,40 +305,47 @@ def report(store, workspace):
         run_id = next(iter(choices))
     selected = st.selectbox('AI analysis report', list(choices), index=list(choices).index(run_id),
                             format_func=choices.get, key='ai_report_choice_' + workspace)
-    result = analysis_report(store, workspace, selected, include_source=True)
+    result = analysis_report(store, workspace, selected, include_source=False)
     summary = result['summary']
-    if result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} and 'request' in result['summary']:
-        unknown = bool(result['summary'].get('inflight'))
-        retry = st.checkbox('Retry the unknown in-flight request (may incur a duplicate charge)', key='ai_retry_' + selected) if unknown else False
-        limits = {}
-        for suffix, field in [('attempts', 'max_provider_attempts'), ('output', 'max_output_tokens_total'), ('seconds', 'max_seconds')]:
-            if st.session_state.get('ai_custom_' + suffix + '_' + workspace):
-                limits[field] = st.session_state.get('ai_custom_value_' + suffix + '_' + workspace,
-                    summary['request'].get(field))
-            elif st.session_state.get('ai_budget_reset_' + workspace):
-                limits[field] = None
-            else:
-                limits[field] = summary['request'].get(field)
-        st.caption('Continue preserves saved Custom ceilings. Edit the AI request budget or Reset to automatic to change them.')
-        if st.button('Continue AI analysis', disabled=unknown and not retry):
-            request = AnalysisRequest.model_validate({**summary['request'], 'resume_run_id': selected,
-                                                     'retry_unknown': retry, **limits})
+    if summary.get('protocol_version') == 5:
+        render_status(analysis_progress(store, workspace, selected))
+    render_inspection(store, workspace, selected)
+    partial_publication = result['status'] == 'committed' and bool(summary.get('unresolved_work'))
+    if (result['status'] in {'awaiting_continuation', 'interrupted', 'cancelled', 'failed'} or partial_publication) and 'request' in summary:
+        from dataforge.ai_pipeline_store import recover_pipeline
+        unknown = bool(result['summary'].get('inflight') or recover_pipeline(store, workspace, selected)['unknown'])
+        exhausted = not summary.get('recovery_queue') and (summary.get('last_failure', {}).get('allowance_exhausted') or
+                                                         'batch_retry_allowance_exhausted' in summary.get('reasons', []))
+        needs_ack = exhausted or (unknown and not summary.get('retry_policy', {}).get('unknown_retries', 0))
+        retry = st.checkbox('Retry the unfinished batch (may incur a duplicate charge; renews the bounded retry allowance)', key='ai_retry_' + selected) if needs_ack else False
+        if summary.get('protocol_version') != 5:
+            st.info('This historical run uses an incompatible protocol. Start a new build.')
+        elif st.button('Retry unresolved AI work' if partial_publication else 'Continue AI analysis', disabled=needs_ack and not retry):
+            request = AnalysisRequest.model_validate({**summary['request'], 'budget_policy': summary['request'].get('budget_policy', 'legacy'),
+                'resume_run_id': selected, 'retry_unknown': retry})
             start(store, workspace, request)
             st.rerun()
 
     counts = summary.get('counts', {})
-    st.write(f"Requests: {counts.get('requests', 0)} · cached units: {counts.get('cache_hits', 0)} · "
-             f"accepted: {counts.get('accepted', 0)} · rejected: {counts.get('rejected', 0)} · "
-             f"unresolved: {counts.get('unresolved', 0)}")
-    st.caption(f"Reported tokens: {counts.get('input_tokens', 0)} input / {counts.get('output_tokens', 0)} output"
-               if summary.get('usage_known') else 'Provider token usage is unknown or only partially reported. Cached reuse makes no new extraction request.')
-    st.caption(f"Agreed: {counts.get('agreed', 0)} · parser only: {counts.get('parser_only', 0)} · "
-               f"AI only: {counts.get('ai_only', 0)} · units with coverage gaps: {counts.get('coverage_gaps', 0)}")
-    if summary.get('reasons'):
-        st.warning('; '.join(summary['reasons']))
+    if summary.get('protocol_version') != 5:
+        st.write(f"Requests: {counts.get('requests', 'Unknown')} · reused parts: {counts.get('cache_hits', 'Unknown')} · "
+             f"accepted: {counts.get('accepted', 'Unknown')} · rejected: {counts.get('rejected', 'Unknown')} · "
+             f"unresolved: {counts.get('unresolved', 'Unknown')}")
+    st.caption(f"Extracted operations: {counts.get('accepted', 'Unknown')} · Unresolved semantic details: {counts.get('unresolved', 'Unknown')} · Incomplete coverage: {counts.get('coverage_gaps', 'Unknown')}")
+    if summary.get('protocol_version') != 5:
+        render_diagnostics(summary)
+    else:
+        st.caption('Continue reuses saved compatible parts in this selected run. Start fresh creates a new run and may send the selected sources again.')
+        if st.button('Start fresh AI analysis (new run)', key='ai_fresh_' + selected):
+            start(store, workspace, AnalysisRequest(mode='ai', file_ids=summary.get('request', {}).get('file_ids')))
+            st.rerun()
+    if result.get('recent_requests'):
+        with st.expander('Recent request and extraction diagnostics'):
+            st.caption('Validation codes, field paths, recovery actions and request budgets. Retained transport bodies are available under Inputs and Outputs.')
+            st.json(result['recent_requests'], expanded=False)
     st.dataframe([{'Claim': c['claim_id'], 'Kind': c['kind'], 'Outcome': c['status'],
                    'Reasons': ', '.join(c['reasons'])} for c in result['claims']],
                  hide_index=True, alt='Source validation outcomes for AI candidates')
     with st.expander('Inspect exact candidate evidence', on_change='rerun', key='ai_claims_' + workspace) as panel:
         if panel.open:
-            st.json(result['claims'])
+            st.json(analysis_report(store, workspace, selected, include_source=True)['claims'])

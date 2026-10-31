@@ -95,3 +95,8 @@ Project run/unit/claim/support tables participate in the shared storage lifecycl
 ## Continued AI analysis
 
 Migration 7 adds bounded per-file/operation accepted snapshots with immutable source references. Backups, restores, workspace cleanup and integrity checks include the snapshot table and referenced blobs; v6 accepted JSON remains readable. Awaiting continuation is idle and never automatically resumes provider work. Source/configuration changes reject continuation; lost in-flight requests require an explicit potentially duplicate retry. Keep the home and its blobs together.
+
+
+## Resumable AI analysis
+
+AI request/attempt, context-dependency and linking checkpoints participate in managed cleanup and whole-home recovery. Interrupted builds never restart provider work by opening the app. Resume reuses completed units; unknown dispatched outcomes require an explicit potentially duplicate retry. See [AI recovery](user-guide/ai-analysis-controls-and-recovery.md).

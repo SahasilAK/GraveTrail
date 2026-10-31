@@ -1,11 +1,58 @@
 # Secure runtime configuration
 
-Credentials are retained only for the active runtime and are not saved in application files
-or databases. They may need to be re-entered when the application restarts.
+New profiles default to **This session only**. **Connect for this session** retains a key in
+the session's `RuntimeConnections`, with no persistent secret writes or environment mutation.
+Only the non-secret source reference is saved when selecting a session source for a profile.
+Session memory lasts until disconnected/cleared or process exit; browser disconnection does
+not guarantee immediate erasure. Python cannot promise forensic memory zeroization.
+
+**Remember on this device** is explicit opt-in. Save the provider profile first, select that
+profile and source, enter the masked key, then press **Save / replace saved key**. The input
+clears on success or failure. Keys are kept **until deleted** in encrypted native OS storage;
+profiles contain only opaque references and non-secret metadata. Saving a replacement creates
+a new application-owned entry and removes the old one. A session override does not replace
+the saved key. Merely opening settings never retrieves/decrypts saved keys; their availability
+is checked on **Connect saved key for this session** or explicit provider use.
+
+The approved backend is Python `keyring.backends.Windows.WinVaultKeyring`, explicitly set to
+`CRED_PERSIST_LOCAL_MACHINE` (2): the current Windows user, this machine, across logons; never
+the library's default enterprise/roaming persistence. Backend discovery, keyring configuration,
+chained/plaintext/third-party/cloud stores and insecure fallbacks are not used. macOS Keychain
+and Linux Secret Service are **not enabled** pending native verification of local-only storage.
+On unsupported systems, locked stores or failures, choose **This session only** explicitly;
+the app never silently selects another storage backend or credential source.
+
+**Disconnect this session** disables the selected reference in that session, leaving any
+saved entry intact. **Connect saved key for this session** explicitly reconnects it.
+**Delete saved key** removes local storage and clears its binding. It does **not** revoke the
+provider's API key: revoke or rotate it at the provider separately. There is no independent
+application master password, nor immunity to malware or other software running as the same
+OS user. Protect the OS account and device.
+
+Saved references bind the canonical data-home path, workspace, profile ID, provider and full
+endpoint path/authentication/API-version identity. A different recipient cannot reuse the key.
+Delete the saved key before changing its recipient, then explicitly save a key for the new
+endpoint. Session references also bind that identity. Existing profile-fingerprint invalidation
+still clears service runtime connections after profile edits. **Environment reference (advanced)**
+preserves legacy automation profiles, without importing their values into OS storage. Missing,
+expired, locked, deleted or disconnected credentials never fall back to an environment value
+with a reserved session/saved reference. Explicitly switch sources to use another credential.
+
+Profile/workspace/application deletion removes only exact matching application-owned entries.
+A deletion failure retains database metadata for retry (earlier entries in a multi-profile
+cleanup may already be deleted). Failed saves attempt to remove only the newly created entry;
+if cleanup also fails, the UI reports its opaque GraveTrail entry name for manual removal in
+Windows Credential Manager. Native-store and database changes cannot be atomic: a crash or
+database failure can leave an orphan entry or a missing binding; neither grants a fallback.
+Do not manually delete a data home before deleting its saved keys; filesystem deletion alone
+cannot clean native storage. Configuration transfers omit provider bindings. Full backups
+contain references, never key values; restore clears saved bindings and requires explicit new
+binding even if the restored files are later moved to the old path. Original-store entries
+remain owned by the original profiles until deleted there.
 
 Connections & AI → Providers & routing supports a masked credential input, session connection and clear
 action. Provider configuration is saved only on **Save provider profile**; this explicitly
-stores nonsecret preferences and the environment variable name, never its value. URLs with
+stores nonsecret preferences and the selected opaque credential/environment reference, never its value. URLs with
 userinfo, query parameters or fragments are rejected. Keep sensitive endpoint identifiers
 out of saved profiles. Newly entered credential names must start with `DATAFORGE_`.
 
@@ -47,8 +94,19 @@ to workspace/profile and invalidated after profile edits. Session overrides rema
 process-environment values are shared by the owning app process.
 Pass session managers explicitly in process; never put session credentials in a process or
 child environment. Never serialize a manager or credentials into job journals. Session secrets
-must not be put in globally cached objects. Disconnect drops session references; launch
-environment secrets remain available for the process lifetime.
+must not be put in globally cached objects. Disconnect drops session overrides and suppresses
+the selected saved reference until explicitly reconnected. Environment variables themselves
+remain in the owning process until removed or process exit.
+
+Saved references do not automatically become available to CLI/MCP. A human must pass each exact
+reference using `--allowed-credential-ref DATAFORGE_SAVED_...` on the CLI/MCP launch, alongside
+the existing workspace, source, network, origin and privacy grants. Copy the non-secret saved
+reference shown beside its UI controls. Settings listing hides unapproved references. Agents
+cannot enumerate the OS vault, receive raw keys, save keys through tool arguments, or alter
+their launch grants. Background work uses the initiating operation's grants; detached work
+journals only opaque references and policy metadata. Saved values are resolved in request
+scopes, never copied into `os.environ` or a process-global cache. Revoking source/network/
+workspace/reference access still blocks subsequent provider disclosure.
 
 Known runtime secrets and common credential patterns are redacted from provider responses,
 persisted AI records and structured application logs. Raw transport errors and validation
@@ -68,10 +126,36 @@ requires application-level access controls before a multi-user deployment.
 
 ## Project AI disclosure and revocation
 
-[Project analysis](AI_ANALYSIS.md) is a run-level opt-in. A selected complete file transmitted through multiple units still counts as complete-source disclosure for remote routes. Enable external and complete-source permission deliberately; loopback gateways may forward data. Relevant declaration context comes only from the selected immutable source scope.
+[Project analysis](AI_ANALYSIS.md) is a run-level opt-in. A complete file transmitted through
+multiple parts still counts as complete-source disclosure for remote routes. Selecting a
+dbt member expands to its disclosed admitted project closure, including configuration,
+macros and supplied artifacts. Relevant definition context stays within that pinned scope.
+Project extraction transmits exact original source parts/context; do not assume the manual
+assistance redaction step sanitizes those parts. Remove secrets before import or withhold
+source/network permission. Loopback gateways may forward requests upstream.
 
-Each physical extraction/review/retry/fallback checks current source, privacy, route/credential authorization, cancellation and run budget. Source, session keys and full request bodies are excluded from job journals. Full prompt/response history remains opt-in; accepted minimal evidence must survive ordinary history expiry. Context preview counts prompt/schema/JSON overhead; increasing both workspace and profile limits is an explicit disclosure decision. No settings import, preview, browse or export starts provider work automatically. A sent/timeout request may already have incurred usage; restart never resumes billing automatically.
+Each physical extraction/completion/consolidation/retry checks current source, privacy,
+route/credential authorization, cancellation and run limits. Job journals omit source,
+session keys and full bodies. Minimal validated evidence persists separately from optional
+full request/response captures, which have their own size/retention limits and retained-copy
+redaction. Full-envelope token fitting includes instructions/schema/context/framing.
+An explicit profile source-character restriction still applies; model token capacity does
+not grant broader disclosure. Preview, settings reads, browsing and export start no provider
+work. A lost response may already have incurred usage; reopening never starts paid work.
 
 ## Automatic AI allowance boundaries
 
-Model-limit discovery is explicit and stores only allowlisted capacity metadata, bound to recipient/model/auth/reference identity. Metadata observation refresh alone preserves runtime credentials; changed capacity values change execution identity. Existing saved profile limits remain Custom. Automatic calculations and offline preview do not send source, call token-count APIs, raise privacy caps or grant external/full-source permission. The explicit calculated-context action changes only context allowances. Continue reauthorizes each attempt; unknown in-flight work never retries without an explicit choice.
+Model-limit discovery is explicit and stores allowlisted capacity metadata bound to
+recipient/model/auth/reference identity. Metadata refresh alone preserves runtime
+credentials; changed capacity values change execution identity. Saved Custom limits remain.
+Automatic calculation and offline preview send no source, make no token-count API calls
+and grant no network/full-source permissions. The pinned output share/exact overrides
+must fit real model capacity. Legacy profiles require an explicit choice of token capacity
+or a retained character disclosure limit. Unknown-outcome retries require configured opt-in
+or explicit acknowledgement; compatible resume retains cumulative reservations.
+
+The persisted workspace `max_context_chars` and `llm_chunk_chars` support manual assistance
+chunk previews. They are not project file-packing caps. Protocol 5 checks the profile's
+`source_limit_policy`/`source_disclosure_chars` when explicitly configured, plus the full
+request's token allowance. Changing a legacy workspace character setting alone does not
+limit an exact-source project request; review the actual project disclosure and profile.

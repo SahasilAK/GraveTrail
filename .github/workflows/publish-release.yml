@@ -13,10 +13,10 @@ on:
         options: [patch, minor, major]
         default: patch
       release_mode:
-        description: 'Development is explicitly unsigned; production requires protected publisher signing'
+        description: 'Unsigned needs no certificate; production requires configured signing (development is a legacy unsigned alias)'
         type: choice
-        options: [development, production]
-        default: development
+        options: [unsigned, development, production]
+        default: unsigned
       dry_run:
         description: 'Verify final downloads and release notes without creating a tag or public release (branch-safe)'
         type: boolean
@@ -41,6 +41,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      build_mode: ${{ steps.policy.outputs.build_mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,28 +52,46 @@ jobs:
         with:
           version: '0.12.5'
           python-version: '3.11'
-      - name: Resolve release version and validate source policy and unused tag
-        id: version
+      - name: Validate release mode, source and signing setup
+        id: policy
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          RELEASE_TYPE: ${{ inputs.release_type }}
           RELEASE_MODE: ${{ inputs.release_mode }}
           DRY_RUN: ${{ inputs.dry_run }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           WINDOWS_SIGNING_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_THUMBPRINT }}
           WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
           WINDOWS_PUBLISHER: ${{ vars.WINDOWS_PUBLISHER }}
         run: |
+          case "$RELEASE_MODE" in
+            unsigned|development) BUILD_MODE=development ;;
+            production) BUILD_MODE=production ;;
+            *) echo "::error::Unknown release mode. Choose unsigned or production."; exit 1 ;;
+          esac
           if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" && ( "$DRY_RUN" != "true" || "$RELEASE_MODE" == "production" ) ]]; then
             echo "::error::Public releases and production signing require the default branch: $DEFAULT_BRANCH"
             exit 1
           fi
-          if [[ "$RELEASE_MODE" == "production" && ( -z "$WINDOWS_SIGNING_THUMBPRINT" || -z "$WINDOWS_TIMESTAMP_URL" || -z "$WINDOWS_PUBLISHER" ) ]]; then
-            echo "::error::Production requires protected WINDOWS_SIGNING_THUMBPRINT, WINDOWS_TIMESTAMP_URL and WINDOWS_PUBLISHER configuration; no unsigned fallback"
-            exit 1
+          if [[ "$BUILD_MODE" == "production" ]]; then
+            missing=()
+            for variable in WINDOWS_SIGNING_THUMBPRINT WINDOWS_TIMESTAMP_URL WINDOWS_PUBLISHER; do
+              if [[ -z "${!variable:-}" ]]; then missing+=("$variable"); fi
+            done
+            if (( ${#missing[@]} )); then
+              echo "::error::Signed production releases need signing configuration in Settings > Environments > windows-production. Missing: ${missing[*]}. Choose release_mode=unsigned to build without a certificate, or follow docs/BUILD_AND_RELEASE.md to configure signing."
+              exit 1
+            fi
+          else
+            echo 'Unsigned release selected. No signing certificate or dedicated signing runner is required.' >> "$GITHUB_STEP_SUMMARY"
           fi
+          echo "build_mode=$BUILD_MODE" >> "$GITHUB_OUTPUT"
+      - name: Resolve release version and validate unused tag
+        id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
           uv lock --check
           gh api --paginate "repos/$GH_REPO/releases?per_page=100" --slurp > release-pages.json
           jq 'add' release-pages.json > releases.json
@@ -105,7 +124,7 @@ jobs:
       skip_container: true
       only_windows: true
       release_version: ${{ needs.prepare.outputs.version }}
-      release_mode: ${{ inputs.release_mode }}
+      release_mode: ${{ needs.prepare.outputs.build_mode }}
 
   highlights:
     if: inputs.copilot_notes
@@ -159,7 +178,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       GH_REPO: ${{ github.repository }}
-      RELEASE_MODE: ${{ inputs.release_mode }}
+      RELEASE_MODE: ${{ needs.prepare.outputs.build_mode }}
       WINDOWS_SIGNING_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_THUMBPRINT }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

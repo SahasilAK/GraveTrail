@@ -378,14 +378,10 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                 else "" for p in scope.expression.expressions]
 
     def name_key(name: str) -> str:
-        """Normalize quoted and unquoted output names for matching.
-
-        Args:
-            name: SQL output column spelling.
-
-        Returns:
-            Case-folded unquoted name or case-preserved quoted name."""
-        return name[1:-1].replace('""', '"') if name.startswith('"') else name.casefold()
+        """Normalize output names using the selected dialect's quoting rules."""
+        quoted = name.startswith('"')
+        value = name[1:-1].replace('""', '"') if quoted else name
+        return dialect.normalize_identifier(exp.Identifier(this=value, quoted=quoted)).name
 
     for scope in scopes:
         query = scope.expression
@@ -438,6 +434,17 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if any(s.expression.find(exp.Star) is not None for s in leaves):
                 coverage.append("Set operation wildcard positions require trusted schema expansion")
         mapping = {name: source for name, (_, source) in scope.selected_sources.items()}
+        alias_keys = {}
+        for name, (node, _) in scope.selected_sources.items():
+            if isinstance(node, exp.Query) and isinstance(node.parent, (exp.Subquery, exp.CTE)):
+                node = node.parent
+            alias = node.args.get('alias')
+            alias_identifier = alias.this if alias else node.this
+            key = (dialect.normalize_identifier(alias_identifier.copy()).name
+                   if isinstance(alias_identifier, exp.Identifier) else name)
+            alias_keys[name] = key
+        if len(set(alias_keys.values())) != len(alias_keys):
+            coverage.append('Relation aliases are ambiguous under dialect identifier rules')
         if any(isinstance(source, exp.Table) and source.args.get('sample') is not None
                for source in mapping.values()):
             coverage.append('Table sampling selection context is not resolved')
@@ -445,9 +452,8 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                               for position, p in enumerate(query.expressions) if isinstance(p, exp.Alias)]
 
         def lookup(alias):
-            if isinstance(alias, exp.Identifier) and alias.args.get("quoted"):
-                return mapping.get(alias.name)
-            matches = [source for name, source in mapping.items() if name.casefold() == alias.name.casefold()]
+            key = dialect.normalize_identifier(alias.copy()).name
+            matches = [source for name, source in mapping.items() if alias_keys[name] == key]
             return matches[0] if len(matches) == 1 else None
         destination = (table, scope_key)
         branch = branch_counts.get(destination, 0)
@@ -487,9 +493,12 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                     record["coverage"].append("Base-table column alias mapping requires trusted schema")
                     return
             name = identifier(column.this)
-            if isinstance(source, Scope) and sum(name_key(n) == name_key(name) for n in output_names(source)) != 1:
-                record["coverage"].append(f"Intermediate output column cannot be established: {name}")
-                return
+            if isinstance(source, Scope):
+                matches = [n for n in output_names(source) if name_key(n) == name_key(name)]
+                if len(matches) != 1:
+                    record["coverage"].append(f"Intermediate output column cannot be established: {name}")
+                    return
+                name = matches[0]
             add_input(record, source, name, role)
 
         def dependencies(node, role, record):

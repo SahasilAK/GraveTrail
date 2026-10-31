@@ -228,7 +228,8 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                 manager = RuntimeConnections()
                 manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True))
                 service.runtime_connections[(workspace_id, profile_id)] = manager
-                service.runtime_profiles[(workspace_id, profile_id)] = profile.model_dump_json()
+                from dataforge.model_capabilities import runtime_profile
+                service.runtime_profiles[(workspace_id, profile_id)] = runtime_profile(profile)
             if background:
                 service._workspace(workspace_id, write=True)
                 if action == 'analyze' and arguments.get('mode', 'parser') != 'parser':
@@ -375,43 +376,25 @@ def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str
 @lineage_app.command("build")
 def build(ctx: typer.Context, workspace: Workspace, force: bool = False,
           file_id: list[str] = typer.Option(None), background: bool = False, mode: str = 'parser',
-          additional_ai_review: bool = False, refresh_ai: bool = False,
-          max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> None:
-    """Build lineage for a workspace or selected source files.
-
-    Args:
-        ctx: Typer command context.
-        workspace: Workspace targeted by the command.
-        force: Whether to force a fresh analysis.
-        file_id: Optional source file identifier.
-        background: Whether to queue work as a background job."""
-    invoke(ctx, "analyze", workspace, background, force=force, file_ids=file_id, mode=mode,
-           additional_ai_review=additional_ai_review, refresh_ai=refresh_ai,
-           max_provider_attempts=max_provider_attempts, max_output_tokens_total=max_output_tokens_total,
-           max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+          max_output_tokens_total: int | None = None, resume_run_id: str = '', retry_unknown: bool = False,
+          output_share: int | None = None, input_token_limit: int | None = None, output_token_limit: int | None = None) -> None:
+    """Build static or AI lineage; token limits come from the selected provider profile."""
+    invoke(ctx, 'analyze', workspace, background, force=force, file_ids=file_id, mode=mode,
+           max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id, retry_unknown=retry_unknown,
+           **{k: v for k, v in dict(output_share=output_share, input_token_limit=input_token_limit,
+                                    output_token_limit=output_token_limit).items() if v is not None})
 
 
 @lineage_app.command('preview')
-def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'hybrid',
-                  file_id: list[str] = typer.Option(None), additional_ai_review: bool = False,
-                  max_provider_attempts: int | None = None, max_output_tokens_total: int | None = None, max_seconds: int | None = None, resume_run_id: str = '', retry_unknown: bool = False) -> None:
-    """Preview analysis inputs, disclosure, and provider budgets without running analysis.
-
-    Args:
-        ctx: Typer command context.
-        workspace: Workspace targeted by the command.
-        mode: Parser-only or hybrid analysis mode.
-        file_id: Optional source file identifiers to include.
-        additional_ai_review: Whether to include diagnostic review capacity.
-        max_provider_attempts: Optional provider call ceiling.
-        max_output_tokens_total: Optional reserved output token ceiling.
-        max_seconds: Optional execution time ceiling.
-        resume_run_id: Optional interrupted run to resume.
-        retry_unknown: Whether to retry unresolved units.
-    """
+def preview_build(ctx: typer.Context, workspace: Workspace, mode: str = 'ai',
+                  file_id: list[str] = typer.Option(None), max_output_tokens_total: int | None = None,
+                  resume_run_id: str = '', output_share: int | None = None,
+                  input_token_limit: int | None = None, output_token_limit: int | None = None) -> None:
+    """Preview pinned sources and token budgets without provider calls."""
     invoke(ctx, 'analysis_preview', workspace, mode=mode, file_ids=file_id,
-           additional_ai_review=additional_ai_review, max_provider_attempts=max_provider_attempts,
-           max_output_tokens_total=max_output_tokens_total, max_seconds=max_seconds, resume_run_id=resume_run_id, retry_unknown=retry_unknown)
+           max_output_tokens_total=max_output_tokens_total, resume_run_id=resume_run_id,
+           **{k: v for k, v in dict(output_share=output_share, input_token_limit=input_token_limit,
+                                    output_token_limit=output_token_limit).items() if v is not None})
 
 
 @lineage_app.command('analysis-report')

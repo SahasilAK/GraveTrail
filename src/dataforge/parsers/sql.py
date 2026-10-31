@@ -261,7 +261,8 @@ def wrapped_sql(tree: exp.Expression, dialect: sqlglot.Dialect, depth: int, code
     return parsed
 
 
-def reachable_scopes(tree: exp.Expression, all_scopes: list[Scope] | None = None) -> list[Scope]:
+def reachable_scopes(tree: exp.Expression, all_scopes: list[Scope] | None = None,
+                     dialect: sqlglot.Dialect | None = None) -> list[Scope]:
     """Select reachable query scopes, including DML-owned subqueries.
 
     Callers may supply an existing traversal to retain scope identity and avoid rescanning.
@@ -269,6 +270,16 @@ def reachable_scopes(tree: exp.Expression, all_scopes: list[Scope] | None = None
     if all_scopes is None:
         all_scopes = list(traverse_scope(tree) or [])
     active = {}
+
+    def identifier_key(node: exp.Identifier) -> str:
+        return dialect.normalize_identifier(node.copy()).name if dialect else node.name.casefold()
+
+    def alias_key(node: exp.Expression, fallback: str = '') -> str:
+        if isinstance(node, exp.Query) and isinstance(node.parent, (exp.Subquery, exp.CTE)):
+            node = node.parent
+        alias = node.args.get('alias')
+        name = alias.this if alias else node.this
+        return identifier_key(name) if isinstance(name, exp.Identifier) else fallback
 
     def visit(scope: Scope) -> None:
         """Mark a scope and its selected nested query scopes as active.
@@ -297,12 +308,13 @@ def reachable_scopes(tree: exp.Expression, all_scopes: list[Scope] | None = None
                         if isinstance(using, exp.Subquery) and s.expression is using.this), None)
     if using_scope is not None:
         visit(using_scope)
-    cte_scopes = {s.expression.parent.alias_or_name.casefold(): s for s in all_scopes
+    cte_scopes = {alias_key(s.expression.parent): s for s in all_scopes
                   if isinstance(s.expression.parent, exp.CTE)}
     if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
         for table in tree.find_all(exp.Table):
-            if table.find_ancestor(exp.CTE) is None and table.name.casefold() in cte_scopes:
-                visit(cte_scopes[table.name.casefold()])
+            key = identifier_key(table.this) if isinstance(table.this, exp.Identifier) else ''
+            if table.find_ancestor(exp.CTE) is None and key in cte_scopes:
+                visit(cte_scopes[key])
     return [s for s in all_scopes if id(s) in active]
 
 
@@ -362,8 +374,22 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 result.diagnostics.append(Diagnostic("Unsupported SQL command or procedural block; no guessed lineage", start))
                 continue
             all_scopes = list(traverse_scope(tree) or [])
-            scopes = reachable_scopes(tree, all_scopes)
+            scopes = reachable_scopes(tree, all_scopes, dialect)
             active = {id(scope) for scope in scopes}
+
+            def identifier_key(node: exp.Identifier) -> str:
+                return dialect.normalize_identifier(node.copy()).name
+
+            def alias_key(node: exp.Expression, fallback: str = '') -> str:
+                if isinstance(node, exp.Query) and isinstance(node.parent, (exp.Subquery, exp.CTE)):
+                    node = node.parent
+                alias = node.args.get('alias')
+                name = alias.this if alias else node.this
+                return identifier_key(name) if isinstance(name, exp.Identifier) else fallback
+
+            def scope_mapping(scope: Scope) -> dict[str, exp.Table | Scope]:
+                return {alias_key(node, name): source for name, (node, source) in scope.selected_sources.items()}
+
             inactive_nodes = {id(n) for s in all_scopes if id(s) not in active for n in s.expression.walk()}
             target = target_table(tree)
             into = select_into(tree)
@@ -376,13 +402,13 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 for _, source in scope.selected_sources.values():
                     if isinstance(source, exp.Table) and isinstance(source.this, exp.Identifier):
                         base_tables[id(source)] = source
-            cte_names = {c.alias_or_name.casefold() for c in tree.find_all(exp.CTE)}
+            cte_names = {alias_key(c) for c in tree.find_all(exp.CTE)}
             # DML owns table references outside query scopes (UPDATE FROM / MERGE USING).
             if not isinstance(tree, (exp.Select, exp.Union, exp.Create, exp.Insert)):
                 for table in tree.find_all(exp.Table):
-                    if table is not target and table.name.casefold() not in cte_names and id(table) not in inactive_nodes:
-                        if isinstance(table.this, exp.Identifier):
-                            base_tables[id(table)] = table
+                    if (table is not target and isinstance(table.this, exp.Identifier)
+                            and identifier_key(table.this) not in cte_names and id(table) not in inactive_nodes):
+                        base_tables[id(table)] = table
             sources = list({table_name(t): AssetRef(table_name(t), temporary=temporary_identifier(t))
                             for t in base_tables.values()}.values())
             usages = []
@@ -404,12 +430,12 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 wildcard_safe = isinstance(star, exp.Star) and not any(star.args.values())
                 source = None
                 if alias:
-                    source = mapping.get(alias.casefold())
+                    key = identifier_key(column.args['table'])
+                    source = mapping.get(key)
                     # A correlated subquery may reference an enclosing scope directly.
                     parent = scope.parent if scope else None
                     while source is None and parent:
-                        parent_mapping = {k.casefold(): v[1] for k, v in parent.selected_sources.items()}
-                        source = parent_mapping.get(alias.casefold())
+                        source = scope_mapping(parent).get(key)
                         parent = parent.parent
                 elif len({id(v) for v in mapping.values()}) == 1:
                     source = next(iter(mapping.values()))
@@ -435,7 +461,7 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 # Scope sources are CTEs/subqueries. Their inner references are counted once.
 
             for scope in scopes:
-                mapping = {k.casefold(): v[1] for k, v in scope.selected_sources.items()}
+                mapping = scope_mapping(scope)
                 for col in [*scope.columns, *scope.stars]:
                     if id(col) not in handled:
                         attribute(col, mapping, scope)
@@ -444,26 +470,29 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                         if isinstance(projection, exp.Star):
                             attribute(projection, mapping, scope)
             if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
-                cte_scopes = {s.expression.parent.alias_or_name.casefold(): s for s in scopes
+                cte_scopes = {alias_key(s.expression.parent): s for s in scopes
                               if isinstance(s.expression.parent, exp.CTE)}
                 using = tree.args.get('using') if isinstance(tree, exp.Merge) else None
                 using_scope = next((s for s in scopes
                                     if isinstance(using, exp.Subquery) and s.expression is using.this), None)
                 visible_tables = [t for t in tree.find_all(exp.Table)
                                   if t.find_ancestor(exp.Select, exp.Subquery, exp.CTE) is None]
-                mapping = {t.alias_or_name.casefold(): t for t in visible_tables
-                           if isinstance(t.this, exp.Identifier) and t.name.casefold() not in cte_names and id(t) not in inactive_nodes}
+                mapping = {alias_key(t): t for t in visible_tables
+                           if isinstance(t.this, exp.Identifier) and identifier_key(t.this) not in cte_names and id(t) not in inactive_nodes}
                 if using_scope is not None and using.alias:
-                    mapping[using.alias.casefold()] = using_scope
+                    mapping[alias_key(using)] = using_scope
                 for table in visible_tables:
-                    if table.name.casefold() in cte_scopes and id(table) not in inactive_nodes:
-                        mapping[table.alias_or_name.casefold()] = cte_scopes[table.name.casefold()]
+                    if (isinstance(table.this, exp.Identifier) and identifier_key(table.this) in cte_scopes
+                            and id(table) not in inactive_nodes):
+                        mapping[alias_key(table)] = cte_scopes[identifier_key(table.this)]
                 if target is not None:
-                    mapping[table_name(target).casefold()] = target
+                    mapping.setdefault(identifier_key(target.this), target)
                 for col in tree.find_all(exp.Column):
                     if id(col) not in handled and id(col) not in inactive_nodes:
                         # Assignment LHS is a write, not a read of the old target value.
-                        if isinstance(col.parent, exp.EQ) and col.parent.this is col and col.parent.parent is tree:
+                        if (isinstance(col.parent, exp.EQ) and col.parent.this is col
+                                and isinstance(col.parent.parent, exp.Update)
+                                and col.parent in col.parent.parent.expressions):
                             continue
                         attribute(col, mapping)
             if target is not None and not targets[0].name:

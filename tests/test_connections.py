@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 
 from dataforge.connections import RuntimeConnections, connection_scope
 from dataforge.llm import Adapter, Profile
@@ -69,7 +70,7 @@ def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatc
     else:
         monkeypatch.setenv('DATAFORGE_TEST_API_KEY', '')
         set_credential_environment('DATAFORGE_TEST_API_KEY', 'dummy-sensitive-123')
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
+    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
     def handler(request: pytest.FixtureRequest) -> Any:
         """Handle handler for the test scenario.
 
@@ -113,11 +114,13 @@ def test_masked_ui_credential_is_cleared_without_persistence(tmp_path: Path, mon
     next(t for t in app.text_input if t.label == 'Runtime credential').set_value('ui-dummy-secret')
     next(b for b in app.button if b.label == 'Connect for this session').click().run()
     assert not app.exception
-    assert app.session_state['runtime_connections'].resolve('DATAFORGE_OLLAMA_API_KEY') == 'ui-dummy-secret'
+    manager = app.session_state['runtime_connections']
+    reference = next(name for name in manager._credentials if name.startswith('DATAFORGE_SESSION_'))
+    assert manager.resolve(reference) == 'ui-dummy-secret'
     assert not next(t for t in app.text_input if t.label == 'Runtime credential').value
     next(b for b in app.button if b.label == 'Clear runtime credentials').click().run()
     assert not app.exception
-    assert app.session_state['runtime_connections'].resolve('DATAFORGE_OLLAMA_API_KEY') == ''
+    assert manager.resolve(reference) == ''
 
 
 def test_environment_credential_is_used_without_retaining_session_copy(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -229,16 +232,16 @@ def test_provider_ui_saves_and_reopens_hour_timeout(tmp_path: Path, monkeypatch:
     view.switch_page('ui/pages/connections.py').run()
     next(s for s in view.selectbox if s.label == 'Provider').select('OmniRoute').run()
     next(t for t in view.text_input if t.label == 'Model or deployment identifier').set_value('auto/best-coding')
-    timeout = next(n for n in view.number_input if n.label == 'Request timeout (seconds)')
+    timeout = next(n for n in view.number_input if n.label == 'Response inactivity timeout (seconds)')
     assert timeout.proto.max == 3600
     timeout.set_value(3600)
     next(b for b in view.button if b.label == 'Save provider profile').click().run()
     assert not view.exception
     store = get_store(str(tmp_path))
     profile = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
-    assert profile['timeout'] == 3600 and profile['model'] == 'auto/best-coding'
+    assert profile['read_timeout'] == 3600 and profile['timeout'] == 30 and profile['model'] == 'auto/best-coding'
     next(s for s in view.selectbox if s.label == 'Provider profile').select_index(1).run()
-    assert next(n for n in view.number_input if n.label == 'Request timeout (seconds)').value == 3600
+    assert next(n for n in view.number_input if n.label == 'Response inactivity timeout (seconds)').value == 3600
     st.cache_resource.clear()
 
 
@@ -260,7 +263,7 @@ def test_json_escaped_secret_is_redacted_before_persistence(tmp_path: Path) -> N
     manager = RuntimeConnections()
     secret = 'dummy"quoted\\secret'
     manager.register('DATAFORGE_TEST_API_KEY', secret)
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
+    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
     transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': json.dumps({'explanation': secret})}}))
     with connection_scope(manager):
         result = assist(store, w, profile, store.files(w)[0]['file_id'], 1, 1, transport=transport)

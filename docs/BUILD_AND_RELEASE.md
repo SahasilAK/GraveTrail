@@ -40,6 +40,44 @@ application's runtime configuration.
 | `dist/docker-image.json` | Local Docker image tag, content ID, OS and architecture |
 | `dist/manifest.json`, `dist/SHA256SUMS` | Version/platform/build metadata, artifact sizes and SHA-256 hashes |
 
+### Optional local API-key storage qualification — 2026-10-26
+
+Dependency: `keyring>=25.7,<26` (locked to 25.7.0), with Windows `pywin32-ctypes==0.2.3`
+and the library's `jaraco.*`/metadata dependencies. The wheel declares keyring; the frozen
+build explicitly collects keyring and win32ctypes. Frozen archive inspection confirmed
+`keyring.backends.Windows`, `win32ctypes.pywin32.win32cred`, its ctypes authentication
+implementation and jaraco modules. The Windows executable starts its CLI successfully.
+
+Native verification used only randomly named disposable GraveTrail-owned entries in a
+temporary data-home scope: save/read, a new runtime manager, a separate Python process,
+and deletion with absence confirmed. Native credential metadata reported current-user
+`CRED_PERSIST_LOCAL_MACHINE` (2). Installed-wheel and frozen CLI provider-model calls also
+retrieved a disposable key under an exact launch reference grant and authenticated to a
+temporary loopback HTTP test server; both test entries were deleted afterward. No existing
+saved credentials were read, overwritten, enumerated or deleted.
+
+Automated lifecycle/security tests use fake native backends for locked/unavailable stores,
+save/delete/database failures, scope isolation, endpoint changes, explicit source selection,
+disconnect/delete, launch/MCP/background grants and absence of canaries from histories,
+logs, exports, journals and backups. They do not verify OS account compromise resistance.
+
+Final checkout acceptance: **1,288 passed, 3 skipped** (Node.js availability and Windows
+symlink privileges); **60 focused provider/connection/AI/UI regressions passed**. Ruff,
+whitespace, source-inventory freshness, strict MkDocs and four artifact checksums passed.
+The final wheel's implementation/UI bytes match the reviewed source. No artifacts were
+pushed, published or merged.
+
+Windows persistence settings are verified by API metadata, not a reboot/domain-roaming
+experiment. Real locked-vault and OS-policy failure conditions remain mocked. macOS Keychain
+and Linux Secret Service are disabled pending verification of their local-only behavior.
+Native-store and database updates are not one atomic transaction; crash/commit failure may
+leave an orphan or missing entry, which must be cleaned or rebound explicitly. Stored keys
+last until deleted, with no independent master-password lock or same-user malware protection.
+See [secure configuration](SECURE_CONFIGURATION.md) for lifecycle and recovery details.
+
+The Windows scope follows [Microsoft's credential persistence definition](https://learn.microsoft.com/en-us/windows/win32/api/wincred/ns-wincred-credentialw)
+and explicitly overrides [keyring's enterprise default](https://github.com/jaraco/keyring/blob/v25.7.0/keyring/backends/Windows.py).
+
 The Docker target builds a local image, rather than exporting an image tarball or
 publishing to a registry. Its manifest hashes the image metadata document. Use the
 recorded content ID to identify the local image. Executables are built for the host
@@ -166,6 +204,13 @@ The publish workflow builds Windows x64 only; existing direct native/archive, Py
 and Docker build targets remain available. No macOS notarization or Linux packaging
 was added.
 
+Leave **release_mode** set to **unsigned** (the default) to build without a signing
+certificate or dedicated signing runner. This uses the regular hosted Windows runner
+and creates the complete application, unsigned installer and portable ZIP. Signing
+status does not change the application's functionality. Select **production** only
+after configuring publisher signing as described below; **development** remains a
+compatibility alias for unsigned releases.
+
 Choose either:
 
 - Enter **version** as an exact stable `X.Y.Z`, without `v`; this overrides release_type.
@@ -224,13 +269,21 @@ may prevent an older application opening it; restore a compatible backup before
 rolling back. Installed processes hold a named Windows mutex; setup/uninstall ask
 the user to close GraveTrail and never forcibly close live analysis.
 
-Two modes are explicit:
+Two signing paths are explicit:
 
-- **development** (default): unsigned `gravetrail-VERSION-windows-amd64-setup-unsigned.exe`
-  and an unsigned portable ZIP. This mode requires no certificate or paid service.
+- **unsigned** (default; **development** is a compatibility alias): unsigned
+  `gravetrail-VERSION-windows-amd64-setup-unsigned.exe` and an unsigned portable ZIP.
+  This mode requires no certificate, paid signing service or self-hosted signing runner.
+  The workflow maps it to the existing internal `development` build/evidence mode.
 - **production**: `gravetrail-VERSION-windows-amd64-setup.exe`, a signed application,
   signed installer and signed uninstaller. Missing identity, key, timestamp or failed
   trust checks stop the release; no unsigned downgrade is permitted.
+
+If a run reports missing `WINDOWS_SIGNING_THUMBPRINT`, `WINDOWS_TIMESTAMP_URL` or
+`WINDOWS_PUBLISHER`, it was launched in signed **production** mode. Rerun with
+**unsigned**, or supply those environment variables and the signing runner before
+selecting production. The workflow lists the missing variables and setup location;
+it never silently changes a requested signed release to unsigned.
 
 Production external setup (not provisioned by this change):
 

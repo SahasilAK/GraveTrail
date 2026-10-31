@@ -2,9 +2,9 @@
 import streamlit as st
 
 from dataforge.ai_service import preview_ai_evidence
-from dataforge.llm import TASKS, assist_task
+from dataforge.llm import TASKS, assist_task, preview_assistance
 from dataforge.store import Store
-from ui.assistance_result import render_result
+from ui.assistance_result import render_budget, render_result
 
 
 def render(store: Store, workspace: str) -> None:
@@ -42,17 +42,27 @@ def render(store: Store, workspace: str) -> None:
                              format_func=lambda i: f"{i + 1}/{len(chunks)} · lines {chunks[i]['first']}–{chunks[i]['last']}")
         first, last = chunks[index]["first"], chunks[index]["last"]
         st.caption("Only this chunk is requested. Uncheck chunk preview to cancel this selection; no remaining chunks run automatically.")
-    st.code("\n".join(source["raw_content"].splitlines()[int(first) - 1:int(last)]), language="sql" if source["extension"] == ".sql" else "sas")
+    prepared = preview_assistance(store, workspace, fid, int(first), int(last), task,
+                                  expected_hash=source['content_hash'])
+    st.code(prepared['code'], language="sql" if source["extension"] == ".sql" else "sas")
+    st.caption(f"{source['relative_path']} · original lines {first}–{last} · task {task}.")
+    render_budget(prepared['budget'])
     st.caption("Only the selected code range is sent, subject to your privacy gates, redaction and context budget. AI explanations remain advisory; relationships require exact source quotes and explicit read/write evidence.")
-    if st.button("Analyze selected evidence with AI", key=f"manual_ai_request_{workspace}_{fid}_{source['content_hash']}"):
+    if st.button("Analyze selected evidence with AI", disabled=not prepared['budget']['fits'], key=f"manual_ai_request_{workspace}_{fid}_{source['content_hash']}"):
         try:
             with st.spinner("Requesting grounded analysis", show_time=True):
                 response = assist_task(store, workspace, fid, int(first), int(last), task,
-                                       expected_hash=source["content_hash"])
-            st.session_state["ai_record_" + workspace] = response["record_id"]
-            st.rerun()
-        except Exception as exc:
+                                       expected_hash=source["content_hash"], expected_job=prepared['job_id'],
+                                       expected_request=prepared['request_fingerprint'])
+            if response['record_id']:
+                st.session_state["ai_record_" + workspace] = response["record_id"]
+                st.rerun()
+            else:
+                st.warning(response['failure']['message'])
+        except ValueError as exc:
             st.error(f"Assistance failed: {exc}")
+        except Exception as exc:
+            st.error(f"Assistance failed ({type(exc).__name__}). No unvalidated relationships were added.")
     st.subheader("AI activity")
     st.dataframe(store.rows("SELECT created_at,task,provider,model,outcome,duration,usage FROM llm_records WHERE workspace_id=? ORDER BY created_at DESC LIMIT 50", [workspace]), hide_index=True)
 

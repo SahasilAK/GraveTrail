@@ -1,6 +1,6 @@
 # .github/
 
-Repository automation configuration.
+Repository automation configuration. Docs and application-test checkouts fetch the source baseline history for mechanically checked developer inventories; deployment remains main-only.
 
 ## Subfolders
 - `workflows/` — [workflows/KNOWLEDGE.md](workflows/KNOWLEDGE.md).

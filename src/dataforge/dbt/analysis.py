@@ -21,7 +21,8 @@ def parse_model_query(query, *, output, dialect, primary_evidence, relation_map,
         if not isinstance(tree, (exp.Select, exp.SetOperation)):
             raise ValueError('dbt model requires one query')
         derivations = extract_transformations(tree, query, sqlglot.Dialect.get_or_raise(dialect or None),
-            reachable_scopes(tree), exp.to_table(output.name))
+            reachable_scopes(tree, dialect=sqlglot.Dialect.get_or_raise(dialect or None)),
+            exp.to_table(output.name))
     except (sqlglot.errors.SqlglotError, ValueError, RecursionError):
         return ParseResult(assets=[output], diagnostics=[Diagnostic('Unsupported dbt query; column coverage is partial')])
     operations = result.operations or [Operation('SELECT', [], [], query, 1, 1)]
