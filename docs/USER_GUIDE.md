@@ -370,3 +370,23 @@ Unknown responses may have been billed and require the configured recovery polic
 explicit retry acknowledgement. **Retry unresolved AI work** retries only unfinished
 items after partial publication. See [AI flow](user-guide/ai-analysis-flow.md) and
 [controls/recovery](user-guide/ai-analysis-controls-and-recovery.md).
+
+## Column lineage graph
+
+In **Columns**, choose an asset and switch between **Direct references** and
+**Lineage graph**. Choose a column and direction. Arrows point from inputs through
+transformation boxes to outputs. Solid edges carry values; dashed edges show
+selection, filter, join, rowset, partition and order context. Select a graph box or
+edge, or use the keyboard-accessible **Transformation step** selector, to inspect
+logic. Multiple writers remain separate choices.
+
+**Transformation logic** shows expression, statement preview, roles, effects and
+coverage. **Analyzed source file** opens the exact historical file used by Analysis,
+with original line numbers, 200-line pages, search and original-byte download.
+Changed or unavailable historical versions are explicitly reported. Compiled dbt
+expressions identify unavailable original-source coordinate mapping.
+
+The display fits at most 600 nodes and 1,200 edges, retaining whole transformation
+units. Omission counts do not change trace completeness. The **Steps and paths**
+table and exports retain the full bounded trace of up to 200 derivations.
+The previous Transformation lineage route still opens the same renderer.

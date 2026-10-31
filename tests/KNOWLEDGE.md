@@ -19,6 +19,8 @@ The byte-identical `test_ai_saved_publication.py` was removed.
 - `sample_data/` — supplied SQL/SAS and synthetic dbt project ZIPs and gold/manifest boundaries; [map](sample_data/KNOWLEDGE.md).
 
 ## Test areas and shared helpers
+- `test_column_parser_followup.py` — Nested scopes, bounded PostgreSQL mutations and dialect-quoted table/CTE columns, including persisted trace continuity.
+- `test_column_graph.py`, `test_column_graph_ui.py`, `test_column_evidence.py` — Source-free scene caps, validated selection, lazy UI and exact historical evidence.
 - `test_workflow.py`, `test_ingestion.py`, `test_inventory_controls.py`, `test_vendor_fixtures.py` — safe intake, complete persisted analysis, incremental cache/reimport/isolation, original evidence and fixture oracles.
 - `test_sql.py`, `test_sas.py`, `test_sas_project.py`, `test_parser_static_wrappers.py`, `test_schemas.py`, `test_job_identity.py` — static grammar, literal-versus-runtime boundaries, original coordinates, schemas/wildcards and temporary/job identities.
 - `test_sql_transformations.py`, `test_sas_transformations.py`, `test_transformations.py`, `test_transformation_sas_integration.py`, `test_transformation_access.py` — distinct value/role derivations, scoped/versioned identity, unknown writers, migrations and UI/CLI/MCP disclosure/traversal parity.

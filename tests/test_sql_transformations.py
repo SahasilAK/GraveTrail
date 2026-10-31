@@ -1,7 +1,72 @@
 """Transformation facts stay separate from direct column usage."""
 from typing import Any
 
+import pytest
+
 from dataforge.parsers.sql import parse_sql
+
+
+@pytest.mark.parametrize('dialect', ['', 'postgres', 'duckdb', 'snowflake', 'bigquery'])
+def test_group_by_ordinal_preserves_selection_dependencies(dialect):
+    records = derivations('CREATE TABLE dst AS SELECT a AS "Key", SUM(b) AS s FROM src GROUP BY 1', dialect)
+    assert inputs(records[1], 'value_selection') == {('src', 'a')}
+    assert records[0]['expression'] == 'a AS "Key"'
+
+
+@pytest.mark.parametrize('position', ['(1)', '((1))'])
+def test_parenthesized_group_ordinal_preserves_dependencies(position):
+    records = derivations(f'CREATE TABLE dst AS SELECT a,SUM(b) AS s FROM src GROUP BY {position}', 'duckdb')
+    assert inputs(records[1], 'value_selection') == {('src', 'a')}
+
+
+@pytest.mark.parametrize('position', ['+1', '+ /* exact source */ 1', '(+1)'])
+def test_unary_plus_grouping_does_not_invent_ordinal_dependencies(position):
+    record = derivations(f'CREATE TABLE dst AS SELECT SUM(b) AS s FROM src GROUP BY {position}', 'duckdb')[0]
+    assert inputs(record, 'value_selection') == set()
+    assert record['status'] == 'unresolved' and record['coverage']
+
+
+def test_query_level_sampling_has_coverage():
+    record = derivations('CREATE TABLE dst AS SELECT a FROM src USING SAMPLE 1 ROWS', 'duckdb')[0]
+    assert record['status'] == 'unresolved' and record['coverage']
+
+
+@pytest.mark.parametrize('group', ['0', '3', '-1'])
+def test_invalid_group_ordinal_has_coverage(group):
+    records = derivations(f'CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src GROUP BY {group}')
+    assert all(r['status'] == 'unresolved' and r['coverage'] for r in records)
+
+
+def test_unqualified_group_ordinal_dialect_has_coverage():
+    records = derivations('CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src GROUP BY 1', 'tsql')
+    assert all(r['status'] == 'unresolved' for r in records)
+
+
+def test_distinct_preserves_cross_column_selection():
+    records = derivations('CREATE TABLE dst AS SELECT DISTINCT a, b FROM src')
+    assert inputs(records[0], 'value_selection') == {('src', 'a'), ('src', 'b')}
+
+
+def test_distinct_on_preserves_selector_or_reports_boundary():
+    record = derivations('CREATE TABLE dst AS SELECT DISTINCT ON (b) a FROM src', 'postgres')[0]
+    assert inputs(record, 'value_selection') == {('src', 'b')}
+    assert record['status'] == 'unresolved' and record['coverage']
+
+
+@pytest.mark.parametrize('modifier', ['LIMIT 10', 'OFFSET 2', 'TABLESAMPLE BERNOULLI (10)',
+                                     'ORDER BY b LIMIT 10 OFFSET 2'])
+def test_row_modifiers_never_silently_verify(modifier):
+    record = derivations(f'CREATE TABLE dst AS SELECT a FROM src {modifier}')[0]
+    assert record['status'] == 'unresolved' and record['coverage']
+    assert inputs(record) == {('src', 'a')}
+
+
+def test_union_duplicate_selection_has_explicit_boundary():
+    records = derivations('CREATE TABLE dst AS SELECT a FROM src UNION SELECT b FROM other')
+    assert all(r['status'] == 'unresolved' and r['coverage'] for r in records)
+    assert [r['branch'] for r in records] == [0, 1]
+    assert all(r['status'] == 'verified' for r in derivations(
+        'CREATE TABLE dst AS SELECT a FROM src UNION ALL SELECT b FROM other'))
 
 
 def derivations(sql: str, dialect: str="") -> Any:

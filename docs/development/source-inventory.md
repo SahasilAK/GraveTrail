@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **396 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **405 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -34,12 +34,12 @@ python scripts/docs/inventory.py --check
 | --- | ---: |
 | [Entry points and package](#entry-points-and-package) | 5 |
 | [Static parsing and identity](#static-parsing-and-identity) | 11 |
-| [Storage and configuration](#storage-and-configuration) | 13 |
+| [Storage and configuration](#storage-and-configuration) | 15 |
 | [Graphs, columns and exports](#graphs-columns-and-exports) | 9 |
 | [AI and provider services](#ai-and-provider-services) | 31 |
 | [dbt](#dbt) | 14 |
 | [CLI and MCP automation](#cli-and-mcp-automation) | 12 |
-| [Streamlit UI](#streamlit-ui) | 34 |
+| [Streamlit UI](#streamlit-ui) | 37 |
 | [Prompts and response schemas](#prompts-and-response-schemas) | 20 |
 | [Verification and release tooling](#verification-and-release-tooling) | 10 |
 | [Documentation tooling](#documentation-tooling) | 6 |
@@ -50,7 +50,7 @@ python scripts/docs/inventory.py --check
 | [Tests: AI and providers](#tests-ai-and-providers) | 59 |
 | [Tests: dbt](#tests-dbt) | 13 |
 | [Tests: automation](#tests-automation) | 14 |
-| [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 27 |
+| [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 31 |
 | [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 26 |
 
 ## Entry points and package
@@ -74,16 +74,18 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/parsers/sas.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sas.py) | Conservative SAS static analysis, with unresolved runtime constructs surfaced. | `IDENT`, `dataset_ref`, `strip_comments`, `resolve_macros`, `parse_sas` |
 | [`src/dataforge/parsers/sas_sql.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sas_sql.py) | SAS SELECT attributes and calculated aliases over the configured SQLGlot dialect. | `FORMAT_VALUE`, `parse_proc_sql` |
 | [`src/dataforge/parsers/sas_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sas_transformations.py) | Bounded DATA-step derivations; unknown SAS runtime behavior stays explicit. | `NAME`, `STRING`, `ASSIGNMENT`, `SUPPORTED_FUNCTIONS`, `derivation`, `dependency`, `data_step_derivations`, `proc_derivations` |
-| [`src/dataforge/parsers/sql.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sql.py) | SQLGlot AST extraction with scope-local direct column attribution. | `ROUTINE_HEADER`, `COMMENT_DELIMITER`, `table_name`, `select_into`, `temporary_identifier`, `target_table`, `usage_context`, `declared_schema`, `wrapped_sql`, `parse_sql` |
+| [`src/dataforge/parsers/sql.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sql.py) | SQLGlot AST extraction with scope-local direct column attribution. | `ROUTINE_HEADER`, `COMMENT_DELIMITER`, `table_name`, `select_into`, `temporary_identifier`, `target_table`, `usage_context`, `declared_schema`, `wrapped_sql`, `reachable_scopes`, `parse_sql` |
 | [`src/dataforge/parsers/sql_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sql_transformations.py) | Conservative, scope-preserving SQL transformation facts with original evidence. | `identifier`, `relation`, `extract_transformations` |
 | [`src/dataforge/schemas.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/schemas.py) | Reconcile explicit DDL without assuming runtime order or discovering a database schema. | `collect_schemas` |
-| [`src/dataforge/services.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/services.py) | Inventory-to-lineage analysis, transactional materialization and direct usage reports. | `PARSER_VERSION`, `analysis_is_current`, `export_lineage_excel`, `analyze`, `source_dialect`, `prepare_analysis_results`, `retained_publication_results`, `publish_analysis_results`, `column_report`, `column_names`, `compare_runs`, `restore_manual_ai_results` |
+| [`src/dataforge/services.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/services.py) | Inventory-to-lineage analysis, transactional materialization and direct usage reports. | `PARSER_VERSION`, `analysis_is_current`, `export_lineage_excel`, `analyze`, `source_dialect`, `prepare_analysis_results`, `retained_publication_results`, `publish_analysis_results`, `column_report`, `column_usage_coverage`, `column_names`, `compare_runs`, `restore_manual_ai_results` |
 
 ## Storage and configuration
 
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
 | [`src/dataforge/cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/cleanup.py) | Previewed, dependency-aware runtime cleanup. No caller-supplied SQL or paths. | `GRAPH`, `WORKSPACE_TABLES`, `CATEGORIES`, `checked_path`, `assert_idle`, `maintenance_guard`, `cleanup_plan`, `apply_cleanup` |
+| `src/dataforge/column_evidence.py` **new** | Validated, lazy source resolution for the local column lineage inspector. | `load_column_evidence` |
+| `src/dataforge/column_graph.py` **new** | Pure, bounded column-trace scenes for the local interactive graph. | `build_column_scene` |
 | [`src/dataforge/configuration.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/configuration.py) | Validated workspace identity and safe, versioned configuration portability. | `ParsingSettings`, `WorkspaceIdentity`, `VisualizationSettings`, `LLMResourceSettings`, `AnalysisPreferences`, `PortableSettings`, `WorkspaceConfiguration`, `export_workspace_configuration`, `import_workspace_configuration` |
 | [`src/dataforge/connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/connections.py) | Session credentials and explicit process-environment credential entry. | `DEFAULT_KEY_ENV`, `set_credential_environment`, `RuntimeConnections`, `current_connections`, `connection_scope` |
 | `src/dataforge/credentials.py` **new** | Application-owned native credentials; no discovery, fallback or secret serialization. | `SAVED_PREFIX`, `SESSION_PREFIX`, `CredentialError`, `credential_source`, `credential_reference`, `owns_reference`, `approved_backend`, `NativeCredentials` |
@@ -195,6 +197,9 @@ python scripts/docs/inventory.py --check
 | [`ui/analysis_sections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/analysis_sections.py) | Lazy diagnostic investigation and run history; source and AI stay explicit. | `render_diagnostics`, `render_history` |
 | [`ui/assistance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/assistance.py) | Focused, user-triggered AI assistance over imported source evidence. | `render` |
 | [`ui/assistance_result.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/assistance_result.py) | Durable AI result presentation shared by manual and diagnostic-assisted review. | `render_budget`, `render_result` |
+| `ui/column_graph.py` **new** | Source-free selectable SVG column graph. | `resolve_selection`, `column_graph_view` |
+| `ui/column_lineage.py` **new** | Shared lineage controls and selection-driven graph inspection. | `render_column_lineage` |
+| `ui/column_references.py` **new** | No module docstring; inspect the linked source. | `render_column_references` |
 | [`ui/common.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/common.py) | No module docstring; inspect the linked source. | `ROOT`, `get_store`, `context`, `storage_homes`, `current_home`, `open_storage_home`, `allowed_roots`, `title`, `load_graph`, `choose_asset`, `downloads`, `source_viewer`, `graph_view` |
 | [`ui/copy_names.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/copy_names.py) | Compact comma-separated names with browser-side clipboard controls. | `copy_names` |
 | [`ui/data_management.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/data_management.py) | Human cleanup controls; policy and mutations stay in shared services. | `render` |
@@ -205,14 +210,14 @@ python scripts/docs/inventory.py --check
 | [`ui/pages/analysis.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/analysis.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/automation.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/automation.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/builder.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/builder.py) | No module docstring; inspect the linked source. | — |
-| [`ui/pages/columns.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/columns.py) | No module docstring; inspect the linked source. | — |
+| [`ui/pages/columns.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/columns.py) | Direct references and interactive column lineage. | — |
 | [`ui/pages/connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/connections.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/dashboard.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/dashboard.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/explorer.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/explorer.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/management.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/management.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/settings.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/tools.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/tools.py) | No module docstring; inspect the linked source. | — |
-| [`ui/pages/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/transformations.py) | Focused, bounded column derivations; direct references remain on Columns. | — |
+| [`ui/pages/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/transformations.py) | Compatibility route for existing transformation-lineage bookmarks. | — |
 | [`ui/presentation.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/presentation.py) | Small, theme-derived presentation helpers for the native Streamlit shell. | `ICON_PATH`, `brand_title`, `apply_style`, `eyebrow`, `empty_state`, `section`, `sync_context` |
 | [`ui/provider_settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/provider_settings.py) | Provider profiles and task routing. Secrets remain environment references. | `render` |
 | [`ui/style.css`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/style.css) | UI stylesheet. | — |
@@ -397,7 +402,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_ai_analysis_evaluation.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_evaluation.py) | The evaluator counts errors and abstentions; it cannot certify mocks as live quality. | 12 test functions; helpers/constants: `install_mock_benchmark` |
 | [`tests/test_ai_analysis_jobs.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_jobs.py) | No module docstring; inspect the linked source. | 2 test functions |
 | [`tests/test_ai_analysis_lifecycle_followup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_lifecycle_followup.py) | No module docstring; inspect the linked source. | 3 test functions |
-| [`tests/test_ai_analysis_persistence.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_persistence.py) | No module docstring; inspect the linked source. | 13 test functions |
+| [`tests/test_ai_analysis_persistence.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_persistence.py) | No module docstring; inspect the linked source. | 14 test functions |
 | [`tests/test_ai_analysis_reconciliation.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_reconciliation.py) | Reconciliation matrix without providers, files, or persistence. | 12 test functions |
 | [`tests/test_ai_analysis_runs.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_runs.py) | No module docstring; inspect the linked source. | 3 test functions |
 | [`tests/test_ai_analysis_scaling.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_scaling.py) | Exact-source semantic paging and lossless review continuation. | 9 test functions; helpers/constants: `unit` |
@@ -456,7 +461,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_dbt_access.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_access.py) | No module docstring; inspect the linked source. | 2 test functions; helpers/constants: `setup_store` |
 | [`tests/test_dbt_ai_analysis.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_ai_analysis.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_dbt_ai_context.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_ai_context.py) | No module docstring; inspect the linked source. | 1 test functions |
-| [`tests/test_dbt_analysis.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_analysis.py) | No module docstring; inspect the linked source. | 6 test functions; helpers/constants: `fixture_entries` |
+| [`tests/test_dbt_analysis.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_analysis.py) | No module docstring; inspect the linked source. | 7 test functions; helpers/constants: `fixture_entries` |
 | [`tests/test_dbt_artifacts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_artifacts.py) | No module docstring; inspect the linked source. | 6 test functions; helpers/constants: `manifest` |
 | [`tests/test_dbt_imports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_imports.py) | No module docstring; inspect the linked source. | 5 test functions; helpers/constants: `project_entries` |
 | [`tests/test_dbt_maintenance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_dbt_maintenance.py) | No module docstring; inspect the linked source. | 4 test functions |
@@ -491,7 +496,11 @@ python scripts/docs/inventory.py --check
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
 | [`tests/test_cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_cleanup.py) | No module docstring; inspect the linked source. | 13 test functions; helpers/constants: `populated` |
-| [`tests/test_column_qol.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_column_qol.py) | Copyable summaries must not confuse filtered-out columns with unused columns. | 2 test functions |
+| `tests/test_column_evidence.py` **new** | Exact historical evidence resolution for the local column inspector. | 11 test functions; helpers/constants: `analyzed`, `load` |
+| `tests/test_column_graph.py` **new** | Column scenes preserve trace facts while bounding only their display. | 13 test functions; helpers/constants: `ref`, `step`, `trace`, `scene`, `assert_closed` |
+| `tests/test_column_graph_ui.py` **new** | Selection and navigation regressions for the column graph. | 2 test functions |
+| `tests/test_column_parser_followup.py` **new** | Nested query repairs and deliberately bounded PostgreSQL writes. | 20 test functions; helpers/constants: `records` |
+| [`tests/test_column_qol.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_column_qol.py) | Copyable summaries must not confuse filtered-out columns with unused columns. | 5 test functions |
 | [`tests/test_connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_connections.py) | No module docstring; inspect the linked source. | 14 test functions |
 | [`tests/test_excel_artifacts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_excel_artifacts.py) | End-to-end XLSX adapters, snapshot facts and disclosure checks. | 5 test functions; helpers/constants: `workspace`, `artifact_bytes` |
 | [`tests/test_excel_exports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_excel_exports.py) | Workbook semantics and inert OOXML content, read independently of the writer. | 13 test functions; helpers/constants: `NS`, `cells`, `table`, `graph`, `workbook` |
@@ -507,16 +516,16 @@ python scripts/docs/inventory.py --check
 | [`tests/test_parser_static_wrappers.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parser_static_wrappers.py) | No module docstring; inspect the linked source. | 27 test functions; helpers/constants: `FIXTURES`, `pairs` |
 | [`tests/test_sas.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sas.py) | No module docstring; inspect the linked source. | 20 test functions; helpers/constants: `pairs` |
 | [`tests/test_sas_project.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sas_project.py) | No module docstring; inspect the linked source. | 2 test functions |
-| [`tests/test_sas_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sas_transformations.py) | No module docstring; inspect the linked source. | 18 test functions; helpers/constants: `physical` |
+| [`tests/test_sas_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sas_transformations.py) | No module docstring; inspect the linked source. | 22 test functions; helpers/constants: `physical` |
 | [`tests/test_schemas.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_schemas.py) | No module docstring; inspect the linked source. | 9 test functions |
 | [`tests/test_sql.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sql.py) | No module docstring; inspect the linked source. | 18 test functions; helpers/constants: `names` |
-| [`tests/test_sql_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sql_transformations.py) | Transformation facts stay separate from direct column usage. | 31 test functions; helpers/constants: `derivations`, `inputs` |
+| [`tests/test_sql_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_sql_transformations.py) | Transformation facts stay separate from direct column usage. | 41 test functions; helpers/constants: `derivations`, `inputs` |
 | [`tests/test_storage_locations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_storage_locations.py) | No module docstring; inspect the linked source. | 3 test functions |
 | [`tests/test_store.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_store.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_temporary_cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_temporary_cleanup.py) | No module docstring; inspect the linked source. | 8 test functions; helpers/constants: `orphan` |
-| [`tests/test_transformation_access.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_transformation_access.py) | All access surfaces preserve column identity, coverage and source restrictions. | 5 test functions; helpers/constants: `SQL`, `engine` |
+| [`tests/test_transformation_access.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_transformation_access.py) | All access surfaces preserve column identity, coverage and source restrictions. | 6 test functions; helpers/constants: `SQL`, `engine` |
 | [`tests/test_transformation_sas_integration.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_transformation_sas_integration.py) | No module docstring; inspect the linked source. | 3 test functions |
-| [`tests/test_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_transformations.py) | No module docstring; inspect the linked source. | 20 test functions; helpers/constants: `populate`, `asset_id` |
+| [`tests/test_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_transformations.py) | No module docstring; inspect the linked source. | 24 test functions; helpers/constants: `populate`, `asset_id` |
 
 ## Tests: UI, packaging and repository
 

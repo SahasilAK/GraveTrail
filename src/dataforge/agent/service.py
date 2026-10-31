@@ -1068,7 +1068,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
 
         Raises:
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
-        from dataforge.services import column_report
+        from dataforge.services import column_report, column_usage_coverage
         if group_by not in {'none', 'file', 'usage_type'} or any(len(value) > 1024 for value in (column_query, usage_type, file_id)):
             raise AgentError('validation_failed', 'Invalid direct-column filter/grouping')
         selected = self._asset(w, asset)
@@ -1088,7 +1088,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             items.sort(key=lambda item: (item['group'], item['column_name']))
         return self._page(w, opts, ["columns", selected["asset_id"], column_query, usage_type, file_id, group_by], items,
                           asset_id=selected["asset_id"], unique_columns=len({r['column_name'] for r in rows}),
-                          group_by=group_by, analysis_current=self._current(w))
+                          group_by=group_by, analysis_current=self._current(w),
+                          usage_coverage=column_usage_coverage(self.store, w, selected['asset_id']))
 
     def _column_catalog(self, w: str, opts: QueryOptions, asset: str) -> dict[str, Any]:
         """Return a bounded catalog of stored column transformations.

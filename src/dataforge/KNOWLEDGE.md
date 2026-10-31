@@ -1,7 +1,7 @@
 # src/dataforge/
 
 Offline lineage, persistence, authorized automation and optional provider analysis. Keep UI
-imports out of this package. Current Store migration: **10**; parser/publication version: **16**;
+imports out of this package. Current Store migration: **10**; parser/publication version: **21**;
 project AI: **file extraction protocol 5**. Historical readers/migrations remain supported.
 
 ## Subfolders
@@ -11,6 +11,9 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 - `tokenizer_assets/` — Packaged offline tokenizer data.
 
 ## Core analysis and storage
+- `column_graph.py` — Bounded source-free column scenes, whole-derivation display caps and cycle-aware layout.
+- `column_evidence.py` — Workspace/run-validated lazy expression and exact analyzed-source lookup.
+- `services.column_usage_coverage` — Source-free freshness/diagnostic/wildcard coverage; unused names require complete direct usage.
 - `models.py` — AssetRef, Usage, Operation, ParseResult, diagnostics, stable IDs, quote-aware column keys and safe statement splitting.
 - `store.py` — Store owns serialized DuckDB access, additive migrations 1–10, workspaces/settings, original versions and transactions. One owning process per home.
 - `ingestion.py` — Importer and path/ZIP limits; lexical authorization precedes resolved containment. Originals are immutable SHA-256 blobs; imported code never executes.

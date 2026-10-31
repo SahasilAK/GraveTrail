@@ -109,3 +109,20 @@ def test_cancelled_dbt_analysis_retains_previous_graph(tmp_path):
         with pytest.raises(InterruptedError):
             analyze(store, w, force=True, cancelled=lambda: True)
         assert len(store.edges(w)) == 3
+
+
+def test_dbt_unused_cte_has_no_column_derivations(tmp_path):
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('reachable dbt scopes')
+        entries = [
+            ('project/dbt_project.yml', b'name: project\n'),
+            ('project/models/model.sql', b'''WITH unused AS (SELECT secret FROM hidden),
+                used AS (SELECT a FROM src), nested AS (SELECT a FROM used)
+                SELECT a FROM nested''')]
+        Importer(store, w).files(entries, set(), source_kind='dbt')
+        analyze(store, w)
+        refs = store.rows('SELECT table_name,column_name,scope FROM column_references WHERE workspace_id=?', [w])
+        assert refs and not any(r['column_name'] == 'secret' or r['table_name'] in {'hidden', 'unused'} for r in refs)
+        assert not any(a['name'] == 'hidden' for a in store.assets(w))
+        assert {r['table_name'] for r in refs} >= {'src', 'model', 'used', 'nested'}
+        assert analyze(store, w)['analyzed'] == 0

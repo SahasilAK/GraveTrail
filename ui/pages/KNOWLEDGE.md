@@ -1,5 +1,8 @@
 # ui/pages/
 
+Columns checks shared usage coverage before computing unused names; unresolved or stale
+coverage displays reasons and suppresses unused claims while retaining known references.
+
 dbt: builder chooses project/mode/artifact paths; analysis displays coverage;
 explorer adds resource/macro impact alongside the shared logical graph and column IDs.
 
@@ -31,3 +34,5 @@ Analysis Run renders the active AI progress fragment and Cancel before inventory
 Explorer Export prepares fitted SVG/PNG through services.export_graph_image; summarizes scope/appearance, explains pan/zoom independence and metadata privacy, and keeps generation errors in place. Images are built only on Prepare and are not cached.
 
 AI analysis uses shared durable response/part counters and an independent transient reasoning fragment; selected-run Continue and explicit new-run Start fresh are rendered by ui.analysis_ai.
+
+Columns contains lazy Direct references/Lineage graph views. transformations.py is a compatibility route; its sidebar duplicate is hidden.

@@ -83,6 +83,8 @@ with st.sidebar:
         for group, destinations in pages.items():
             eyebrow(group)
             for destination in destinations:
+                if destination.title == "Transformation lineage":
+                    continue
                 st.page_link(destination, label=destination.title, icon=destination.icon, width="stretch")
     st.caption(":material/lock: Local storage · source is never executed")
 

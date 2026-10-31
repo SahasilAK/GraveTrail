@@ -79,6 +79,13 @@ participate in workspace cleanup and full-home recovery; integrity inspection ch
 asset, statement, input, derivation and analysis references. See
 [transformation lineage](TRANSFORMATION_LINEAGE.md).
 
+Parser 16 refreshes grouping/selection dependencies and SQL/dbt reachable scopes.
+Downstream paths can contain both value and row-selection effects for one derivation;
+derivations remain deduplicated. Direct-usage reports expose computed `usage_coverage`
+with `complete` and source-free `reasons`; this is query metadata, not a new stored table.
+Unused column summaries require explicit complete coverage. Existing column tables and
+dependency-role vocabulary remain compatible; no schema migration is required.
+
 ## AI project analysis persistence
 
 Migration 6 adds staged project analysis without deleting existing facts:

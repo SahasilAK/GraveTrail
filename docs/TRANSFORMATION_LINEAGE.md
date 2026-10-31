@@ -43,12 +43,22 @@ identity under workspace case rules; quoted case and escaped identifier characte
 
 SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL and Snowflake
 syntax cases; supported syntax is bounded by the fixtures, not by SQLGlot's full dialect list.
+Positional GROUP BY dependencies resolve for generic SQL, PostgreSQL, DuckDB, Snowflake
+and BigQuery. Other dialects and invalid positions retain explicit coverage gaps.
+Parentheses around positions are preserved; normalized unary-plus grouping syntax
+stays unresolved rather than being mistaken for a position.
+DISTINCT records duplicate-selection inputs. DISTINCT ON records selectors and an unresolved
+row-choice boundary. Duplicate-eliminating UNION, LIMIT/OFFSET and table sampling retain
+explicit boundaries; UNION ALL retains separate value branches. dbt uses the same reachable
+SQL scopes, excluding unused CTEs from column facts.
 UPDATE/MERGE/DELETE value transformations, recursive SQL, EXCEPT/INTERSECT, named windows,
 scalar/correlated value subqueries, unknown UDF semantics, lateral projection/QUALIFY alias
 references, base-table positional column aliases, duplicate output names, query-level ordering
 and unsupported wildcard layouts have coverage gaps.
 SAS MERGE BY, multi-SET ownership, arrays, variable lists, loops, conditional retention,
 automatic runtime variables and runtime/macro-expanded expressions remain unresolved.
+SAS applies statement KEEP/DROP, statement RENAME, then output KEEP=/DROP= and RENAME=
+options. Repeated selection statements or dataset options remain explicitly unresolved.
 Existing table-level extraction can still recognize a construct that has no column mapping.
 
 ## Read the boundaries
@@ -68,6 +78,16 @@ operation remain distinguishable. Cycles and depth/item/input limits terminate v
 Unresolved writes remain visible beside known derivations and stop chaining through uncertain
 values. The service visits bounded column/effect states rather than enumerating every possible path;
 omitted path-step records carry their own truncation marker.
+A column used as both a value and a filter or join key retains both `value` and
+`row_selection` impact paths; derivation records remain unique. Cycles retain their
+boundary while newly discovered effect states can propagate within the traversal limits.
+
+Columns shows unused declared columns only with current, complete direct-reference
+coverage. Ambiguous references, parser diagnostics, failed sources, unexpanded wildcards
+and stale analysis suppress the unused list while retaining known used columns.
+Diagnostics without reliable asset attribution conservatively affect the workspace.
+Agent direct-column reports expose the same `usage_coverage` completeness and reasons,
+independently of display filters.
 
 The UI defaults to depth 5 and caps depth at 15. Shared service/CLI/MCP queries support
 depth 1–30, at most 20,000 derivations and bounded inputs/paths. Agent response character
@@ -105,3 +125,37 @@ not establish semantic completeness or live-model accuracy. dbt Python column de
 dynamic Jinja and unsupported compiled-to-original mappings remain partial. Current
 protocol 5 qualification uses independent nonempty mock fixtures; live accuracy remains
 separate evidence.
+
+## Column graph and parser 21 follow-up
+
+Columns offers Direct references and Lineage graph views. Graph boxes retain
+column/derivation identity, UNION branches, scopes and SAS versions. Display caps
+are separate from trace coverage. Source files load lazily from exact analyzed
+hashes; the graph component receives no expression or source text. Re-run Analysis
+after this parser upgrade.
+
+Table aliases and intermediate output columns follow the selected SQL dialect's
+quoted and unquoted identifier rules. Equivalent intermediate references retain
+the producer's column identity so traces remain connected.
+
+Intermediate set-operation LIMIT/OFFSET/sampling is marked incomplete. Unused CTE
+UNION DISTINCT does not contaminate active projections or stop their traces.
+
+PostgreSQL UPDATE support: single target; simultaneous SET of literals, NULL,
+boolean, target columns and arithmetic (+, -, *, /, %); optional comparison,
+AND/OR/NOT/IS predicates. Old inputs have statement-scoped prior-value identities.
+Prior rows, unchanged columns, partial writes and writer order remain unresolved.
+FROM, WITH, tuple assignment, DEFAULT, functions, subqueries, RETURNING, other
+modifiers and other dialects remain unsupported.
+
+PostgreSQL INSERT VALUES support: one literal row and explicit unique target
+columns, including NULL/boolean/negative numbers. Exact target order and evidence
+are retained. Existing rows and omitted-column defaults remain unresolved; a
+literal insert never proves the entire table column constant. Multiple rows,
+omitted lists, DEFAULT, expressions/functions, conflicts, RETURNING and subqueries
+remain unsupported.
+
+References: [PostgreSQL UPDATE](https://www.postgresql.org/docs/current/sql-update.html)
+and [PostgreSQL INSERT](https://www.postgresql.org/docs/current/sql-insert.html).
+
+Supported mutation operations also publish an unresolved partial-write scope boundary, so a known unassigned target column cannot appear to have complete lineage.

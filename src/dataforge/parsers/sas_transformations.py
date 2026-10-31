@@ -122,11 +122,15 @@ def _dataset(statement: str, keyword: str) -> dict[str, list[str] | dict[str, st
     if not (tail.startswith('(') and tail.endswith(')')):
         raise ValueError('SAS column transformations require a single dataset with simple options')
     tail = tail[1:-1].strip()
+    seen = set()
     while tail:
         key = re.match(r'(keep|drop|rename)\s*=\s*', tail, re.I)
         if not key:
             raise ValueError('Unsupported SAS dataset option in column transformations')
         name = key[1].casefold()
+        if name in seen:
+            raise ValueError('Repeated SAS dataset options are unresolved')
+        seen.add(name)
         tail = tail[key.end():]
         if name == 'rename':
             mapping = re.match(r'\(([^()]*)\)', tail)
@@ -222,6 +226,9 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             coverage.append('SAS procedural/MERGE BY/array/loop/conditional retention transformations are unresolved')
         elif not (ASSIGNMENT.fullmatch(clean) or re.match(r'\s*(set|keep|drop|rename|run)\b', clean, re.I)):
             coverage.append('Unsupported SAS DATA statement in column transformations')
+    for keyword in ('keep', 'drop', 'rename'):
+        if sum(bool(re.match(rf'\s*{keyword}\s+', clean, re.I)) for _, clean in body) > 1:
+            coverage.append(f'Repeated SAS {keyword.upper()} statements are unresolved')
     try:
         output_options = _dataset(statements[0][1], 'data')
         source_options = _dataset(sets[0], 'set') if sets else {'keep': None, 'drop': [], 'rename': {}}
@@ -281,19 +288,28 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         state[name] = step
         steps.append(step)
 
-    candidates = set(source_columns) | set(state) | set(rename) | set(output_options['rename'])
+    # SAS order: statement KEEP/DROP, statement RENAME, then output options.
+    # Output options therefore name the variable after the statement rename.
+    # https://support.sas.com/documentation/cdl/en/lrcon/65287/HTML/default/p10abuffsctmo1n1dp2gasb34p76.htm
+    before_rename = {new: old for old, new in rename.items()}
+    option_names = set(output_options['rename']) | set(output_options['keep'] or [])
+    candidates = set(source_columns) | set(state) | set(rename) | {
+        before_rename.get(name, name) for name in option_names}
     # Explicit KEEP establishes only the requested output columns, never the whole source schema.
     if keep is not None:
         candidates = keep
-    if output_options['keep'] is not None:
-        candidates = set(output_options['keep']) if keep is None else candidates & set(output_options['keep'])
-    candidates -= drop | set(output_options['drop'])
-    rename.update(output_options['rename'])
-    output_names = [rename.get(name, name) for name in candidates]
-    if len(set(output_names)) != len(output_names):
+    candidates -= drop
+    output_names = {}
+    for name in candidates:
+        renamed = rename.get(name, name)
+        if output_options['keep'] is not None and renamed not in output_options['keep']:
+            continue
+        if renamed not in output_options['drop']:
+            output_names[name] = output_options['rename'].get(renamed, renamed)
+    if len(set(output_names.values())) != len(output_names):
         coverage.append('SAS output RENAME has conflicting column names')
     for target in targets:
-        for name in sorted(candidates):
+        for name in sorted(output_names):
             errors = list(coverage)
             if name in state:
                 item = state[name]
@@ -304,7 +320,7 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             else:
                 inputs = []
                 errors.append('SAS output variable has no established input')
-            steps.append(derivation(target, rename.get(name, name), operation.code, inputs=inputs,
+            steps.append(derivation(target, output_names[name], operation.code, inputs=inputs,
                                     coverage=errors, ordinal=len(steps)))
         if source and not known_source and keep is None and output_options['keep'] is None:
             steps.append(derivation(target, '', operation.code, category='wildcard',

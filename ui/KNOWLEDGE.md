@@ -71,3 +71,7 @@ Explicit slider changes become run-only output overrides, respecting real model 
 `analysis_inspection.render_inspection` provides lazy Inputs/Outputs with request/attempt selection, planned-versus-dispatched outcomes, nested artifact expansion, metadata/content pagination and deferred retained-content downloads. Privacy/retention/size failures are explicit; source/provider content is data.
 
 `analysis_reasoning.py` — 500ms scoped reasoning fragment, exact absence caption and native browser details/300px CCv2 scroll body; textContent only, per-attempt browser expansion/scroll memory and Jump to latest. `analysis_ai` distinguishes durable validated/reused parts from received/handled responses and exposes explicit Start fresh (new run). Inspection remains lazy and shows per-request outcomes.
+
+- `column_graph.py` — Selectable local SVG component and validated scene-keyed selections.
+- `column_lineage.py` — Shared trace controls, graph, logic/file inspector and exports.
+- `column_references.py` — Direct usage and coverage summaries used by Columns.

@@ -2,6 +2,11 @@
 
 Pure static parsers returning ParseResult. Add positive/negative fixtures and bump services.PARSER_VERSION for semantic changes. No imported code is executed.
 
+Parser16: `sql.reachable_scopes` is shared with dbt, preserving DML activation and excluding
+unused CTEs. Grouping ordinals resolve in qualified dialects; DISTINCT retains selection
+roles and row modifiers/set duplicate selection retain explicit coverage. SAS output options
+apply after statement renaming; repeated selection statements/options remain unresolved.
+
 - `sql_transformations.py` — SQLGlot projection spans, scope/branch-preserving derivations,
   dependency roles and explicit unsupported boundaries; schema hooks defer to materialization.
 - `sas_transformations.py` — ordered DATA assignment versions, bounded single SET and
@@ -31,3 +36,5 @@ block comments and a bounded keyword regex; no ambiguous repeated prefix or sour
 Parser13: PROC SQL validates bounded adjacent SAS date/time/datetime constants and retains their exact typed tokens as Var so generated usage expressions keep suffixes; value derivations remain unresolved. SQL activates reachable MERGE USING and UPDATE/DELETE scalar scopes, excludes unused CTEs and restricts outer DML column maps to visible relations.
 
 Parser14 retains private original expression offsets for SQL projections and SAS assignment versions so semantic validation cannot swap identical text between branches/versions. Literal wrapper rebinding drops inner-only offsets. Private coordinates never replace original full-operation evidence.
+
+Parser version 21 retains nested set/mutation boundaries and uses dialect identifier rules for source aliases and intermediate outputs; matched intermediate inputs preserve producer spelling/identity.

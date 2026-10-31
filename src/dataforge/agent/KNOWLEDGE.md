@@ -2,6 +2,10 @@
 
 Saved provider references need the same exact human launch credential-ref grants as environment references; no vault enumeration or raw-key tools. Credential failures return sanitized credential_unavailable errors. Workspace cleanup also requires each saved ref before native deletion; detached jobs journal references/policy only.
 
+Direct-column responses expose source-free `usage_coverage` completeness/reasons before
+display filtering. Column lineage retains multiple effect paths per derivation under
+existing detail/source permissions and response limits.
+
 `cli_dbt.py` registers project/resource/detail/dependency commands over DbtOperations.
 Capability DBT01, four MCP dbt reads and explicit ingestion options share existing
 workspace/source/write/root permissions and cursor budgets.
