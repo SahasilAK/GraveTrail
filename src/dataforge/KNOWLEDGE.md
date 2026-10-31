@@ -2,6 +2,9 @@
 
 Static facts, persistence, analysis and export APIs. Keep UI imports out of this package. Related tables and data flow are in docs/DATA_MODEL.md.
 
+- `lineage_builder.py` — Bounded authored table/column/link models, workspace settings persistence with revision conflict checks and CSV/XLSX exports. Separate from analyzed evidence; JSON is the lossless transfer format.
+- `schema_imports.py` — Schema-only SQL DDL, explicit SAS LENGTH/PROC SQL, dbt YAML/manifest/catalog JSON, generic JSON, Informatica PowerCenter XML and CSV/TSV imports. Upload limits, inert content, DTD/alias rejection and partial-format warnings.
+
 `transformations.py` — materialize_columns, column_catalog and trace_columns: indexed,
 workspace/job/scoped column identities, revision-bound expressions/roles, bounded traversal,
 unknown-writer alternatives and cycle/limit/coverage markers. `models.column_key` shares

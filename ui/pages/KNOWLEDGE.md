@@ -6,10 +6,11 @@ explorer adds resource/macro impact alongside the shared logical graph and colum
 Analysis Run delegates explicit AI controls, worker progress and validation reporting to
 ui/analysis_ai.py; parser stays the unchecked default. History includes durable project runs.
 
-Eleven focused direct scripts registered by app.py using native st.Page/st.navigation.
+Twelve focused direct scripts registered by app.py using native st.Page/st.navigation.
 Existing /builder, /explorer, /columns, /tools and /settings routes remain supported.
 
 ## Files
+- `lineage_builder.py` — Sidebar authoring page with Schemas & data entry / Build lineage sections. Manual schema editing, bounded import preview, explicit linked-column deletion, auto-saved canvas, native relationship entry, JSON/HTML/Excel/CSV exports and confirmed JSON replacement.
 - `dashboard.py` — Overview: contextual next action, real inventory/evidence counts, hotspots, health and recent work; no automatic analysis.
 - `builder.py` — Sources: Import (ZIP/directory/allowed host, report and next Analysis link) / Inventory (filter, compact columns, report exports, lazy original source and metadata).
 - `analysis.py` — Run / Diagnostics / History; explicit analyze selected/all, force rebuild and evidence validation, scoped completion notice and next actions. Delegates lazy sections to analysis_sections.py.

@@ -2,6 +2,8 @@
 
 Shared Streamlit presentation and provider/assistance forms. Uses dataforge services; source content is loaded lazily.
 
+- `builder_canvas.py` — Offline CCv2 SVG canvas: searchable table palette, drag/drop, movable cards, column ports, labels, keyboard controls, pan/zoom/full screen and SVG/PNG exports. `builder_html` embeds the same renderer and escaped document in an offline presentation.
+
 ## Subfolders
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
 

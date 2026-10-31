@@ -30,7 +30,7 @@ Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `
 - `Dockerfile`, `compose.yaml` — Locked multi-stage non-root image, persistent /data, UI/MCP owner profiles and health check; actual Linux container smoke verified on Docker Desktop.
 - `LICENSE` — Project license; preserve original terms.
 - `README.md` — “Nothing stays buried.” headline and “Every dependency leaves a trail.” supporting line, live documentation link, animated hero, installation, first workflow, features and honest limits. Branding is shared with the app sidebar, Pages homepage/banner and site description.
-- `app.py` — Entry point: shared frame, workspace dialog and context guards; eleven native routes grouped into Workspace, Explore and Administration. Transformation lineage follows Columns; existing builder/explorer/settings URLs remain valid.
+- `app.py` — Entry point: shared frame, workspace dialog and context guards; twelve native routes grouped into Workspace, Explore and Administration, including authored Lineage builder. Transformation lineage follows Columns; existing builder/explorer/settings URLs remain valid.
 - `pyproject.toml` — Package/dependency constraints (including pure-Python XlsxWriter), CLI aliases, MCP SDK/Typer, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
 - `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
 
