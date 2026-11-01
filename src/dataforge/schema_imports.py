@@ -177,6 +177,7 @@ def import_schema(filename: str, content: bytes, dialect: str | None = None) -> 
         # Deduplicate repeated artifact definitions only when their schema agrees.
         unique = {}
         for table in tables:
+            table.folder = None  # Schema-only imports do not import another work's catalog organization.
             previous = unique.get(table.name.casefold())
             if previous and [(c.name, c.data_type) for c in previous.columns] != [(c.name, c.data_type) for c in table.columns]:
                 raise ValueError(f"Conflicting declarations for {table.name}; import them separately and review")

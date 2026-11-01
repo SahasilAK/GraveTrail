@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from dataforge.datatypes import TYPE_CATALOG, format_data_type, type_entry
 from dataforge.store import Store
 
 SETTING = "lineage_builder"
+WORKS_SETTING = "lineage_builder_works"
 JOIN_TYPES = ["Inner join", "Left join", "Right join", "Full outer join", "Cross join", "Self join"]
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 
@@ -38,6 +40,11 @@ class TableSize(BuilderModel):
     height: float = Field(ge=98, le=30000, allow_inf_nan=False)
 
 
+class BuilderFolder(BuilderModel):
+    id: Name = Field(default_factory=lambda: uuid4().hex)
+    name: Name
+
+
 class BuilderTable(BuilderModel):
     id: Name = Field(default_factory=lambda: uuid4().hex)
     name: Name
@@ -47,7 +54,9 @@ class BuilderTable(BuilderModel):
     comment: str = Field(default="", max_length=2000)
     position: Position | None = None
     canvas_member: bool = False
+    catalog_hidden: bool = False
     size: TableSize | None = None
+    folder: Name | None = None
 
     @model_validator(mode="after")
     def unique_columns(self) -> BuilderTable:
@@ -80,12 +89,17 @@ class BuilderDocument(BuilderModel):
     revision: int = Field(default=0, ge=0)
     tables: list[BuilderTable] = Field(default_factory=list, max_length=100)
     links: list[BuilderLink] = Field(default_factory=list, max_length=2000)
+    folders: list[BuilderFolder] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def valid_graph(self) -> BuilderDocument:
-        for values in ([t.id for t in self.tables], [t.name.casefold() for t in self.tables], [e.id for e in self.links]):
+        for values in ([t.id for t in self.tables], [t.name.casefold() for t in self.tables], [e.id for e in self.links],
+                       [f.id for f in self.folders], [f.name.casefold() for f in self.folders]):
             if len(set(values)) != len(values):
-                raise ValueError("Table names, table IDs and relationship IDs must be unique")
+                raise ValueError("Table/folder names, table/folder IDs and relationship IDs must be unique")
+        folder_ids = {f.id for f in self.folders}
+        if any(t.folder is not None and t.folder not in folder_ids for t in self.tables):
+            raise ValueError("A table refers to a missing catalog folder")
         endpoints = {(t.id, c.id) for t in self.tables for c in t.columns}
         seen = set()
         for link in self.links:
@@ -99,6 +113,55 @@ class BuilderDocument(BuilderModel):
                 raise ValueError("A relationship must connect different columns and cannot be duplicated")
             seen.add(identity)
         return self
+
+
+class BuilderWorkInfo(BuilderModel):
+    id: Name = Field(default_factory=lambda: uuid4().hex)
+    name: Name
+    updated_at: str
+
+
+class BuilderWork(BuilderWorkInfo):
+    document: BuilderDocument
+
+
+def list_builder_works(store: Store, workspace: str) -> list[BuilderWorkInfo]:
+    return [BuilderWorkInfo.model_validate(value) for value in store.setting(workspace, WORKS_SETTING, [])]
+
+
+def get_builder_work(store: Store, workspace: str, work_id: str) -> BuilderWork:
+    value = store.setting(workspace, WORKS_SETTING + "_" + work_id, None)
+    if value is None:
+        raise ValueError("The saved work no longer exists. Reload the list.")
+    return BuilderWork.model_validate(value)
+
+
+def save_builder_work(store: Store, workspace: str, name: str, *, work_id: str | None = None,
+                      document: BuilderDocument | None = None) -> BuilderWork:
+    """Save a named editable snapshot, or explicitly update an existing one."""
+    with store.transaction():
+        works = list_builder_works(store, workspace)
+        if work_id is not None and not any(w.id == work_id for w in works):
+            raise ValueError("The saved work no longer exists. Reload the list.")
+        work = BuilderWork(id=work_id or uuid4().hex, name=name,
+                           updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                           document=BuilderDocument.model_validate((document or load_builder(store, workspace)).model_dump()))
+        if any(w.id != work.id and w.name.casefold() == work.name.casefold() for w in works):
+            raise ValueError("A saved work with this name already exists. Choose another name or update that work.")
+        if work_id is None and len(works) >= 100:
+            raise ValueError("This workspace already has 100 saved works. Update an existing work instead.")
+        works = [w for w in works if w.id != work.id] + [BuilderWorkInfo.model_validate(work.model_dump(exclude={"document"}))]
+        store.set_setting(workspace, WORKS_SETTING + "_" + work.id, work.model_dump())
+        store.set_setting(workspace, WORKS_SETTING, [w.model_dump() for w in works])
+    return work
+
+
+def load_builder_work(store: Store, workspace: str, work_id: str, *, expected_revision: int) -> BuilderDocument:
+    """Replace the active document with a saved copy while retaining revision conflict checks."""
+    work = get_builder_work(store, workspace, work_id)
+    payload = work.document.model_dump()
+    payload["revision"] = expected_revision
+    return save_builder(store, workspace, BuilderDocument.model_validate(payload))
 
 
 def load_builder(store: Store, workspace: str) -> BuilderDocument:
@@ -186,7 +249,7 @@ def export_schemas(document: BuilderDocument, format: str, *, table_ids: list[st
     tables = [t for t in document.tables if (table_ids is None or t.id in table_ids) and (role is None or t.role == role)]
     if not tables:
         raise ValueError("Select at least one table to export")
-    subset = BuilderDocument(tables=tables)
+    subset = BuilderDocument(tables=tables, folders=document.folders)
     if format in ("csv", "xlsx"):
         return export_tabular(subset, format, schema_only=True)
     payload = {"tables": [t.model_dump(include={"name", "role", "system", "comment", "columns"},

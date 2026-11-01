@@ -2,7 +2,7 @@
 
 Shared Streamlit presentation and provider/assistance forms. Uses dataforge services; source content is loaded lazily.
 
-- `builder_canvas.py` — Offline CCv2 SVG canvas with signed positions, fan-out, typed/custom joins, session undo/redo and Delete shortcuts. Bordered cells support initially collapsed, fully wrapped comments; mouse edge/corner resizing saves dimensions and updates ports/export bounds. Current/previous catalog scrolls independently; Add table searches all schemas. `builder_node_colors` shares Lineage role colors with SVG/PNG/HTML; image exports retain fonts and expanded text. `mountColumns` / `column_editor` share one editable datatype field; fullscreen creation uses a native/custom system dropdown. `builder_html` embeds an escaped offline presentation.
+- `builder_canvas.py` — Offline CCv2 SVG canvas with grouped selection/drag/Delete, undo/redo and temporary Alt Pan. Toolbar Export dropdown groups SVG/PNG; shared menu positioning, keyboard navigation and dismissal also serve context menus for tables/relationships/canvas/catalog/folders. Catalog removal is reversible without removing schema/canvas data. Catalog-first creation, pointer drops, search/scroll and keyboard placement remain. History includes folders, sizes, links and catalog visibility. Bordered cells wrap expandable comments; resizing updates ports/exports. Shared role colors/datatype editor; `builder_html` escapes offline presentations.
 
 ## Subfolders
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).

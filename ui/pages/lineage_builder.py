@@ -15,8 +15,12 @@ from dataforge.lineage_builder import (
     columns_from_rows,
     export_schemas,
     export_tabular,
+    get_builder_work,
+    list_builder_works,
     load_builder,
+    load_builder_work,
     save_builder,
+    save_builder_work,
     schema_rows,
 )
 from dataforge.schema_imports import import_schema
@@ -75,7 +79,9 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
                 columns = columns_from_rows(edited, system, existing=existing.columns if existing else None)
                 table = BuilderTable(id=existing.id if existing else uuid4().hex, name=name, role=role,
                                      comment=comment, columns=columns, system=system, size=existing.size if existing else None,
-                                     position=existing.position if existing else ({"x": 80, "y": 80} if place else None))
+                                     folder=existing.folder if existing else None, canvas_member=True,
+                                     catalog_hidden=existing.catalog_hidden if existing else False,
+                                     position=existing.position if existing else None)
                 payload = document.model_dump()
                 if existing:
                     payload["tables"] = [table.model_dump() if t["id"] == existing.id else t for t in payload["tables"]]
@@ -93,7 +99,7 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
                 st.error(str(exc)[:600])
 
 
-mode = section("Builder workspace", ["Schemas & data entry", "Build lineage", "Export schemas"], prefix + "section")
+mode = section("Builder workspace", ["Schemas & data entry", "Build lineage", "Export schemas", "Saved work"], prefix + "section")
 st.caption(f"{len(document.tables)} tables · {sum(len(t.columns) for t in document.tables)} columns · {len(document.links)} relationships · Saved in this workspace")
 
 if mode == "Schemas & data entry":
@@ -121,14 +127,16 @@ if mode == "Schemas & data entry":
                 # New IDs ensure schema imports cannot collide with a different document's identities.
                 for table in tables:
                     table.id, table.position = uuid4().hex, None
-                    table.canvas_member = False
+                    table.canvas_member = True
+                    table.catalog_hidden = False
+                    table.folder = None
                     for column in table.columns:
                         column.id = uuid4().hex
                 existing_names = {t.name.casefold() for t in document.tables}
                 duplicate = [t.name for t in tables if t.name.casefold() in existing_names]
                 if duplicate:
                     raise ValueError("These tables already exist; edit them instead: " + ", ".join(duplicate)[:300])
-                BuilderDocument(tables=document.tables + tables, links=document.links)
+                BuilderDocument(tables=document.tables + tables, links=document.links, folders=document.folders)
                 st.session_state[prefix + "preview"] = {"tables": [t.model_dump() for t in tables], "notes": notes}
             except ValueError as exc:
                 st.session_state.pop(prefix + "preview", None)
@@ -158,7 +166,7 @@ if mode == "Schemas & data entry":
                     payload["links"] = [e for e in payload["links"] if selected not in (e["source_table"], e["target_table"])]
                     commit(payload, "Table deleted.")
 elif mode == "Build lineage":
-    st.caption("Use Lineage mode for mappings, or Join mode to connect two source columns. Add tables from the toolbar; the catalog keeps current and previously placed tables.")
+    st.caption("Create or add tables to the catalog, then drag them onto the canvas or into folders. Ctrl-click or drag empty canvas to select a group.")
     canvas_key = prefix + "canvas"
 
     def save_canvas():
@@ -175,6 +183,8 @@ elif mode == "Build lineage":
             if not isinstance(request, dict) or not isinstance(request.get("table"), dict):
                 raise ValueError("Invalid table entry")
             raw_table = dict(request["table"])
+            raw_table["position"] = None
+            raw_table["canvas_member"] = True
             raw_table["columns"] = columns_from_rows(raw_table.get("columns", []), raw_table.get("system", ""))
             table = BuilderTable.model_validate(raw_table)
             payload = load_builder(store, w).model_dump()
@@ -188,7 +198,7 @@ elif mode == "Build lineage":
     if error := st.session_state.pop(prefix + "canvas_error", ""):
         st.error(error)
     canvas(document, canvas_key, save_canvas, error, on_create=create_canvas_table, node_colors=node_colors)
-    with st.expander("Create a table on the canvas"):
+    with st.expander("Create a table in the catalog"):
         table_form(place=True)
     with st.expander("Add a relationship without dragging"):
         choices = {t.id: t.name for t in document.tables if t.columns}
@@ -241,8 +251,56 @@ elif mode == "Export schemas":
         except (ValueError, OSError) as exc:
             st.error(str(exc)[:600])
 
+elif mode == "Saved work":
+    st.subheader("Save, load and share lineage work")
+    st.caption("The current work saves automatically in this workspace. Save named copies to keep different designs. JSON files include tables, columns, folders, joins, links, positions and box sizes so another GraveTrail user can continue editing.")
+    name = st.text_input("Work name", max_chars=300, key=prefix + "work_name")
+    if st.button("Save new work", disabled=not name.strip()):
+        try:
+            save_builder_work(store, w, name)
+            st.success("Work saved in this workspace.")
+        except (ValueError, duckdb.Error, OSError) as exc:
+            st.error(str(exc)[:600])
+    try:
+        works = list_builder_works(store, w)
+        if works:
+            names = {work.id: work.name for work in works}
+            previous_work = st.session_state.get(prefix + "selected_work_id")
+            selected_work = st.selectbox("Saved work", names, format_func=names.get,
+                                         index=list(names).index(previous_work) if previous_work in names else 0,
+                                         key=prefix + "saved_work")
+            st.session_state[prefix + "selected_work_id"] = selected_work
+            work = get_builder_work(store, w, selected_work)
+            st.caption("Saved: " + work.updated_at)
+            st.download_button("Export saved work JSON", work.document.model_dump_json(indent=2).encode(),
+                               "lineage-work.json", "application/json", on_click="ignore")
+            if st.button("Update selected work with current design"):
+                save_builder_work(store, w, work.name, work_id=work.id)
+                st.session_state[prefix + "notice"] = "Saved work updated."
+                st.rerun()
+            replace_saved = st.checkbox("Replace the current work with this saved work", key=prefix + "load_work_confirm_" + work.id)
+            if st.button("Load saved work", disabled=not replace_saved):
+                load_builder_work(store, w, work.id, expected_revision=document.revision)
+                st.session_state[prefix + "notice"] = "Saved work loaded. Open Build lineage to continue editing."
+                st.rerun()
+        else:
+            st.info("No named works saved yet.")
+    except (ValueError, duckdb.Error, OSError) as exc:
+        st.error(str(exc)[:600])
+    st.subheader("Import another user's work")
+    imported_work = st.file_uploader("Lineage work JSON", type=["json"], max_upload_size=64, key=prefix + "import_work")
+    imported_name = st.text_input("Imported work name", max_chars=300, key=prefix + "imported_work_name")
+    if st.button("Import as saved work", disabled=not imported_work or not imported_name.strip()):
+        try:
+            incoming = BuilderDocument.model_validate_json(imported_work.getvalue())
+            save_builder_work(store, w, imported_name, document=incoming)
+            st.session_state[prefix + "notice"] = "Imported work saved. Select it above and load it when ready."
+            st.rerun()
+        except (ValueError, duckdb.Error, OSError) as exc:
+            st.error(str(exc)[:600])
+
 with st.expander("Export & restore builder"):
-    st.caption("SVG and PNG buttons on the canvas export all placed tables. HTML exports an offline interactive presentation. CSV/Excel include every table and relationship. JSON preserves the complete editable builder.")
+    st.caption("The canvas Export menu saves all placed tables as SVG or PNG. HTML exports an offline interactive presentation. CSV/Excel include every table and relationship. JSON preserves the complete editable builder.")
     format = st.selectbox("Builder export format", ["JSON", "HTML", "Excel", "CSV"], key=prefix + "export_format")
     if st.button("Prepare builder export", disabled=not document.tables):
         try:

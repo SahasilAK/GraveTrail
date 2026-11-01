@@ -98,6 +98,8 @@ def test_builder_sidebar_create_and_canvas(tmp_path, monkeypatch):
     store = get_store(str(tmp_path))
     assert load_builder(store, app.session_state["workspace"]).tables[0].name == "new_table"
     assert load_builder(store, app.session_state["workspace"]).tables[0].system == "SQL Server"
+    assert load_builder(store, app.session_state["workspace"]).tables[0].canvas_member
+    assert load_builder(store, app.session_state["workspace"]).tables[0].position is None
     app.segmented_control[0].set_value("Build lineage").run()
     assert not app.exception
     next(c for c in app.selectbox if c.label == "Builder export format").set_value("HTML").run()
@@ -112,6 +114,11 @@ def test_builder_sidebar_create_and_canvas(tmp_path, monkeypatch):
     next(b for b in app.button if b.label == "Prepare schema export").click().run()
     assert not app.exception
     assert any(b.label == "Download schemas CSV" for b in app.get("download_button"))
+    app.segmented_control[0].set_value("Saved work").run()
+    next(t for t in app.text_input if t.label == "Work name").set_value("Design one").run()
+    next(b for b in app.button if b.label == "Save new work").click().run()
+    assert not app.exception
+    assert any(b.label == "Export saved work JSON" for b in app.get("download_button"))
 
 
 def test_free_canvas_positions_and_column_fanout():
@@ -196,6 +203,11 @@ def test_canvas_joins_membership_and_shared_node_palette(tmp_path):
         saved = save_builder(store, w, doc)
         assert load_builder(store, w).tables[0].canvas_member
         assert not saved.tables[2].canvas_member
+        saved.tables[1].catalog_hidden = True
+        hidden = save_builder(store, w, saved)
+        assert load_builder(store, w).tables[1].catalog_hidden
+        assert hidden.tables[1].position is not None and hidden.links == saved.links
+        assert BuilderDocument.model_validate_json(hidden.model_dump_json()).tables[1].catalog_hidden
         assert b"Left join" in export_tabular(saved, "csv")
         assert BuilderDocument.model_validate_json(saved.model_dump_json()).links[0].kind == "join"
         reversed_join = {**join.model_dump(), "id": "reverse", "source_table": b.id,
@@ -245,3 +257,56 @@ def test_resizable_tables_and_filtered_schema_exports():
         table = BuilderTable(name="unsafe", columns=[{"name": "value", "data_type": datatype}])
         with pytest.raises(ValueError, match="datatype"):
             export_schemas(BuilderDocument(tables=[table]), "sql")
+
+
+def test_catalog_folders_and_saved_work_transfer(tmp_path):
+    from dataforge.lineage_builder import (
+        BuilderDocument,
+        BuilderTable,
+        list_builder_works,
+        load_builder,
+        load_builder_work,
+        save_builder,
+        save_builder_work,
+    )
+    from dataforge.store import Store
+
+    doc = BuilderDocument(folders=[{"id": "sources", "name": "Source systems"}], tables=[
+        BuilderTable(name="customers", folder="sources", canvas_member=True, columns=[{"name": "id"}],
+                     position={"x": 20, "y": 30}, size={"width": 600, "height": 180})])
+    with pytest.raises(ValidationError, match="folder"):
+        BuilderDocument(tables=doc.tables)
+    with pytest.raises(ValidationError):
+        BuilderDocument(folders=[{"name": "Sales"}, {"name": "sales"}])
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("Designer")
+        other = store.create_workspace("Recipient")
+        saved = save_builder(store, w, doc)
+        work = save_builder_work(store, w, "Customer lineage")
+        saved.tables[0].position.x = 200
+        save_builder(store, w, saved)
+        assert work.document.tables[0].position.x == 20
+        imported = BuilderDocument.model_validate_json(work.document.model_dump_json())
+        received = save_builder_work(store, other, "Received design", document=imported)
+        assert received.document.folders[0].name == "Source systems"
+        assert received.document.tables[0].folder == "sources"
+        assert received.document.tables[0].size.width == 600
+        assert load_builder(store, other).tables == []  # Import saves a copy until explicitly loaded.
+        load_builder_work(store, other, received.id, expected_revision=0)
+        assert load_builder(store, other).tables[0].position.x == 20
+        assert len(list_builder_works(store, other)) == 1
+        with pytest.raises(ValueError, match="revision|changed"):
+            load_builder_work(store, other, received.id, expected_revision=0)
+        with pytest.raises(ValueError, match="name|exists"):
+            save_builder_work(store, w, "Customer lineage")
+        updated = save_builder_work(store, w, "Updated design", work_id=work.id)
+        assert updated.document.tables[0].position.x == 200
+        assert len(list_builder_works(store, w)) == 1
+        from dataforge.schema_imports import import_schema
+        tables, _ = import_schema("schemas.json", work.document.model_dump_json().encode())
+        assert tables[0].folder is None
+        with pytest.raises(ValueError):
+            save_builder_work(store, w, "Broken", document=doc.model_copy(update={"folders": []}))
+    finally:
+        store.close()
