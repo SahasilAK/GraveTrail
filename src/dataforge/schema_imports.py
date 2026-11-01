@@ -54,6 +54,7 @@ def _structured(value: dict | list) -> list[BuilderTable]:
         if isinstance(columns, dict):
             columns = [{**c, "name": c.get("name", name)} for name, c in columns.items()]
         tables.append(BuilderTable(name=table.get("name") or table.get("table"),
+                                  system=table.get("system", ""),
                                   comment=str(table.get("description") or table.get("comment") or ""),
                                   role=table.get("role", "source"), columns=[_column(c) for c in columns]))
     return tables
@@ -164,7 +165,8 @@ def import_schema(filename: str, content: bytes, dialect: str | None = None) -> 
                 column = row.get("column") or row.get("column_name")
                 if not name:
                     raise ValueError("CSV requires table and column headers (optional data_type, comment, role)")
-                table = grouped.setdefault(name, {"name": name, "role": row.get("role") or "source", "columns": []})
+                table = grouped.setdefault(name, {"name": name, "role": row.get("role") or "source",
+                                                   "system": row.get("system") or "", "columns": []})
                 if column:
                     table["columns"].append({**row, "name": column})
             tables = _structured(list(grouped.values()))

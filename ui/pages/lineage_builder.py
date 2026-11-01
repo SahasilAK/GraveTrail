@@ -5,24 +5,31 @@ import duckdb
 import streamlit as st
 from pydantic import ValidationError
 
+from dataforge.configuration import VisualizationSettings
+from dataforge.datatypes import TYPE_CATALOG, type_entry
 from dataforge.lineage_builder import (
-    BuilderColumn,
+    JOIN_TYPES,
     BuilderDocument,
     BuilderLink,
     BuilderTable,
+    columns_from_rows,
+    export_schemas,
     export_tabular,
     load_builder,
     save_builder,
     schema_rows,
 )
 from dataforge.schema_imports import import_schema
-from ui.builder_canvas import builder_html, canvas
+from ui.builder_canvas import builder_html, builder_node_colors, canvas, column_editor
 from ui.common import context, title
 from ui.presentation import section
+from ui.themes import _loaded_preset
 
 title("Lineage builder", "Design table schemas and connect columns to build and present your own lineage.")
 store, w = context()
 prefix = "lineage_builder_" + w
+node_colors = builder_node_colors(_loaded_preset(), VisualizationSettings.from_store(store, w).graph_palette,
+                                  dark=st.get_option("theme.base") == "dark")
 if notice := st.session_state.pop(prefix + "notice", None):
     st.success(notice)
 try:
@@ -44,29 +51,30 @@ def commit(payload: dict, notice: str) -> None:
 
 def table_form(existing: BuilderTable | None = None, place: bool = False) -> None:
     form_key = prefix + (existing.id if existing else "new")
+    saved_system = existing.system if existing and existing.system else "Generic SQL"
+    systems = list(TYPE_CATALOG)
+    if saved_system not in systems:
+        systems.append(saved_system)
+    system = st.selectbox("System / database", systems, index=systems.index(saved_system),
+                          key=form_key + "_system", accept_new_options=True,
+                          help="Choose a system to see its datatype suggestions, or enter another system.") or "Generic SQL"
+    editor_key = form_key + f"_columns_{document.revision}"
+    rows = [{**c.model_dump(), **type_entry(c.data_type, system)} for c in existing.columns] if existing and existing.columns else [
+        {"id": "", "name": "", "comment": "", **type_entry("")}]
     with st.form(form_key):
         name = st.text_input("Table name", value=existing.name if existing else "", max_chars=300,
                              placeholder="e.g. warehouse.customer")
         roles = ["source", "intermediate", "target"]
         role = st.selectbox("Table role", roles, index=roles.index(existing.role) if existing else (1 if place else 0))
         comment = st.text_input("Table comment", value=existing.comment if existing else "", max_chars=2000)
-        rows = [c.model_dump() for c in existing.columns] if existing else [{"id": "", "name": "", "data_type": "", "comment": ""}]
-        edited = st.data_editor(rows, num_rows="dynamic", hide_index=True, key=form_key + f"_columns_{document.revision}",
-                                column_config={"id": None, "name": st.column_config.TextColumn("Column name", required=True),
-                                               "data_type": st.column_config.TextColumn("Data type"),
-                                               "comment": st.column_config.TextColumn("Comment")},
-                                alt="Table columns. Add or delete rows to change the schema.")
+        st.caption("Type a datatype or choose a suggestion in the same field. For decimals, enter precision and scale, or write DECIMAL(18,2).")
+        edited = column_editor(rows, system, editor_key)
         allow_prune = st.checkbox("Allow deleting columns and their relationships", value=False) if existing else False
         if st.form_submit_button("Save table" if existing else "Create table", type="primary"):
             try:
-                columns = []
-                for row in edited:
-                    if not any(row.get(k) for k in ("name", "data_type", "comment")):
-                        continue
-                    columns.append(BuilderColumn(id=row.get("id") or uuid4().hex, name=row.get("name") or "",
-                                                 data_type=row.get("data_type") or "", comment=row.get("comment") or ""))
+                columns = columns_from_rows(edited, system, existing=existing.columns if existing else None)
                 table = BuilderTable(id=existing.id if existing else uuid4().hex, name=name, role=role,
-                                     comment=comment, columns=columns,
+                                     comment=comment, columns=columns, system=system, size=existing.size if existing else None,
                                      position=existing.position if existing else ({"x": 80, "y": 80} if place else None))
                 payload = document.model_dump()
                 if existing:
@@ -85,7 +93,7 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
                 st.error(str(exc)[:600])
 
 
-mode = section("Builder workspace", ["Schemas & data entry", "Build lineage"], prefix + "section")
+mode = section("Builder workspace", ["Schemas & data entry", "Build lineage", "Export schemas"], prefix + "section")
 st.caption(f"{len(document.tables)} tables · {sum(len(t.columns) for t in document.tables)} columns · {len(document.links)} relationships · Saved in this workspace")
 
 if mode == "Schemas & data entry":
@@ -113,6 +121,7 @@ if mode == "Schemas & data entry":
                 # New IDs ensure schema imports cannot collide with a different document's identities.
                 for table in tables:
                     table.id, table.position = uuid4().hex, None
+                    table.canvas_member = False
                     for column in table.columns:
                         column.id = uuid4().hex
                 existing_names = {t.name.casefold() for t in document.tables}
@@ -148,8 +157,8 @@ if mode == "Schemas & data entry":
                     payload["tables"] = [t for t in payload["tables"] if t["id"] != selected]
                     payload["links"] = [e for e in payload["links"] if selected not in (e["source_table"], e["target_table"])]
                     commit(payload, "Table deleted.")
-else:
-    st.caption("Connect source outputs on the right to target inputs on the left. Many columns can feed the same target; use labels to describe joins or transformations.")
+elif mode == "Build lineage":
+    st.caption("Use Lineage mode for mappings, or Join mode to connect two source columns. Add tables from the toolbar; the catalog keeps current and previously placed tables.")
     canvas_key = prefix + "canvas"
 
     def save_canvas():
@@ -160,9 +169,25 @@ else:
         except (ValueError, duckdb.Error, OSError) as exc:
             st.session_state[prefix + "canvas_error"] = "Canvas edit was not saved: " + str(exc)[:500]
 
+    def create_canvas_table():
+        try:
+            request = st.session_state[canvas_key].get("create_table")
+            if not isinstance(request, dict) or not isinstance(request.get("table"), dict):
+                raise ValueError("Invalid table entry")
+            raw_table = dict(request["table"])
+            raw_table["columns"] = columns_from_rows(raw_table.get("columns", []), raw_table.get("system", ""))
+            table = BuilderTable.model_validate(raw_table)
+            payload = load_builder(store, w).model_dump()
+            payload["revision"] = request.get("revision")
+            payload["tables"].append(table.model_dump())
+            save_builder(store, w, BuilderDocument.model_validate(payload))
+            st.session_state.pop(prefix + "canvas_error", None)
+        except (ValueError, duckdb.Error, OSError) as exc:
+            st.session_state[prefix + "canvas_error"] = "Table was not saved: " + str(exc)[:500]
+
     if error := st.session_state.pop(prefix + "canvas_error", ""):
         st.error(error)
-    canvas(document, canvas_key, save_canvas, error)
+    canvas(document, canvas_key, save_canvas, error, on_create=create_canvas_table, node_colors=node_colors)
     with st.expander("Create a table on the canvas"):
         table_form(place=True)
     with st.expander("Add a relationship without dragging"):
@@ -182,14 +207,39 @@ else:
                 target_columns = {c.id: c.name for c in target.columns}
                 target_column = st.selectbox("Target column", target_columns, format_func=target_columns.get)
             label = st.text_input("Relationship label", max_chars=500)
+            kind = st.selectbox("Relationship type", ["Lineage", "Join"])
+            join_type = st.selectbox("Join type", JOIN_TYPES, accept_new_options=True) if kind == "Join" else ""
             if st.button("Add relationship"):
                 payload = document.model_dump()
                 payload["links"].append(BuilderLink(source_table=source_id, source_column=source_column,
-                                                   target_table=target_id, target_column=target_column, label=label).model_dump())
+                                                   target_table=target_id, target_column=target_column, label=label,
+                                                   kind=kind.lower(), join_type=join_type or "").model_dump())
                 for index, t in enumerate(payload["tables"]):
                     if t["id"] in {source_id, target_id} and not t["position"]:
                         t["position"] = {"x": 60 + (index % 3) * 520, "y": 60 + (index // 3) * 320}
                 commit(payload, "Relationship added.")
+
+elif mode == "Export schemas":
+    st.subheader("Export table schemas")
+    scope = st.selectbox("Tables to export", ["All tables", "Selected tables", "Source tables", "Intermediate tables", "Target tables"],
+                         key=prefix + "schema_export_scope")
+    ids = None
+    role = {"Source tables": "source", "Intermediate tables": "intermediate", "Target tables": "target"}.get(scope)
+    if scope == "Selected tables":
+        names = {t.id: t.name for t in document.tables}
+        ids = st.multiselect("Search and select tables", names, format_func=names.get, key=prefix + "schema_export_tables")
+    selected = [t for t in document.tables if (ids is None or t.id in ids) and (role is None or t.role == role)]
+    st.caption(f"{len(selected)} tables selected. Exports contain schema definitions only. SQL DDL requires column datatypes; JSON and YAML preserve custom types and comments.")
+    schema_format = st.selectbox("Schema export format", ["JSON", "YAML", "SQL DDL", "CSV", "Excel"], key=prefix + "schema_export_format")
+    if st.button("Prepare schema export", disabled=not selected):
+        try:
+            extension, mime = {"JSON": ("json", "application/json"), "YAML": ("yaml", "application/yaml"),
+                               "SQL DDL": ("sql", "text/plain"), "CSV": ("csv", "text/csv"),
+                               "Excel": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}[schema_format]
+            content = export_schemas(document, extension, table_ids=ids, role=role)
+            st.download_button("Download schemas " + schema_format, content, "table-schemas." + extension, mime, on_click="ignore")
+        except (ValueError, OSError) as exc:
+            st.error(str(exc)[:600])
 
 with st.expander("Export & restore builder"):
     st.caption("SVG and PNG buttons on the canvas export all placed tables. HTML exports an offline interactive presentation. CSV/Excel include every table and relationship. JSON preserves the complete editable builder.")
@@ -198,7 +248,7 @@ with st.expander("Export & restore builder"):
         try:
             extension, mime = {"JSON": ("json", "application/json"), "HTML": ("html", "text/html"),
                                "Excel": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), "CSV": ("csv", "text/csv")}[format]
-            content = document.model_dump_json(indent=2).encode() if format == "JSON" else builder_html(document) if format == "HTML" else export_tabular(document, extension)
+            content = document.model_dump_json(indent=2).encode() if format == "JSON" else builder_html(document, node_colors=node_colors) if format == "HTML" else export_tabular(document, extension)
             st.download_button("Download builder " + format, content, "lineage-builder." + extension, mime, on_click="ignore")
         except (ValueError, OSError) as exc:
             st.error(str(exc)[:600])

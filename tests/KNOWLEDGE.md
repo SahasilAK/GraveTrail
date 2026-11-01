@@ -21,7 +21,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `sample_data/` — SQL and SAS sample project ZIPs for loading sample data into the application during testing. See [sample_data/KNOWLEDGE.md](sample_data/KNOWLEDGE.md).
 
 ## Files
-- `test_lineage_builder.py` — Four focused checks for common schema imports/malformed content, workspace persistence/revision conflicts/valid links/tabular exports, inert offline HTML and sidebar/create/canvas/export AppTest flow.
+- `test_lineage_builder.py` — Eight focused checks: imports, persistence/exports, inert HTML, sidebar/system/create/canvas/schema-export AppTest, signed positions/fan-out, vendor decimal/custom/unchanged imported types, joins/membership/palettes, plus bounded size roundtrip and selected/role schema exports with SQL vendor-type fidelity and extra-SQL rejection.
 - `test_excel_exports.py` — Independent OOXML checks for ordered paths/steps, branches, job identities, continuations, cycles/isolated assets, evidence counts, inert text, global relationship/evidence/text bounds and temporary cleanup on failure/timeout.
 - `test_excel_artifacts.py` — Real workspace, CLI download, MCP and Explorer XLSX preparation; original-hash evidence, explicit raw-source disclosure, stale analysis and authorization revocation.
 - `test_cleanup.py` — Preview staleness, workspace/source dependencies, active jobs/providers, shared blobs, path hardlinks/traversal, scoped backup denial, integrity-checked new-home restore, CLI/MCP and UI backup/rebuild.

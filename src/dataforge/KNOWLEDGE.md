@@ -2,8 +2,9 @@
 
 Static facts, persistence, analysis and export APIs. Keep UI imports out of this package. Related tables and data flow are in docs/DATA_MODEL.md.
 
-- `lineage_builder.py` — Bounded authored table/column/link models, workspace settings persistence with revision conflict checks and CSV/XLSX exports. Separate from analyzed evidence; JSON is the lossless transfer format.
-- `schema_imports.py` — Schema-only SQL DDL, explicit SAS LENGTH/PROC SQL, dbt YAML/manifest/catalog JSON, generic JSON, Informatica PowerCenter XML and CSV/TSV imports. Upload limits, inert content, DTD/alias rejection and partial-format warnings.
+- `lineage_builder.py` — Authored table/column/link models with signed positions, bounded optional TableSize, system metadata, sticky canvas membership and revision-checked persistence. Links distinguish directed lineage from typed/custom joins. `export_schemas` filters IDs/roles and writes schema-only JSON/YAML/SQL/CSV/XLSX; SQL retains authored vendor types after full-definition validation and quoted names. `export_tabular` retains full-builder links by default. `columns_from_rows` shares decimal validation while preserving unchanged imported types. Separate from analyzed evidence.
+- `datatypes.py` — Offline suggestions for 22 system choices plus custom entry; `type_entry` splits decimal cells and `format_data_type` validates precision/scale with vendor rules. SAS DATA step NUMERIC remains unparameterized; official rule references are retained.
+- `schema_imports.py` — Schema-only SQL DDL, explicit SAS LENGTH/PROC SQL, dbt YAML/manifest/catalog JSON, generic JSON, Informatica PowerCenter XML and CSV/TSV imports. Preserves authored system metadata in JSON/CSV. Upload limits, inert content, DTD/alias rejection and partial-format warnings.
 
 `transformations.py` — materialize_columns, column_catalog and trace_columns: indexed,
 workspace/job/scoped column identities, revision-bound expressions/roles, bounded traversal,
