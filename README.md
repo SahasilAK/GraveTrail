@@ -17,6 +17,7 @@
 <p align="center">
   <a href="https://sahasilak.github.io/GraveTrail/"><strong>Documentation hub</strong></a> ·
   <a href="docs/getting-started/quick-start.md">Quick start</a> ·
+  <a href="docs/user-guide/lineage-builder.md">Lineage builder</a> ·
   <a href="docs/CLI_GUIDE.md">CLI</a> ·
   <a href="docs/MCP_INTEGRATION.md">MCP</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
@@ -31,6 +32,9 @@
 GraveTrail turns SQL, SAS and supported dbt project artifacts into explorable
 lineage, dependencies and source evidence. Follow where data comes from, what
 depends on it, and which code to investigate before making a change.
+
+Use the [Lineage builder](docs/user-guide/lineage-builder.md) to design table and
+column relationships from scratch and share editable diagrams with other users.
 
 Built for data engineers, analysts, analytics engineers and architects untangling
 unfamiliar pipelines, reviewing changes or planning migrations.
@@ -59,6 +63,23 @@ unfamiliar pipelines, reviewing changes or planning migrations.
 - **How is this column used?** Explore direct references and supported transformations.
 - **What connects this dbt project?** Inspect models, versions, resources and macro impact.
 - **How do I share my findings?** Export reports, graph images or interactive HTML.
+
+## Design lineage on a canvas
+
+Open **Workspace → Lineage builder** to create or import reusable table schemas,
+then explicitly add tables to a canvas catalog. Drag and resize table boxes,
+connect columns and joins, organize folders, and highlight complete downstream
+paths with table/group colors. Multi-selection, undo/redo, Alt-to-pan, and
+right-click menus support larger designs.
+
+Save named designs directly from the canvas and confirm overwrites when needed.
+Clearing saves a backup and empties the current diagram/catalog while preserving
+workspace schemas. Export SVG/PNG, offline interactive HTML, schema reports, or
+editable JSON so another user can continue the work.
+
+The [lineage builder guide](docs/user-guide/lineage-builder.md) covers the full
+workflow, shortcuts, safe clearing, and sharing. It includes source-version setup;
+the older checkout pinned in the introductory tutorials does not include this feature.
 
 <a name="know-the-boundaries"></a>
 
@@ -122,6 +143,7 @@ before using pip, Docker or older release binaries.
 | --- | --- |
 | Install and complete an example | [Get started](docs/getting-started/index.md) |
 | Import, analyze, explore and share | [User guides](docs/user-guide/index.md) |
+| Design tables and lineage on a canvas | [Lineage builder](docs/user-guide/lineage-builder.md) |
 | Understand SQL, SAS or dbt support | [Project types](docs/project-types/index.md) |
 | Judge evidence and uncertainty | [Concepts](docs/concepts/index.md) |
 | Configure optional AI and recovery | [AI analysis](docs/AI_ANALYSIS.md) |

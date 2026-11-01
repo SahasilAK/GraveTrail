@@ -32,6 +32,7 @@ workspace** to open a creation dialog. Changing pages never starts an analysis o
 | Workspace | Overview | Health, recent runs and the next useful action |
 | Workspace | Sources | ZIP/folder/host import; Inventory, original file details and exports |
 | Workspace | Analysis | Run selected/all files, rebuild, validation; Diagnostics and optional AI review; History and run comparison |
+| Workspace | Lineage builder | Reusable schemas, canvas catalog/diagram, column links and joins, trace colors, saved designs and editable handoff |
 | Explore | Lineage | Graph or full-width Tree; source evidence, paths and graph/source exports |
 | Explore | Columns | Direct usage, grouping, declared schema evidence and reports |
 | Explore | Transformation lineage | Output/value transformations, distinct dependency roles, coverage and original source evidence |
@@ -46,6 +47,14 @@ source revision changes discard stale source previews and cleanup plans. Unsaved
 preferences are discarded when you leave their form; saved settings require the
 explicit Save action. `/builder` now opens Sources, `/explorer` opens Lineage, and
 `/settings` opens workspace preferences, so existing page bookmarks still work.
+
+For an authored design, open **Lineage builder**. Its **Schemas & data entry**,
+**Build lineage**, **Export schemas**, and **Saved work** sections cover creation
+through sharing. Workspace schemas are permanent; explicitly add them to the
+current canvas catalog. Clear saves a snapshot before emptying that diagram and
+catalog, and table deletion is available in Data management. Follow the
+[lineage builder and canvas guide](user-guide/lineage-builder.md) for controls,
+shortcuts, joins, colors, overwrite confirmation, recovery, and editable JSON handoff.
 
 **Import:** In Sources → Import choose a ZIP, browser folder or allowed host directory. Select
 extensions before importing; only selected supported files are read. The inventory shows

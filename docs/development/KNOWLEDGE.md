@@ -13,6 +13,6 @@ The current inventory includes credentials.py and test_local_credentials.py; reg
 - `extending.md` — parser/dbt/provider/AI/transport/export/settings/schema/UI recipes and positive/negative regression boundaries.
 - `contributing.md` — bounded safe changes, focused/full checks, inventory maintenance, disposable homes and review submission.
 - `documentation.md` — navigation/assets, docs-only lock/build, digest-reviewed HTML, baseline routes/headings and artifact/publication checks.
-- `screenshots.md` — nine real fixture-image recipes, isolated home/port, readable small lineage versus larger tutorial, and editable offline SVG sources.
+- `screenshots.md` — real fixture-image recipes, isolated home/port, current builder a803b6e canvas capture, readable small lineage versus larger tutorial, and editable offline SVG sources.
 
 Current validate_extraction checks source provenance/structure/internal consistency without static semantic approval. Legacy ai_semantic/manual focused grounding stay distinct; AI publication retains complete=False / semantic_coverage_not_proven. Keep context maps out of public artifacts and run inventory --check after first-party file changes.

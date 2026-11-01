@@ -19,6 +19,8 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `overrides/` — shared registry theme injection without app dependencies; [map](overrides/KNOWLEDGE.md).
 - `prompts/`, `superpowers/` — ignored local app-building context and requirements, including their knowledge maps; excluded from public output.
 
+The authored Lineage builder guide is in user-guide/lineage-builder.md, linked from the site homepage, user-guide index, export/recovery references and MkDocs navigation. Its source pin a803b6e is newer than the introductory tutorial baseline.
+
 ## Root references
 - `index.md` — public homepage and learning-path entry; eight full-card navigation links include task descriptions, including developer code walkthroughs and CLI/MCP tools.
 - `USER_GUIDE.md`, `SETUP_AND_DEPLOYMENT.md`, `DATA_MANAGEMENT.md`, `TROUBLESHOOTING.md` — detailed UI/installation/operations/symptom references retained at existing routes/headings.

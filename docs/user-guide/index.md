@@ -19,6 +19,7 @@ These focused guides help you repeat one part on your own project.
 | --- | --- |
 | Add files or refresh sources | [Import and manage sources](sources.md) |
 | Build static lineage and interpret diagnostics | [Run analysis](analysis.md) |
+| Design schemas and author an editable lineage diagram | [Lineage builder and canvas](lineage-builder.md) |
 | Trace inputs or change impact | [Explore lineage](explore.md) |
 | Read the original statement | [Inspect source evidence](evidence.md) |
 | Find references and output expressions | [Columns and transformations](columns.md) |
