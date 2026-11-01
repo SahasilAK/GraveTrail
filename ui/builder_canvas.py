@@ -68,7 +68,7 @@ BODY = """
     <label class="lb-custom-system" hidden>Custom system<input name="custom_system" maxlength="100" placeholder="System name"></label>
     <label>Table comment<input name="comment" maxlength="2000"></label>
    </div>
-   <p>Type or choose a datatype. For decimals enter precision and scale, or write DECIMAL(18,2). Scale defaults to 0.</p>
+   <p>Type or choose a datatype. Lengths and decimal precision/scale are optional: VARCHAR, VARCHAR(200), DECIMAL or DECIMAL(18,2). Custom types are welcome.</p>
    <!--column-editor-->
    <p class="lb-create-error" role="alert"></p>
    <div class="lb-create-actions"><button type="button" class="lb-cancel-create">Cancel</button><button type="submit">Create table</button></div>
@@ -92,8 +92,9 @@ BODY = """
  </form></dialog>
  <dialog class="lb-work-dialog" aria-labelledby="lb-work-title"><form class="lb-work-form">
   <h2 id="lb-work-title">Save canvas</h2><p class="lb-work-description"></p>
+  <label class="lb-work-mode" hidden>Save option<select name="save_mode" aria-label="Save option"><option value="overwrite">Overwrite saved work</option><option value="new">Save as new work</option></select></label>
   <label>Work name (optional)<input name="work_name" maxlength="300" placeholder="Leave blank for an automatic name"></label>
-  <p class="lb-work-error" role="alert"></p><button type="button" class="lb-work-cancel">Cancel</button><button type="submit" class="lb-work-submit">Save canvas</button>
+  <p class="lb-work-error" role="alert"></p><button type="button" class="lb-work-cancel">Cancel</button><button type="submit" class="lb-work-submit">Save canvas</button><button type="button" class="lb-work-overwrite" hidden>Overwrite saved work</button>
  </form></dialog>
  <div id="lb-context" class="lb-context" role="menu" aria-label="Lineage options" tabindex="-1" hidden></div>
 </div>
@@ -126,6 +127,7 @@ CSS = """
 .lb-root:fullscreen{padding:20px;box-sizing:border-box;background:var(--lb-bg);overflow:auto;display:flex;flex-direction:column}.lb-root:fullscreen .lb-layout{flex:1;height:0;min-height:200px}.lb-root:fullscreen .lb-svg{height:100%}.lb-root:fullscreen .lb-palette{height:100%}
 .lb-create{color:inherit;background:var(--lb-bg);border:1px solid var(--lb-border);border-radius:8px;width:min(1000px,90vw);max-height:85dvh;box-sizing:border-box;padding:24px}.lb-create::backdrop{background:#0008}
 .lb-add,.lb-folder-dialog,.lb-work-dialog{color:inherit;background:var(--lb-bg);border:1px solid var(--lb-border);border-radius:8px;width:min(540px,90vw);padding:24px}.lb-add::backdrop,.lb-folder-dialog::backdrop,.lb-work-dialog::backdrop{background:#0008}.lb-add-search{width:100%;margin:8px 0}.lb-add-list{max-height:350px;overflow-y:auto;margin:12px 0}.lb-add-list button{display:block;width:100%;text-align:left;margin:6px 0}.lb-folder-dialog input,.lb-work-dialog input{width:100%;margin:8px 0}
+.lb-work-dialog label{display:block;margin:12px 0}.lb-work-mode select{margin-left:8px}
 .lb-create h2{margin:0 0 16px}.lb-create-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px}.lb-create label{display:flex;flex-direction:column;gap:4px}.lb-create p{font-size:13px}.lb-column-scroll{overflow:auto;margin:16px 0}.lb-columns table{border-collapse:collapse;width:100%}.lb-columns th{text-align:left;font-size:12px;padding:4px}.lb-columns td{padding:4px}.lb-columns td input{width:100%;min-width:130px}.lb-columns td input[type=number]{min-width:80px}.lb-create-actions{display:flex;justify-content:flex-end;gap:8px}.lb-create-error{color:var(--st-red-color,#c74747)}
 @media(max-width:650px){.lb-layout{grid-template-columns:1fr;grid-template-rows:auto auto}.lb-palette{height:160px;border-right:0;border-bottom:1px solid var(--lb-border)}.lb-svg{height:500px}.lb-status{margin-left:0}.lb-create-meta{grid-template-columns:1fr}}
 """
@@ -206,6 +208,7 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
   if(data.error)s.pending=null;
  }
  const workDone=!!data.work_result&&s.workResult!==data.work_result.id;
+ const showWorkResult=workDone&&s.workPending;
  if(workDone){s.workResult=data.work_result.id;s.saving=false;s.operation=null;}
  const doc=s.doc, editable=!!changed;
  doc.folders=doc.folders||[];s.selection=new Set([...s.selection].filter(id=>doc.tables.some(t=>t.id===id&&t.position)));
@@ -525,6 +528,7 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
  dialog.oncancel=e=>{if(s.saving)e.preventDefault();};
  form.onsubmit=e=>{
   e.preventDefault();if(!createTable||s.saving)return;
+  if(!form.elements.table_name.value.trim()){root.querySelector('.lb-create-error').textContent='Enter a table name.';return;}
   s.creating=true;s.operation={kind:'catalog',before:s.lastSaved};s.saving=true;historyButtons();root.querySelector('.lb-create-error').textContent='Saving table…';
   dialog.querySelectorAll('input,select,button').forEach(el=>el.disabled=true);
   createTable({revision:doc.revision,table:{name:form.elements.table_name.value,role:form.elements.role.value,system:selectedSystem(),comment:form.elements.comment.value,columns:columns.read(),position:null,canvas_member:true}});
@@ -568,22 +572,35 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
   const folder={id:crypto.randomUUID(),name};doc.folders.push(folder);s.openFolders.add(folder.id);folderDialog.close();folderForm.reset();palette();send();
  };
  mode.onchange=()=>{s.pending=null;s.selected=null;s.selection.clear();updateMode();draw();};joinSelect.onchange=updateMode;
- const workDialog=root.querySelector('.lb-work-dialog'),workForm=root.querySelector('.lb-work-form');
+ const workDialog=root.querySelector('.lb-work-dialog'),workForm=root.querySelector('.lb-work-form'),overwriteWork=root.querySelector('.lb-work-overwrite');
+ workForm.elements.work_name.oninput=()=>{overwriteWork.hidden=true;root.querySelector('.lb-work-error').textContent='';};
+ function workSaveChoice(){
+  overwriteWork.hidden=true;
+  const overwrite=!!s.workTarget&&workForm.elements.save_mode.value==='overwrite';
+  workForm.elements.work_name.value=overwrite?s.workTarget.name:'';workForm.elements.work_name.readOnly=overwrite;
+ }
+ workForm.elements.save_mode.onchange=workSaveChoice;
  function openWork(action){
   if(!workAction||s.saving)return;s.workAction=action;s.pending=null;workForm.reset();root.querySelector('.lb-work-error').textContent='';
+  s.workTarget=data.current_work||null;root.querySelector('.lb-work-mode').hidden=!s.workTarget;
+  workForm.elements.save_mode.value=s.workTarget?'overwrite':'new';workSaveChoice();
   const clearing=action==='clear';root.querySelector('#lb-work-title').textContent=clearing?'Save and clear canvas':'Save canvas';
-  root.querySelector('.lb-work-description').textContent=clearing?'Save a complete copy in Saved work, then clear the canvas, table catalog, folders and relationships. Load the saved copy to restore your design.':'Save a named copy of the current design in Saved work. Leave the name blank to generate one automatically.';
+  root.querySelector('.lb-work-description').textContent=clearing?'Save your design, then clear the canvas and its catalog, folders and relationships. Workspace table schemas stay available through Add table. Load the saved work to restore the diagram.':s.workTarget?'Overwrite the saved design or choose Save as new work to keep a separate copy.':'Save a named copy of the current design in Saved work. Leave the name blank to generate one automatically.';
   root.querySelector('.lb-work-submit').textContent=clearing?'Save and clear':'Save canvas';workDialog.showModal();
  }
  root.querySelector('.lb-work-cancel').onclick=()=>workDialog.close();workDialog.oncancel=e=>{if(s.saving)e.preventDefault();};
+ function submitWork(workId){
+  if(!workAction||s.saving)return;s.workPending=true;s.saving=true;s.operation={kind:s.workAction==='clear'?'clear':'catalog',before:s.lastSaved};historyButtons();
+  overwriteWork.hidden=true;workDialog.querySelectorAll('input,select,button').forEach(el=>el.disabled=true);root.querySelector('.lb-work-error').textContent='Saving…';
+  workAction({action:s.workAction,name:workForm.elements.work_name.value.trim(),revision:s.revision,work_id:workId,request_id:crypto.randomUUID()});
+ }
  workForm.onsubmit=e=>{
-  e.preventDefault();if(!workAction||s.saving)return;s.workPending=true;s.saving=true;s.operation={kind:s.workAction==='clear'?'clear':'catalog',before:s.lastSaved};historyButtons();
-  workDialog.querySelectorAll('input,button').forEach(el=>el.disabled=true);root.querySelector('.lb-work-error').textContent='Saving…';
-  workAction({action:s.workAction,name:workForm.elements.work_name.value.trim(),revision:s.revision});
+  e.preventDefault();submitWork(workForm.elements.save_mode.value==='overwrite'?s.workTarget?.id:null);
  };
+ overwriteWork.onclick=()=>{if(data.work_conflict&&workForm.elements.work_name.value.trim()===data.work_conflict.requested_name)submitWork(data.work_conflict.id);};
  if(s.workPending&&(workDone||data.error)){
-  s.workPending=false;workDialog.querySelectorAll('input,button').forEach(el=>el.disabled=false);
-  if(data.error)root.querySelector('.lb-work-error').textContent=data.error;
+  s.workPending=false;workDialog.querySelectorAll('input,select,button').forEach(el=>el.disabled=false);
+  if(data.error){root.querySelector('.lb-work-error').textContent=data.error;overwriteWork.hidden=!data.work_conflict||workForm.elements.work_name.value.trim()!==data.work_conflict.requested_name;overwriteWork.textContent=s.workAction==='clear'?'Overwrite and clear':'Overwrite saved work';}
   else{workDialog.close();if(s.workAction==='clear'){s.selection.clear();s.selected=null;s.pending=null;s.openFolders.clear();s.expanded.clear();s.view=[0,0,1200,700];root.querySelector('.lb-search').value='';}}
  }
  root.querySelector('[data-action=create]').hidden=!createTable;
@@ -700,7 +717,7 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
  root.querySelector('.lb-layout').style.gridTemplateColumns=editable?'':'1fr';
  root.querySelector('.lb-hint').textContent=editable?'Select tables to highlight their full downstream trace. Set a trace color for selected tables or a catalog folder. Ctrl-click/drag empty space selects a group; drag boxes to move. Hold Alt to pan. Catalog tables drag onto canvas/folders. Resize edges/corners; + expands comments. Ctrl+Z / Ctrl+Y undo/redo; Delete removes selected boxes or lines. Edits save automatically.':'Select a table to highlight its downstream trace. Expand comments with +. Hold Alt or drag empty space to pan, scroll to zoom, or use Fit diagram.';
  draw();palette();historyButtons();message(data.error|| (s.saving?'Saving…':editable?(s.pending?'Saved · choose another column, or Escape to finish':'All changes saved'):'Authored lineage'));
- if(workDone)message(data.work_result.message);
+ if(showWorkResult&&!data.error)message(data.work_result.message);
  if(!s.initialFit){fit();s.initialFit=true;}
  return ()=>{panEvents.abort();closeMenu(false);};
 }
@@ -721,9 +738,10 @@ def column_editor(rows: list[dict], system: str, key: str) -> list[dict]:
 
 
 def canvas(document: BuilderDocument, key: str, on_edit, error: str = "", on_create=None, node_colors: dict | None = None,
-           on_work=None, work_result: dict | None = None):
+           on_work=None, work_result: dict | None = None, current_work: dict | None = None, work_conflict: dict | None = None):
     return _CANVAS(data={"document": document.model_dump(), "error": error, "type_catalog": TYPE_CATALOG,
-                         "node_colors": node_colors or builder_node_colors(None), "work_result": work_result}, key=key,
+                         "node_colors": node_colors or builder_node_colors(None), "work_result": work_result,
+                         "current_work": current_work, "work_conflict": work_conflict}, key=key,
                    on_edit_change=on_edit, on_create_table_change=on_create or (lambda: None),
                    on_work_action_change=on_work or (lambda: None), height="content")
 

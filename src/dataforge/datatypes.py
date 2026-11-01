@@ -82,7 +82,9 @@ def format_data_type(system: str, data_type: str, precision=None, scale=None) ->
             raise ValueError("Decimal parameters conflict with the precision/scale cells")
         precision, scale = inline_p, inline_s
     if precision is None:
-        raise ValueError(f"Enter precision for {kind}; scale defaults to 0")
+        if scale is None:
+            return value
+        raise ValueError("Enter precision when scale is provided, or leave both blank")
     p, s = _integer(precision, "Precision"), _integer(0 if scale is None else scale, "Scale")
     max_p = {"postgresql": 1000, "mysql": 65, "mariadb": 65, "db2": 31, "clickhouse": 76}.get(system, 38)
     min_s, max_s = 0, max_p

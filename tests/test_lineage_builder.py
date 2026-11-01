@@ -36,6 +36,7 @@ def test_builder_persistence_links_and_exports(tmp_path):
         BuilderDocument,
         BuilderLink,
         BuilderTable,
+        delete_builder_tables,
         export_tabular,
         load_builder,
         save_builder,
@@ -64,6 +65,13 @@ def test_builder_persistence_links_and_exports(tmp_path):
         broken["tables"][1]["columns"] = []
         with pytest.raises(ValidationError):
             BuilderDocument.model_validate(broken)
+        retained = save_builder(store, workspace, BuilderDocument(revision=saved.revision))
+        assert {t.name for t in retained.tables} == {a.name, b.name}
+        assert all(t.position is None and t.catalog_hidden for t in retained.tables)
+        with pytest.raises(ValueError, match="changed"):
+            delete_builder_tables(store, workspace, [a.id], expected_revision=saved.revision)
+        deleted = delete_builder_tables(store, workspace, [a.id], expected_revision=retained.revision)
+        assert [t.id for t in deleted.tables] == [b.id]
     finally:
         store.close()
 
@@ -91,6 +99,8 @@ def test_builder_sidebar_create_and_canvas(tmp_path, monkeypatch):
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/lineage_builder.py").run()
     assert not app.exception
+    next(b for b in app.button if b.label == "Create table").click().run()
+    assert any(e.value == "Enter a table name." for e in app.error)
     next(c for c in app.selectbox if c.label == "System / database").set_value("SQL Server").run()
     next(t for t in app.text_input if t.label == "Table name").set_value("new_table")
     next(b for b in app.button if b.label == "Create table").click().run()
@@ -98,10 +108,17 @@ def test_builder_sidebar_create_and_canvas(tmp_path, monkeypatch):
     store = get_store(str(tmp_path))
     assert load_builder(store, app.session_state["workspace"]).tables[0].name == "new_table"
     assert load_builder(store, app.session_state["workspace"]).tables[0].system == "SQL Server"
-    assert load_builder(store, app.session_state["workspace"]).tables[0].canvas_member
+    assert not load_builder(store, app.session_state["workspace"]).tables[0].canvas_member
     assert load_builder(store, app.session_state["workspace"]).tables[0].position is None
+    app.segmented_control[1].set_value("Edit tables").run()
+    next(b for b in app.button if b.label == "Save table").click().run()
+    assert not load_builder(store, app.session_state["workspace"]).tables[0].canvas_member
     app.segmented_control[0].set_value("Build lineage").run()
     assert not app.exception
+    next(t for t in app.text_input if t.label == "Table name").set_value("catalog_table")
+    next(b for b in app.button if b.label == "Create table").click().run()
+    tables = {t.name: t for t in load_builder(store, app.session_state["workspace"]).tables}
+    assert tables["catalog_table"].canvas_member and not tables["new_table"].canvas_member
     next(c for c in app.selectbox if c.label == "Builder export format").set_value("HTML").run()
     next(b for b in app.button if b.label == "Prepare builder export").click().run()
     assert not app.exception
@@ -119,6 +136,18 @@ def test_builder_sidebar_create_and_canvas(tmp_path, monkeypatch):
     next(b for b in app.button if b.label == "Save new work").click().run()
     assert not app.exception
     assert any(b.label == "Export saved work JSON" for b in app.get("download_button"))
+    app.segmented_control[0].set_value("Schemas & data entry").run()
+    app.segmented_control[1].set_value("Edit tables").run()
+    assert not any(b.label == "Delete table" for b in app.button)
+    table_id = load_builder(store, app.session_state["workspace"]).tables[0].id
+    app.switch_page("ui/pages/management.py").run()
+    app.segmented_control[0].set_value("Cleanup & recovery").run()
+    next(m for m in app.multiselect if m.label == "Workspace table schemas to delete").set_value([table_id]).run()
+    assert next(b for b in app.button if b.label == "Delete workspace table schemas").disabled
+    next(c for c in app.checkbox if c.label == "Permanently delete the selected workspace table schemas").check().run()
+    next(b for b in app.button if b.label == "Delete workspace table schemas").click().run()
+    assert not app.exception
+    assert [t.name for t in load_builder(store, app.session_state["workspace"]).tables] == ["catalog_table"]
 
 
 def test_free_canvas_positions_and_column_fanout():
@@ -152,12 +181,17 @@ def test_system_datatypes_and_decimal_entry():
         ("SAS", "NUMERIC", None, None, "NUMERIC"),
     ]:
         assert format_data_type(system, kind, precision, scale) == expected
-    for system, kind, precision, scale in [("SQL Server", "DECIMAL", None, None),
+    for system, kind, precision, scale in [("SQL Server", "DECIMAL", None, 2),
                                             ("SQL Server", "DECIMAL", 39, 0),
                                             ("Databricks", "DECIMAL", 5, 6),
                                             ("BigQuery", "NUMERIC", 38, 0)]:
         with pytest.raises(ValueError):
             format_data_type(system, kind, precision, scale)
+    for kind in ["STRING", "CHAR", "CHARACTER", "VARCHAR", "VARCHAR(250)", "DECIMAL", "NUMERIC", "CUSTOM_TYPE"]:
+        assert format_data_type("Generic SQL", kind) == kind
+        assert columns_from_rows([{"name": "value", "data_type": kind}], "Generic SQL")[0].data_type == kind
+    with pytest.raises(ValueError, match="Enter a column name"):
+        columns_from_rows([{"name": " ", "data_type": "VARCHAR"}], "Generic SQL")
     assert type_entry("DECIMAL(12,2)") == {"data_type": "DECIMAL", "precision": 12, "scale": 2}
     row = {"name": "amount", **type_entry("DECIMAL(12,2)")}
     columns = columns_from_rows([row, {"name": "location", "data_type": "MY_GEOGRAPHY"}], "SQL Server")
@@ -325,6 +359,7 @@ def test_canvas_save_and_clear_preserve_work_atomically(tmp_path, monkeypatch):
         BuilderDocument,
         BuilderLink,
         BuilderTable,
+        BuilderWorkExistsError,
         get_builder_work,
         list_builder_works,
         load_builder,
@@ -344,11 +379,19 @@ def test_canvas_save_and_clear_preserve_work_atomically(tmp_path, monkeypatch):
         doc = save_builder(store, w, doc)
         named = save_canvas_work(store, w, "My design", expected_revision=doc.revision)
         assert named.document == doc and load_builder(store, w) == doc
-        with pytest.raises(ValueError, match="name|exists"):
-            save_canvas_work(store, w, "My design", expected_revision=doc.revision, clear=True)
+        doc.tables[0].position.x = 80
+        doc = save_builder(store, w, doc)
+        updated = save_canvas_work(store, w, "My design", work_id=named.id, expected_revision=doc.revision)
+        assert updated.id == named.id and updated.document == doc
+        assert len(list_builder_works(store, w)) == 1
+        with pytest.raises(BuilderWorkExistsError, match="name|exists") as duplicate:
+            save_canvas_work(store, w, "  MY DESIGN  ", expected_revision=doc.revision, clear=True)
+        assert duplicate.value.work.id == named.id and duplicate.value.work.name == "My design"
         with pytest.raises(ValueError, match="changed"):
             save_canvas_work(store, w, expected_revision=0, clear=True)
         assert load_builder(store, w) == doc and len(list_builder_works(store, w)) == 1
+        doc.tables[0].position.x = 90
+        doc = save_builder(store, w, doc)
         original_set = store.set_setting
 
         def fail_clear(workspace, key, value):
@@ -359,20 +402,54 @@ def test_canvas_save_and_clear_preserve_work_atomically(tmp_path, monkeypatch):
         with monkeypatch.context() as patch:
             patch.setattr(store, "set_setting", fail_clear)
             with pytest.raises(OSError):
-                save_canvas_work(store, w, expected_revision=doc.revision, clear=True)
+                save_canvas_work(store, w, "My design", work_id=named.id, expected_revision=doc.revision, clear=True)
         assert load_builder(store, w) == doc and len(list_builder_works(store, w)) == 1
-        backup = save_canvas_work(store, w, expected_revision=doc.revision, clear=True)
+        assert get_builder_work(store, w, named.id).document == updated.document
+        backup = save_canvas_work(store, w, "My design", work_id=named.id, expected_revision=doc.revision, clear=True)
+        assert backup.id == named.id and len(list_builder_works(store, w)) == 1
         empty = load_builder(store, w)
         assert get_builder_work(store, w, backup.id).document == doc
-        assert empty == BuilderDocument(revision=doc.revision + 1)
+        assert empty.revision == doc.revision + 1 and not empty.links and not empty.folders
+        assert [t.name for t in empty.tables] == [t.name for t in doc.tables]
+        assert all(t.position is None and t.folder is None and t.catalog_hidden for t in empty.tables)
         assert backup.document.tables[0].color == a.color and backup.document.folders == doc.folders
         assert backup.document.tables[0].columns == a.columns
         generated = save_canvas_work(store, w, expected_revision=empty.revision)
         assert generated.name != backup.name
-        restored = load_builder_work(store, w, backup.id, expected_revision=empty.revision)
-        assert restored.links == doc.links and restored.tables == doc.tables
+        new_table = BuilderTable(name="new_design_table", canvas_member=True)
+        empty.tables.append(new_table)
+        current = save_builder(store, w, empty)
+        restored = load_builder_work(store, w, backup.id, expected_revision=current.revision)
+        assert restored.links == doc.links and restored.tables[:2] == doc.tables
+        assert restored.tables[2].id == new_table.id and restored.tables[2].catalog_hidden
     finally:
         store.close()
+
+
+def test_repeated_canvas_saves_send_distinct_requests():
+    import shutil
+    import subprocess
+
+    from ui.builder_canvas import JS
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is needed to exercise canvas save requests")
+    submit = JS[JS.index(" function submitWork("):JS.index("\n workForm.onsubmit=")]
+    fixture = r"""
+const assert=require('node:assert/strict'),crypto=require('node:crypto'),requests=[];
+const s={workAction:'save',revision:7,lastSaved:{}},controls=[{},{}],overwriteWork={};
+const workDialog={querySelectorAll:()=>controls},workForm={elements:{work_name:{value:'My design'}}};
+const root={querySelector:()=>({})},historyButtons=()=>{},workAction=request=>requests.push(request);
+"""
+    check = r"""
+submitWork('existing');assert.equal(s.saving,true);assert.ok(controls.every(c=>c.disabled));
+s.saving=false;submitWork('existing');
+assert.equal(requests.length,2);assert.ok(requests[0].request_id);
+assert.notEqual(requests[0].request_id,requests[1].request_id);
+for(const request of requests){delete request.request_id;assert.deepEqual(request,{action:'save',name:'My design',revision:7,work_id:'existing'});}
+"""
+    subprocess.run([node, "-e", fixture + submit + check], check=True, capture_output=True, text=True, timeout=10)
 
 
 def test_downstream_trace_colors_branches_merges_cycles_and_joins():

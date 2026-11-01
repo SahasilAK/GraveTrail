@@ -12,6 +12,7 @@ from dataforge.lineage_builder import (
     BuilderDocument,
     BuilderLink,
     BuilderTable,
+    BuilderWorkExistsError,
     columns_from_rows,
     export_schemas,
     export_tabular,
@@ -72,15 +73,18 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
         roles = ["source", "intermediate", "target"]
         role = st.selectbox("Table role", roles, index=roles.index(existing.role) if existing else (1 if place else 0))
         comment = st.text_input("Table comment", value=existing.comment if existing else "", max_chars=2000)
-        st.caption("Type a datatype or choose a suggestion in the same field. For decimals, enter precision and scale, or write DECIMAL(18,2).")
+        st.caption("Type a datatype or choose a suggestion. Lengths and decimal precision/scale are optional: VARCHAR, VARCHAR(200), DECIMAL or DECIMAL(18,2). Custom types are welcome.")
         edited = column_editor(rows, system, editor_key)
         allow_prune = st.checkbox("Allow deleting columns and their relationships", value=False) if existing else False
         if st.form_submit_button("Save table" if existing else "Create table", type="primary"):
             try:
+                if not name.strip():
+                    raise ValueError("Enter a table name.")
                 columns = columns_from_rows(edited, system, existing=existing.columns if existing else None)
                 table = BuilderTable(id=existing.id if existing else uuid4().hex, name=name, role=role,
                                      comment=comment, columns=columns, system=system, size=existing.size if existing else None,
-                                     folder=existing.folder if existing else None, canvas_member=True,
+                                     folder=existing.folder if existing else None,
+                                     canvas_member=existing.canvas_member if existing else place,
                                      catalog_hidden=existing.catalog_hidden if existing else False,
                                      color=existing.color if existing else "",
                                      position=existing.position if existing else None)
@@ -102,13 +106,13 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
 
 
 mode = section("Builder workspace", ["Schemas & data entry", "Build lineage", "Export schemas", "Saved work"], prefix + "section")
-st.caption(f"{len(document.tables)} tables · {sum(len(t.columns) for t in document.tables)} columns · {len(document.links)} relationships · Saved in this workspace")
+st.caption(f"{len(document.tables)} workspace tables · {sum(len(t.columns) for t in document.tables)} columns · {sum(t.position is not None for t in document.tables)} tables on canvas · {len(document.links)} relationships")
 
 if mode == "Schemas & data entry":
     action = section("Schema action", ["Create table", "Import schemas", "Edit tables"], prefix + "schema_action")
     if action == "Create table":
         st.subheader("Create a table")
-        st.caption("Define source, intermediate or target tables. Add column names, data types and optional comments.")
+        st.caption("Define workspace table schemas with columns, data types and optional comments. Use Add table in the canvas catalog to include a schema in a design.")
         table_form()
     elif action == "Import schemas":
         st.subheader("Import table schemas")
@@ -129,7 +133,7 @@ if mode == "Schemas & data entry":
                 # New IDs ensure schema imports cannot collide with a different document's identities.
                 for table in tables:
                     table.id, table.position = uuid4().hex, None
-                    table.canvas_member = True
+                    table.canvas_member = False
                     table.catalog_hidden = False
                     table.folder = None
                     table.color = ""
@@ -152,7 +156,7 @@ if mode == "Schemas & data entry":
             if st.button(f"Add {len(staged.tables)} tables", type="primary"):
                 payload = document.model_dump()
                 payload["tables"].extend(preview["tables"])
-                commit(payload, "Schemas imported. Open Build lineage to place tables on the canvas.")
+                commit(payload, "Workspace schemas imported. Use Add table in the canvas catalog to include them in a design.")
     elif action == "Edit tables":
         if not document.tables:
             st.info("Create a table or import schemas to start.")
@@ -161,13 +165,7 @@ if mode == "Schemas & data entry":
             selected = st.selectbox("Table to edit", names, format_func=names.get, key=prefix + "edit_table")
             table = next(t for t in document.tables if t.id == selected)
             table_form(table)
-            with st.expander("Delete table"):
-                confirmed = st.checkbox("Delete this table and all of its relationships", key=prefix + "delete_" + selected)
-                if st.button("Delete table", disabled=not confirmed):
-                    payload = document.model_dump()
-                    payload["tables"] = [t for t in payload["tables"] if t["id"] != selected]
-                    payload["links"] = [e for e in payload["links"] if selected not in (e["source_table"], e["target_table"])]
-                    commit(payload, "Table deleted.")
+            st.caption("Table schemas stay in this workspace. Permanent table deletion is available in Data management → Cleanup & recovery.")
 elif mode == "Build lineage":
     st.caption("Create or add tables to the catalog, then drag them onto the canvas or into folders. Save named copies here; Clear canvas saves a backup first. Use Saved work to load a design.")
     canvas_key = prefix + "canvas"
@@ -186,6 +184,8 @@ elif mode == "Build lineage":
             if not isinstance(request, dict) or not isinstance(request.get("table"), dict):
                 raise ValueError("Invalid table entry")
             raw_table = dict(request["table"])
+            if not isinstance(raw_table.get("name"), str) or not raw_table["name"].strip():
+                raise ValueError("Enter a table name.")
             raw_table["position"] = None
             raw_table["canvas_member"] = True
             raw_table["columns"] = columns_from_rows(raw_table.get("columns", []), raw_table.get("system", ""))
@@ -199,23 +199,37 @@ elif mode == "Build lineage":
             st.session_state[prefix + "canvas_error"] = "Table was not saved: " + str(exc)[:500]
 
     def canvas_work_action():
+        st.session_state.pop(prefix + "work_conflict", None)
+        st.session_state[prefix + "work_result"] = {"id": uuid4().hex, "message": ""}
         try:
             request = st.session_state[canvas_key].get("work_action")
             if not isinstance(request, dict) or request.get("action") not in ("save", "clear") or not isinstance(request.get("name", ""), str):
                 raise ValueError("Invalid canvas action")
+            if request.get("work_id") is not None and not isinstance(request["work_id"], str):
+                raise ValueError("Invalid saved work")
             clearing = request["action"] == "clear"
-            work = save_canvas_work(store, w, request.get("name", ""), expected_revision=request.get("revision"), clear=clearing)
+            work = save_canvas_work(store, w, request.get("name", ""), expected_revision=request.get("revision"),
+                                    clear=clearing, work_id=request.get("work_id"))
             st.session_state[prefix + "selected_work_id"] = work.id
-            st.session_state[prefix + "work_result"] = {
-                "id": work.id, "message": f'Saved as “{work.name}”.' + (" Canvas cleared; restore it from Saved work." if clearing else "")}
+            st.session_state[prefix + "current_work"] = None if clearing else {"id": work.id, "name": work.name}
+            st.session_state[prefix + "work_result"]["message"] = f'Saved as “{work.name}”.' + (" Canvas cleared; restore it from Saved work." if clearing else "")
             st.session_state.pop(prefix + "canvas_error", None)
+        except BuilderWorkExistsError as exc:
+            st.session_state[prefix + "work_conflict"] = {
+                "id": exc.work.id, "name": exc.work.name, "requested_name": request.get("name", "").strip()}
+            st.session_state[prefix + "canvas_error"] = f'Saved work “{exc.work.name}” already exists. Confirm overwrite below, choose another name, or cancel.'
         except (ValueError, duckdb.Error, OSError) as exc:
             st.session_state[prefix + "canvas_error"] = "Canvas was not saved or cleared: " + str(exc)[:500]
 
     if error := st.session_state.pop(prefix + "canvas_error", ""):
-        st.error(error)
+        if st.session_state.get(prefix + "work_conflict"):
+            st.info(error)
+        else:
+            st.error(error)
     canvas(document, canvas_key, save_canvas, error, on_create=create_canvas_table, node_colors=node_colors,
-           on_work=canvas_work_action, work_result=st.session_state.get(prefix + "work_result"))
+           on_work=canvas_work_action, work_result=st.session_state.get(prefix + "work_result"),
+           current_work=st.session_state.get(prefix + "current_work"),
+           work_conflict=st.session_state.get(prefix + "work_conflict"))
     with st.expander("Create a table in the catalog"):
         table_form(place=True)
     with st.expander("Add a relationship without dragging"):
@@ -275,7 +289,8 @@ elif mode == "Saved work":
     name = st.text_input("Work name", max_chars=300, key=prefix + "work_name")
     if st.button("Save new work", disabled=not name.strip()):
         try:
-            save_builder_work(store, w, name)
+            saved_work = save_builder_work(store, w, name)
+            st.session_state[prefix + "current_work"] = {"id": saved_work.id, "name": saved_work.name}
             st.success("Work saved in this workspace.")
         except (ValueError, duckdb.Error, OSError) as exc:
             st.error(str(exc)[:600])
@@ -294,11 +309,13 @@ elif mode == "Saved work":
                                "lineage-work.json", "application/json", on_click="ignore")
             if st.button("Update selected work with current design"):
                 save_builder_work(store, w, work.name, work_id=work.id)
+                st.session_state[prefix + "current_work"] = {"id": work.id, "name": work.name}
                 st.session_state[prefix + "notice"] = "Saved work updated."
                 st.rerun()
             replace_saved = st.checkbox("Replace the current work with this saved work", key=prefix + "load_work_confirm_" + work.id)
             if st.button("Load saved work", disabled=not replace_saved):
                 load_builder_work(store, w, work.id, expected_revision=document.revision)
+                st.session_state[prefix + "current_work"] = {"id": work.id, "name": work.name}
                 st.session_state[prefix + "notice"] = "Saved work loaded. Open Build lineage to continue editing."
                 st.rerun()
         else:

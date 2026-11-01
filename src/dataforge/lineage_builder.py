@@ -122,6 +122,14 @@ class BuilderWorkInfo(BuilderModel):
     updated_at: str
 
 
+class BuilderWorkExistsError(ValueError):
+    """Return the conflicting saved work so callers can offer explicit overwrite."""
+
+    def __init__(self, work: BuilderWorkInfo):
+        self.work = work
+        super().__init__("A saved work with this name already exists. Choose another name or confirm overwrite.")
+
+
 class BuilderWork(BuilderWorkInfo):
     document: BuilderDocument
 
@@ -153,8 +161,8 @@ def _save_builder_work(store: Store, workspace: str, name: str, *, document: Bui
     work = BuilderWork(id=work_id or uuid4().hex, name=name,
                        updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                        document=BuilderDocument.model_validate(document.model_dump()))
-    if any(w.id != work.id and w.name.casefold() == work.name.casefold() for w in works):
-        raise ValueError("A saved work with this name already exists. Choose another name or update that work.")
+    if conflict := next((w for w in works if w.id != work.id and w.name.casefold() == work.name.casefold()), None):
+        raise BuilderWorkExistsError(conflict)
     if work_id is None and len(works) >= 100:
         raise ValueError("This workspace already has 100 saved works. Update an existing work instead.")
     works = [w for w in works if w.id != work.id] + [BuilderWorkInfo.model_validate(work.model_dump(exclude={"document"}))]
@@ -164,8 +172,8 @@ def _save_builder_work(store: Store, workspace: str, name: str, *, document: Bui
 
 
 def save_canvas_work(store: Store, workspace: str, name: str = "", *, expected_revision: int,
-                     clear: bool = False) -> BuilderWork:
-    """Snapshot the current canvas, optionally resetting the entire builder atomically."""
+                     clear: bool = False, work_id: str | None = None) -> BuilderWork:
+    """Snapshot then clear canvas membership/layout, preserving workspace schemas."""
     with store.transaction():
         document = load_builder(store, workspace)
         if document.revision != expected_revision:
@@ -177,15 +185,15 @@ def save_canvas_work(store: Store, workspace: str, name: str = "", *, expected_r
             name, index = base, 2
             while name.casefold() in names:
                 name, index = f"{base} ({index})", index + 1
-        work = _save_builder_work(store, workspace, name, document=document)
+        work = _save_builder_work(store, workspace, name, document=document, work_id=work_id)
         if clear:
-            empty = BuilderDocument(revision=document.revision + 1)
+            empty = BuilderDocument(revision=document.revision + 1, tables=[_off_canvas(t) for t in document.tables])
             store.set_setting(workspace, SETTING, empty.model_dump())
     return work
 
 
 def load_builder_work(store: Store, workspace: str, work_id: str, *, expected_revision: int) -> BuilderDocument:
-    """Replace the active document with a saved copy while retaining revision conflict checks."""
+    """Load a saved design while retaining other workspace schemas and revision checks."""
     work = get_builder_work(store, workspace, work_id)
     payload = work.document.model_dump()
     payload["revision"] = expected_revision
@@ -197,18 +205,46 @@ def load_builder(store: Store, workspace: str) -> BuilderDocument:
     return BuilderDocument.model_validate(store.setting(workspace, SETTING, {}))
 
 
+def _off_canvas(table: BuilderTable) -> BuilderTable:
+    return table.model_copy(deep=True, update={"position": None, "folder": None, "catalog_hidden": True,
+                                              "size": None, "color": ""})
+
+
 def save_builder(store: Store, workspace: str, document: BuilderDocument) -> BuilderDocument:
-    """Validate and save atomically; reject edits based on an older revision."""
+    """Save atomically, retaining omitted workspace schemas; reject stale revisions."""
     document = BuilderDocument.model_validate(document.model_dump())
     with store.transaction():
         previous = load_builder(store, workspace)
         if previous.revision != document.revision:
             raise ValueError("The builder changed in another session. Reload and try the edit again.")
+        ids = {t.id for t in document.tables}
+        names = {t.name.casefold() for t in document.tables}
+        retained = [_off_canvas(t) for t in previous.tables if t.id not in ids and t.name.casefold() not in names]
+        document = BuilderDocument.model_validate({**document.model_dump(),
+                                                   "tables": [t.model_dump() for t in [*document.tables, *retained]]})
         members = {t.id for t in previous.tables if t.canvas_member}
         for table in document.tables:
             if table.id in members:
                 table.canvas_member = True
         document.revision += 1
+        store.set_setting(workspace, SETTING, document.model_dump())
+    return document
+
+
+def delete_builder_tables(store: Store, workspace: str, table_ids: list[str], *, expected_revision: int) -> BuilderDocument:
+    """Explicit workspace-schema deletion for Data management; saved snapshots remain."""
+    with store.transaction():
+        document = load_builder(store, workspace)
+        if document.revision != expected_revision:
+            raise ValueError("The builder changed in another session. Reload and try again.")
+        ids = set(table_ids)
+        if not ids or not ids.issubset({t.id for t in document.tables}):
+            raise ValueError("Select existing workspace tables to delete.")
+        payload = document.model_dump()
+        payload["tables"] = [t for t in payload["tables"] if t["id"] not in ids]
+        payload["links"] = [e for e in payload["links"] if e["source_table"] not in ids and e["target_table"] not in ids]
+        payload["revision"] += 1
+        document = BuilderDocument.model_validate(payload)
         store.set_setting(workspace, SETTING, document.model_dump())
     return document
 
@@ -342,6 +378,8 @@ def columns_from_rows(rows: list[dict], system: str, *, existing: list[BuilderCo
         if not any(row.get(k) for k in ("name", "data_type", "comment", "precision", "scale")):
             continue
         try:
+            if not isinstance(row.get("name"), str) or not row["name"].strip():
+                raise ValueError("Enter a column name.")
             original = originals.get(row.get("id"))
             unchanged_type = original and all(
                 (row.get(key) or "") == value if isinstance(value, str) else row.get(key) == value

@@ -1,10 +1,12 @@
 """Human cleanup controls; policy and mutations stay in shared services."""
 import uuid
 
+import duckdb
 import streamlit as st
 
 from dataforge.cleanup import CATEGORIES, apply_cleanup, cleanup_plan
 from dataforge.database_maintenance import backup, checkpoint, inspect_database, restore_backup
+from dataforge.lineage_builder import delete_builder_tables, load_builder
 from dataforge.services import analyze
 from dataforge.store import Store
 from dataforge.temporary_cleanup import cleanup_temporary, temporary_plan
@@ -21,6 +23,26 @@ def render(store: Store, workspace: str, mode: str = "cleanup") -> None:
     st.subheader('Cleanup preview' if mode == 'cleanup' else 'Backups & integrity', icon=':material/shield:')
     st.caption('Preview dependencies before removal. Backups contain private source data; keep a copy outside this runtime home.')
     if mode == 'cleanup':
+        with st.expander('Lineage builder table schemas'):
+            try:
+                if notice := st.session_state.pop('builder_delete_notice_' + workspace, None):
+                    st.session_state['builder_delete_tables_' + workspace] = []
+                    st.session_state['builder_delete_confirm_' + workspace] = False
+                    st.success(notice)
+                document = load_builder(store, workspace)
+                choices = {t.id: t.name for t in document.tables}
+                st.caption('These schemas belong to the workspace. Clearing a canvas only removes its diagram and catalog entries. Saved work snapshots remain available after deletion.')
+                selected_tables = st.multiselect('Workspace table schemas to delete', choices, format_func=choices.get,
+                                                  key='builder_delete_tables_' + workspace)
+                affected = sum(e.source_table in selected_tables or e.target_table in selected_tables for e in document.links)
+                st.caption(f'{len(selected_tables)} tables and {affected} current relationships will be deleted.')
+                confirmed = st.checkbox('Permanently delete the selected workspace table schemas', key='builder_delete_confirm_' + workspace)
+                if st.button('Delete workspace table schemas', disabled=not selected_tables or not confirmed):
+                    delete_builder_tables(store, workspace, selected_tables, expected_revision=document.revision)
+                    st.session_state['builder_delete_notice_' + workspace] = 'Selected workspace table schemas deleted. Saved work snapshots were retained.'
+                    st.rerun()
+            except (ValueError, duckdb.Error, OSError) as exc:
+                st.error('Table deletion refused: ' + str(exc)[:500])
         names = {row['workspace_id']: row['name'] for row in store.workspaces()}
         metrics = []
         for category in ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs'):
