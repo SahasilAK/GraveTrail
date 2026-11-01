@@ -21,6 +21,7 @@ from dataforge.lineage_builder import (
     load_builder_work,
     save_builder,
     save_builder_work,
+    save_canvas_work,
     schema_rows,
 )
 from dataforge.schema_imports import import_schema
@@ -81,6 +82,7 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
                                      comment=comment, columns=columns, system=system, size=existing.size if existing else None,
                                      folder=existing.folder if existing else None, canvas_member=True,
                                      catalog_hidden=existing.catalog_hidden if existing else False,
+                                     color=existing.color if existing else "",
                                      position=existing.position if existing else None)
                 payload = document.model_dump()
                 if existing:
@@ -130,6 +132,7 @@ if mode == "Schemas & data entry":
                     table.canvas_member = True
                     table.catalog_hidden = False
                     table.folder = None
+                    table.color = ""
                     for column in table.columns:
                         column.id = uuid4().hex
                 existing_names = {t.name.casefold() for t in document.tables}
@@ -166,7 +169,7 @@ if mode == "Schemas & data entry":
                     payload["links"] = [e for e in payload["links"] if selected not in (e["source_table"], e["target_table"])]
                     commit(payload, "Table deleted.")
 elif mode == "Build lineage":
-    st.caption("Create or add tables to the catalog, then drag them onto the canvas or into folders. Ctrl-click or drag empty canvas to select a group.")
+    st.caption("Create or add tables to the catalog, then drag them onto the canvas or into folders. Save named copies here; Clear canvas saves a backup first. Use Saved work to load a design.")
     canvas_key = prefix + "canvas"
 
     def save_canvas():
@@ -195,9 +198,24 @@ elif mode == "Build lineage":
         except (ValueError, duckdb.Error, OSError) as exc:
             st.session_state[prefix + "canvas_error"] = "Table was not saved: " + str(exc)[:500]
 
+    def canvas_work_action():
+        try:
+            request = st.session_state[canvas_key].get("work_action")
+            if not isinstance(request, dict) or request.get("action") not in ("save", "clear") or not isinstance(request.get("name", ""), str):
+                raise ValueError("Invalid canvas action")
+            clearing = request["action"] == "clear"
+            work = save_canvas_work(store, w, request.get("name", ""), expected_revision=request.get("revision"), clear=clearing)
+            st.session_state[prefix + "selected_work_id"] = work.id
+            st.session_state[prefix + "work_result"] = {
+                "id": work.id, "message": f'Saved as “{work.name}”.' + (" Canvas cleared; restore it from Saved work." if clearing else "")}
+            st.session_state.pop(prefix + "canvas_error", None)
+        except (ValueError, duckdb.Error, OSError) as exc:
+            st.session_state[prefix + "canvas_error"] = "Canvas was not saved or cleared: " + str(exc)[:500]
+
     if error := st.session_state.pop(prefix + "canvas_error", ""):
         st.error(error)
-    canvas(document, canvas_key, save_canvas, error, on_create=create_canvas_table, node_colors=node_colors)
+    canvas(document, canvas_key, save_canvas, error, on_create=create_canvas_table, node_colors=node_colors,
+           on_work=canvas_work_action, work_result=st.session_state.get(prefix + "work_result"))
     with st.expander("Create a table in the catalog"):
         table_form(place=True)
     with st.expander("Add a relationship without dragging"):
@@ -300,7 +318,7 @@ elif mode == "Saved work":
             st.error(str(exc)[:600])
 
 with st.expander("Export & restore builder"):
-    st.caption("The canvas Export menu saves all placed tables as SVG or PNG. HTML exports an offline interactive presentation. CSV/Excel include every table and relationship. JSON preserves the complete editable builder.")
+    st.caption("The canvas Export menu saves SVG, PNG or editable canvas JSON. HTML exports an offline interactive presentation. CSV/Excel include every table and relationship. JSON preserves the complete editable builder.")
     format = st.selectbox("Builder export format", ["JSON", "HTML", "Excel", "CSV"], key=prefix + "export_format")
     if st.button("Prepare builder export", disabled=not document.tables):
         try:

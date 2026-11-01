@@ -2,7 +2,7 @@
 
 Shared Streamlit presentation and provider/assistance forms. Uses dataforge services; source content is loaded lazily.
 
-- `builder_canvas.py` — Offline CCv2 SVG canvas with grouped selection/drag/Delete, undo/redo and temporary Alt Pan. Toolbar Export dropdown groups SVG/PNG; shared menu positioning, keyboard navigation and dismissal also serve context menus for tables/relationships/canvas/catalog/folders. Catalog removal is reversible without removing schema/canvas data. Catalog-first creation, pointer drops, search/scroll and keyboard placement remain. History includes folders, sizes, links and catalog visibility. Bordered cells wrap expandable comments; resizing updates ports/exports. Shared role colors/datatype editor; `builder_html` escapes offline presentations.
+- `builder_canvas.py` — Offline CCv2 SVG canvas with group selection/drag/Delete, history, Alt Pan, context menus and catalog folders. `TRACE_JS` / `lineageTraces` follow directed downstream reachability and propagate color sets cycle-safely; joins are highlighted but do not traverse into peer sources. Color dialogs apply/clear single, selected-group or folder colors. Selection dims unrelated paths; merged colors use reusable user-space gradients, including horizontal edges. Role-derived tints preserve contrast in app/HTML. Colors/highlighting survive SVG/PNG; JSON/history retain assigned colors. Toolbar Save/Clear dialogs use backend work actions with acknowledgements; Clear resets history/catalog after saving a restorable snapshot. Export menu includes editable JSON alongside SVG/PNG. Shared datatype editor and escaped interactive `builder_html` remain.
 
 ## Subfolders
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).

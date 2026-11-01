@@ -39,6 +39,7 @@ BODY = """
   <label class="lb-tool-options">Tool <select class="lb-tool" aria-label="Canvas tool"><option value="select">Select tables</option><option value="pan">Pan</option></select></label>
   <button data-action="fit">Fit diagram</button><button data-action="out" aria-label="Zoom out">−</button>
   <button data-action="in" aria-label="Zoom in">+</button><button data-action="full">Full screen</button>
+  <button data-action="save-work">Save canvas</button><button data-action="clear-canvas">Clear canvas</button>
   <button data-action="export" aria-haspopup="menu" aria-expanded="false" aria-controls="lb-context">Export ▾</button>
   <label class="lb-connection-options">Connection <select class="lb-mode" aria-label="Connection type"><option value="lineage">Lineage</option><option value="join">Join</option></select></label>
   <label class="lb-join-options" hidden>Join type <select class="lb-join-type" aria-label="Join type"><option>Inner join</option><option>Left join</option><option>Right join</option><option>Full outer join</option><option>Cross join</option><option>Self join</option><option value="__custom__">Custom…</option></select></label>
@@ -51,6 +52,8 @@ BODY = """
   <div class="lb-board"><svg class="lb-svg" tabindex="0" role="group" aria-label="Lineage canvas. Drag table headers to move. Connect an output port to an input port." viewBox="0 0 1200 700" preserveAspectRatio="xMidYMin meet"></svg></div>
  </div>
  <div class="lb-inspector"><span class="lb-selection">Select a table or relationship.</span>
+  <button data-action="color" hidden>Set trace color</button><button data-action="clear-color" hidden>Clear assigned color</button>
+  <span class="lb-trace-summary" aria-live="polite"></span>
   <input class="lb-label" aria-label="Relationship label" placeholder="Relationship label, e.g. Join" maxlength="500" hidden>
   <button data-action="label" hidden>Apply label</button><button data-action="remove" hidden>Remove</button>
  </div>
@@ -80,6 +83,18 @@ BODY = """
   <h2>New folder</h2><label>Folder name<input name="folder_name" required maxlength="300"></label>
   <p class="lb-folder-error" role="alert"></p><button type="button" class="lb-folder-cancel">Cancel</button><button type="submit">Create folder</button>
  </form></dialog>
+ <dialog class="lb-color-dialog" aria-label="Trace color"><form class="lb-color-form">
+  <h2>Trace color</h2><p class="lb-color-targets"></p>
+  <label>Custom color <input type="color" class="lb-color-picker" aria-label="Custom trace color" value="#2563eb"></label>
+  <div class="lb-color-swatches" aria-label="Trace color presets"></div>
+  <p>The color follows downstream lineage. Shared paths show all contributing colors.</p>
+  <button type="button" class="lb-color-cancel">Cancel</button><button type="button" class="lb-color-clear">Clear assigned color</button><button type="submit">Apply color</button>
+ </form></dialog>
+ <dialog class="lb-work-dialog" aria-labelledby="lb-work-title"><form class="lb-work-form">
+  <h2 id="lb-work-title">Save canvas</h2><p class="lb-work-description"></p>
+  <label>Work name (optional)<input name="work_name" maxlength="300" placeholder="Leave blank for an automatic name"></label>
+  <p class="lb-work-error" role="alert"></p><button type="button" class="lb-work-cancel">Cancel</button><button type="submit" class="lb-work-submit">Save canvas</button>
+ </form></dialog>
  <div id="lb-context" class="lb-context" role="menu" aria-label="Lineage options" tabindex="-1" hidden></div>
 </div>
 """.replace("<!--column-editor-->", COLUMN_BODY)
@@ -106,10 +121,11 @@ CSS = """
 .lb-svg .lb-marquee{fill:var(--lb-accent);fill-opacity:.12;stroke:var(--lb-accent);stroke-dasharray:5 3;pointer-events:none}
 .lb-alt-pan .lb-svg,.lb-alt-pan .lb-svg *{cursor:grab!important}.lb-alt-pan.lb-pan-dragging .lb-svg,.lb-alt-pan.lb-pan-dragging .lb-svg *{cursor:grabbing!important}
 .lb-context{position:fixed;z-index:30;min-width:210px;max-width:min(310px,90vw);max-height:70dvh;overflow:auto;padding:5px;background:var(--lb-card);border:1px solid var(--lb-border);border-radius:7px;box-shadow:0 8px 24px #0005}.lb-context button{display:block;text-align:left;width:100%;background:transparent;border:0;white-space:normal;overflow-wrap:anywhere}.lb-context button:disabled{cursor:default}.lb-context button:hover:not(:disabled),.lb-context button:focus-visible{background:var(--lb-bg)}.lb-context hr{border:0;border-top:1px solid var(--lb-border);margin:4px}
+.lb-color-dialog{color:inherit;background:var(--lb-bg);border:1px solid var(--lb-border);border-radius:8px;width:min(460px,90vw);padding:24px}.lb-color-dialog::backdrop{background:#0008}.lb-color-picker{width:65px;vertical-align:middle}.lb-color-swatches{display:flex;gap:8px;margin:18px 0;flex-wrap:wrap}.lb-color-swatches button{width:36px;padding:0;min-height:36px}.lb-trace-summary{font-size:12px;opacity:.8}
 .lb-status{margin-left:auto;font-size:12px}.lb-selection{overflow-wrap:anywhere}.lb-label{flex:1;max-width:450px}.lb-hint{font-size:12px;opacity:.75;margin:4px 0 12px}
 .lb-root:fullscreen{padding:20px;box-sizing:border-box;background:var(--lb-bg);overflow:auto;display:flex;flex-direction:column}.lb-root:fullscreen .lb-layout{flex:1;height:0;min-height:200px}.lb-root:fullscreen .lb-svg{height:100%}.lb-root:fullscreen .lb-palette{height:100%}
 .lb-create{color:inherit;background:var(--lb-bg);border:1px solid var(--lb-border);border-radius:8px;width:min(1000px,90vw);max-height:85dvh;box-sizing:border-box;padding:24px}.lb-create::backdrop{background:#0008}
-.lb-add,.lb-folder-dialog{color:inherit;background:var(--lb-bg);border:1px solid var(--lb-border);border-radius:8px;width:min(540px,90vw);padding:24px}.lb-add::backdrop,.lb-folder-dialog::backdrop{background:#0008}.lb-add-search{width:100%;margin:8px 0}.lb-add-list{max-height:350px;overflow-y:auto;margin:12px 0}.lb-add-list button{display:block;width:100%;text-align:left;margin:6px 0}.lb-folder-dialog input{width:100%;margin:8px 0}
+.lb-add,.lb-folder-dialog,.lb-work-dialog{color:inherit;background:var(--lb-bg);border:1px solid var(--lb-border);border-radius:8px;width:min(540px,90vw);padding:24px}.lb-add::backdrop,.lb-folder-dialog::backdrop,.lb-work-dialog::backdrop{background:#0008}.lb-add-search{width:100%;margin:8px 0}.lb-add-list{max-height:350px;overflow-y:auto;margin:12px 0}.lb-add-list button{display:block;width:100%;text-align:left;margin:6px 0}.lb-folder-dialog input,.lb-work-dialog input{width:100%;margin:8px 0}
 .lb-create h2{margin:0 0 16px}.lb-create-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px}.lb-create label{display:flex;flex-direction:column;gap:4px}.lb-create p{font-size:13px}.lb-column-scroll{overflow:auto;margin:16px 0}.lb-columns table{border-collapse:collapse;width:100%}.lb-columns th{text-align:left;font-size:12px;padding:4px}.lb-columns td{padding:4px}.lb-columns td input{width:100%;min-width:130px}.lb-columns td input[type=number]{min-width:80px}.lb-create-actions{display:flex;justify-content:flex-end;gap:8px}.lb-create-error{color:var(--st-red-color,#c74747)}
 @media(max-width:650px){.lb-layout{grid-template-columns:1fr;grid-template-rows:auto auto}.lb-palette{height:160px;border-right:0;border-bottom:1px solid var(--lb-border)}.lb-svg{height:500px}.lb-status{margin-left:0}.lb-create-meta{grid-template-columns:1fr}}
 """
@@ -142,8 +158,32 @@ function mountColumns(parent, rows, options, changed=null){
 }
 """
 
-JS = COLUMN_JS + r"""
-function mountBuilder(parent, data, changed, createTable=null) {
+TRACE_JS = r"""
+function lineageTraces(document, selected=[]){
+ const tables=new Map(document.tables.map(t=>[t.id,t])),outgoing=new Map(),joins=[];
+ for(const link of document.links){
+  if(!tables.has(link.source_table)||!tables.has(link.target_table))continue;
+  if(link.kind==='join'){joins.push(link);continue;}
+  if(!outgoing.has(link.source_table))outgoing.set(link.source_table,[]);outgoing.get(link.source_table).push(link);
+ }
+ function downstream(roots){
+  const reached=new Set(roots.filter(id=>tables.has(id))),links=new Set(),queue=[...reached];
+  for(let i=0;i<queue.length;i++)for(const link of outgoing.get(queue[i])||[]){links.add(link.id);if(!reached.has(link.target_table)){reached.add(link.target_table);queue.push(link.target_table);}}
+  for(const link of joins)if(reached.has(link.source_table)||reached.has(link.target_table))links.add(link.id);
+  return {tables:reached,links};
+ }
+ const nodeColors=new Map(),edgeColors=new Map();
+ const add=(map,id,color)=>{if(!map.has(id))map.set(id,new Set());map.get(id).add(color);};
+ for(const table of document.tables)if(table.color){
+  const color=table.color.toLowerCase(),trace=downstream([table.id]);
+  for(const id of trace.tables)add(nodeColors,id,color);for(const id of trace.links)add(edgeColors,id,color);
+ }
+ return {active:selected.length>0,selected:downstream(selected),nodeColors,edgeColors};
+}
+"""
+
+JS = COLUMN_JS + TRACE_JS + r"""
+function mountBuilder(parent, data, changed, createTable=null, workAction=null) {
  const root=parent.querySelector('.lb-root'); if(!root)return;
  const svg=root.querySelector('.lb-svg'),contextMenu=root.querySelector('.lb-context'),exportButton=root.querySelector('[data-action=export]'),ns='http://www.w3.org/2000/svg';
  let s=root._builder;
@@ -151,7 +191,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
  s.undo=s.undo||[];s.redo=s.redo||[];
  s.selection=s.selection||new Set();s.openFolders=s.openFolders||new Set();
  const copy=value=>JSON.parse(JSON.stringify(value));
- function snapshot(value){return {positions:Object.fromEntries(value.tables.map(t=>[t.id,t.position?{...t.position}:null])),sizes:Object.fromEntries(value.tables.map(t=>[t.id,t.size?{...t.size}:null])),tableFolders:Object.fromEntries(value.tables.map(t=>[t.id,t.folder||null])),catalogHidden:Object.fromEntries(value.tables.map(t=>[t.id,!!t.catalog_hidden])),folders:copy(value.folders||[]),links:copy(value.links)};}
+ function snapshot(value){return {positions:Object.fromEntries(value.tables.map(t=>[t.id,t.position?{...t.position}:null])),sizes:Object.fromEntries(value.tables.map(t=>[t.id,t.size?{...t.size}:null])),tableFolders:Object.fromEntries(value.tables.map(t=>[t.id,t.folder||null])),catalogHidden:Object.fromEntries(value.tables.map(t=>[t.id,!!t.catalog_hidden])),colors:Object.fromEntries(value.tables.map(t=>[t.id,t.color||''])),folders:copy(value.folders||[]),links:copy(value.links)};}
  const updated=s.revision!==data.document.revision;
  if(updated || data.error){
   const operation=s.operation;
@@ -159,11 +199,14 @@ function mountBuilder(parent, data, changed, createTable=null) {
    if(operation.kind==='undo'){s.undo.pop();s.redo.push(operation.before);}
    else if(operation.kind==='redo'){s.redo.pop();s.undo.push(operation.before);}
    else if(operation.kind==='edit'){s.undo.push(operation.before);s.redo=[];}
+   else if(operation.kind==='clear'){s.undo=[];s.redo=[];s.selection.clear();}
    s.undo=s.undo.slice(-50);s.redo=s.redo.slice(-50);
   }else if(updated&&s.revision!==-1){s.undo=[];s.redo=[];s.selection.clear();}
   s.doc=copy(data.document);s.revision=data.document.revision;s.saving=false;s.selected=null;s.operation=null;s.lastSaved=snapshot(s.doc);
   if(data.error)s.pending=null;
  }
+ const workDone=!!data.work_result&&s.workResult!==data.work_result.id;
+ if(workDone){s.workResult=data.work_result.id;s.saving=false;s.operation=null;}
  const doc=s.doc, editable=!!changed;
  doc.folders=doc.folders||[];s.selection=new Set([...s.selection].filter(id=>doc.tables.some(t=>t.id===id&&t.position)));
  const tool=root.querySelector('.lb-tool');
@@ -191,6 +234,24 @@ function mountBuilder(parent, data, changed, createTable=null) {
  const message=text=>{status.textContent=text;};
  const visible=()=>doc.tables.filter(t=>t.position);
  const table=id=>doc.tables.find(t=>t.id===id);
+ let traces,paints,arrows;
+ const colorList=(map,id)=>[...(map.get(id)||[])].sort();
+ function paint(colors,coordinates,owner){
+  if(!colors.length)return '';if(colors.length===1)return colors[0];let entry=paints.get(owner);
+  if(!entry){const id='lb-flow-'+paints.size,gradient=node('linearGradient',{id,gradientUnits:'userSpaceOnUse'},null,svg.querySelector('defs'));
+   colors.forEach((color,i)=>node('stop',{offset:(i/(colors.length-1)*100)+'%','stop-color':color},null,gradient));entry={gradient,value:`url(#${id})`};paints.set(owner,entry);
+  }
+  const [x1,y1,x2,y2]=coordinates;for(const [key,value]of Object.entries({x1,y1,x2:x1===x2&&y1===y2?x2+1:x2,y2}))entry.gradient.setAttribute(key,value);return entry.value;
+ }
+ function arrow(color){
+  if(arrows.has(color))return arrows.get(color);const id='lb-arrow-'+arrows.size,marker=node('marker',{id,viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'},null,svg.querySelector('defs'));
+  node('path',{d:'M0 0L10 5L0 10z',fill:color},null,marker);const value=`url(#${id})`;arrows.set(color,value);return value;
+ }
+ function tint(color){
+  const fills=Object.values(data.node_colors||{}).map(c=>c.fill).filter(c=>/^#[\da-f]{6}$/i.test(c));
+  const base=fills.length?[1,3,5].map(start=>fills.reduce((sum,c)=>sum+parseInt(c.slice(start,start+2),16),0)/fills.length):[255,255,255];
+  return 'rgb('+[1,3,5].map((start,i)=>Math.round(parseInt(color.slice(start,start+2),16)*.22+base[i]*.78)).join(',')+')';
+ }
  s.expanded=s.expanded||new Set();
  const width=t=>t.size?.width||420;
  const measure=document.createElement('canvas').getContext('2d');measure.font='12px '+getComputedStyle(svg).fontFamily;
@@ -208,7 +269,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
   const el=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));
   if(text!==null)el.textContent=text;if(parentNode)parentNode.append(el);return el;
  }
- function historyButtons(){root.querySelector('[data-action=undo]').disabled=!editable||s.saving||!s.undo.length;root.querySelector('[data-action=redo]').disabled=!editable||s.saving||!s.redo.length;}
+ function historyButtons(){root.querySelector('[data-action=undo]').disabled=!editable||s.saving||!s.undo.length;root.querySelector('[data-action=redo]').disabled=!editable||s.saving||!s.redo.length;for(const action of ['save-work','clear-canvas'])root.querySelector(`[data-action="${action}"]`).disabled=s.saving;}
  function send(record=true){
   if(!editable)return;
   s.operation=s.operation||{kind:record?'edit':'catalog',before:s.lastSaved};s.saving=true;historyButtons();message('Saving…');
@@ -217,7 +278,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
  function history(kind){
   if(s.saving||!editable)return;const stack=kind==='undo'?s.undo:s.redo,target=stack[stack.length-1];if(!target)return;
   s.operation={kind,before:snapshot(doc)};
-  for(const t of doc.tables){t.position=target.positions[t.id]?{...target.positions[t.id]}:null;t.size=target.sizes?.[t.id]?{...target.sizes[t.id]}:null;t.folder=target.tableFolders?.[t.id]||null;t.catalog_hidden=target.catalogHidden?.[t.id]||false;}
+  for(const t of doc.tables){t.position=target.positions[t.id]?{...target.positions[t.id]}:null;t.size=target.sizes?.[t.id]?{...target.sizes[t.id]}:null;t.folder=target.tableFolders?.[t.id]||null;t.catalog_hidden=target.catalogHidden?.[t.id]||false;t.color=target.colors?.[t.id]||'';}
   doc.folders=copy(target.folders||[]);doc.links=copy(target.links);s.pending=null;s.selected=null;s.selection.clear();draw();palette();send();svg.focus({preventScroll:true});
  }
  function removeSelected(){
@@ -244,9 +305,10 @@ function mountBuilder(parent, data, changed, createTable=null) {
    const join=e.kind==='join',a=endpoint(e.source_table,e.source_column,true),b=endpoint(e.target_table,e.target_column,join),d=join?joinPath(a,b):path(a,b);
    node('path',{d,class:'lb-hit','data-edge':e.id},null,group);
    const attrs={d,class:'lb-edge'+(join?' lb-join':'')+(s.selected?.id===e.id?' selected':''),'data-edge':e.id,tabindex:0,role:'button','aria-label':`${table(e.source_table).name}.${table(e.source_table).columns.find(c=>c.id===e.source_column).name} ${join?'join':'to'} ${table(e.target_table).name}.${table(e.target_table).columns.find(c=>c.id===e.target_column).name}: ${join?e.join_type:e.label||'relationship'}`};
-   if(!join)attrs['marker-end']='url(#lb-arrow)';node('path',attrs,null,group);
+   const colors=colorList(traces.edgeColors,e.id),stroke=paint(colors,[a.x,a.y,b.x,b.y],'edge:'+e.id)||(join?'#d89e3a':'var(--lb-accent)'),traced=traces.selected.links.has(e.id),opacity=traces.active&&!traced ? .16 : 1;
+   attrs['data-traced']=traced;if(!join)attrs['marker-end']=arrow(colors.length?colors[colors.length-1]:stroke);const line=node('path',attrs,null,group);line.style.stroke=stroke;line.style.opacity=opacity;line.style.strokeWidth=s.selected?.id===e.id?4:traces.active&&traced?3.5:2;
    const text=join?(e.join_type||'Join')+(e.label?' · '+e.label:''):e.label;
-   if(text){const label=node('text',{x:join?Math.max(a.x,b.x)+90:(a.x+b.x)/2,y:(a.y+b.y)/2-10,'text-anchor':join?'start':'middle','font-size':12,'data-edge':e.id},short(text,40),group);node('title',{},text,label);}
+   if(text){const label=node('text',{x:join?Math.max(a.x,b.x)+90:(a.x+b.x)/2,y:(a.y+b.y)/2-10,'text-anchor':join?'start':'middle','font-size':12,'data-edge':e.id},short(text,40),group);label.style.opacity=opacity;node('title',{},text,label);}
   }
  }
  function inspector(){
@@ -256,20 +318,22 @@ function mountBuilder(parent, data, changed, createTable=null) {
   if(e?.kind==='join'){mode.value='join';setJoinChoice(e.join_type||'Inner join');}updateMode();
   root.querySelector('[data-action=label]').hidden=!e||!editable;
   const remove=root.querySelector('[data-action=remove]');remove.hidden=(!s.selected&&!s.selection.size)||!editable;remove.textContent=s.selection.size?'Remove from canvas':'Delete relationship';
+  for(const action of ['color','clear-color']){const button=root.querySelector(`[data-action="${action}"]`);button.hidden=!editable||!s.selection.size;button.disabled=s.saving||(action==='clear-color'&&![...s.selection].some(id=>table(id).color));}
+  root.querySelector('.lb-trace-summary').textContent=traces.active?`Downstream trace: ${traces.selected.tables.size-s.selection.size} tables · ${traces.selected.links.size} relationships`:'';
  }
  function draw(){
-  svg.replaceChildren();const defs=node('defs',{},null,svg);
-  const marker=node('marker',{id:'lb-arrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'},null,defs);
-  node('path',{d:'M0 0L10 5L0 10z',fill:'var(--lb-accent)'},null,marker);
+  traces=lineageTraces(doc,[...s.selection]);paints=new Map();arrows=new Map();svg.replaceChildren();node('defs',{},null,svg);
   node('g',{class:'lb-edges'},null,svg);
   if(!visible().length)node('text',{x:80,y:160,'font-size':20},editable?'Add tables from the catalog to start your lineage.':'No tables placed on this canvas.',svg);
   for(const t of visible()){
    const box=layout(t),w=box.width,h=box.height;
-   const g=node('g',{'data-table':t.id,transform:`translate(${t.position.x},${t.position.y})`},null,svg);
+   const traced=traces.selected.tables.has(t.id),flowColors=colorList(traces.nodeColors,t.id),flowPaint=paint(flowColors,[0,0,w,0],'node:'+t.id),custom=t.color||(flowColors.length===1?flowColors[0]:'');
+   const g=node('g',{'data-table':t.id,'data-traced':traced,transform:`translate(${t.position.x},${t.position.y})`},null,svg);g.style.opacity=traces.active&&!traced ? .25 : 1;
    const card=node('rect',{width:w,height:h,rx:7,class:'lb-card'+(s.selection.has(t.id)?' selected':'')},null,g);
-   const colors=data.node_colors?.[t.role];if(colors){card.style.fill=colors.fill;if(!s.selection.has(t.id))card.style.stroke=colors.stroke;g.style.setProperty('--st-text-color',colors.text);g.style.setProperty('--lb-rule',colors.stroke);}
-   const color=colors?.stroke||{source:'#208b79',intermediate:'#bc872e',target:'#477fc4'}[t.role];
+   const colors=data.node_colors?.[t.role];if(colors){card.style.fill=custom?tint(custom):colors.fill;card.style.stroke=t.color||flowPaint||(traces.active&&traced?'var(--lb-accent)':colors.stroke);card.style.strokeWidth=s.selection.has(t.id)?3.5:traces.active&&traced?2.5:1;g.style.setProperty('--st-text-color',colors.text);g.style.setProperty('--lb-rule',colors.stroke);}
+   const color=t.color||flowPaint||colors?.stroke||{source:'#208b79',intermediate:'#bc872e',target:'#477fc4'}[t.role];
    node('rect',{x:0,y:8,width:4,height:46,fill:color},null,g);
+   if(flowColors.length>1)node('rect',{x:8,y:3,width:w-16,height:3,fill:flowPaint,rx:1},null,g);
    const header=node('g',{class:'lb-header',tabindex:0,role:'button','aria-pressed':s.selection.has(t.id),'aria-label':`${t.name}, ${t.role}. Arrow keys move this table.`},null,g);
    node('rect',{width:w,height:62,fill:'transparent'},null,header);
    const name=node('text',{x:16,y:25,'font-weight':600,'font-size':15},short(t.name,Math.floor((w-32)/8)),header);node('title',{},t.name+(t.comment?' — '+t.comment:''),name);
@@ -320,6 +384,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
   const filter=root.querySelector('.lb-search').value.toLowerCase(),list=root.querySelector('.lb-tables');list.replaceChildren();
   function tableButton(t,parent){
    const b=document.createElement('button');b.type='button';b.textContent=t.name;b.dataset.catalogTable=t.id;let dragged=false;
+   if(t.color)b.style.borderLeft='4px solid '+t.color;
    const detail=document.createElement('small');detail.textContent=`${t.role} · ${t.columns.length} columns${t.position?' · on canvas':' · drag to canvas'}`;b.append(detail);
    b.onclick=()=>{if(dragged){dragged=false;return;}if(t.position)select('table',t.id);else message('Drag this table onto the canvas, or press Enter to place it.');};b.onkeydown=e=>{if(e.key==='Enter'&&!t.position){e.preventDefault();add(t.id);}};
    b.onpointerdown=e=>{if(e.button!==0||s.saving||!editable)return;e.preventDefault();dragged=false;s.catalogDrag={id:t.id,x:e.clientX,y:e.clientY,moved:false};b.setPointerCapture(e.pointerId);};
@@ -432,6 +497,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
   const clone=svg.cloneNode(true);clone.setAttribute('xmlns',ns);clone.setAttribute('viewBox',`${x} ${y} ${w} ${h}`);clone.setAttribute('width',w);clone.setAttribute('height',h);
   const originalText=svg.querySelectorAll('text');clone.querySelectorAll('text').forEach((n,i)=>{const style=getComputedStyle(originalText[i]);n.style.fill=style.fill;n.style.fontFamily=style.fontFamily;});
   const originalRules=svg.querySelectorAll('.lb-rule');clone.querySelectorAll('.lb-rule').forEach((n,i)=>n.style.stroke=getComputedStyle(originalRules[i]).stroke);
+  const originalShapes=svg.querySelectorAll('.lb-card,.lb-edge');clone.querySelectorAll('.lb-card,.lb-edge').forEach((n,i)=>{const stroke=getComputedStyle(originalShapes[i]).stroke;if(!stroke.includes('url('))n.style.stroke=stroke;});
   const style=getComputedStyle(root),color=style.color,bg=style.getPropertyValue('--lb-bg').trim()||'#fff',accent=style.getPropertyValue('--lb-accent').trim()||'#176db1',border=style.getPropertyValue('--lb-border').trim()||'#a3afbd',card=style.getPropertyValue('--lb-card').trim()||'#f2f5f9';
   clone.querySelectorAll('.lb-port,.lb-hit,.lb-ghost,.lb-resize,.lb-expand,.lb-marquee').forEach(n=>n.remove());
   const css=node('style',{},`.lb-card{fill:${card};stroke:${border}}text{fill:${color};font-family:Arial,sans-serif}.lb-edge{fill:none;stroke:${accent};stroke-width:2}.lb-edge.lb-join{stroke:#d89e3a;stroke-dasharray:6 4}.lb-rule{stroke:${border};opacity:.4}`,null);clone.prepend(css);
@@ -469,6 +535,21 @@ function mountBuilder(parent, data, changed, createTable=null) {
   if(!data.error){dialog.close();form.reset();columns.reset();}
  }
  typeOptions();
+ const colorDialog=root.querySelector('.lb-color-dialog'),colorForm=root.querySelector('.lb-color-form'),colorPicker=root.querySelector('.lb-color-picker');
+ function assignColor(ids,color){
+  if(!editable||s.saving)return;const targets=ids.map(table).filter(t=>t&&(t.color||'')!==color);if(!targets.length)return;
+  for(const t of targets)t.color=color;s.selection=new Set(ids.filter(id=>table(id)?.position));s.selected=null;s.pending=null;draw();palette();send();
+ }
+ function openColor(ids){
+  if(!editable||s.saving||!ids.length)return;s.colorTargets=[...ids];colorPicker.value=ids.map(table).find(t=>t?.color)?.color||'#2563eb';
+  root.querySelector('.lb-color-targets').textContent=`Apply to ${ids.length} table${ids.length===1?'':'s'}.`;colorDialog.showModal();
+ }
+ const swatches=root.querySelector('.lb-color-swatches');swatches.replaceChildren();
+ for(const [name,color]of [['Blue','#2563eb'],['Green','#16a34a'],['Orange','#f97316'],['Purple','#9333ea'],['Pink','#db2777'],['Cyan','#0891b2']]){
+  const button=document.createElement('button');button.type='button';button.setAttribute('aria-label',name);button.title=name+' '+color;button.style.background=color;button.onclick=()=>{colorPicker.value=color;};swatches.append(button);
+ }
+ colorForm.onsubmit=e=>{e.preventDefault();const ids=s.colorTargets||[];colorDialog.close();assignColor(ids,colorPicker.value);};
+ root.querySelector('.lb-color-clear').onclick=()=>{colorDialog.close();assignColor(s.colorTargets||[],'');};root.querySelector('.lb-color-cancel').onclick=()=>colorDialog.close();
  const addDialog=root.querySelector('.lb-add');
  function addChoices(){
   const list=root.querySelector('.lb-add-list'),filter=root.querySelector('.lb-add-search').value.toLowerCase();list.replaceChildren();
@@ -487,6 +568,24 @@ function mountBuilder(parent, data, changed, createTable=null) {
   const folder={id:crypto.randomUUID(),name};doc.folders.push(folder);s.openFolders.add(folder.id);folderDialog.close();folderForm.reset();palette();send();
  };
  mode.onchange=()=>{s.pending=null;s.selected=null;s.selection.clear();updateMode();draw();};joinSelect.onchange=updateMode;
+ const workDialog=root.querySelector('.lb-work-dialog'),workForm=root.querySelector('.lb-work-form');
+ function openWork(action){
+  if(!workAction||s.saving)return;s.workAction=action;s.pending=null;workForm.reset();root.querySelector('.lb-work-error').textContent='';
+  const clearing=action==='clear';root.querySelector('#lb-work-title').textContent=clearing?'Save and clear canvas':'Save canvas';
+  root.querySelector('.lb-work-description').textContent=clearing?'Save a complete copy in Saved work, then clear the canvas, table catalog, folders and relationships. Load the saved copy to restore your design.':'Save a named copy of the current design in Saved work. Leave the name blank to generate one automatically.';
+  root.querySelector('.lb-work-submit').textContent=clearing?'Save and clear':'Save canvas';workDialog.showModal();
+ }
+ root.querySelector('.lb-work-cancel').onclick=()=>workDialog.close();workDialog.oncancel=e=>{if(s.saving)e.preventDefault();};
+ workForm.onsubmit=e=>{
+  e.preventDefault();if(!workAction||s.saving)return;s.workPending=true;s.saving=true;s.operation={kind:s.workAction==='clear'?'clear':'catalog',before:s.lastSaved};historyButtons();
+  workDialog.querySelectorAll('input,button').forEach(el=>el.disabled=true);root.querySelector('.lb-work-error').textContent='Saving…';
+  workAction({action:s.workAction,name:workForm.elements.work_name.value.trim(),revision:s.revision});
+ };
+ if(s.workPending&&(workDone||data.error)){
+  s.workPending=false;workDialog.querySelectorAll('input,button').forEach(el=>el.disabled=false);
+  if(data.error)root.querySelector('.lb-work-error').textContent=data.error;
+  else{workDialog.close();if(s.workAction==='clear'){s.selection.clear();s.selected=null;s.pending=null;s.openFolders.clear();s.expanded.clear();s.view=[0,0,1200,700];root.querySelector('.lb-search').value='';}}
+ }
  root.querySelector('[data-action=create]').hidden=!createTable;
  root.querySelector('.lb-search').oninput=palette;
  root.querySelectorAll('[data-action]').forEach(button=>{button.onclick=()=>{
@@ -495,7 +594,9 @@ function mountBuilder(parent, data, changed, createTable=null) {
   if(action==='full'){if(document.fullscreenElement)document.exitFullscreen();else root.requestFullscreen?.().catch(()=>message('Full screen is unavailable.'));}
   if(action==='export'){openExport();return;}
   if(!editable||s.saving)return;
+  if(action==='save-work')openWork('save');if(action==='clear-canvas')openWork('clear');
   if(action==='undo'||action==='redo')history(action);
+  if(action==='color')openColor([...s.selection]);if(action==='clear-color')assignColor([...s.selection],'');
   if(action==='add'){s.pending=null;addChoices();addDialog.showModal();}
   if(action==='folder'){root.querySelector('.lb-folder-error').textContent='';folderDialog.showModal();}
   if(action==='create'&&createTable){s.pending=null;root.querySelector('.lb-create-error').textContent='';dialog.showModal();}
@@ -521,9 +622,11 @@ function mountBuilder(parent, data, changed, createTable=null) {
   if(!contextMenu.hidden&&contextMenu.getAttribute('aria-label')==='Export options'){closeMenu(true);return;}
   closeMenu(false);setAltPan(false);contextMenu.replaceChildren();contextMenu.setAttribute('aria-label','Export options');s.menuReturn=exportButton;
   for(const format of ['svg','png'])menuItem(format.toUpperCase(),()=>image(format),!visible().length);
+  menuItem('Editable canvas (JSON)',exportCanvas,s.saving);
   exportButton.setAttribute('aria-expanded','true');const anchor=exportButton.getBoundingClientRect();showMenu(anchor.left,anchor.bottom+4);
  }
  exportButton.onkeydown=e=>{if(e.key==='ArrowDown'){e.preventDefault();e.stopPropagation();openExport();}};
+ function exportCanvas(){download(new Blob([JSON.stringify(doc,null,2)],{type:'application/json'}),'lineage-work.json');message('Editable canvas exported. Import it in Saved work to continue editing.');}
  function openMenu(e){
   const target=e.composedPath()[0];if(target.closest('input,textarea,select,[contenteditable],dialog,.lb-context'))return;
   const catalog=target.closest('[data-catalog-table]'),folder=target.closest('.lb-folder'),card=target.closest('[data-table]'),edge=target.closest('[data-edge]');
@@ -544,6 +647,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
    menuItem('Select table on canvas',()=>select('table',t.id),busy||!t.position);
    menuItem('Add to canvas',()=>add(t.id),busy||!!t.position);
    menuItem('Remove from canvas',()=>removeTable(t),busy||!t.position);
+   menuItem('Set trace color',()=>openColor([t.id]),busy);menuItem('Clear assigned color',()=>assignColor([t.id],''),busy||!t.color);
    separate();
    menuItem('Move to Unfiled',()=>moveFolder(t,null),busy||!t.folder);
    for(const f of doc.folders)menuItem('Move to folder: '+f.name,()=>moveFolder(t,f.id),busy||t.folder===f.id);
@@ -555,6 +659,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
    menuItem(wasSelected?'Deselect table':'Add to selection',()=>{if(!wasSelected)s.selection=previousSelection;select('table',t.id,true);},busy);
    menuItem('Select all tables',selectAll,busy||!visible().length);
    menuItem(s.selection.size>1?'Delete selected from canvas':'Remove from canvas',removeSelected,busy);
+   menuItem('Set trace color',()=>openColor([...s.selection]),busy);menuItem('Clear assigned color',()=>assignColor([...s.selection],''),busy||![...s.selection].some(id=>table(id).color));
    if(t.catalog_hidden)menuItem('Add to catalog',()=>{t.catalog_hidden=false;t.canvas_member=true;palette();send();},busy);
    comments(t);separate();undoRedo();
   }else if(edge){
@@ -565,6 +670,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
   }else if(target.closest('.lb-palette')){
    contextMenu.setAttribute('aria-label','Catalog options');
    if(folder)menuItem(folder.open?'Collapse folder':'Expand folder',()=>{folder.open=!folder.open;});
+   if(folder){const ids=doc.tables.filter(t=>t.folder===folder.dataset.folder).map(t=>t.id);menuItem('Set folder trace color',()=>openColor(ids),busy||!ids.length);menuItem('Clear folder colors',()=>assignColor(ids,''),busy||!ids.some(id=>table(id).color));}
    menuItem('Create table',()=>toolbar('create'),busy||!createTable);menuItem('Add table',()=>toolbar('add'),busy);
    menuItem('New folder',()=>toolbar('folder'),busy);separate();undoRedo();
   }else{
@@ -576,6 +682,7 @@ function mountBuilder(parent, data, changed, createTable=null) {
    menuItem('Create table',()=>toolbar('create'),busy||!createTable);menuItem('Add table',()=>toolbar('add'),busy);
    menuItem('Fit diagram',()=>fit(),!visible().length);menuItem('Zoom in',()=>zoom(.8));menuItem('Zoom out',()=>zoom(1.25));
    menuItem('Full screen',()=>toolbar('full'));menuItem('Export SVG',()=>image('svg'),!visible().length);menuItem('Export PNG',()=>image('png'),!visible().length);
+   menuItem('Export editable canvas (JSON)',exportCanvas,busy);menuItem('Save canvas',()=>openWork('save'),busy||!workAction);menuItem('Clear canvas',()=>openWork('clear'),busy||!workAction);
   }
   const anchor=target.getBoundingClientRect(),x=e.clientX||anchor.left+8,y=e.clientY||anchor.top+8;
   showMenu(x,y);
@@ -589,16 +696,18 @@ function mountBuilder(parent, data, changed, createTable=null) {
  closeMenu(false);
  root.querySelector('.lb-palette').hidden=!editable;
  for(const selector of ['[data-action=add]','[data-action=undo]','[data-action=redo]','.lb-connection-options','.lb-tool-options'])root.querySelector(selector).hidden=!editable;
+ for(const action of ['save-work','clear-canvas'])root.querySelector(`[data-action="${action}"]`).hidden=!workAction;
  root.querySelector('.lb-layout').style.gridTemplateColumns=editable?'':'1fr';
- root.querySelector('.lb-hint').textContent=editable?'Ctrl-click boxes or drag empty canvas to select a group; drag a selected box to move them. Hold Alt for temporary Pan; release to restore the selected tool. Shift-drag or use Pan also pans. Drag catalog tables onto the canvas or folders; Enter places a focused catalog table. Resize edges/corners; + expands comments. Ctrl+Z / Ctrl+Y undo/redo; Delete removes selected boxes or lines. Edits save automatically.':'Expand comments with +. Hold Alt or drag empty space to pan, scroll to zoom, or use Fit diagram. Authored lineage presentation.';
+ root.querySelector('.lb-hint').textContent=editable?'Select tables to highlight their full downstream trace. Set a trace color for selected tables or a catalog folder. Ctrl-click/drag empty space selects a group; drag boxes to move. Hold Alt to pan. Catalog tables drag onto canvas/folders. Resize edges/corners; + expands comments. Ctrl+Z / Ctrl+Y undo/redo; Delete removes selected boxes or lines. Edits save automatically.':'Select a table to highlight its downstream trace. Expand comments with +. Hold Alt or drag empty space to pan, scroll to zoom, or use Fit diagram.';
  draw();palette();historyButtons();message(data.error|| (s.saving?'Saving…':editable?(s.pending?'Saved · choose another column, or Escape to finish':'All changes saved'):'Authored lineage'));
+ if(workDone)message(data.work_result.message);
  if(!s.initialFit){fit();s.initialFit=true;}
  return ()=>{panEvents.abort();closeMenu(false);};
 }
 """
 
 _CANVAS = st.components.v2.component("dataforge_lineage_builder", html=BODY, css=CSS,
-    js=JS + "\nexport default function(c){return mountBuilder(c.parentElement,c.data,v=>c.setTriggerValue('edit',v),v=>c.setTriggerValue('create_table',v));}\n")
+    js=JS + "\nexport default function(c){return mountBuilder(c.parentElement,c.data,v=>c.setTriggerValue('edit',v),v=>c.setTriggerValue('create_table',v),v=>c.setTriggerValue('work_action',v));}\n")
 
 _COLUMN_EDITOR = st.components.v2.component("dataforge_schema_columns", html='<div class="lb-root">'+COLUMN_BODY+'</div>',
     css=CSS, js=COLUMN_JS + "\nexport default function(c){mountColumns(c.parentElement.querySelector('.lb-columns'),c.data.rows,c.data.options,v=>c.setStateValue('rows',v));}\n")
@@ -611,10 +720,12 @@ def column_editor(rows: list[dict], system: str, key: str) -> list[dict]:
     return result.rows
 
 
-def canvas(document: BuilderDocument, key: str, on_edit, error: str = "", on_create=None, node_colors: dict | None = None):
+def canvas(document: BuilderDocument, key: str, on_edit, error: str = "", on_create=None, node_colors: dict | None = None,
+           on_work=None, work_result: dict | None = None):
     return _CANVAS(data={"document": document.model_dump(), "error": error, "type_catalog": TYPE_CATALOG,
-                         "node_colors": node_colors or builder_node_colors(None)}, key=key,
-                   on_edit_change=on_edit, on_create_table_change=on_create or (lambda: None), height="content")
+                         "node_colors": node_colors or builder_node_colors(None), "work_result": work_result}, key=key,
+                   on_edit_change=on_edit, on_create_table_change=on_create or (lambda: None),
+                   on_work_action_change=on_work or (lambda: None), height="content")
 
 
 def builder_html(document: BuilderDocument, *, node_colors: dict | None = None) -> bytes:

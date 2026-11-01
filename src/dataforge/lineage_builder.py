@@ -57,6 +57,7 @@ class BuilderTable(BuilderModel):
     catalog_hidden: bool = False
     size: TableSize | None = None
     folder: Name | None = None
+    color: str = Field(default="", max_length=7, pattern=r"^(#[0-9a-fA-F]{6})?$")
 
     @model_validator(mode="after")
     def unique_columns(self) -> BuilderTable:
@@ -140,19 +141,46 @@ def save_builder_work(store: Store, workspace: str, name: str, *, work_id: str |
                       document: BuilderDocument | None = None) -> BuilderWork:
     """Save a named editable snapshot, or explicitly update an existing one."""
     with store.transaction():
-        works = list_builder_works(store, workspace)
-        if work_id is not None and not any(w.id == work_id for w in works):
-            raise ValueError("The saved work no longer exists. Reload the list.")
-        work = BuilderWork(id=work_id or uuid4().hex, name=name,
-                           updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                           document=BuilderDocument.model_validate((document or load_builder(store, workspace)).model_dump()))
-        if any(w.id != work.id and w.name.casefold() == work.name.casefold() for w in works):
-            raise ValueError("A saved work with this name already exists. Choose another name or update that work.")
-        if work_id is None and len(works) >= 100:
-            raise ValueError("This workspace already has 100 saved works. Update an existing work instead.")
-        works = [w for w in works if w.id != work.id] + [BuilderWorkInfo.model_validate(work.model_dump(exclude={"document"}))]
-        store.set_setting(workspace, WORKS_SETTING + "_" + work.id, work.model_dump())
-        store.set_setting(workspace, WORKS_SETTING, [w.model_dump() for w in works])
+        return _save_builder_work(store, workspace, name, work_id=work_id, document=document or load_builder(store, workspace))
+
+
+def _save_builder_work(store: Store, workspace: str, name: str, *, document: BuilderDocument,
+                       work_id: str | None = None) -> BuilderWork:
+    """Write a snapshot inside the caller's transaction."""
+    works = list_builder_works(store, workspace)
+    if work_id is not None and not any(w.id == work_id for w in works):
+        raise ValueError("The saved work no longer exists. Reload the list.")
+    work = BuilderWork(id=work_id or uuid4().hex, name=name,
+                       updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                       document=BuilderDocument.model_validate(document.model_dump()))
+    if any(w.id != work.id and w.name.casefold() == work.name.casefold() for w in works):
+        raise ValueError("A saved work with this name already exists. Choose another name or update that work.")
+    if work_id is None and len(works) >= 100:
+        raise ValueError("This workspace already has 100 saved works. Update an existing work instead.")
+    works = [w for w in works if w.id != work.id] + [BuilderWorkInfo.model_validate(work.model_dump(exclude={"document"}))]
+    store.set_setting(workspace, WORKS_SETTING + "_" + work.id, work.model_dump())
+    store.set_setting(workspace, WORKS_SETTING, [w.model_dump() for w in works])
+    return work
+
+
+def save_canvas_work(store: Store, workspace: str, name: str = "", *, expected_revision: int,
+                     clear: bool = False) -> BuilderWork:
+    """Snapshot the current canvas, optionally resetting the entire builder atomically."""
+    with store.transaction():
+        document = load_builder(store, workspace)
+        if document.revision != expected_revision:
+            raise ValueError("The builder changed in another session. Reload and try again.")
+        name = name.strip()
+        if not name:
+            base = "Lineage " + datetime.now(timezone.utc).strftime("%Y-%m-%d %H-%M-%S UTC")
+            names = {w.name.casefold() for w in list_builder_works(store, workspace)}
+            name, index = base, 2
+            while name.casefold() in names:
+                name, index = f"{base} ({index})", index + 1
+        work = _save_builder_work(store, workspace, name, document=document)
+        if clear:
+            empty = BuilderDocument(revision=document.revision + 1)
+            store.set_setting(workspace, SETTING, empty.model_dump())
     return work
 
 

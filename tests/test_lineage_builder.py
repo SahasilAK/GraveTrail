@@ -208,6 +208,12 @@ def test_canvas_joins_membership_and_shared_node_palette(tmp_path):
         assert load_builder(store, w).tables[1].catalog_hidden
         assert hidden.tables[1].position is not None and hidden.links == saved.links
         assert BuilderDocument.model_validate_json(hidden.model_dump_json()).tables[1].catalog_hidden
+        hidden.tables[1].color = "#2563eb"
+        colored = save_builder(store, w, hidden)
+        assert load_builder(store, w).tables[1].color == "#2563eb"
+        assert BuilderDocument.model_validate_json(colored.model_dump_json()).tables[1].color == "#2563eb"
+        with pytest.raises(ValidationError):
+            colored.tables[1].color = "url(javascript:alert(1))"
         assert b"Left join" in export_tabular(saved, "csv")
         assert BuilderDocument.model_validate_json(saved.model_dump_json()).links[0].kind == "join"
         reversed_join = {**join.model_dump(), "id": "reverse", "source_table": b.id,
@@ -272,7 +278,7 @@ def test_catalog_folders_and_saved_work_transfer(tmp_path):
     from dataforge.store import Store
 
     doc = BuilderDocument(folders=[{"id": "sources", "name": "Source systems"}], tables=[
-        BuilderTable(name="customers", folder="sources", canvas_member=True, columns=[{"name": "id"}],
+        BuilderTable(name="customers", folder="sources", canvas_member=True, color="#2563eb", columns=[{"name": "id"}],
                      position={"x": 20, "y": 30}, size={"width": 600, "height": 180})])
     with pytest.raises(ValidationError, match="folder"):
         BuilderDocument(tables=doc.tables)
@@ -292,6 +298,7 @@ def test_catalog_folders_and_saved_work_transfer(tmp_path):
         assert received.document.folders[0].name == "Source systems"
         assert received.document.tables[0].folder == "sources"
         assert received.document.tables[0].size.width == 600
+        assert received.document.tables[0].color == "#2563eb"
         assert load_builder(store, other).tables == []  # Import saves a copy until explicitly loaded.
         load_builder_work(store, other, received.id, expected_revision=0)
         assert load_builder(store, other).tables[0].position.x == 20
@@ -306,7 +313,107 @@ def test_catalog_folders_and_saved_work_transfer(tmp_path):
         from dataforge.schema_imports import import_schema
         tables, _ = import_schema("schemas.json", work.document.model_dump_json().encode())
         assert tables[0].folder is None
+        assert tables[0].color == ""
         with pytest.raises(ValueError):
             save_builder_work(store, w, "Broken", document=doc.model_copy(update={"folders": []}))
     finally:
         store.close()
+
+
+def test_canvas_save_and_clear_preserve_work_atomically(tmp_path, monkeypatch):
+    from dataforge.lineage_builder import (
+        BuilderDocument,
+        BuilderLink,
+        BuilderTable,
+        get_builder_work,
+        list_builder_works,
+        load_builder,
+        load_builder_work,
+        save_builder,
+        save_canvas_work,
+    )
+    from dataforge.store import Store
+
+    a = BuilderTable(name="source", folder="group", color="#2563eb", position={"x": 10, "y": 20}, columns=[{"name": "id"}])
+    b = BuilderTable(name="target", role="target", position={"x": 600, "y": 20}, columns=[{"name": "id"}])
+    doc = BuilderDocument(tables=[a, b], folders=[{"id": "group", "name": "Group"}], links=[
+        BuilderLink(source_table=a.id, source_column=a.columns[0].id, target_table=b.id, target_column=b.columns[0].id)])
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("Canvas controls")
+        doc = save_builder(store, w, doc)
+        named = save_canvas_work(store, w, "My design", expected_revision=doc.revision)
+        assert named.document == doc and load_builder(store, w) == doc
+        with pytest.raises(ValueError, match="name|exists"):
+            save_canvas_work(store, w, "My design", expected_revision=doc.revision, clear=True)
+        with pytest.raises(ValueError, match="changed"):
+            save_canvas_work(store, w, expected_revision=0, clear=True)
+        assert load_builder(store, w) == doc and len(list_builder_works(store, w)) == 1
+        original_set = store.set_setting
+
+        def fail_clear(workspace, key, value):
+            if key == "lineage_builder":
+                raise OSError("Storage unavailable")
+            original_set(workspace, key, value)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(store, "set_setting", fail_clear)
+            with pytest.raises(OSError):
+                save_canvas_work(store, w, expected_revision=doc.revision, clear=True)
+        assert load_builder(store, w) == doc and len(list_builder_works(store, w)) == 1
+        backup = save_canvas_work(store, w, expected_revision=doc.revision, clear=True)
+        empty = load_builder(store, w)
+        assert get_builder_work(store, w, backup.id).document == doc
+        assert empty == BuilderDocument(revision=doc.revision + 1)
+        assert backup.document.tables[0].color == a.color and backup.document.folders == doc.folders
+        assert backup.document.tables[0].columns == a.columns
+        generated = save_canvas_work(store, w, expected_revision=empty.revision)
+        assert generated.name != backup.name
+        restored = load_builder_work(store, w, backup.id, expected_revision=empty.revision)
+        assert restored.links == doc.links and restored.tables == doc.tables
+    finally:
+        store.close()
+
+
+def test_downstream_trace_colors_branches_merges_cycles_and_joins():
+    import shutil
+    import subprocess
+
+    from ui.builder_canvas import JS, TRACE_JS
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is needed to exercise the canvas JavaScript traversal")
+    check = r"""
+const assert=require('node:assert/strict');
+const doc={tables:[{id:'a',color:'#2563eb'},{id:'b',color:'#f97316'},{id:'merge'},{id:'end'},{id:'other'}],links:[
+ {id:'am',source_table:'a',target_table:'merge'}, {id:'bm',source_table:'b',target_table:'merge'},
+ {id:'me',source_table:'merge',target_table:'end'}, {id:'cycle',source_table:'end',target_table:'merge'},
+ {id:'join',source_table:'a',target_table:'b',kind:'join'}]};
+let trace=lineageTraces(doc,['a']);
+assert.deepEqual([...trace.selected.tables].sort(),['a','end','merge']);
+assert.deepEqual([...trace.selected.links].sort(),['am','cycle','join','me']);
+assert.deepEqual([...trace.nodeColors.get('end')].sort(),['#2563eb','#f97316']);
+assert.deepEqual([...trace.edgeColors.get('me')].sort(),['#2563eb','#f97316']);
+assert.deepEqual([...trace.nodeColors.get('b')],['#f97316']);
+assert.equal(trace.nodeColors.has('other'),false);
+trace=lineageTraces(doc,['a','b']);assert.equal(trace.selected.tables.size,4);assert.equal(trace.selected.links.size,5);
+trace=lineageTraces(doc,[]);assert.equal(trace.active,false);assert.equal(trace.edgeColors.get('me').size,2);
+doc.tables[0].color='';doc.tables[1].color='';trace=lineageTraces(doc,['a']);
+assert.equal(trace.edgeColors.size,0);assert.equal(trace.selected.tables.has('end'),true);
+const paints=new Map(),defs={children:[]},svg={querySelector:()=>defs};
+function node(tag,attributes,text,parent){const element={attributes:{...attributes},children:[],setAttribute(key,value){this.attributes[key]=value;}};if(parent)parent.children.push(element);return element;}
+const gradientPaint=paint(['#2563eb','#f97316'],[0,10,100,10],'edge');
+assert.equal(defs.children[0].attributes.gradientUnits,'userSpaceOnUse');
+assert.equal(defs.children[0].attributes.y1,defs.children[0].attributes.y2);
+assert.equal(paint(['#2563eb','#f97316'],[10,20,110,20],'edge'),gradientPaint);
+assert.equal(paints.size,1);assert.equal(defs.children[0].attributes.x2,110);
+paint(['#2563eb','#f97316'],[10,20,10,20],'edge');assert.notEqual(defs.children[0].attributes.x1,defs.children[0].attributes.x2);
+let data={node_colors:{source:{fill:'#143e29'},intermediate:{fill:'#1a2d4f'},target:{fill:'#471e22'}}};
+assert.ok(tint('#2563eb').match(/\d+/g).map(Number).every(channel=>channel<120));
+data={node_colors:{source:{fill:'#e0efeb'},intermediate:{fill:'#ece7f7'},target:{fill:'#e3ecfb'}}};
+assert.ok(tint('#2563eb').match(/\d+/g).map(Number).every(channel=>channel>140));
+"""
+    paint_js = JS[JS.index(" function paint("):JS.index("\n function arrow(")]
+    tint_js = JS[JS.index(" function tint("):JS.index("\n s.expanded=")]
+    subprocess.run([node, "-e", TRACE_JS + paint_js + tint_js + check], check=True, capture_output=True, text=True, timeout=10)
