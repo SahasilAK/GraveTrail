@@ -34,7 +34,7 @@ def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: 
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "home"))
     config = tmp_path / "config.toml"
-    config.write_bytes(Path(".streamlit/config.toml").read_bytes())
+    config.write_bytes(Path("ui/streamlit.toml").read_bytes())
     monkeypatch.setattr("ui.themes.CONFIG_PATH", config)
     monkeypatch.setattr("ui.themes._loaded_preset", lambda: None)
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
@@ -308,6 +308,9 @@ def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path: 
     Importer(store, w).files([("q.sql", code.encode())], {".sql"})
     analyze(store, w)
     profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="synthetic")
+    from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
+    profile.source_limit_policy = 'token_capacity'
+    profile.model_capabilities = bind_capabilities(ModelCapabilities(context_tokens=100000, source='manual'), profile)
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["p", w, "Synthetic", profile.model_dump_json()])
     store.set_setting(w, "default_profile", "p")
     store.close()
@@ -345,7 +348,7 @@ def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path: 
     assert not app.exception and not calls
     assert any(c.value == changed for c in app.code)
     next(b for b in app.button if b.label == "Request AI review of this range").click().run()
-    assert not app.exception and len(calls) == 1
+    assert not app.exception and len(calls) == 1, [e.value for e in [*app.error, *app.warning]]
     assert not [e for e in get_store(str(tmp_path)).edges(w) if e["method"] == "llm"]
     assert isinstance(app.session_state["review_result_" + w], str)
     next(b for b in app.button if b.label == "Merge grounded relationships as inferred").click().run()

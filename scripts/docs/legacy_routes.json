@@ -1,0 +1,331 @@
+{
+  "index.html": [
+    "a-place-for-every-part-of-your-work",
+    "a-useful-first-run-on-your-machine",
+    "begin-with-the-question-in-front-of-you",
+    "dbt-projects-models-and-macro-impact",
+    "every-dependency-leaves-a-trail",
+    "how-can-my-tools-use-the-evidence",
+    "local-analysis-first-ai-when-you-choose",
+    "nothing-stays-buried",
+    "what-depends-on-this-change",
+    "where-does-this-table-come-from"
+  ],
+  "getting-started/index.html": [
+    "choose-your-installation",
+    "getting-started",
+    "know-what-the-result-means",
+    "your-first-investigation"
+  ],
+  "getting-started/quick-start/index.html": [
+    "1-install-and-launch",
+    "2-import-one-sample-project",
+    "3-generate-and-explore-lineage",
+    "4-inspect-and-export",
+    "continue-from-the-cli",
+    "quick-start",
+    "try-the-dbt-sample"
+  ],
+  "setup_and_deployment/index.html": [
+    "1-introduction",
+    "10-cli-and-mcp-setup",
+    "11-data-storage-and-backup",
+    "12-cleanup-and-maintenance",
+    "13-updating-the-application",
+    "14-troubleshooting",
+    "15-security-and-privacy",
+    "16-development-and-contribution",
+    "17-frequently-asked-questions",
+    "2-system-requirements",
+    "3-quick-start",
+    "4-python-installation",
+    "5-docker-installation",
+    "6-standalone-executable-installation",
+    "7-building-from-source",
+    "8-initial-application-setup",
+    "9-llm-connection-configuration",
+    "cli-and-mcp-ui-coverage",
+    "gravetrail-setup-and-deployment",
+    "source-installation-without-activation",
+    "temporary-pillow-security-compatibility",
+    "wheel-installation"
+  ],
+  "getting-started/configuration/index.html": [
+    "configuration",
+    "maintenance-settings",
+    "optional-llm-assistance",
+    "startup-settings",
+    "storage-and-ownership",
+    "workspace-preferences"
+  ],
+  "user-guide/index.html": [
+    "build-a-trustworthy-workspace",
+    "choose-the-right-output",
+    "explore-dependencies-and-evidence",
+    "follow-column-transformations",
+    "inspect-direct-column-usage",
+    "maintain-the-workspace",
+    "start-locally-add-ai-when-useful",
+    "use-diagnostics-and-optional-assistance",
+    "user-guide"
+  ],
+  "user_guide/index.html": [
+    "automation-access",
+    "build-lineage-with-optional-ai",
+    "choose-how-to-analyze",
+    "find-your-way-around",
+    "interaction-and-accessibility",
+    "resumable-ai-analysis",
+    "user-guide"
+  ],
+  "dbt_support/index.html": [
+    "artifacts-and-evidence",
+    "cli-mcp-and-settings",
+    "dbt-project-support",
+    "import-and-analyze",
+    "models-columns-and-resources",
+    "reproducible-qualification",
+    "upgrade-and-recovery"
+  ],
+  "ai_analysis/index.html": [
+    "build-flow",
+    "durable-extraction-and-response-recovery-2026-10-24",
+    "evidence-and-semantic-quality",
+    "inspecting-request-inputs-and-outputs",
+    "live-progress",
+    "optional-ai-analysis",
+    "recovery-and-limits",
+    "token-capacity-and-disclosure"
+  ],
+  "user-guide/ai-analysis-flow/index.html": [
+    "ai-analysis-flow"
+  ],
+  "user-guide/ai-analysis-controls-and-recovery/index.html": [
+    "ai-controls-and-recovery",
+    "what-is-actually-saved"
+  ],
+  "transformation_lineage/index.html": [
+    "column-transformation-lineage",
+    "optional-project-ai-extraction",
+    "read-the-boundaries",
+    "storage-and-recovery",
+    "tested-static-coverage",
+    "trace-a-column"
+  ],
+  "data_management/index.html": [
+    "automation",
+    "backup-restore-and-maintenance",
+    "continued-ai-analysis",
+    "data-management-and-cleanup",
+    "project-ai-facts-and-active-runs",
+    "resumable-ai-analysis"
+  ],
+  "integrations/index.html": [
+    "choose-an-interface",
+    "configure-ai-deliberately",
+    "connect-your-tools",
+    "query-before-reading-source"
+  ],
+  "cli_guide/index.html": [
+    "command-groups",
+    "commands",
+    "explicit-ai-project-builds",
+    "first-workflow",
+    "global-options",
+    "gravetrail-cli",
+    "output-and-access-controls",
+    "pagination-and-failures",
+    "ui-and-build-entry-points"
+  ],
+  "mcp_integration/index.html": [
+    "ai-project-analysis-tools",
+    "discovery-and-tools",
+    "mcp-integration",
+    "recommended-local-stdio",
+    "resources-and-prompts",
+    "static-graph-images",
+    "streamable-http"
+  ],
+  "cli_mcp_capabilities/index.html": [
+    "cli-and-mcp-capability-coverage",
+    "project-ai-analysis-parity"
+  ],
+  "agent_workflows/index.html": [
+    "agent-workflows",
+    "column-transformation-question",
+    "direct-columns-and-impact",
+    "investigate-a-table",
+    "repository-automation-incremental-refresh",
+    "supplied-sql-and-sas-archives"
+  ],
+  "token_optimization/index.html": [
+    "representative-measurements",
+    "token-efficient-local-analysis"
+  ],
+  "llm_integration/index.html": [
+    "llm-integration",
+    "omniroute-live-verification",
+    "optional-live-provider-reasoning",
+    "project-analysis",
+    "protocol-5-file-extraction-2026-10-23",
+    "request-timeout-gateway-waiting-and-recovery",
+    "resource-controls",
+    "task-specific-advisory-results"
+  ],
+  "secure_configuration/index.html": [
+    "automatic-ai-allowance-boundaries",
+    "project-ai-disclosure-and-revocation",
+    "secure-runtime-configuration"
+  ],
+  "architecture/overview/index.html": [
+    "how-gravetrail-works",
+    "keep-the-distinction-between-facts-and-inference"
+  ],
+  "architecture/index.html": [
+    "agent-and-automation-interfaces",
+    "architecture",
+    "distribution-boundary",
+    "maintenance-boundary",
+    "resumable-ai-analysis"
+  ],
+  "architecture/ai-analysis-pipeline/index.html": [
+    "file-extraction-pipeline"
+  ],
+  "data_model/index.html": [
+    "ai-continuation-snapshots-migration-7",
+    "ai-project-analysis-persistence",
+    "data-model",
+    "resumable-ai-analysis"
+  ],
+  "lineage_engine/index.html": [
+    "explicit-ai-builds",
+    "lineage-engine"
+  ],
+  "sql_parsing/index.html": [
+    "column-transformation-coverage",
+    "literal-procedure-and-dynamic-sql-bodies",
+    "sql-parsing"
+  ],
+  "sas_parsing/index.html": [
+    "column-transformation-subset",
+    "sas-static-analysis",
+    "static-macro-variable-expressions"
+  ],
+  "prompt_engineering/index.html": [
+    "extraction-protocol-v4",
+    "project-extraction-and-review-contracts",
+    "project-protocol-v2",
+    "prompt-engineering",
+    "protocol-5-file-extraction-2026-10-23",
+    "resumable-ai-analysis",
+    "source-focus-and-review-batches"
+  ],
+  "security/index.html": [
+    "agent-access",
+    "cleanup-backup-and-distribution",
+    "dependency-compatibility-policy",
+    "security-and-privacy"
+  ],
+  "performance/index.html": [
+    "automatic-ai-continuation-qualification-2026-10-20",
+    "column-transformation-measurement-2026-10-18",
+    "performance",
+    "protocol-5-file-extraction-2026-10-23",
+    "resumable-ai-analysis"
+  ],
+  "deployment/index.html": [
+    "before-operating-a-data-home",
+    "run-and-publish"
+  ],
+  "build_and_release/index.html": [
+    "artifacts-and-verification",
+    "build-and-release-gravetrail",
+    "docker-and-compose",
+    "graph-image-renderer-and-distribution-proof",
+    "gravetrail-rebrand-compatibility",
+    "historical-verification-ledger-2026-10-16",
+    "names-intentionally-retained",
+    "previous-build-acceptance-2026-10-18",
+    "publish-a-standalone-github-release",
+    "python-installation-and-launches",
+    "reusable-smoke-checks-and-ci",
+    "windows-installer-acceptance-2026-10-19",
+    "windows-installer-and-signing-policy",
+    "writable-runtime-data"
+  ],
+  "deployment/github-pages/index.html": [
+    "build-and-validate",
+    "enable-pages-and-publish",
+    "how-future-updates-work",
+    "optional-custom-domain",
+    "optional-repository-metadata",
+    "prerequisites",
+    "preview-locally",
+    "publish-the-documentation-with-github-pages",
+    "troubleshooting"
+  ],
+  "development/index.html": [
+    "development",
+    "engineering-contracts",
+    "find-the-responsible-layer",
+    "guides-by-task"
+  ],
+  "development/contributing/index.html": [
+    "contributing",
+    "make-a-bounded-change",
+    "set-up-a-checkout",
+    "submit-a-reviewable-pull-request",
+    "verify-the-workflow"
+  ],
+  "implementation_guide/index.html": [
+    "configuration-transfer-boundary",
+    "implementation-guide",
+    "maintenance-and-runtime-configuration",
+    "packaging-and-release-checks"
+  ],
+  "extending_the_app/index.html": [
+    "extending-gravetrail"
+  ],
+  "testing/index.html": [
+    "adaptive-ai-context-and-expression-components-2026-10-22",
+    "agent-integration-acceptance",
+    "ai-project-analysis-qualification-2026-10-20",
+    "ai-visibility-verification-2026-10-24",
+    "automatic-capacity-and-continuation-qualification",
+    "climcp-ui-parity-verification",
+    "current-acceptance-summary-2026-10-20",
+    "current-acceptance-summary-2026-10-21",
+    "durable-response-recovery-verification-2026-10-24",
+    "host-expression-citation-enhancement-2026-10-21",
+    "non-streaming-analysis-rollback-2026-10-24",
+    "one-hour-timeout-and-visible-waits-2026-10-21",
+    "pillow-security-compatibility-remediation-2026-10-21",
+    "pr-32-ci-repair-2026-10-25",
+    "protocol-5-file-extraction-2026-10-23",
+    "resumable-ai-analysis",
+    "semantic-paging-and-review-batch-regressions",
+    "supplied-banking-archive-evaluation-2026-10-21",
+    "test-commands-and-historical-evidence",
+    "testing"
+  ],
+  "development/documentation/index.html": [
+    "change-or-add-a-page",
+    "dependency-updates",
+    "find-the-right-home",
+    "images-diagrams-and-motion",
+    "maintain-the-documentation",
+    "publication-checks"
+  ],
+  "troubleshooting/help/index.html": [
+    "application-or-storage-problems",
+    "cleanup-and-recovery",
+    "import-and-lineage-problems",
+    "optional-provider-problems",
+    "report-an-issue-safely",
+    "troubleshooting"
+  ],
+  "troubleshooting/index.html": [
+    "resumable-ai-analysis",
+    "troubleshooting"
+  ]
+}

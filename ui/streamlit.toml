@@ -1,0 +1,33 @@
+[server]
+address = "127.0.0.1"
+headless = true
+maxUploadSize = 100
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+font = "system-ui"
+baseFontSize = 16
+headingFontSizes = ["2.5rem", "1.65rem", "1.2rem", "1rem", "0.9rem", "0.85rem"]
+baseRadius = "0.75rem"
+buttonRadius = "0.55rem"
+headingFontWeights = [650, 600, 600, 600, 600, 600]
+metricValueFontSize = "2rem"
+metricValueFontWeight = 600
+showSidebarBorder = true
+showWidgetBorder = true
+paddingTop = "2rem"
+paddingBottom = "3rem"
+base = "dark"
+primaryColor = "#dc2626"
+backgroundColor = "#0a0d12"
+secondaryBackgroundColor = "#1e242e"
+textColor = "#f1f5f9"
+borderColor = "#2e3642"
+linkColor = "#e26465"
+chartCategoricalColors = ["#22c55e", "#3b82f6", "#ef4444", "#f97316"]
+
+[theme.sidebar]
+backgroundColor = "#141821"
+secondaryBackgroundColor = "#1e242e"

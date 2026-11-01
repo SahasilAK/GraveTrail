@@ -122,6 +122,7 @@ def build_executable(root: Path, output: Path, version: str) -> list[Path]:
           "--distpath", str(work / "bundle"), "--workpath", str(work / "pyinstaller"),
           "--specpath", str(work), "--paths", assets, "--collect-all", "dataforge",
           "--collect-all", "streamlit", "--collect-submodules", "ui", "--collect-submodules", "sqlglot",
+          "--collect-all", "keyring", "--collect-submodules", "win32ctypes",
           "--recursive-copy-metadata", "gravetrail",
           str(root / "scripts/build/frozen_entry.py")], root)
     bundle = work / "bundle/gravetrail"

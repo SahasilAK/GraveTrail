@@ -1,80 +1,35 @@
 # GraveTrail/
 
-Local evidence-backed SQL/SAS/CSV/dbt engineering workspace. Entry: app.py; Python, Streamlit, DuckDB, SQLGlot and NetworkX.
-
-dbt support: src/dataforge/dbt (parser15/schema8) owns safe project/artifact imports,
-multi-root/package/version identity, resource/macro relationships, column adaptation and
-source/generated evidence. UI/CLI/MCP share services. See docs/DBT_SUPPORT.md for limits.
-
 ## Project overview
-Run `uv sync --locked --extra dev`, `uv run streamlit run app.py`; verify with `uv run pytest -q` and `uv run ruff check .`. Read local AGENTS and plans/IMPLEMENTATION_STATUS when supplied; this map and child maps are tracked repository documentation.
+Local evidence-backed SQL/SAS/CSV/dbt engineering workspace. Python 3.11+, Streamlit UI, DuckDB persistence, SQLGlot static parsing, NetworkX investigation, Typer CLI and MCP SDK. Distribution/primary commands use gravetrail; Python package, DATAFORGE_* variables, storage paths and legacy command aliases retain dataforge compatibility.
+
+Application entry: `app.py`; installed/frozen UI entry: `dataforge.launcher:main`; automation entry: `dataforge.cli:app`. Start a disposable home with `uv run gravetrail-ui --home <path>`. One process owns a DuckDB home; do not open it concurrently through independent UI/CLI/MCP processes.
+
+API credentials default to session memory. Optional keyring persistence explicitly approves Windows Credential Manager with current-user/local-machine persistence; session/saved references bind data home/workspace/profile/recipient. Legacy environment references remain available, and agents need exact launch grants for saved references.
 
 ## Subfolders
-- `.github/` — [.github/KNOWLEDGE.md](.github/KNOWLEDGE.md).
-- `.streamlit/` — [.streamlit/KNOWLEDGE.md](.streamlit/KNOWLEDGE.md).
-- `docs/` — [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md).
-- `plans/` — [plans/KNOWLEDGE.md](plans/KNOWLEDGE.md).
-- `prompts/` — [prompts/KNOWLEDGE.md](prompts/KNOWLEDGE.md).
-- `scripts/` — [scripts/KNOWLEDGE.md](scripts/KNOWLEDGE.md).
-- `src/` — [src/KNOWLEDGE.md](src/KNOWLEDGE.md).
-- `tests/` — [tests/KNOWLEDGE.md](tests/KNOWLEDGE.md).
-- `ui/` — [ui/KNOWLEDGE.md](ui/KNOWLEDGE.md).
+- `.github/` — test/security/docs/release workflows and contribution templates; [map](.github/KNOWLEDGE.md).
+- `.streamlit/` — ignored local UI settings.
+- `docs/` — public guides, tutorials, developer architecture and reviewed assets; [map](docs/KNOWLEDGE.md).
+- `src/` — domain/service package; [map](src/KNOWLEDGE.md).
+- `ui/` — Streamlit presentation and components; [map](ui/KNOWLEDGE.md).
+- `prompts/` — versioned manual/project assistance instructions and schemas; [map](prompts/KNOWLEDGE.md).
+- `scripts/` — reproducible qualification, builds/releases and docs tooling; [map](scripts/KNOWLEDGE.md).
+- `tests/` — isolated unit/integration/protocol/AppTest regression suites and fixtures; [map](tests/KNOWLEDGE.md).
+- `plans/`, `planning/`, `docs/plans/`, `docs/prompts/`, `superpowers/` — ignored local implementation records and app-building prompts, including their knowledge maps.
 
-## Files
-- `.dockerignore` — Exclude runtime data, environments and caches from Docker build context.
-- `.gitattributes` — Repository text normalization policy.
-- `.gitleaks.toml` — Extend default secret detectors; only exact dummy redaction-test credentials in tests/test_connections.py are allowlisted, requiring both path and secret matches.
-- `.gitignore` — Source-control exclusions, including local runtime. Preserve separate preexisting user edits.
-- `.kbignore` — Knowledge scan exclusions; this scanner uses bare-name/glob patterns rather than trailing-slash directory patterns.
-- `AGENTS.md` — Repository conventions, authority, module navigation, verification commands, current OmniRoute auto/best-reasoning route and per-feature commit policy.
-- `Dockerfile`, `compose.yaml` — Locked multi-stage non-root image, persistent /data, UI/MCP owner profiles and health check; actual Linux container smoke verified on Docker Desktop.
-- `LICENSE` — Project license; preserve original terms.
-- `README.md` — “Nothing stays buried.” headline and “Every dependency leaves a trail.” supporting line, live documentation link, animated hero, installation, first workflow, features and honest limits. Branding is shared with the app sidebar, Pages homepage/banner and site description.
-- `app.py` — Entry point: shared frame, workspace dialog and context guards; twelve native routes grouped into Workspace, Explore and Administration, including authored Lineage builder. Transformation lineage follows Columns; existing builder/explorer/settings URLs remain valid.
-- `pyproject.toml` — Package/dependency constraints (including pure-Python XlsxWriter), CLI aliases, MCP SDK/Typer, pytest/Ruff settings, bundled prompts and runtime-safe sdist allowlist.
-- `uv.lock` — Generated reproducible dependency lock; update with uv, never by hand.
+## Root files
+- `app.py` — includes authored Lineage builder alongside the existing routes; navigation, selected workspace/home, shared UI frame and session connection scope; guards cached storage reads with explicit reconnect after fatal errors, displays cleanup results after rerun and selects a surviving/default workspace before rendering its selector. Domain decisions stay in services.
+- `pyproject.toml` / `uv.lock` — dependency/build/entrypoint/test/lint contracts and generated exact lock. Temporary Pillow metadata override also lives in `dependency-overrides.txt`; see SECURITY.md before changing it.
+- `README.md` — branded banner, live-docs link, status badges and quick navigation; “Nothing stays buried. Every dependency leaves a trail.” headline, product introduction, illustrative lineage, expandable real fixture screenshot and pinned-version onboarding; public docs entry point.
+- `mkdocs.yml` — explicit navigation/asset publication list, theme and strict site configuration. Docs builder checks inventory, routes/headings, links/search and exact output contents.
+- `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE` — contribution entry, security/reporting/compatibility policy and license.
+- `Dockerfile`, `compose.yaml`, `.dockerignore` — container build/runtime/ownership and build-context policy; platform evidence is separate from source configuration.
+- `.gitattributes`, `.gitignore`, `.gitleaks.toml`, `.kbignore` — text normalization, source/runtime exclusions, narrowly scoped secret exceptions and local knowledge-scan rules.
 
-Storage selection is per-session and startup-allowlisted (DATAFORGE_STORAGE_LOCATIONS); app.py
-opens the validated home before workspace navigation. Default remains DATAFORGE_HOME.
+## Core contracts
+Imported programs/templates remain data and never execute. Preserve original file/version/hash/coordinates and exact evidence. Parsers return ParseResult; services resolve identities and publish a coherent transaction. Direct column usage and transformation derivations are different queries. Ambiguity and traversal/coverage limits stay explicit.
 
-Documentation: `mkdocs.yml` and separate locked docs group build 38 public pages with scripts/docs/build.py. CONTRIBUTING.md and SECURITY.md are root entry points. README is a product introduction with real fixture imagery. Site output is ignored/excluded; canonical uppercase guide sources remain.
+Current project analysis offers static or independent AI. Protocol5 extraction validates provenance/shape/internal consistency without static semantic approval; AI facts remain inferred with semantic_coverage_not_proven. Durable checkpoints/recovery are distinct from atomic publication. Runtime credentials stay scoped or referenced, never stored secret values or job payloads. CLI/MCP enforce launch plus workspace/source/effect grants.
 
-Context policy: All project KNOWLEDGE.md maps are tracked so humans and agents can navigate a clean checkout, including maps inside otherwise ignored context folders. AGENTS.md, .kbignore, .codex/ and implementation records remain local-only. New branches use feature/, bugfix/ or another appropriate prefix; never codex/.
-
-GraveTrail branding: distribution/commands use gravetrail (legacy dataforge commands remain aliases). Internal Python package, DATAFORGE_* variables, .dataforge/platform homes, database/portable formats and Compose project/volume stay compatible. Repository links, origin and the case-sensitive Pages prefix use SahasilAK/GraveTrail and /GraveTrail/. Build outputs and MCP display/resource aliases use GraveTrail.
-
-Rebrand audit: frozen CLI program name, sample install paths and cleanup guide use GraveTrail; README/guide screenshot references use gravetrail-prefixed real captures. BUILD_AND_RELEASE lists intentionally retained compatibility names.
-
-Parser9: bounded PostgreSQL SQL procedure dollar bodies, Snowflake literal dynamic SQL and
-quote-aware known-value SAS %LET expressions with stale-binding invalidation. Imported code
-never executes; original wrapper/block evidence survives. docs/TESTING.md is the tracked
-current acceptance matrix; optional local status/matrix ledgers retain dated historical records.
-
-Palette update: app retains Ocean dark (default)/Ink dark plus nine shared semantic palettes; Pages retains Ink dark/Celadon light plus those nine. Supplied icon and two-color wordmark; names, layout and interactions stay unchanged.
-
-UI redesign: Apple Design guides system typography, native theme tokens and scoped presentation CSS. Sources and Analysis are separate; administration has four focused routes. App/Pages share the visual language, with no entrance animations or remote font dependency. Navigation/state and delivery checklist: docs/USER_GUIDE.md; local plan: plans/UI_REDESIGN.md when available.
-
-Column transformations: parser11/migration5 add scoped SQL/PROC SQL and bounded DATA-step
-derivations alongside direct usage. `transformations.py` shares identity, materialization,
-catalog and bounded traversal across the new page, CLI and MCP. Coverage/upgrade limits:
-docs/TRANSFORMATION_LINEAGE.md; benchmark: scripts/benchmark_transformations.py.
-
-Static graph images share the browser scene and filtered graph across UI, CLI and MCP. resvg-py wheels provide PNG without Cairo/browser runtimes; Docker includes DejaVu fonts and frozen builds dispatch a private render worker. Limits and packaging evidence: docs/USER_GUIDE.md and docs/BUILD_AND_RELEASE.md.
-
-AI project builds: parser12/migration6 preserve the offline parser default and add explicit
-hybrid/experimental AI modes, complete immutable units, source-backed validation, optional
-bounded review, staged atomic publication and offline accepted-fact reuse. UI, CLI and MCP
-share analysis_service/project_analysis; prompts stay in root prompts/. Public behavior,
-flow diagram and qualification limits: docs/AI_ANALYSIS.md. Current parity: 48 capabilities,
-103 CLI routes/29 groups and 83 MCP tools. Two synthetic live SQL smoke cases are development
-evidence only; source/packaging checks and open release gates are dated in docs/TESTING.md.
-
-README and Pages position local parser analysis as the primary default with no source sent to AI; optional AI/hybrid supports additional investigation in complex projects, with explicit disclosure and no completeness guarantee.
-
-Parser13/validator2: SAS PROC SQL typed constants preserve complete generated usage text; their value derivations remain unresolved. DML follows reachable USING/scalar subqueries with outer-only alias ownership. Semantic versions pin AI caches and continuation. Banking archive scorer masks fixture answers; table-only manifests cannot qualify column precision. Evidence: docs/TESTING.md.
-
-Parser14/validator3: source-only expression references hydrate exact original SQL/SAS text/coordinates before semantic checks. Identical UNION branches and SAS assignment versions retain occurrence identity. Extraction wire3/prompt4; review wire2/prompt3 and canonical compact-v2 storage remain compatible. No independent column-gold implementation or qualified live accuracy claim.
-
-Security compatibility: exactStreamlit1.66/Pillow13runtime pins plus temporaryexplicituvPillow override replace vulnerablePillow. dependency-overrides.txt is the wheel installer policy; plainpip fails onupstreammetadata conflict. Source/Docker/native sharelock; CI audits lock andcleanwheel. Removal/limits: SECURITY.md anddocs/SETUP_AND_DEPLOYMENT.md.
-
-- `dependency-overrides.txt` — Exact temporary Pillow installer exception; keep synchronized with pyproject tool.uv/runtime pins, package with Python artifacts, remove only after tested stable upstream support.
+Use `uv sync --locked --extra dev`, focused pytest suites, then `uv run pytest -q` and `uv run ruff check .` for application changes. Docs use the locked docs group and `python scripts/docs/build.py`; source inventory requires the pinned baseline in Git history (CI checkout fetch-depth0). Context maps are tracked but excluded from the public site/package; application homes, site output, environments and local evidence are not source.

@@ -48,7 +48,7 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
 
     @ai.command('request')
     def request(ctx: typer.Context, file_id: str, workspace: Workspace, first: int = typer.Option(...), last: int = typer.Option(...), task: str = typer.Option(...),
-                expected_hash: str = typer.Option(...), expected_job: str = 'workspace', credential_prompt: bool = False) -> None:
+                expected_hash: str = typer.Option(...), expected_job: str = 'workspace', credential_prompt: bool = False, expected_request: str = '') -> None:
         """Request AI assistance for a hash- and job-pinned source range.
 
         Args:
@@ -60,10 +60,11 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
             task: AI task type.
             expected_hash: Expected source content hash.
             expected_job: Expected analysis job identifier.
+            expected_request: Optional request_fingerprint from the offline preview.
             credential_prompt: Whether to request hidden credentials for this call.
         """
         invoke(ctx, 'ai_request', workspace, file_id=file_id, first=first, last=last, task=task,
-               expected_hash=expected_hash, expected_job=expected_job, credential_prompt=credential_prompt)
+               expected_hash=expected_hash, expected_job=expected_job, credential_prompt=credential_prompt, expected_request=expected_request)
 
     @review.command('list')
     def review_list(ctx: typer.Context, workspace: Workspace) -> None:
@@ -91,7 +92,7 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
 
     @review.command('request')
     def review_request(ctx: typer.Context, diagnostic_id: str, workspace: Workspace, expected_hash: str = typer.Option(...),
-                       first: int = typer.Option(...), last: int = typer.Option(...), expected_job: str = 'workspace') -> None:
+                       first: int = typer.Option(...), last: int = typer.Option(...), expected_job: str = 'workspace', expected_request: str = '') -> None:
         """Request AI review for the explicitly selected diagnostic context.
 
         Args:
@@ -102,9 +103,10 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
             first: First source line in the selected range.
             last: Last source line in the selected range.
             expected_job: Expected analysis job identifier.
+            expected_request: Optional request_fingerprint from the offline preview.
         """
         invoke(ctx, 'review_request', workspace, diagnostic_id=diagnostic_id, expected_hash=expected_hash,
-               first=first, last=last, expected_job=expected_job)
+               first=first, last=last, expected_job=expected_job, expected_request=expected_request)
 
     @results.command('list')
     def results_list(ctx: typer.Context, workspace: Workspace) -> None:

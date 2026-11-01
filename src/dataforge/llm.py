@@ -1,15 +1,14 @@
 """Provider-specific HTTP adapters and strictly grounded, privacy-gated assistance."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import ipaddress
 import json
 import re
 import time
 import uuid
-from contextlib import ExitStack
-from dataclasses import asdict
-from functools import lru_cache
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Self
 from urllib.parse import quote, urlparse
@@ -17,16 +16,8 @@ from urllib.parse import quote, urlparse
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from dataforge.ai_analysis_models import (
-    AnalysisUnit,
-    LineageReviewResponse,
-    NormalizedFact,
-    ProjectLineageResponse,
-    UnitAttemptResult,
-)
-from dataforge.ai_budget import project_profile, request_allowance
+from dataforge.ai_analysis_models import ExtractionEnvelope
 from dataforge.ai_results import TASK_SCHEMAS, validate_advisory
-from dataforge.ai_wire import SourceCitationError
 from dataforge.asset_identity import source_job, unambiguous_job_assets
 from dataforge.configuration import LLMResourceSettings, ParsingSettings
 from dataforge.connections import connection_scope, current_connections
@@ -36,12 +27,10 @@ from dataforge.model_capabilities import (
     ModelDescriptor,
     bind_capabilities,
     capability_identity,
-    execution_profile,
     merge_descriptors,
     normalize_model,
 )
-from dataforge.models import canonical, stable_id, statements
-from dataforge.parsers.sas import parse_sas, strip_comments
+from dataforge.models import stable_id
 
 if TYPE_CHECKING:
     from dataforge.store import Store
@@ -52,11 +41,10 @@ PROVIDERS = {"OpenAI": "https://api.openai.com/v1", "Anthropic": "https://api.an
     "Databricks": "https://your-workspace.cloud.databricks.com", "Azure OpenAI": "https://your-resource.openai.azure.com",
     "Gemini": "https://generativelanguage.googleapis.com/v1beta", "OpenRouter": "https://openrouter.ai/api/v1"}
 MANUAL_TASKS = ["sas_lineage", "sql_lineage", "lineage_validation", "column_usage", "code_explanation"]
-PROJECT_TASKS = ["project_lineage", "lineage_review"]
+PROJECT_TASKS = ["project_lineage"]
 ROUTABLE_TASKS = MANUAL_TASKS + PROJECT_TASKS
 TASKS = MANUAL_TASKS  # Existing manual selectors must keep their five contracts.
-PROJECT_SCHEMAS = {"project_lineage": ProjectLineageResponse, "lineage_review": LineageReviewResponse}
-PROJECT_PROTOCOLS = {'project_lineage': ('3', '4'), 'lineage_review': ('2', '3')}
+PROJECT_SCHEMAS = {"project_lineage": ExtractionEnvelope}
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 if not PROMPTS.is_dir():
     PROMPTS = Path(__file__).resolve().parent / "prompts"
@@ -86,17 +74,26 @@ class Profile(BaseModel):
     model: str = Field(min_length=1, max_length=250)
     name: str = "Default"
     key_env: str = ""
+    saved_key_ref: str = Field(default='', pattern=r'^(?:DATAFORGE_SAVED_[A-F0-9]{64}_[A-F0-9]{32})?$')
     auth: Literal["auto", "none", "bearer", "api-key", "x-api-key", "x-goog-api-key"] = "auto"
     timeout: float = Field(default=30, ge=1, le=3600)
+    connect_timeout: float = Field(default=5, ge=.05, le=60)
+    read_timeout: float | None = Field(default=None, ge=.05, le=3600)
+    wait_until_stopped: bool = False
+    unknown_retries: int = Field(default=0, ge=0, le=2)
     retries: int = Field(default=1, ge=0, le=2)
-    max_tokens: int = Field(default=2048, ge=64, le=32000)
+    max_tokens: int = Field(default=2048, ge=64, le=2147483647)
     context_chars: int = Field(default=16000, ge=500, le=200000)
     temperature: float | None = Field(default=None, ge=0, le=2)
     structured: bool = True
+    quota_group: str = Field(default='', max_length=100, pattern=r'^[A-Za-z0-9_.-]*$')
     api_version: str = "2024-10-21"
     model_capabilities: ModelCapabilities | None = None
     context_mode: Literal['automatic', 'custom'] = 'custom'
     output_mode: Literal['automatic', 'custom'] = 'custom'
+    analysis_input_allowance: int | None = Field(default=None, ge=1)
+    source_limit_policy: Literal['unconfirmed', 'token_capacity', 'explicit'] = 'unconfirmed'
+    source_disclosure_chars: int | None = Field(default=None, ge=1)
 
     @model_validator(mode='after')
     def bound_capabilities(self) -> Self:
@@ -182,7 +179,7 @@ class GroundedResponse(BaseModel):
 class ProviderError(Exception):
     """Describe a provider failure and whether retrying may succeed."""
 
-    def __init__(self, message: str, retryable: bool=False) -> None:
+    def __init__(self, message: str, retryable: bool=False, *, unknown: bool=False) -> None:
         """Create a provider error with its retryability flag.
 
         Args:
@@ -190,6 +187,7 @@ class ProviderError(Exception):
             retryable: Whether the failed operation may be retried."""
         super().__init__(message)
         self.retryable = retryable
+        self.unknown = unknown
 
 
 def response_object(text: str) -> dict[str, Any]:
@@ -218,10 +216,136 @@ def response_object(text: str) -> dict[str, Any]:
     return obj
 
 
+def decode_provider_response(provider, data, *, requested_model=None):
+    """Pure provider envelope decoding, shared by transport and retained replay."""
+    finish = None
+    envelope_key = 'candidates' if provider == 'Gemini' else 'choices'
+    if provider not in {'Anthropic','Ollama'}:
+        choices = data.get(envelope_key)
+        if not isinstance(choices,list) or not choices or not isinstance(choices[0],dict):
+            raise ProviderError('Provider returned an unsupported response shape')
+    if provider == 'Anthropic':
+        finish = data.get('stop_reason')
+    elif provider == 'Ollama':
+        finish = data.get('done_reason')
+    elif provider == 'Gemini':
+        finish = (data.get('candidates') or [{}])[0].get('finishReason')
+    else:
+        finish = (data.get('choices') or [{}])[0].get('finish_reason')
+    reported_usage = data.get('usage', data.get('usageMetadata', {}))
+    if provider == 'Ollama':
+        reported_usage = {k:data[k] for k in ['prompt_eval_count','eval_count'] if k in data}
+    metadata = {'finish_reason':finish,
+        'truncated':finish in {'length','max_tokens','MAX_TOKENS','model_length'},
+        'usage_known':any(type(v) is int for v in reported_usage.values()) if isinstance(reported_usage,dict) else False,
+        'resolved_model':data.get('model'), 'requested_model':requested_model}
+    try:
+        if provider == "Anthropic":
+            return "".join(c.get("text", "") for c in data["content"]), data.get("usage", {}), metadata
+        if provider == "Ollama":
+            return data["message"]["content"], {"input_tokens": data.get("prompt_eval_count"), "output_tokens": data.get("eval_count")}, metadata
+        if provider == "Gemini":
+            return "".join(c.get("text", "") for c in data["candidates"][0]["content"]["parts"]), data.get("usageMetadata", {}), metadata
+        return data["choices"][0]["message"]["content"], data.get("usage", {}), metadata
+    except (KeyError, IndexError, TypeError, AttributeError):
+        raise ProviderError("Provider returned an unsupported response shape") from None
+
+
+class ChatEventStream:
+    """Bounded OpenAI chat SSE framing; native LM Studio events are unsupported."""
+
+    def __init__(self, reasoning_observer=None):
+        self.pending = b''
+        self.lines = []
+        self.content = []
+        self.usage = {}
+        self.finish = None
+        self.model = None
+        self.done = False
+        self.size = 0
+        self.observer = reasoning_observer
+
+    def feed(self, chunk):
+        self.size += len(chunk)
+        if self.size > 2 * 1024 * 1024:
+            raise ProviderError('Provider stream exceeds 2 MB limit', unknown=True)
+        self.pending += chunk
+        while b'\n' in self.pending:
+            line, self.pending = self.pending.split(b'\n', 1)
+            line = line.rstrip(b'\r')
+            if not line:
+                if self.lines:
+                    self._event(b'\n'.join(self.lines))
+                    self.lines = []
+            elif line.startswith(b'data:'):
+                self.lines.append(line[5:].lstrip(b' '))
+            elif not line.startswith(b':'):
+                raise ProviderError('Unsupported SSE event format', unknown=True)
+
+    def _event(self, body):
+        if self.done:
+            raise ProviderError('Unexpected event after stream termination', unknown=True)
+        if body == b'[DONE]':
+            self.done = True
+            return
+        try:
+            event = json.loads(body)
+            if not isinstance(event, dict) or event.get('error'):
+                raise ValueError()
+            if event.get('usage') is not None:
+                if not isinstance(event['usage'], dict):
+                    raise ValueError()
+                self.usage = event['usage']
+            self.model = event.get('model') or self.model
+            choices = event['choices']
+            if not isinstance(choices, list) or len(choices) > 1:
+                raise ValueError()
+            for choice in choices:
+                if choice.get('index', 0) != 0:
+                    raise ValueError()
+                delta = choice.get('delta', {})
+                content = delta.get('content')
+                if content is not None:
+                    if not isinstance(content, str) or self.finish is not None:
+                        raise ValueError()
+                    self.content.append(content)
+                reasoning = delta.get('reasoning') or delta.get('reasoning_content')
+                if reasoning is not None:
+                    if not isinstance(reasoning, str):
+                        raise ValueError()
+                    if self.observer:
+                        self.observer(reasoning)
+                if choice.get('finish_reason') is not None:
+                    if self.finish is not None:
+                        raise ValueError()
+                    self.finish = choice['finish_reason']
+        except (ValueError, KeyError, TypeError, AttributeError, RecursionError):
+            raise ProviderError('Invalid chat SSE event', unknown=True) from None
+
+    def result(self):
+        if not self.done or not isinstance(self.finish, str) or self.pending.strip() or self.lines:
+            raise ProviderError('Incomplete chat SSE response', unknown=True)
+        return {'choices': [{'message': {'content': ''.join(self.content)}, 'finish_reason': self.finish}],
+            'usage': self.usage, 'model': self.model}
+
+
+def decode_wire_response(content, wire_format='json'):
+    if wire_format == 'openai_chat_sse':
+        stream = ChatEventStream()
+        stream.feed(content.encode('utf-8') if isinstance(content, str) else content)
+        return stream.result()
+    if wire_format != 'json':
+        raise ProviderError('Unsupported retained wire format')
+    data = json.loads(content)
+    if not isinstance(data, dict):
+        raise ProviderError('Provider response must be a JSON object')
+    return data
+
+
 class Adapter:
     """Send non-streaming requests to a configured model provider."""
 
-    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None) -> None:
+    def __init__(self, profile: Profile, transport: httpx.BaseTransport | None=None, cancelled: Callable[[], bool] | None=None, before_attempt: Callable[[Profile], float] | None=None, check: Callable[[], None] | None=None, response_observer=None, wait=None, retry_unknown_transports=True, attempt_observer=None, wire_observer=None, reasoning_observer=None, stream_analysis=False) -> None:
         """Create an HTTP client for the profile and current cancellation source.
 
         Args:
@@ -236,7 +360,23 @@ class Adapter:
         self.before_attempt = before_attempt
         self.check = check
         self.completion_metadata = {}
-        self.client = httpx.Client(timeout=profile.timeout, follow_redirects=False, trust_env=False, transport=transport)
+        self.response_observer = response_observer
+        self.wait = wait or self._wait
+        self.retry_unknown_transports = retry_unknown_transports
+        self.attempt_observer = attempt_observer
+        self.wire_observer = wire_observer
+        self.reasoning_observer = reasoning_observer
+        self.stream_analysis = stream_analysis
+        self._sse_observed = False
+        self._transport = transport
+        self.client = httpx.Client(timeout=self._timeouts(), follow_redirects=False, trust_env=False, transport=transport,
+            event_hooks={'request': [self._capture_request]} if wire_observer else None)
+
+    def _capture_request(self, request):
+        """Observe the serialized HTTPX body after authorization and before send."""
+        secrets = tuple(value.removeprefix('Bearer ') for name, value in request.headers.items()
+            if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
+        self.wire_observer('input', request.content, secrets)
 
     def __enter__(self) -> Adapter:
         """Return this adapter for use as a context manager."""
@@ -271,39 +411,169 @@ class Adapter:
             headers["anthropic-version"] = "2023-06-01"
         return headers
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None=None) -> dict[str, Any]:
+    def _timeouts(self, read_override=None):
+        # Setup/discovery without a Stop control must remain bounded.
+        unlimited = self.profile.wait_until_stopped and bool(self.check or self.cancelled)
+        return httpx.Timeout(None if unlimited else (read_override or self.profile.read_timeout or self.profile.timeout),
+            connect=self.profile.connect_timeout, write=self.profile.timeout, pool=self.profile.connect_timeout)
+
+    def _guard(self):
+        if self.check:
+            self.check()
+        if self.cancelled and self.cancelled():
+            raise ProviderError('AI request cancelled; no further retries')
+
+    @contextmanager
+    def _stream(self, method, url, **kwargs):
+        if self._transport is not None or not (self.check or self.cancelled):
+            with self.client.stream(method, url, **kwargs) as response:
+                yield response
+            return
+        # Consume chat deltas as they arrive; retain bounded wire bytes for replay.
+        async def receive():
+            async def capture(request):
+                self._capture_request(request)
+            async with httpx.AsyncClient(follow_redirects=False, trust_env=False,
+                    event_hooks={'request': [capture]} if self.wire_observer else None) as client:
+                async with client.stream(method, url, **kwargs) as response:
+                    self._http_status = response.status_code
+                    sse = (kwargs.get('json') or {}).get('stream') and 'text/event-stream' in response.headers.get('content-type', '')
+                    events = ChatEventStream(self.reasoning_observer) if sse and response.status_code < 300 else None
+                    self._sse_observed = events is not None
+                    chunks, total = [], 0
+                    async for chunk in response.aiter_bytes():
+                        total += len(chunk)
+                        if total > 2 * 1024 * 1024:
+                            if self.wire_observer:
+                                self.wire_observer('output', b'', (), unavailable='response exceeds 2 MiB transport limit')
+                            raise ProviderError('Provider response exceeds 2 MB limit')
+                        chunks.append(chunk)
+                        if events:
+                            events.feed(chunk)
+                    headers = {k: v for k, v in response.headers.items()
+                               if k.lower() not in {'content-encoding', 'content-length'}}
+                    return httpx.Response(response.status_code, headers=headers, content=b''.join(chunks))
+        async def monitored():
+            task = asyncio.create_task(receive())
+            try:
+                while not task.done():
+                    self._guard()
+                    await asyncio.wait({task}, timeout=.1)
+                self._guard()
+                return await task
+            finally:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        response = asyncio.run(monitored())
+        try:
+            yield response
+        finally:
+            response.close()
+
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None=None, *,
+                 root_relative: bool=False) -> dict[str, Any]:
         """Send one bounded JSON request and sanitize its response.
 
         Args:
             method: HTTP method for the provider endpoint.
             path: Provider-relative request path.
             payload: JSON request body, when the method requires one.
+            root_relative: Resolve the path at the same origin instead of below the API base URL.
 
         Returns:
             Sanitized provider response object.
 
         Raises:
             ProviderError: If the request fails, is cancelled, or returns invalid or oversized content."""
+        url = (urlparse(self.profile.base_url)._replace(path=path, params='', query='', fragment='').geturl()
+               if root_relative else self.profile.base_url + path)
+        unknowns = 0
         for attempt in range(self.profile.retries + 1):
-            if self.cancelled and self.cancelled():
-                raise ProviderError("AI request cancelled; no further retries")
+            self._sse_observed = False
+            self._guard()
+            started, sent, recorded = time.monotonic(), False, False
+            transport_error = None
+            self._http_status = None
+            timeout = self._timeouts()
+            def record(category, unknown, retry):
+                nonlocal recorded
+                recorded = True
+                detail = {'failure_category': category, 'attempt_number': attempt + 1,
+                        'elapsed_seconds': max(0., time.monotonic() - started), 'timeouts': timeout.as_dict(),
+                        'outcome': 'unknown' if unknown else 'known', 'retry_scheduled': retry,
+                        'transport_error': transport_error,
+                        'allowance_exhausted': not retry and (attempt >= self.profile.retries or
+                            (unknown and unknowns > self.profile.unknown_retries)), 'http_status': self._http_status}
+                if self.attempt_observer:
+                    self.attempt_observer(detail)
+                return detail['retry_scheduled']
             try:
-                headers = self._headers()
-                # Keep sent credentials local through sanitization if another session rotates the environment.
-                request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
-                    if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
-                timeout = self.before_attempt(self.profile) if self.before_attempt else self.profile.timeout
+                override = self.before_attempt(self.profile) if self.before_attempt else None
+                timeout = self._timeouts(override)
                 if self.check:
                     self.check()
-                with self.client.stream(method, self.profile.base_url + path, headers=headers, json=payload,
-                                        timeout=timeout or self.profile.timeout) as response:
+                # Admission can wait: resolve credentials only at the disclosure boundary.
+                headers = self._headers()
+                request_secrets = tuple(value.removeprefix('Bearer ') for name, value in headers.items()
+                    if name.lower() in {'authorization', 'api-key', 'x-api-key', 'x-goog-api-key'})
+                sent = True
+                with self._stream(method, url, headers=headers, json=payload,
+                                  timeout=timeout) as response:
+                    self._http_status = response.status_code
+                    if self.response_observer:
+                        from dataforge.ai_rate_limits import normalize_rate_limits
+                        self.response_observer(response.status_code,
+                            normalize_rate_limits(self.profile.provider, dict(response.headers), now=time.time()))
+                    category = ''
+                    error_body = None
+                    if response.status_code >= 300 and self.wire_observer:
+                        chunks, total, complete = [], 0, True
+                        for chunk in response.iter_bytes():
+                            total += len(chunk)
+                            if total > 2 * 1024 * 1024:
+                                complete = False
+                                break
+                            chunks.append(chunk)
+                        error_body = b''.join(chunks)
+                        self.wire_observer('output', error_body if complete else b'', request_secrets,
+                            unavailable=None if complete else 'error body exceeds 2 MiB capture limit')
+                    if response.status_code == 429:
+                        chunks, total = [], 0
+                        for chunk in ([error_body] if error_body is not None else response.iter_bytes()):
+                            if error_body is not None:
+                                chunk = chunk[:65536]
+                            total += len(chunk)
+                            if total > 65536:
+                                break
+                            chunks.append(chunk)
+                        try:
+                            error = json.loads(b''.join(chunks)).get('error', {})
+                            code = error.get('code', '') if isinstance(error, dict) else ''
+                            if code in {'insufficient_quota', 'credit_balance_too_low', 'billing_hard_limit_reached'}:
+                                category = 'provider_credits_exhausted'
+                            elif code in {'daily_quota_exceeded', 'daily_limit_exceeded'}:
+                                category = 'provider_daily_quota_exhausted'
+                            elif isinstance(error, dict) and any('perday' in str(item).lower() for item in error.get('details', [])):
+                                category = 'provider_daily_quota_exhausted'
+                        except (ValueError, TypeError, AttributeError):
+                            pass
+                    if category:
+                        record(category, False, False)
+                        raise ProviderError(category)
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < self.profile.retries:
-                            time.sleep(.25 * (attempt + 1))
+                            if not record('http_failure', False, True):
+                                raise ProviderError('Batch retry allowance exhausted')
+                            from dataforge.ai_rate_limits import retry_delay
+                            self.wait(retry_delay(attempt, dict(response.headers), now=time.time()))
                             continue
                     if response.status_code >= 300:
+                        record('authentication' if response.status_code in {401, 403} else 'http_failure', False, False)
                         raise ProviderError(f"Provider request failed (HTTP {response.status_code})",
                                             response.status_code == 429 or response.status_code >= 500)
+                    sse = bool(payload and payload.get('stream')) and 'text/event-stream' in response.headers.get('content-type', '')
+                    events = ChatEventStream(None if self._sse_observed else self.reasoning_observer) if sse else None
                     chunks, total = [], 0
                     for chunk in response.iter_bytes():
                         if self.check:
@@ -312,27 +582,75 @@ class Adapter:
                             raise ProviderError("AI request cancelled while receiving response")
                         total += len(chunk)
                         if total > 2 * 1024 * 1024:
+                            if self.wire_observer:
+                                self.wire_observer('output', b'', request_secrets, unavailable='response exceeds 2 MiB transport limit')
                             raise ProviderError("Provider response exceeds 2 MB limit")
                         chunks.append(chunk)
+                        if events:
+                            events.feed(chunk)
+                    if self.wire_observer:
+                        self.wire_observer('output', b''.join(chunks), request_secrets,
+                            **({'wire_format': 'openai_chat_sse'} if sse else {}))
                     try:
-                        data = json.loads(b"".join(chunks))
+                        data = events.result() if events else json.loads(b"".join(chunks))
                         if not isinstance(data, dict):
                             raise ProviderError("Provider response must be a JSON object")
                         return self.connections.sanitize(data, request_secrets)
                     except (ValueError, UnicodeError, RecursionError):
                         raise ProviderError("Provider returned invalid JSON") from None
-            except httpx.TransportError:
-                if attempt >= self.profile.retries:
-                    raise ProviderError("Provider connection failed or timed out", True) from None
-                time.sleep(.25 * (attempt + 1))
+            except httpx.TransportError as exc:
+                transport_error = type(exc).__name__
+                pre_send = isinstance(exc, (httpx.ConnectTimeout, httpx.PoolTimeout, httpx.ConnectError))
+                explicit = self._http_status is not None and self._http_status >= 300
+                unknown = not pre_send and not explicit
+                unknowns += int(unknown)
+                retry = attempt < self.profile.retries and (pre_send or
+                    (explicit and (self._http_status == 429 or self._http_status >= 500)) or
+                    (unknown and self.retry_unknown_transports and unknowns <= self.profile.unknown_retries))
+                retry = record('pre_send' if pre_send else 'authentication' if self._http_status in {401, 403}
+                               else 'http_failure' if explicit else 'transport_unknown', unknown, retry)
+                if not retry:
+                    raise ProviderError('Provider response outcome is unknown' if unknown else 'Provider connection failed',
+                                        retryable=pre_send, unknown=unknown) from None
+                self.wait(min(60, 2 ** attempt))
+            except ProviderError as exc:
+                if not recorded:
+                    cancelled = bool(self.cancelled and self.cancelled())
+                    record('cancelled' if cancelled else 'transport_unknown' if exc.unknown else 'invalid_response',
+                           exc.unknown or (sent and cancelled), False)
+                raise
+            except (InterruptedError, TimeoutError, ValueError) as exc:
+                if not recorded:
+                    record('cancelled' if isinstance(exc, InterruptedError) else
+                           'run_limit' if isinstance(exc, TimeoutError) else 'configuration',
+                           sent and not (self._http_status is not None and self._http_status >= 300), False)
+                raise
         raise ProviderError("Provider request failed")
 
-    def complete(self, system: str, user: str) -> tuple[str, dict]:
+    def _wait(self, seconds):
+        until = time.monotonic() + seconds
+        while time.monotonic() < until:
+            if self.check:
+                self.check()
+            if self.cancelled and self.cancelled():
+                raise ProviderError('AI request cancelled; no further retries')
+            time.sleep(min(.2, max(0, until - time.monotonic())))
+
+    @staticmethod
+    def completion_request(p, system, user, *, stream_analysis=False):
+        """Return the actual provider request body used for sizing and dispatch."""
+        path, payload = _completion_request(p, system, user)
+        if stream_analysis and p.provider == 'LM Studio':
+            payload.update(stream=True, stream_options={'include_usage': True})
+        return path, payload
+
+    def complete(self, system: str, user: str, *, prepared_request=None) -> tuple[str, dict]:
         """Submit a system and user prompt using the provider's chat protocol.
 
         Args:
             system: System instruction text.
             user: User prompt text.
+            prepared_request: Optional path/body already built and budgeted for this profile.
 
         Returns:
             Provider response text and usage metadata.
@@ -340,73 +658,10 @@ class Adapter:
         Raises:
             ProviderError: If the provider response has an unsupported shape."""
         p = self.profile
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        if p.provider == "Anthropic":
-            path = "/messages"
-            payload = {"model": p.model, "system": system, "messages": messages[1:], "max_tokens": p.max_tokens}
-        elif p.provider == "Ollama":
-            path = "/api/chat"
-            payload = {"model": p.model, "messages": messages, "stream": False, "options": {"num_predict": p.max_tokens}}
-            if p.structured:
-                payload["format"] = "json"
-            if p.temperature is not None:
-                payload["options"]["temperature"] = p.temperature
-        elif p.provider == "Gemini":
-            path = "/models/" + quote(p.model.removeprefix("models/"), safe="-._") + ":generateContent"
-            payload = {"systemInstruction": {"parts": [{"text": system}]},
-                       "contents": [{"role": "user", "parts": [{"text": user}]}],
-                       "generationConfig": {"maxOutputTokens": p.max_tokens}}
-            if p.structured:
-                payload["generationConfig"]["responseMimeType"] = "application/json"
-            if p.temperature is not None:
-                payload["generationConfig"]["temperature"] = p.temperature
-        else:
-            path = "/chat/completions"
-            payload = {"model": p.model, "messages": messages,
-                       "max_completion_tokens" if p.provider == "OpenAI" else "max_tokens": p.max_tokens,
-                       "stream": False}
-            if p.provider == "Databricks":
-                path = "/serving-endpoints/" + quote(p.model, safe="-._") + "/invocations"
-                payload.pop("model")
-            elif p.provider == "Azure OpenAI":
-                path = "/openai/deployments/" + quote(p.model, safe="-._") + "/chat/completions?api-version=" + quote(p.api_version, safe="-")
-                payload.pop("model")
-            if p.structured and p.provider != "Databricks":
-                payload["response_format"] = {"type": "json_object"}
-        if p.temperature is not None and p.provider not in {"Gemini", "Ollama"}:
-            payload["temperature"] = p.temperature
+        path, payload = prepared_request or self.completion_request(p, system, user, stream_analysis=self.stream_analysis)
         data = self._request("POST", path, payload)
-        finish = None
-        envelope_key = 'candidates' if p.provider == 'Gemini' else 'choices'
-        if p.provider not in {'Anthropic','Ollama'}:
-            choices = data.get(envelope_key)
-            if not isinstance(choices,list) or not choices or not isinstance(choices[0],dict):
-                raise ProviderError('Provider returned an unsupported response shape')
-        if p.provider == 'Anthropic':
-            finish = data.get('stop_reason')
-        elif p.provider == 'Ollama':
-            finish = data.get('done_reason')
-        elif p.provider == 'Gemini':
-            finish = (data.get('candidates') or [{}])[0].get('finishReason')
-        else:
-            finish = (data.get('choices') or [{}])[0].get('finish_reason')
-        reported_usage = data.get('usage', data.get('usageMetadata', {}))
-        if p.provider == 'Ollama':
-            reported_usage = {k:data[k] for k in ['prompt_eval_count','eval_count'] if k in data}
-        self.completion_metadata = {'finish_reason':finish,
-            'truncated':finish in {'length','max_tokens','MAX_TOKENS','model_length'},
-            'usage_known':any(type(v) is int for v in reported_usage.values()) if isinstance(reported_usage,dict) else False,
-            'resolved_model':data.get('model'), 'requested_model':p.model}
-        try:
-            if p.provider == "Anthropic":
-                return "".join(c.get("text", "") for c in data["content"]), data.get("usage", {})
-            if p.provider == "Ollama":
-                return data["message"]["content"], {"input_tokens": data.get("prompt_eval_count"), "output_tokens": data.get("eval_count")}
-            if p.provider == "Gemini":
-                return "".join(c.get("text", "") for c in data["candidates"][0]["content"]["parts"]), data.get("usageMetadata", {})
-            return data["choices"][0]["message"]["content"], data.get("usage", {})
-        except (KeyError, IndexError, TypeError, AttributeError):
-            raise ProviderError("Provider returned an unsupported response shape") from None
+        text, usage, self.completion_metadata = decode_provider_response(p.provider, data, requested_model=p.model)
+        return text, usage
 
     def models(self) -> list[str]:
         """List model identifiers exposed by providers that support discovery.
@@ -463,6 +718,16 @@ class Adapter:
                 descriptor = descriptor.model_copy(update={'capabilities': descriptor.capabilities.model_copy(update={'source': 'runtime'})})
         else:
             descriptor = next((item for item in self.model_catalog() if item.id == model), None)
+            if self.profile.provider == 'LM Studio' and (descriptor is None or descriptor.capabilities.context_tokens is None):
+                try:
+                    items = self._request('GET', '/api/v1/models', root_relative=True).get('models', [])
+                    if isinstance(items, list) and len(items) <= 20000:
+                        native = next((item for item in merge_descriptors(
+                            normalize_model(item, 'LM Studio') for item in items) if item.id == model), None)
+                        if native is not None:
+                            descriptor = merge_descriptors([descriptor, native])[0]
+                except ProviderError:
+                    pass  # Optional native metadata must not discard the catalog or configured defaults.
             if descriptor is None:
                 raise ValueError('Selected model is absent from the provider catalog')
         profile = self.profile.model_copy(update={'model': model})
@@ -470,45 +735,14 @@ class Adapter:
 
 
 def validate_response(response: GroundedResponse, code: str, known: set[str], first: int, last: int) -> GroundedResponse:
-    """Ensure provider claims exactly match supplied source and asset evidence.
+    """Compatibility API for historical callers; strict original locations only.
 
-    Args:
-        response: Structured provider response to validate.
-        code: Original source text used as evidence.
-        known: Asset names allowed in claims.
-        first: First source line included in the evidence selection.
-        last: Last source line included in the evidence selection.
-
-    Returns:
-        The validated response unchanged.
-
-    Raises:
-        ValueError: If a claim cites an invalid line range, quote, asset, or read/write relationship."""
-    lines = code.splitlines()
-    known = {canonical(x) for x in known}
-    for claim in response.claims:
-        if not first <= claim.start_line <= claim.end_line <= min(last, len(lines)):
-            raise ValueError("Claim line range is outside supplied source evidence")
-        span = "\n".join(lines[claim.start_line - 1:claim.end_line])
-        if claim.quote not in span:
-            raise ValueError("Claim quote is not exact source evidence")
-        cleaned = re.sub(r"--[^\n]*", "", strip_comments(claim.quote))
-        cleaned = re.sub(r"'([^']|'')*'", "''", cleaned)
-        cleaned = re.sub(r'["`\[\]]', "", cleaned)
-        for name in [claim.source, claim.target]:
-            if canonical(name) not in known or not re.search(r"(?<![\w.])" + re.escape(name) + r"(?![\w.])", cleaned, re.I):
-                raise ValueError("Claim asset is not known or is absent from code evidence")
-        src = re.escape(claim.source)
-        tgt = re.escape(claim.target)
-        reads = r"(?:from|join|using|set|merge|modify|data\s*=)\s*" + src + r"(?![\w.])"
-        writes = r"(?:table|view|into|update|data|out\s*=|base\s*=)\s*" + tgt + r"(?![\w.])"
-        same_statement = any(re.search(reads, part, re.I) and re.search(writes, part, re.I)
-                             for part, _, _ in statements(cleaned))
-        # SAS DATA headers and reads span semicolon-delimited statements; bind them by block.
-        same_sas_block = any(canonical(s.name) == canonical(claim.source) and canonical(t.name) == canonical(claim.target)
-            for op in parse_sas(claim.quote).operations for s in op.sources for t in op.targets)
-        if not same_statement and not same_sas_block:
-            raise ValueError("Source and target lack bound read/write evidence in the same statement or SAS block")
+    Known names remain an advisory input. Production validation also resolves
+    host identities and preserves corrections via focused_grounding.
+    """
+    from dataforge.focused_grounding import ground_response
+    extension = '.sas' if re.search(r'(?im)^\s*(?:data|proc)\s', code) else '.sql'
+    ground_response(response, {'raw_content': code, 'extension': extension}, first, last, {}, rebind=False)
     return response
 
 
@@ -545,8 +779,151 @@ def expire_ai_history(store: Store, workspace: str) -> None:
             store.execute('DELETE FROM llm_records WHERE record_id=?', [record['record_id']])
 
 
+def review_budget_message(reason: str) -> str:
+    """Keep actionable preflight guidance identical across review clients."""
+    guidance = {
+        'model_token_capacity_required': 'In Connections & AI, inspect or explicitly confirm capacity for the selected profile/model; stale observations must be refreshed.',
+        'shared_model_context_capacity_required': 'In Connections & AI, confirm the shared context capacity for this model.',
+        'dynamic_route_safe_capacity_confirmation_required': 'In Connections & AI, explicitly confirm a safe capacity for this dynamic route.',
+        'separate_model_output_capacity_required': 'In Connections & AI, confirm output capacity or save a Custom output cap.',
+        'insufficient_model_token_capacity': 'In Connections & AI, check capacity and the saved Custom output cap.',
+        'legacy_source_limit_choice_required': 'In Connections & AI, explicitly choose token capacity or a source-character disclosure limit for this legacy profile.',
+        'explicit_disclosure_limit_required': 'In Connections & AI, configure the explicit source-character disclosure limit.',
+        'explicit_disclosure_limit_exceeded': 'Select fewer source lines or explicitly change this profile’s disclosure limit in Connections & AI.',
+        'complete_request_exceeds_input_budget': 'The complete redacted prompt, schema and known assets exceed the input allowance. Select fewer lines or confirm a larger capacity for this model in Connections & AI.',
+    }
+    return f"{reason}: {guidance.get(reason, 'Check the selected profile’s model limits in Connections & AI.')}"
+
+
+def prepare_assistance(store: Store, workspace: str, profile: Profile, file_id: str,
+                       first: int, last: int, task: str, profile_id: str = "", *,
+                       expected_hash: str | None = None, expected_job: str | None = None) -> dict[str, Any]:
+    """Prepare the exact redacted manual request offline; never call providers or write history."""
+    from dataforge.focused_grounding import GroundingError
+    if task not in TASKS:
+        raise ValueError("Unsupported analysis task")
+    if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
+        raise GroundingError('external_requests_disabled')
+    source = store.file(file_id)
+    from dataforge.dbt.service import is_dbt
+    if is_dbt(source):
+        raise ValueError('dbt currently requires parser analysis')
+    if source["workspace_id"] != workspace:
+        raise ValueError("Source does not belong to this workspace")
+    if source['extension'] not in {'.sql', '.sas'}:
+        raise ValueError('Select an SQL/SAS source for focused assistance')
+    if expected_hash is not None and source["content_hash"] != expected_hash:
+        raise GroundingError('source_changed')
+    lines = source["raw_content"].splitlines()
+    if type(first) is not int or type(last) is not int or not 1 <= first <= last <= len(lines):
+        raise ValueError("Select a valid source line range")
+    if not is_local(profile.base_url) and first == 1 and last == len(lines) and not store.setting(workspace, "allow_full_source", False):
+        raise GroundingError('full_source_disabled')
+    focused = "\n".join(lines[first - 1:last])
+    disclosed_characters = len(focused)
+    if store.setting(workspace, "redact_secrets", True):
+        focused = redact(focused)
+    system_path = PROMPTS / task / "system.md"
+    system = system_path.read_text(encoding="utf-8")
+    template = (PROMPTS / task / "user_template.md").read_text(encoding="utf-8")
+    response_model = TASK_SCHEMAS.get(task, GroundedResponse)
+    schema = response_model.model_json_schema()
+    version = "2" if task in TASK_SCHEMAS else "3"
+    prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
+    settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
+    job = source_job(source, settings)
+    if expected_job is not None and job != expected_job:
+        raise GroundingError('job_changed')
+    known = {a["name"] for a in unambiguous_job_assets(store.assets(workspace), job).values()}
+    from dataforge.ai_analysis_models import AnalysisRequest
+    from dataforge.ai_budget import allocate_analysis_profile, request_budget
+    from dataforge.ai_context_index import referenced_asset_names
+    from dataforge.services import source_dialect
+    settings['dialect'] = source_dialect(source, settings)
+    # Context selection is semantic, never a way to force a budget fit.
+    prompt_known = referenced_asset_names(focused, known)
+    context_scope = {'policy': 'selected_source_references', 'prompt_assets': len(prompt_known),
+                     'available_assets': len(known)}
+    static = store.rows("""SELECT o.kind,s.start_line,s.end_line,
+        (SELECT list(a.name ORDER BY a.name) FROM operation_assets oa JOIN assets a ON oa.asset_id=a.asset_id
+            AND oa.workspace_id=a.workspace_id WHERE oa.workspace_id=o.workspace_id AND oa.operation_id=o.operation_id
+            AND oa.role='input') AS inputs,
+        (SELECT list(a.name ORDER BY a.name) FROM operation_assets oa JOIN assets a ON oa.asset_id=a.asset_id
+            AND oa.workspace_id=a.workspace_id WHERE oa.workspace_id=o.workspace_id AND oa.operation_id=o.operation_id
+            AND oa.role='output') AS outputs
+        FROM statements s JOIN operations o
+        ON s.statement_id=o.statement_id AND s.workspace_id=o.workspace_id
+        WHERE s.workspace_id=? AND s.file_id=? AND s.content_hash=? AND o.method NOT IN ('llm','ai-project')
+        AND s.start_line>=? AND s.end_line<=? ORDER BY s.start_line,o.kind""",
+        [workspace, file_id, source['content_hash'], first, last])
+    findings = store.rows("""SELECT line,severity,message FROM diagnostics
+        WHERE workspace_id=? AND file_id=? AND line BETWEEN ? AND ? ORDER BY line,diagnostic_id""",
+        [workspace, file_id, first, last])
+    user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
+        "content_hash": source['content_hash'], "start_line": first, "end_line": last,
+        "known_assets": prompt_known, "source": focused, "schema": schema, "job_id": job,
+        "dialect": settings['dialect'], "library_mappings": settings['library_mappings'],
+        "static_findings": static, "diagnostics": findings}))
+    if store.setting(workspace, "redact_secrets", True):
+        system, user = redact(system), redact(user)
+    allocation_error = None
+    # Always allocate from saved settings, without transient project UI overrides.
+    profile = profile.model_copy(update={'analysis_input_allowance': None})
+    try:
+        profile, allocation = allocate_analysis_profile(profile, AnalysisRequest())
+    except ValueError as exc:
+        allocation_error, allocation = str(exc), {}
+    path, payload = Adapter.completion_request(profile, system, user)
+    counted = request_budget(profile, json.dumps(payload, ensure_ascii=False, separators=(',', ':')),
+                             profile.max_tokens, disclosed_characters=disclosed_characters)
+    reasons = list(dict.fromkeys([*([allocation_error] if allocation_error else []), *counted.reasons]))
+    diagnostics = {'profile_id': profile_id, 'provider': profile.provider, 'model': profile.model,
+        'estimated_input_tokens': counted.input_count, 'input_allowance': counted.input_limit,
+        'reserved_output': counted.reserved_output, 'counting_method': counted.count_method,
+        'safety_reserve': counted.headroom, 'allocation': allocation, 'context_scope': context_scope,
+        'fits': not reasons, 'blocking_reasons': reasons,
+        'messages': [review_budget_message(reason) for reason in reasons]}
+    fingerprint = stable_id(source['content_hash'], job, profile_id, profile.base_url, profile.provider,
+        json.dumps(settings, sort_keys=True), json.dumps(payload, sort_keys=True), path,
+        str(store.setting(workspace, 'redact_secrets', True)))
+    return {'profile': profile, 'source': source, 'focused': focused, 'system': system, 'user': user,
+            'path': path, 'payload': payload, 'response_model': response_model, 'version': version,
+            'prompt_hash': prompt_hash, 'settings': settings, 'job': job, 'known': known, 'budget': diagnostics,
+            'request_fingerprint': fingerprint}
+
+
+def preview_assistance(store: Store, workspace: str, file_id: str, first: int, last: int,
+                       task: str, *, expected_hash: str | None = None) -> dict[str, Any]:
+    """Preview the routed redacted request offline, without any persistent writes."""
+    chosen = store.setting(workspace, 'task_models', {}).get(task) or store.setting(workspace, 'default_profile', '')
+    rows = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [workspace, chosen])
+    budget = {'profile_id': chosen, 'provider': None, 'model': None, 'estimated_input_tokens': None,
+              'input_allowance': None, 'reserved_output': None, 'counting_method': None,
+              'fits': False, 'blocking_reasons': [], 'messages': []}
+    source = store.file(file_id)
+    code = '\n'.join(source['raw_content'].splitlines()[first - 1:last])
+    if store.setting(workspace, 'redact_secrets', True):
+        code = redact(code)
+    job = source_job(source, {k: store.setting(workspace, k, v) for k, v in ParsingSettings().model_dump().items()})
+    fingerprint = ''
+    try:
+        if not rows:
+            raise ValueError('Configure a default or task-specific provider profile in Connections & AI first')
+        profile = Profile.model_validate_json(rows[0]['config'])
+        budget.update(provider=profile.provider, model=profile.model)
+        prepared = prepare_assistance(store, workspace, profile, file_id, first, last, task, chosen,
+                                      expected_hash=expected_hash)
+        budget, code, job = prepared['budget'], prepared['focused'], prepared['job']
+        fingerprint = prepared['request_fingerprint']
+    except ValueError as exc:
+        budget.update(blocking_reasons=['assistance_preflight_failed'], messages=[str(exc)])
+    return {'code': code, 'budget': budget, 'job_id': job, 'content_hash': source['content_hash'],
+            'file_id': file_id, 'first': first, 'last': last, 'task': task, 'request_fingerprint': fingerprint}
+
+
 def assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str="lineage_validation", profile_id: str="",
-           transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, expected_job: str | None=None) -> dict[str, Any]:
+           transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, expected_job: str | None=None,
+           retry_authorize: Callable[[], None] | None=None, expected_request: str = '') -> dict[str, Any]:
     """Run one privacy-gated AI request while holding workspace request capacity.
 
     Args:
@@ -576,14 +953,17 @@ def assist(store: Store, workspace: str, profile: Profile, file_id: str, first: 
         try:
             stack.enter_context(request_slot(store.home, workspace, resources.llm_concurrency))
         except ValueError:
+            from dataforge.focused_grounding import GroundingError
             return {'record_id': '', 'outcome': 'quarantined', 'reason': 'ValueError',
-                    'result': None, 'usage': {}, 'retryable': False}
-        stack.enter_context(connection_scope(current_connections()))
+                    'result': None, 'usage': {}, 'retryable': False,
+                    'failure': GroundingError('request_busy').failure}
+        stack.enter_context(connection_scope(current_connections().for_profile(profile_id, profile)))
         return _assist(store, workspace, profile, file_id, first, last, task, profile_id,
-                       transport, expected_hash, cancelled, expected_job)
+                       transport, expected_hash, cancelled, expected_job, retry_authorize, expected_request)
 
 
-def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str, profile_id: str, transport: httpx.BaseTransport | None, expected_hash: str | None, cancelled: Callable[[], bool] | None, expected_job: str | None=None) -> dict[str, Any]:
+def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first: int, last: int, task: str, profile_id: str, transport: httpx.BaseTransport | None, expected_hash: str | None, cancelled: Callable[[], bool] | None, expected_job: str | None=None,
+            retry_authorize: Callable[[], None] | None=None, expected_request: str = '') -> dict[str, Any]:
     """Build, send, validate, and persist one bounded AI assistance request.
 
     Args:
@@ -608,54 +988,51 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
         ValueError: If the task, source, selection, privacy policy, or evidence bounds are invalid."""
     if cancelled and cancelled():
         raise InterruptedError("AI request cancelled before transmission")
-    if task not in TASKS:
-        raise ValueError("Unsupported analysis task")
-    if not is_local(profile.base_url) and not store.setting(workspace, "external_llm", False):
-        raise ValueError("External LLM requests are disabled in Security and privacy")
-    source = store.file(file_id)
-    from dataforge.dbt.service import is_dbt
-    if is_dbt(source):
-        raise ValueError('dbt currently requires parser analysis')
-    if source["workspace_id"] != workspace:
-        raise ValueError("Source does not belong to this workspace")
-    if expected_hash is not None and source["content_hash"] != expected_hash:
-        raise ValueError("Source changed; refresh the evidence preview before requesting assistance")
-    lines = source["raw_content"].splitlines()
-    if not 1 <= first <= last <= len(lines):
-        raise ValueError("Select a valid source line range")
-    if not is_local(profile.base_url) and first == 1 and last == len(lines) and not store.setting(workspace, "allow_full_source", False):
-        raise ValueError("Complete source transmission is disabled; select a statement range or change privacy settings")
-    focused = "\n".join(lines[first - 1:last])
-    budget = min(store.setting(workspace, "max_context_chars", 8000), profile.context_chars)
-    if len(focused) > budget:
-        raise ValueError("Selected source exceeds context budget; choose a smaller line range")
-    if store.setting(workspace, "redact_secrets", True):
-        focused = redact(focused)
-    system_path = PROMPTS / task / "system.md"
-    system = system_path.read_text(encoding="utf-8")
-    template = (PROMPTS / task / "user_template.md").read_text(encoding="utf-8")
-    response_model = TASK_SCHEMAS.get(task, GroundedResponse)
-    schema = response_model.model_json_schema()
-    version = "2" if task in TASK_SCHEMAS else "1"
-    prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
-    settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
-    job = source_job(source, settings)
-    if expected_job is not None and job != expected_job:
-        raise ValueError("Source job changed; refresh the evidence preview before requesting assistance")
-    known = {a["name"] for a in unambiguous_job_assets(store.assets(workspace), job).values()}
-    user = template.replace("{{context}}", json.dumps({"file_id": file_id, "path": source["relative_path"],
-                "start_line": first, "end_line": last, "known_assets": sorted(known), "source": focused,
-                "schema": schema, "job_id": job}))
-    if len(system) + len(user) > profile.context_chars:
-        raise ValueError("Request exceeds the profile context budget; select fewer lines or increase its limit")
+    prepared = prepare_assistance(store, workspace, profile, file_id, first, last, task, profile_id,
+        expected_hash=expected_hash, expected_job=expected_job)
+    if expected_request and prepared['request_fingerprint'] != expected_request:
+        raise ValueError('Request preparation changed; refresh the evidence preview before dispatch')
+    diagnostics = prepared['budget']
+    if diagnostics and not diagnostics['fits']:
+        raise ValueError('; '.join(diagnostics['messages']))
+    profile, source = prepared['profile'], prepared['source']
+    focused, system, user = prepared['focused'], prepared['system'], prepared['user']
+    response_model, version = prepared['response_model'], prepared['version']
+    prompt_hash, settings = prepared['prompt_hash'], prepared['settings']
+    job, known = prepared['job'], prepared['known']
+    grounding = None
+    saved_profile = store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?',
+                               [workspace, profile_id]) if profile_id else []
+    attempts = 0
+
+    def revalidate(_profile):
+        # Each HTTP attempt, including retries, checks the exact disclosure again.
+        nonlocal attempts
+        if attempts and retry_authorize:
+            retry_authorize()
+        attempts += 1
+        current = prepare_assistance(store, workspace, profile, file_id, first, last, task, profile_id,
+            expected_hash=source['content_hash'], expected_job=job)
+        if not current['budget']['fits']:
+            from dataforge.focused_grounding import GroundingError
+            error = GroundingError('request_budget_exceeded')
+            error.failure['blocking_reasons'] = current['budget']['blocking_reasons']
+            raise error
+        if (current['payload'] != prepared['payload'] or current['path'] != prepared['path'] or
+                current['settings'] != settings or
+                (profile_id and store.rows('SELECT config FROM llm_profiles WHERE workspace_id=? AND profile_id=?',
+                                           [workspace, profile_id]) != saved_profile)):
+            from dataforge.focused_grounding import GroundingError
+            raise GroundingError('preparation_changed')
+
     start = time.perf_counter()
     usage, raw, validated = {}, "", None
     outcome, reason, retryable = "validated", "", False
     try:
-        with Adapter(profile, transport, cancelled) as adapter:
+        with Adapter(profile, transport, cancelled, before_attempt=revalidate) as adapter:
             if cancelled and cancelled():
                 raise InterruptedError("AI request cancelled before transmission")
-            raw, usage = adapter.complete(system, user)
+            raw, usage = adapter.complete(system, user, prepared_request=(prepared['path'], prepared['payload']))
         if cancelled and cancelled():
             raise ProviderError("AI request cancelled after response; result quarantined")
         raw = redact(raw)
@@ -666,12 +1043,22 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
             settings["dialect"] = source_dialect(source, settings)
             validate_advisory(validated, source, known, first, last, settings)
         else:
-            validate_response(validated, source["raw_content"], known, first, last)
+            from dataforge.focused_grounding import ground_response, resolve_resources
+            grounding = ground_response(validated, source, first, last, settings)
+            resources, _ = resolve_resources(workspace, source, settings, grounding.pop('references'),
+                store.assets(workspace), grounding['persistent_declarations'])
+            grounding['resources'] = resources
     except (ValueError, ProviderError) as exc:
+        from dataforge.focused_grounding import MESSAGES, GroundingError
+        code = 'request_failed' if isinstance(exc, ProviderError) else 'invalid_response'
+        failure = exc.failure if isinstance(exc, GroundingError) else {'code': code, 'message': MESSAGES[code]}
         outcome, reason = "quarantined", type(exc).__name__
         retryable = isinstance(exc, ProviderError) and exc.retryable
     details = {"content_hash": source["content_hash"], "reason": reason, "schema_version": version, "job_id": job,
-               "result": validated.model_dump() if outcome == "validated" else None}
+               "result": validated.model_dump() if outcome == "validated" else None,
+               "selection": {"first": first, "last": last}, "settings": settings, "grounding": grounding,
+               "static_findings": json.loads(user.split('\n', 1)[-1]).get('static_findings', []),
+               "failure": failure if outcome == 'quarantined' else None}
     if store.setting(workspace, "llm_history", False):
         details.update(context=focused, response=raw)
     details = json.loads(redact(json.dumps(details)))
@@ -684,8 +1071,8 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
                        profile.model, outcome, time.perf_counter() - start, json.dumps(usage), json.dumps(details)])
         expire_ai_history(store, workspace)
     return {"record_id": record_id, "outcome": outcome, "reason": reason,
-            "result": validated.model_dump() if outcome == "validated" else None, "usage": usage,
-            "retryable": retryable}
+            "result": details['result'], "usage": usage,
+            "retryable": retryable, "failure": details['failure'], "budget": diagnostics}
 
 
 def merge_claims(store: Store, workspace: str, record_id: str) -> int:
@@ -718,37 +1105,53 @@ def _merge_claims(store: Store, workspace: str, record_id: str) -> int:
 
     Raises:
         ValueError: If the result is unvalidated, stale, unsupported, or no longer evidence-grounded."""
-    records = store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND record_id=? AND outcome='validated'", [workspace, record_id])
-    if not records:
+    from dataforge.focused_grounding import resource_key, validate_saved_response
+    from dataforge.models import Operation, operation_ids
+    records = store.rows("SELECT * FROM llm_records WHERE workspace_id=? AND record_id=?", [workspace, record_id])
+    if not records or records[0]['outcome'] not in {'validated', 'merged'}:
         raise ValueError("Only validated AI records can be merged")
     record = records[0]
     if record["task"] not in {"sas_lineage", "sql_lineage", "lineage_validation"}:
         raise ValueError("Only lineage task records can be merged; advisory results cannot create relationships")
     source = store.file(record["file_id"])
     details = json.loads(record["details"])
-    if source["content_hash"] != details["content_hash"]:
-        raise ValueError("Source changed; run assistance again before merging")
     response = GroundedResponse.model_validate(details["result"])
     config = {key: store.setting(workspace, key, value) for key, value in ParsingSettings().model_dump().items()}
+    from dataforge.services import source_dialect
+    config['dialect'] = source_dialect(source, config)
     job = source_job(source, config)
-    if details.get("job_id", "workspace") != job:
-        raise ValueError("Source job/session assignment changed; request assistance again before merging")
-    assets = {name: asset["asset_id"] for name, asset in unambiguous_job_assets(store.assets(workspace), job).items()}
-    validate_response(response, source["raw_content"], set(assets), 1, len(source["raw_content"].splitlines()))
+    _, resources, assets = validate_saved_response(response, details, workspace, source, config, store.assets(workspace))
+    if record['outcome'] == 'merged':
+        return len(response.claims)
     with store.transaction():
-        for i, c in enumerate(response.claims):
-            sid = stable_id(record_id, str(i))
-            oid = stable_id(sid, "llm")
-            src, tgt = assets[canonical(c.source)], assets[canonical(c.target)]
+        for resource in resources:
+            if resource['row']:
+                row = list(resource['row'])
+                row[6] = json.dumps({**json.loads(row[6]), 'origin': 'ai_inferred'})
+                store.execute("INSERT INTO assets VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", row)
+        for c in response.claims:
+            src, tgt = assets[resource_key(c.source, config)], assets[resource_key(c.target, config)]
+            op = Operation(c.operation, [], [], c.quote, c.start_line, c.end_line, 'llm',
+                           evidence_key=focused_evidence_key(c, job))
+            sid, oid = operation_ids(workspace, source, 0, op)
             store.execute("INSERT INTO statements VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [sid, workspace, source["file_id"], c.start_line, c.end_line, c.quote, source["content_hash"]])
             store.execute("INSERT INTO operations VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [oid, workspace, sid, c.operation, "llm", min(c.confidence, .8), json.dumps([c.explanation])])
-            store.db.executemany("INSERT INTO operation_assets VALUES (?,?,?,?)", [[workspace, oid, src, "input"], [workspace, oid, tgt, "output"]])
+            for aid, role in [(src, 'input'), (tgt, 'output')]:
+                store.execute("INSERT INTO operation_assets SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM operation_assets WHERE workspace_id=? AND operation_id=? AND asset_id=? AND role=?)",
+                              [workspace, oid, aid, role, workspace, oid, aid, role])
             store.execute("INSERT INTO edges VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", [stable_id(oid, src, tgt), workspace, src, tgt, oid, sid, source["file_id"], c.operation, "llm", min(c.confidence, .8), "inferred", "llm:" + record_id])
         store.execute("UPDATE llm_records SET outcome='merged' WHERE record_id=?", [record_id])
     return len(response.claims)
 
 
-def assist_task(store: Store, workspace: str, file_id: str, first: int, last: int, task: str, transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, authorize: Callable[[str, Profile], Profile] | None=None, expected_job: str | None=None) -> dict[str, Any]:
+def focused_evidence_key(claim, job):
+    """Stable acceptance identity shared by merge and normal analysis refresh."""
+    return 'focused:' + stable_id(job, claim.source, claim.target, claim.operation,
+                                 str(claim.start_line), str(claim.end_line), claim.quote)
+
+
+def assist_task(store: Store, workspace: str, file_id: str, first: int, last: int, task: str, transport: httpx.BaseTransport | None=None, expected_hash: str | None=None, cancelled: Callable[[], bool] | None=None, authorize: Callable[[str, Profile], Profile] | None=None, expected_job: str | None=None,
+                expected_request: str = '') -> dict[str, Any]:
     """Select a task profile, apply same-origin fallback, and run assistance.
 
     Args:
@@ -776,6 +1179,10 @@ def assist_task(store: Store, workspace: str, file_id: str, first: int, last: in
     if chosen not in profiles:
         raise ValueError("Configure a default or task-specific provider profile first")
     first_profile = profiles[chosen]
+    source = store.file(file_id)
+    expected_hash = expected_hash or source['content_hash']
+    if expected_job is None:
+        expected_job = source_job(source, {k: store.setting(workspace, k, v) for k, v in ParsingSettings().model_dump().items()})
     ids = [chosen, *store.setting(workspace, "fallback_profiles", [])]
     result = None
     for pid in dict.fromkeys(ids):
@@ -787,8 +1194,12 @@ def assist_task(store: Store, workspace: str, file_id: str, first: int, last: in
             continue
         if authorize:
             profile = authorize(pid, profile)
+        def retry_authorize():
+            if authorize and authorize(pid, profiles[pid]) != profile:
+                raise ValueError('Provider authorization or profile changed; refresh the evidence preview')
         result = assist(store, workspace, profile, file_id, first, last, task, pid, transport,
-                        expected_hash=expected_hash, cancelled=cancelled, expected_job=expected_job)
+                        expected_hash=expected_hash, cancelled=cancelled, expected_job=expected_job,
+                        retry_authorize=retry_authorize, expected_request=expected_request if pid == chosen else '')
         if not result["retryable"]:
             return result
     return result
@@ -847,284 +1258,40 @@ def _transmitted_schema(value: Any) -> Any:
     return result
 
 
-REVIEW_CONTEXT_CHARS = 2000
-
-
-def review_batches(facts: list[NormalizedFact]) -> list[list[dict[str, Any]]]:
-    """Split normalized facts into deterministic pages bounded by review context size.
-
-    Args:
-        facts: Normalized facts to serialize for review.
-
-    Returns:
-        Ordered groups of serialized facts.
-    """
-    batches, current = [], []
-    for fact in facts:
-        candidate = fact.model_dump(exclude={'detail','evidence','unit_id','evidence_key','status','origin'}, exclude_defaults=True)
-        proposed = [*current,candidate]
-        if current and (len(proposed)>100 or len(json.dumps(proposed,ensure_ascii=False,separators=(',',':')))>REVIEW_CONTEXT_CHARS):
-            batches.append(current)
-            current=[]
-        current.append(candidate)
-    if current:
-        batches.append(current)
-    return batches
-
-
-@lru_cache(maxsize=2)
-def _analysis_schema_text(task: str) -> str:
-    """Serialize the validation schema sent for a project analysis task.
-
-    Args:
-        task: Project analysis task whose wire schema is required.
-
-    Returns:
-        Compact JSON for the transmitted schema.
-    """
-    from dataforge.ai_wire import wire_schema
-    return json.dumps(_transmitted_schema(wire_schema(task)), sort_keys=True, separators=(',', ':'))
-
-
-def analysis_prompt_hash(task: str, *, focused: bool=False) -> str:
-    """Hash the system prompt, focus instructions, and transmitted schema.
-
-    Args:
-        task: Project analysis task.
-        focused: Whether unit-specific focus instructions are included.
-
-    Returns:
-        SHA-256 prompt identity.
-    """
-    system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
-    template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
-    focus_path = PROMPTS/task/'focus.md'
-    if focused and focus_path.exists():
-        system += '\n' + focus_path.read_text(encoding='utf-8')
-    return hashlib.sha256((system + template + _analysis_schema_text(task)).encode()).hexdigest()
-
-
-def analysis_prompt(unit: AnalysisUnit, task: str, execution: Any, *, reserve_review: bool=False) -> tuple[str, str, str]:
-    """Build the system prompt, bounded JSON user context, and prompt identity.
-
-    Args:
-        unit: Analysis unit whose source and evidence are under review.
-        task: Project analysis task.
-        execution: Current analysis context and privacy settings.
-        reserve_review: Whether to reserve maximum review candidate space.
-
-    Returns:
-        System prompt, serialized user prompt, and prompt hash.
-
-    Raises:
-        ValueError: If the requested task is not a supported project task.
-    """
-    if task not in PROJECT_SCHEMAS:
-        raise ValueError('Unknown project task')
-    system = (PROMPTS/task/'system.md').read_text(encoding='utf-8')
-    template = (PROMPTS/task/'user_template.md').read_text(encoding='utf-8')
-    schema_text = _analysis_schema_text(task)
-    schema = json.loads(schema_text)
-    digest = analysis_prompt_hash(task, focused=bool(unit.focus))
-    if unit.focus and (PROMPTS/task/'focus.md').exists():
-        system += '\n' + (PROMPTS/task/'focus.md').read_text(encoding='utf-8')
-    context = {'unit':unit.model_dump(),'settings':execution.settings,'catalog':execution.catalog,
-               'schema':schema,'schema_version':PROJECT_PROTOCOLS[task][0]}
-    if task == 'project_lineage':
-        from dataforge.ai_citations import source_references
-        context['expression_references'] = [
-            {k: v for k, v in reference.items()
-             if k not in {'start_offset', 'end_offset'} and (k != 'text' or reference['kind'] != 'unit')}
-            for reference in source_references(unit, execution.settings)]
-    if unit.focus:
-        from dataforge.ai_semantic import source_view, unit_dialect
-        context['unit'].pop('code')
-        context['source_segments'] = source_view(unit, unit_dialect(unit, execution.settings))
-    context['evidence_reference'] = {'unit_id': unit.unit_id}
-    if task == 'lineage_review':
-        context['candidates'] = 'x' * REVIEW_CONTEXT_CHARS if reserve_review and not execution.review_candidates else execution.review_candidates
-    user = template.replace('{{context}}',json.dumps(context,ensure_ascii=False,separators=(',',':')))
-    return system,user,digest
-
-
-def preview_analysis_routes(store: Store, workspace: str, units: list[AnalysisUnit], execution: Any,
-                            *, tasks: list[str] | None=None) -> dict[str, Any]:
-    """Check routes, full-envelope budgets, credentials, and disclosure permissions offline.
-
-    Args:
-        store: Workspace store used to read profiles and privacy settings.
-        workspace: Workspace identifier.
-        units: Analysis units to include in the capacity preview.
-        execution: Current execution context and configured resource limits.
-        tasks: Optional ordered task list to preview.
-
-    Returns:
-        Route availability, blocked reasons, allowances, and budget totals.
-    """
-    blocked, routes, excluded, allowances = [], {}, [], []
-    tasks = tasks or ['project_lineage'] + (['lineage_review'] if execution.request.additional_ai_review else [])
-    for task in tasks:
-        try:
-            selected = analysis_routes(store, workspace, task)
-        except ValueError as exc:
-            blocked.append({'task': task, 'reason': str(exc)})
-            continue
-        routes[task] = []
-        for index, (pid, profile) in enumerate(selected):
-            configured_profile = profile
-            if len(units) == 1:
-                profile = project_profile(profile, units[0])
-            manager = execution.connections or current_connections()
-            if hasattr(manager, 'for_profile'):
-                manager = manager.for_profile(pid, configured_profile)
-            if profile.key_env and not manager.resolve(profile.key_env):
-                blocked.append({'task': task, 'profile_id': pid, 'reason': 'credential_unavailable'})
-            if not is_local(profile.base_url) and not store.setting(workspace, 'external_llm', False):
-                blocked.append({'task': task, 'profile_id': pid, 'reason': 'external_requests_disabled'})
-            if not is_local(profile.base_url) and not store.setting(workspace, 'allow_full_source', False):
-                blocked.append({'task': task, 'profile_id': pid, 'reason': 'complete_source_permission_required'})
-            incompatible = []
-            for unit in units:
-                system, user, _ = analysis_prompt(unit, task, execution, reserve_review=task == 'lineage_review')
-                allowance = request_allowance(profile, system, user,
-                    privacy_chars=store.setting(workspace, 'max_context_chars', 8000))
-                allowances.append({'task': task, 'unit_id': unit.unit_id, 'path': unit.path, 'profile_id': pid, **asdict(allowance)})
-                incompatible.extend({'task': task, 'unit_id': unit.unit_id, 'profile_id': pid,
-                    'reason': reason, 'required_characters': allowance.required_characters} for reason in allowance.reasons)
-            if incompatible and index:
-                excluded.extend(incompatible)
-                continue
-            blocked.extend(incompatible)
-            routes[task].append({'profile_id': pid, 'provider': profile.provider, 'model': profile.model,
-                'base_url': profile.base_url, 'max_tokens': profile.max_tokens,
-                'timeout': profile.timeout, 'attempts_per_unit': profile.retries + 1})
-    ceiling = sum(p['attempts_per_unit'] for rr in routes.values() for p in rr) * len(units)
-    tokens = sum(p['max_tokens'] * p['attempts_per_unit'] for rr in routes.values() for p in rr) * len(units)
-    if ceiling > execution.request.max_provider_attempts:
-        blocked.append({'reason': 'worst_case_provider_attempt_budget'})
-    if tokens > execution.request.max_output_tokens_total:
-        blocked.append({'reason': 'worst_case_output_reservation_budget'})
-    return {'routes': routes, 'blocked': blocked, 'excluded_routes': excluded, 'allowances': allowances,
-            'valid': not blocked, 'max_provider_attempts': ceiling, 'max_output_tokens_reserved': tokens}
-
-
-def invoke_analysis_unit(store: Store, workspace: str, unit: AnalysisUnit, task: str,
-                         execution: Any) -> UnitAttemptResult | None:
-    """Run routed project extraction with each provider attempt reauthorized and reserved.
-
-    Args:
-        store: Workspace store for immutable source and result records.
-        workspace: Workspace identifier.
-        unit: Analysis unit to submit.
-        task: Project analysis task.
-        execution: Current execution state, permissions, and resource reservations.
-
-    Returns:
-        The final recorded attempt result, if a route was available.
-
-    Raises:
-        ValueError: If budgets, source identity, settings, or provider output are invalid.
-    """
-    execution.check()
-    schema_version, prompt_version = PROJECT_PROTOCOLS[task]
-    routes = analysis_routes(store,workspace,task)
-    system,user,prompt_hash = analysis_prompt(unit,task,execution)
-    manager = execution.connections or current_connections()
-    result = None
-    invocation_start = execution.attempts
-    for pid,profile in routes:
-        configured_profile = profile
-        profile = project_profile(profile, unit)
-        manager = execution.connections or current_connections()
-        if hasattr(manager, 'for_profile'):
-            manager = manager.for_profile(pid, configured_profile)
-        execution.check()
-        allowance = request_allowance(profile, system, user, privacy_chars=store.setting(workspace, 'max_context_chars', 8000))
-        if not allowance.valid:
-            if pid != routes[0][0]:
-                continue
-            raise ValueError(', '.join(allowance.reasons))
-        started,attempt_start = time.perf_counter(),execution.attempts
-        usage,raw,validated,metadata = {},'',None,{}
-        outcome,reason,retryable = 'validated','',False
-
-        def before_attempt(active_profile):
-            execution.check()
-            source = store.file(unit.file_id)
-            settings = {k:store.setting(workspace,k,v) for k,v in ParsingSettings().model_dump().items()}
-            if source['workspace_id'] != workspace or source['content_hash'] != unit.content_hash or source_job(source,settings) != unit.job_id:
-                raise ValueError('Source identity changed before provider attempt')
-            if source['raw_content'][unit.start_offset:unit.end_offset] != unit.code:
-                raise ValueError('Unit code differs from the immutable original')
-            current_routes = dict(analysis_routes(store,workspace,task))
-            if pid not in current_routes or execution_profile(project_profile(current_routes[pid], unit)) != execution_profile(active_profile):
-                raise ValueError('Provider route changed before provider attempt')
-            if execution.settings and any(execution.settings.get(k) != v for k,v in settings.items()):
-                raise ValueError('Analysis settings changed before provider attempt')
-            for fid,digest in execution.source_hashes.items():
-                context_source = store.file(fid)
-                if context_source['workspace_id'] != workspace or context_source['content_hash'] != digest:
-                    raise ValueError('Declaration context changed before provider attempt')
-            if not is_local(active_profile.base_url):
-                if not store.setting(workspace,'external_llm',False):
-                    raise ValueError('External LLM requests are disabled')
-                if not store.setting(workspace,'allow_full_source',False):
-                    raise ValueError('Complete source transmission is disabled')
-            return execution.before_attempt(active_profile)
-
-        try:
-            resources = LLMResourceSettings.model_validate({k:store.setting(workspace,k,v)
-                for k,v in LLMResourceSettings().model_dump().items()})
-            with connection_scope(manager), request_slot(store.home,workspace,resources.llm_concurrency), Adapter(
-                    profile,execution.transport,cancelled=execution.cancelled,before_attempt=before_attempt,check=execution.check) as adapter:
-                send_user = manager.redact(user) if store.setting(workspace,'redact_secrets',True) else user
-                raw,usage = adapter.complete(system,send_user)
-                metadata = adapter.completion_metadata
-                if execution.attempt_log:
-                    execution.attempt_log[-1].update(outcome='response_received',usage_known=metadata.get('usage_known',False))
-                if execution.attempts - invocation_start > 1:
-                    metadata = {**metadata,'usage_known':False}
-                execution.check()
-                if metadata.get('truncated'):
-                    raise ValueError('Provider output truncated')
-                if len(raw) > 1024*1024:
-                    raise ValueError('Model content exceeds response budget')
-                from dataforge.ai_wire import decode_project_result
-                validated = decode_project_result(task, response_object(raw), unit, settings=execution.settings)
-                if task == 'project_lineage':
-                    validated.assert_unit(unit)
-                else:
-                    validated.assert_candidates({c['candidate_id'] for c in execution.review_candidates})
-                    for decision in validated.decisions:
-                        for citation in decision.evidence:
-                            citation.assert_unit(unit)
-        except (ValueError,ProviderError) as exc:
-            # Pydantic errors include rejected input values; retain only host error codes.
-            outcome = 'quarantined'
-            reason = str(exc)[:500] if isinstance(exc, ProviderError) else 'project_response_contract_invalid'
-            if isinstance(exc, SourceCitationError):
-                reason = str(exc)
-            retryable = isinstance(exc, ProviderError) and exc.retryable
-        record_id = uuid.uuid4().hex
-        details = {'unit_id':unit.unit_id,'content_hash':unit.content_hash,'job_id':unit.job_id,'schema_version':schema_version,'prompt_version':prompt_version,
-                   'reason':reason,'attempts':execution.attempts-attempt_start,'requested_model':profile.model,
-                   'resolved_model':metadata.get('resolved_model'),'finish_reason':metadata.get('finish_reason'),
-                   'usage_known':metadata.get('usage_known',False),'result':None,
-                   'physical_attempts':execution.attempt_log[attempt_start:]}
-        # Minimal evidence belongs to staged claims; full provider bodies are privacy-opt-in.
-        if store.setting(workspace,'llm_history',False):
-            details.update(context=user,response=raw)
-        safe_details,safe_usage = manager.sanitize(details),manager.sanitize(usage)
-        with store.transaction():
-            store.execute('INSERT INTO prompt_versions VALUES (?,?,?) ON CONFLICT DO NOTHING',[prompt_hash,task,prompt_version])
-            store.execute('INSERT INTO llm_records(record_id,workspace_id,profile_id,task,file_id,start_line,prompt_hash,provider,model,outcome,duration,usage,details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                [record_id,workspace,pid,task,unit.file_id,unit.first,prompt_hash,profile.provider,profile.model,
-                 outcome,time.perf_counter()-started,json.dumps(safe_usage),json.dumps(safe_details)])
-        result = UnitAttemptResult(unit_id=unit.unit_id,task=task,result=validated if outcome == 'validated' else None,
-            record_id=record_id,outcome=outcome,reason=manager.redact(reason),usage=safe_usage,usage_known=metadata.get('usage_known',False),
-            attempts=execution.attempts-invocation_start,requested_model=profile.model,resolved_model=metadata.get('resolved_model'),
-            finish_reason=metadata.get('finish_reason'),prompt_hash=prompt_hash)
-        expire_ai_history(store, workspace)
-        if not retryable:
-            return result
-    return result
+def _completion_request(p, system, user):
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    if p.provider == "Anthropic":
+        path = "/messages"
+        payload = {"model": p.model, "system": system, "messages": messages[1:], "max_tokens": p.max_tokens}
+    elif p.provider == "Ollama":
+        path = "/api/chat"
+        payload = {"model": p.model, "messages": messages, "stream": False, "options": {"num_predict": p.max_tokens}}
+        if p.structured:
+            payload["format"] = "json"
+        if p.temperature is not None:
+            payload["options"]["temperature"] = p.temperature
+    elif p.provider == "Gemini":
+        path = "/models/" + quote(p.model.removeprefix("models/"), safe="-._") + ":generateContent"
+        payload = {"systemInstruction": {"parts": [{"text": system}]},
+                   "contents": [{"role": "user", "parts": [{"text": user}]}],
+                   "generationConfig": {"maxOutputTokens": p.max_tokens}}
+        if p.structured:
+            payload["generationConfig"]["responseMimeType"] = "application/json"
+        if p.temperature is not None:
+            payload["generationConfig"]["temperature"] = p.temperature
+    else:
+        path = "/chat/completions"
+        payload = {"model": p.model, "messages": messages,
+                   "max_completion_tokens" if p.provider == "OpenAI" else "max_tokens": p.max_tokens,
+                   "stream": False}
+        if p.provider == "Databricks":
+            path = "/serving-endpoints/" + quote(p.model, safe="-._") + "/invocations"
+            payload.pop("model")
+        elif p.provider == "Azure OpenAI":
+            path = "/openai/deployments/" + quote(p.model, safe="-._") + "/chat/completions?api-version=" + quote(p.api_version, safe="-")
+            payload.pop("model")
+        if p.structured and p.provider != "Databricks":
+            payload["response_format"] = {"type": "json_object"}
+    if p.temperature is not None and p.provider not in {"Gemini", "Ollama"}:
+        payload["temperature"] = p.temperature
+    return path, payload

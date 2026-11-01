@@ -1,7 +1,13 @@
 """Explicit publication boundary: nav documents and named assets only."""
 from collections.abc import Iterable, Iterator
+from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+# Executable HTML is admitted only as this reviewed, self-contained fixture snapshot.
+PUBLIC_HTML_SHA256 = {
+    "assets/examples/lineage.html": "1dd1dca260acf77f005752f7dbb8e0b40259ba825d37af9b62e6deb97e4a3f48",
+}
 
 
 def on_config(config: Any) -> Any:
@@ -21,7 +27,7 @@ def on_config(config: Any) -> Any:
     config.theme["palette"] = [
         {"scheme": scheme, "primary": "custom", "accent": "custom",
          "toggle": {"icon": "material/palette-outline", "name": name}}
-        for scheme, name in sorted(themes["SITE_THEMES"].items(), key=lambda item: item[0] != "obsidian-ember")]
+        for scheme, name in sorted(themes["SITE_THEMES"].items(), key=lambda item: item[0] != "crimson-forge")]
     return config
 
 
@@ -75,7 +81,8 @@ def public_files(root: Path, names: set[str]) -> set[str]:
         path = PurePosixPath(name)
         if (
             path.is_absolute() or ".." in path.parts or "\\" in name or ":" in name
-            or path.suffix not in {".md", ".svg", ".png", ".jpg", ".webp", ".css", ".js"}
+            or (path.suffix not in {".md", ".svg", ".png", ".jpg", ".webp", ".css", ".js"}
+                and name not in PUBLIC_HTML_SHA256)
             or any(part.startswith(".") for part in path.parts)
             or path.name == "KNOWLEDGE.md"
             or any(part in {"prompts", "plans"} for part in path.parts)
@@ -86,6 +93,8 @@ def public_files(root: Path, names: set[str]) -> set[str]:
             raise ValueError(f"Unsafe symlink in publication path: {name}")
         if not target.is_file():
             raise ValueError(f"Publication source missing: {name}")
+        if name in PUBLIC_HTML_SHA256 and sha256(target.read_bytes()).hexdigest() != PUBLIC_HTML_SHA256[name]:
+            raise ValueError(f"Changed reviewed HTML requires content and digest review: {name}")
     return names
 
 

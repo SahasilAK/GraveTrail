@@ -10,6 +10,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
+from dataforge.credentials import (
+    CredentialError,
+    NativeCredentials,
+    credential_reference,
+    credential_source,
+    owns_reference,
+)
+
 DEFAULT_KEY_ENV = {
     name: 'DATAFORGE_' + suffix for name, suffix in {
         'OpenAI': 'OPENAI_API_KEY', 'Anthropic': 'ANTHROPIC_API_KEY',
@@ -42,11 +50,45 @@ class RuntimeConnections:
         """Initialize empty registered-credential and redaction state."""
         self._credentials: dict[str, tuple[str, float | None]] = {}
         self._resolved: set[str] = set()
+        self._disconnected: set[str] = set()
+        self._request_secrets: set[str] = set()
+        self._workspace: tuple[Any, str] | None = None
+        self._profile: tuple[str, Any] | None = None
+
+    def for_workspace(self, home, workspace) -> RuntimeConnections:
+        """Bind a view to a workspace, sharing only this session's runtime state."""
+        view = self.for_profile('', None)
+        view._workspace = (home, workspace)
+        return view
+
+    def for_profile(self, profile_id, profile) -> RuntimeConnections:
+        """Make a request-scoped recipient view without decrypting anything."""
+        view = RuntimeConnections()
+        view._credentials, view._resolved = self._credentials, self._resolved
+        view._disconnected = self._disconnected
+        view._workspace, view._profile = self._workspace, (profile_id, profile)
+        return view
+
+    def disconnect(self, name: str) -> None:
+        """Disable this reference in this session without deleting a saved key."""
+        self.clear(name)
+        self._disconnected.add(name)
+
+    def reconnect(self, name: str) -> None:
+        """Explicitly allow this session to use its selected credential source again."""
+        self._disconnected.discard(name)
+
+    def available(self, name: str) -> bool:
+        """Report runtime/environment availability without fetching saved secrets."""
+        if name in self._disconnected:
+            return False
+        return self.registered(name) or (credential_source(name) == 'environment' and bool(os.environ.get(name)))
 
     def register(self, name: str, secret: str, ttl: float | None = None) -> None:
         """Register a credential, optionally expiring it after the given number of seconds."""
         _validate_credential(name, secret)
         self._credentials[name] = (secret, None if ttl is None else time.monotonic() + ttl)
+        self.reconnect(name)
 
     def registered(self, name: str) -> bool:
         """Check whether a named credential is currently registered and unexpired."""
@@ -55,12 +97,33 @@ class RuntimeConnections:
 
     def resolve(self, name: str) -> str:
         """Resolve a registered credential or read its value from the process environment."""
+        source = credential_source(name)
+        if source != 'environment' and self._workspace and self._profile and self._profile[1] is not None:
+            pid, profile = self._profile
+            valid = (owns_reference(*self._workspace, pid, profile) if source == 'saved' else
+                     name == credential_reference(*self._workspace, pid, profile))
+            if not valid:
+                raise CredentialError('Credential identity changed; explicitly rebind or save a new key.')
+        if name in self._disconnected:
+            return ''
         credential = self._credentials.get(name)
         if credential:
             secret, expires = credential
             if expires is None or expires > time.monotonic():
                 return secret
             self._credentials.pop(name, None)
+            # An expired override must not expose a different source.
+            self._disconnected.add(name)
+            return ''
+        if source == 'session':
+            return ''
+        if source == 'saved':
+            if not self._workspace or not self._profile or self._profile[1] is None or self._profile[1].key_env != name:
+                return ''
+            value = NativeCredentials().read(*self._workspace, *self._profile)
+            if value:
+                self._request_secrets.add(value)
+            return value
         # Remember names for redaction, never copy environment secrets into session state.
         value = os.environ.get(name, '') if name else ''
         if value:
@@ -72,23 +135,29 @@ class RuntimeConnections:
         if name is None:
             self._credentials.clear()
             self._resolved.clear()
+            self._request_secrets.clear()
         else:
             self._credentials.pop(name, None)
             self._resolved.discard(name)
 
     def scoped_environment(self, names: list[str]) -> dict[str, str]:
         """Return only requested application-prefixed credentials that resolve to values."""
-        if any(not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name) for name in names):
+        if any(not re.fullmatch(r'DATAFORGE_[A-Z][A-Z0-9_]*', name) or credential_source(name) != 'environment' for name in names):
             raise ValueError('Only application-prefixed variables may be injected')
         return {name: value for name in names if (value := self.resolve(name))}
 
-    def redact(self, text: str, request_secrets: tuple[str, ...] = ()) -> str:
-        """Redact registered, request, environment, and credential-shaped secret values."""
-        secrets = [*request_secrets, *(value[0] for value in self._credentials.values())]
+    def redaction_values(self, request_secrets: tuple[str, ...] = ()) -> set[str]:
+        """Runtime-only secret values; used to withhold split streaming credentials."""
+        secrets = [*request_secrets, *self._request_secrets, *(value[0] for value in self._credentials.values())]
         secrets.extend(os.environ[name] for name in self._resolved if os.environ.get(name))
         secrets.extend(value for name, value in os.environ.items()
                        if re.search(r'(?:KEY|TOKEN|PASSWORD|SECRET)$', name, re.I) and value)
-        for secret in sorted(set(secrets), key=len, reverse=True):
+        return {variant for secret in secrets if secret for variant in
+            (secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1])}
+
+    def redact(self, text: str, request_secrets: tuple[str, ...] = ()) -> str:
+        """Redact registered, request, environment, and credential-shaped secret values."""
+        for secret in sorted(self.redaction_values(request_secrets), key=len, reverse=True):
             variants = {secret, json.dumps(secret)[1:-1], json.dumps(secret, ensure_ascii=False)[1:-1]}
             for variant in sorted(variants, key=len, reverse=True):
                 text = text.replace(variant, '[REDACTED]')

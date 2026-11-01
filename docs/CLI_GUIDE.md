@@ -44,13 +44,13 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `ai activity` | — | `--workspace`, `-w` **required**; `--help` |
 | `ai chunks` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--help` |
 | `ai merge` | `RECORD_ID` | `--workspace`, `-w` **required**; `--refresh`, `--no-refresh`; `--help` |
-| `ai request` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--expected-hash` **required**; `--expected-job`; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `ai request` | `FILE_ID` | `--workspace`, `-w` **required**; `--first` **required**; `--last` **required**; `--task` **required**; `--expected-hash` **required**; `--expected-job`; `--credential-prompt`, `--no-credential-prompt`; `--expected-request`; `--help` |
 | `ai results export` | `RECORD_ID` | `--workspace`, `-w` **required**; `--help` |
 | `ai results get` | `RECORD_ID` | `--workspace`, `-w` **required**; `--help` |
 | `ai results list` | — | `--workspace`, `-w` **required**; `--help` |
 | `ai review list` | — | `--workspace`, `-w` **required**; `--help` |
 | `ai review preview` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--first`; `--last`; `--help` |
-| `ai review request` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--expected-hash` **required**; `--first` **required**; `--last` **required**; `--expected-job`; `--help` |
+| `ai review request` | `DIAGNOSTIC_ID` | `--workspace`, `-w` **required**; `--expected-hash` **required**; `--first` **required**; `--last` **required**; `--expected-job`; `--expected-request`; `--help` |
 | `application logging get` | — | `--help` |
 | `application logging update` | `LEVEL` | `--help` |
 | `application theme apply` | `NAME` | `--help` |
@@ -96,11 +96,11 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `jobs cancel` | `JOB_ID` | `--workspace`, `-w` **required**; `--help` |
 | `jobs status` | `JOB_ID` | `--workspace`, `-w` **required**; `--wait`, `--no-wait`; `--help` |
 | `lineage analysis-report` | — | `--workspace`, `-w` **required**; `--run-id`; `--help` |
-| `lineage build` | — | `--workspace`, `-w` **required**; `--force`, `--no-force`; `--file-id` (repeatable); `--background`, `--no-background`; `--mode`; `--additional-ai-review`, `--no-additional-ai-review`; `--refresh-ai`, `--no-refresh-ai`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
+| `lineage build` | — | `--workspace`, `-w`; `--force`, `--no-force`; `--file-id`; `--background`, `--no-background`; `--mode`; `--max-output-tokens-total`; `--output-share`; `--input-token-limit`; `--output-token-limit`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
 | `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
 | `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
-| `lineage preview` | — | `--workspace`, `-w` **required**; `--mode`; `--file-id` (repeatable); `--additional-ai-review`, `--no-additional-ai-review`; `--max-provider-attempts`; `--max-output-tokens-total`; `--max-seconds`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
+| `lineage preview` | — | `--workspace`, `-w`; `--mode`; `--file-id`; `--max-output-tokens-total`; `--output-share`; `--input-token-limit`; `--output-token-limit`; `--resume-run-id`; `--help` |
 | `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
 | `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |
@@ -299,7 +299,7 @@ Workspace preferences: `settings schema -w ID [--section parsing]`, `settings ge
 
 Providers: `providers list|get|save|remove`, `providers routing get|update`, `providers credentials status`, `providers models|test PROFILE -w ID [--credential-prompt]`. Save/update take bounded JSON files and --expected-revision; remove refuses routed profiles. All outbound calls need --allow-write --allow-llm, an exact --allowed-llm-origin (scheme/host/port), approved --allowed-credential-ref and workspace privacy approval for remote recipients. Hidden input exists only during that invocation. Never pass key values in arguments/files.
 
-AI: `ai chunks FILE -w ID --first N --last N --task sql_lineage` is offline. `ai request` takes the same bounds plus --expected-hash HASH, --expected-job JOB (default workspace), optionally --credential-prompt. Each request sends only that explicit selection; retries/fallback may bill more than once after an ambiguous disconnect. `ai review list|preview|request`, `ai results list|get`, `ai activity`, `ai merge RECORD -w ID` reuse stored evidence and contracts. Five tasks are sql_lineage, sas_lineage, lineage_validation, column_usage, code_explanation. Advisory/quarantined results cannot merge; merged lineage remains inferred. Detailed saved-result reads require source permission.
+AI: `ai chunks FILE -w ID --first N --last N --task sql_lineage` is offline. `ai request` takes the same bounds plus --expected-hash HASH, --expected-job JOB (default workspace), optionally --credential-prompt and --expected-request FINGERPRINT from the offline preview. Each request sends only that explicit selection; retries/fallback may bill more than once after an ambiguous disconnect. `ai review list|preview|request`, `ai results list|get`, `ai activity`, `ai merge RECORD -w ID` reuse stored evidence and contracts. Five tasks are sql_lineage, sas_lineage, lineage_validation, column_usage, code_explanation. Advisory/quarantined results cannot merge; merged lineage remains inferred. Detailed saved-result reads require source permission.
 
 Reports: `runs list|get|compare BEFORE AFTER -w ID`, `ingestions list|get -w ID`, `dictionary list -w ID`, `assets schema ASSET -w ID`, `workspace health -w ID`, `lineage validate -w ID`, `source metadata FILE -w ID`. Source inventory adds encoding/file_size. `source search TEXT -w ID --include-matches` explicitly returns exact code lines with source permission; default remains matching file metadata. CSV values are excluded from line search. Schema evidence code requires --detail detailed; sampled types and unknowns retain provenance. Evidence validation reads original versions, does not reparse or repair.
 
@@ -361,12 +361,21 @@ See the [user guide](USER_GUIDE.md) for image bounds and metadata privacy.
 
 ## Explicit AI project builds
 
-`lineage build` defaults to local parser mode. `--mode hybrid` explicitly requests parser comparison plus validated AI extraction; `--mode ai` selects experimental AI-generated extraction. `lineage preview` is offline and reports disclosure, complete-unit/context failures, routes and worst-case attempt/output reservations. `lineage analysis-report` reads a saved report; `jobs cancel` requests cooperative cancellation. Use each route's `--help` for selected file IDs, refresh/review and bounded run options.
+`lineage build` defaults to static `parser` mode. `--mode ai` selects independent
+file extraction using the selected profile's token limits. `lineage preview` is
+offline. One build accepts SQL, SAS, or a complete dbt project; it rejects mixed
+families. Hybrid comparison, extra review, character/window/worker options and
+file-count tuning are no longer new-build contracts.
 
-Billable builds require the existing independent write/source/network grants: `--allow-write`, `--allow-llm`, exact `--allowed-llm-origin` and approved `--allowed-credential-ref`, plus workspace privacy. Complete-file disclosure across remote chunks requires complete-source permission. Do not put credential values in command arguments. A failed/cancelled/stale run keeps the old graph; requests already sent may have incurred usage. Preview, parser defaults and report reads send zero provider requests. See [AI project analysis](AI_ANALYSIS.md) for modes, semantic limits, deadlines and the full prompt/schema context budget.
+`--max-output-tokens-total` is an optional run-wide reservation ceiling, including
+physical retries and resumed attempts. `--resume-run-id` reuses completed parts
+within that compatible run; `--retry-unknown` acknowledges a possibly billed lost
+response. Ceilings cannot reset on resume. No push or live call is made by preview.
+See [AI analysis](AI_ANALYSIS.md) for source permissions, semantic uncertainty and
+historical-data compatibility.
 
-## Automatic project budgets and continuation
-
-For `lineage build` and `lineage preview`, omitted `--max-provider-attempts`, `--max-output-tokens-total` and `--max-seconds` calculate a bounded execution automatically. Explicit numeric values are ceilings. Use `--resume-run-id RUN_ID` to continue a paused AI build; its source selection/mode/options remain pinned. `--retry-unknown` explicitly permits retrying a lost in-flight request and may incur duplicate usage. Inspect `lineage analysis-report` first. Offline preview makes no network requests.
-
-AI preview also reports semantic projection tasks and whether review sizing is provisional. Source partitions and completed review batches are preserved by the shared Continue implementation; these behaviors require no additional CLI options. See [oversized operations](AI_ANALYSIS.md#oversized-operations-and-large-review-sets).
+Build and preview accept `--output-share` (10–50, default 30 for new runs),
+`--input-token-limit` and `--output-token-limit`. Optional exact run overrides use
+the same precedence and model clamps as the UI; omitted fields preserve pinned
+resume choices. `--resume-run-id` also retries unresolved work from an explicitly
+incomplete committed run, reusing successes without resetting cumulative spending.

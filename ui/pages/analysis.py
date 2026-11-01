@@ -10,6 +10,15 @@ from ui.presentation import empty_state, section
 title("Analysis", "Turn source code into dependencies you can inspect, verify and trace.")
 store, w = context()
 mode = section("Analysis view", ["Run", "Diagnostics", "History"], "analysis_section_" + w)
+if mode == "Run":
+    from dataforge.agent.jobs import TERMINAL
+    from ui.analysis_ai import analysis_jobs, controls, progress, report, start
+
+    progress(store, w)
+    job_id = st.session_state.get('ai_analysis_job_' + w)
+    if job_id and analysis_jobs(str(store.home)).read(job_id, w)['status'] not in TERMINAL:
+        # Keep Cancel available while the worker reads sources or prepares batches.
+        st.stop()
 files = store.files(w)
 render_projects(store, w)
 if not files:
@@ -38,9 +47,8 @@ elif mode == "Run":
             st.session_state[key] = [fid for fid in st.session_state[key] if fid in paths]
         selected = st.multiselect("Files to analyze (leave empty for all)", list(paths), format_func=paths.get,
                                   key=key, persist_state="session")
-        from ui.analysis_ai import controls, progress, report, start
         ai_request, ready = controls(store, w, selected or None)
-        label = ('Analyze with AI + parser' if ai_request.mode == 'hybrid' else 'Analyze with AI') if ai_request else ('Analyze selected' if selected else 'Analyze all files')
+        label = 'Analyze with AI' if ai_request else ('Analyze selected' if selected else 'Analyze all files')
         run = st.button(label, type="primary", icon=":material/play_arrow:", disabled=not ready)
         rebuild, validate = False, False
         with st.expander("Rebuild & validation"):
@@ -66,7 +74,6 @@ elif mode == "Run":
             from dataforge.reporting import validate_lineage_evidence
             invalid = validate_lineage_evidence(store, w)["invalid"]
             (st.error if invalid else st.success)(f"Validation: {len(invalid)} invalid evidence records")
-    progress(store, w)
     report(store, w)
 elif mode == "Diagnostics":
     from ui.analysis_sections import render_diagnostics

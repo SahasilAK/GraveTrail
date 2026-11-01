@@ -112,8 +112,26 @@ describes parity checks for transports, the running UI, both real ZIPs and live 
 
 ## Project AI analysis parity
 
-The Analysis build workflow adds explicit `parser` (default), `hybrid` and experimental `ai` modes to the shared build service. CLI uses `lineage build`, `lineage preview`, `lineage analysis-report` and `jobs cancel`; MCP uses `start_lineage_analysis`, `preview_project_analysis`, `get_project_analysis_report` and `cancel_job`. Previews/reports stay offline. AI execution requires independent source/write/network grants plus current origin/reference/privacy checks; report details remain source-gated.
+The shared build service accepts `parser` (default) and independent `ai` extraction.
+CLI uses `lineage build`, `lineage preview`, `lineage analysis-report` and `jobs cancel`;
+MCP uses `start_lineage_analysis`, `preview_project_analysis`,
+`get_project_analysis_report` and `cancel_job`. Preview/report reads stay offline. AI
+execution requires source/write/network grants and current origin/reference/privacy
+authorization. Detailed source-bearing reports remain source-gated.
 
-Provider routing accepts both v1 project tasks, `project_lineage` and `lineage_review`, alongside the five existing manual tasks. The manual range selector retains its five contracts. Complete-source disclosure across chunks, physical attempt/output/deadline ceilings, validation, atomic publication and compatible offline reuse follow the [same project-analysis policy](AI_ANALYSIS.md) across interfaces.
+Current project routing uses `project_lineage`, separately from the five manual contracts.
+Legacy `lineage_review`, hybrid comparison, extra review and execution-window/worker/file
+controls are not used for new builds. Token packing, one active request per build, durable
+physical-attempt/output reservations, bounded item recovery and atomic partial publication
+follow the [same project-analysis policy](AI_ANALYSIS.md) across interfaces.
 
-Project analysis adds A06 (explicit AI/hybrid build, offline preview and paged validation report) and A07 (cooperative analysis cancellation). Parser remains the default; AI-generated mode is experimental. See [project AI analysis](AI_ANALYSIS.md).
+S06's shared request slots are admission limits rather than per-build parallelism.
+S07's persisted workspace character setting supports manual chunk previews; current project
+packing uses model token capacity and any explicit profile source-disclosure restriction.
+Protocol 5 sends exact source parts/definitions; manual pre-send redaction and retained-body
+credential redaction do not sanitize that outgoing project source. See
+[disclosure and revocation](SECURE_CONFIGURATION.md#project-ai-disclosure-and-revocation).
+
+Capability A06 covers explicit AI builds, offline preview and paged reports; A07 covers
+cooperative cancellation. dbt reports add project/resource inventory and typed dependency
+traversal. Accepted AI facts remain inferred and do not establish semantic completeness.

@@ -1,34 +1,19 @@
 # scripts/
 
-`benchmark_dbt.py` creates a disposable chain/fanout/YAML/macro workload and reports
-cold/warm/edit counts, time and Python allocation peak.
-
-Operational reproducibility utilities. benchmark.py creates isolated synthetic files, measures real services and persists labeled workload metrics.
-
-`benchmark_transformations.py` — disposable 120-stage/20-column expression chain plus
-order-totals example, real analysis and bounded query time/Python allocation peak. Optional
-explicit home supports browser review; no private source/provider data used.
+Reproducible qualification and delivery helpers. Use synthetic/tracked fixtures and isolated homes; source checks, mocked protocol metrics, live semantic accuracy, platform smoke and hosted deployment are separate evidence.
 
 ## Subfolders
-- `build/` — Allowlisted package assets, frozen dispatcher and actual distribution smoke drivers. See [build/KNOWLEDGE.md](build/KNOWLEDGE.md).
+- `build/` — asset hook, frozen dispatcher, executable/installer/signing and distribution smoke tooling; [map](build/KNOWLEDGE.md).
+- `docs/` — inventory, strict static-site publication/legacy-route validation and reviewed fixture authoring; [map](docs/KNOWLEDGE.md).
 
 ## Files
-- `verify_agents.py` — Asserts exact logical edge sets and all-source traversal for BOTH SQL/SAS ZIPs; measures cached refresh and compact/detailed responses in a separate data home; no imported source execution.
-- `benchmark.py` — CLI labeled SQL-chain benchmark, isolated temporary database, precision/recall assertions, cold/warm/traversal metrics.
-- `verify_llm.py` — Opt-in real endpoint check, default OmniRoute auto/best-reasoning; synthetic SQL/SAS discovery, connection, grounding/merge/refresh/restart and safe JSON report. Credentials come from a named environment variable.
-
-- `verify_parity.py` — Requires a new isolated home; actual CLI extension-specific ZIP import/build/warm reuse, owner close/reopen, exact original byte/hash checks, manifest traversal, actual MCP handlers/shared UI dictionary and SDK stdio catalog verification. No network provider calls.
-
-- `docs/` — [docs/KNOWLEDGE.md](docs/KNOWLEDGE.md): explicit public allowlist, strict static-site build, links/anchors/search/output inspection.
-
-- `release.py` — Stable version resolution from published releases or exact override, checkout-only uv materialization, Windows-only or legacy three-platform staging, source/lifecycle/trust-policy checks, consolidated metadata, Copilot summary and release notes. CLI resolve/materialize/validate/stage/summarize/notes; helper never publishes.
-
-Windows staging consumes an explicit single artifact directory and requires checksummed installer/lifecycle evidence. Other-platform staging retains named-directory/archive contracts.
-
-Benchmark/live-check temporary directories use gravetrail prefixes; supplied fixture archive names remain original.
-
-- `benchmark_ai_analysis.py` — Offline operation/scope/version/role gold scorer and optional synthetic ZIP acceptance; explicit doubly opted-in bounded live OmniRoute evaluation. Aggregate sanitized metrics distinguish absent precision/sample-size insufficiency from pass.
-
-`benchmark_ai_analysis.py --scale-units 1000` adds mock-transport durable continuation, exact request/unit coverage, reopen, one final publication, elapsed time, peak Python allocations and maximum unit record bytes. Scale mode never makes live provider calls.
-
-- `benchmark_lineage_archives.py` — Supplied synthetic SQL/SAS ZIP checksum/inventory checks, answer-header masking preserving offsets, versioned scenario-group splits and per-script table-manifest agreement. Offline default; explicit bounded live samples reuse production planner/adapter/validator and compare parser/AI/hybrid. Receipts include quarantined metering and gateway-reported models. Missing column gold keeps qualification open.
+- `benchmark.py` — disposable labeled SQL-chain import/cold/warm/traversal timing with exact edge assertions.
+- `benchmark_dbt.py` — disposable dbt chain/fanout/YAML/macro workload, cache/edit counts, timing and allocation peak.
+- `benchmark_transformations.py` — scoped column-expression chain and order-totals workload, bounded query time/allocation; optional explicit safe review home.
+- `benchmark_ai_analysis.py` — independent semantic gold scorer; live calls require explicit selected-case/environment opt-in and capacity. Current file pipeline, not hybrid comparison.
+- `benchmark_lineage_archives.py` — archive checksum/masking/scenario split and table-only parser/AI scoring; absent column gold cannot qualify column accuracy.
+- `qualify_ai_context.py` — generated SQL/SAS/dbt mock transport qualification, oversized inputs/duplicate writers/interruption/reopen, independent request/token/storage/coverage metrics; not live-model qualification.
+- `verify_agents.py` — SQL/SAS supplied-archive edge/traversal/cache and compact/detailed automation checks in separate homes.
+- `verify_parity.py` — new-home CLI import/build/warm refresh, exact originals, shared reports/MCP SDK stdio; no provider calls.
+- `verify_llm.py` — explicit opt-in real endpoint protocol/focused grounding/merge/refresh/reopen check with named environment credential; bounded synthetic result is not broad accuracy.
+- `release.py` — version resolution/materialization/artifact/source/lifecycle/trust/staging/notes helpers; never publishes by itself. Windows explicit installer staging and other-platform archive contracts remain distinct.

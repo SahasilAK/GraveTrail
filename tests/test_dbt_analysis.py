@@ -28,6 +28,21 @@ models:
         (f'{prefix}/macros/money.sql', b'{% macro money(x) %}{{ x }} / 100{% endmacro %}')]
 
 
+def test_parser_upgrade_rebuilds_dbt_results_before_marking_current(tmp_path, monkeypatch):
+    from dataforge.services import analysis_is_current
+
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('dbt upgrade')
+        Importer(store, w).files(fixture_entries(), set(), source_kind='dbt')
+        analyze(store, w)
+        assert analysis_is_current(store, w)
+        monkeypatch.setattr('dataforge.services.PARSER_VERSION', 'future-parser')
+        assert not analysis_is_current(store, w)
+        rebuilt = analyze(store, w)
+        assert rebuilt['analyzed'] == 6 and rebuilt['cached'] == 0
+        assert analysis_is_current(store, w)
+
+
 def test_three_model_project_has_logical_outputs_and_original_evidence(tmp_path):
     with closing(Store(tmp_path)) as store:
         workspace = store.create_workspace('dbt')
@@ -94,3 +109,20 @@ def test_cancelled_dbt_analysis_retains_previous_graph(tmp_path):
         with pytest.raises(InterruptedError):
             analyze(store, w, force=True, cancelled=lambda: True)
         assert len(store.edges(w)) == 3
+
+
+def test_dbt_unused_cte_has_no_column_derivations(tmp_path):
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('reachable dbt scopes')
+        entries = [
+            ('project/dbt_project.yml', b'name: project\n'),
+            ('project/models/model.sql', b'''WITH unused AS (SELECT secret FROM hidden),
+                used AS (SELECT a FROM src), nested AS (SELECT a FROM used)
+                SELECT a FROM nested''')]
+        Importer(store, w).files(entries, set(), source_kind='dbt')
+        analyze(store, w)
+        refs = store.rows('SELECT table_name,column_name,scope FROM column_references WHERE workspace_id=?', [w])
+        assert refs and not any(r['column_name'] == 'secret' or r['table_name'] in {'hidden', 'unused'} for r in refs)
+        assert not any(a['name'] == 'hidden' for a in store.assets(w))
+        assert {r['table_name'] for r in refs} >= {'src', 'model', 'used', 'nested'}
+        assert analyze(store, w)['analyzed'] == 0

@@ -5,6 +5,42 @@ import pytest
 from dataforge.parsers.sas import parse_sas
 
 
+@pytest.mark.parametrize('body', ['keep a; keep b;', 'drop a; drop b;',
+                                  'rename a=x; rename b=y;'])
+def test_repeated_declarations_have_explicit_coverage(body):
+    operation = parse_sas(f'data dst; set src(keep=a b); {body} run;').operations[0]
+    assert operation.derivations
+    assert all(d['status'] == 'unresolved' and d['coverage'] for d in operation.derivations)
+
+
+@pytest.mark.parametrize('code', ['data dst(keep=a keep=b); set src(keep=a b); run;',
+                                  'data dst; set src(keep=a keep=b); run;'])
+def test_repeated_dataset_options_have_explicit_coverage(code):
+    records = parse_sas(code).operations[0].derivations
+    assert records and all(d['status'] == 'unresolved' for d in records)
+
+
+@pytest.mark.parametrize('header', ['data dst(keep=x rename=(x=z));', 'data dst(keep=y);'])
+def test_output_options_follow_statement_rename_order(header):
+    # SAS Concepts: input options, KEEP/DROP statements, RENAME statement,
+    # then output KEEP/DROP options and output RENAME option.
+    rename = '' if 'rename=' in header else 'rename x=y;'
+    operation = parse_sas(f'{header} set src(keep=a rename=(a=x)); {rename} run;').operations[0]
+    output = physical(operation)
+    expected = 'z' if 'rename=' in header else 'y'
+    assert set(output) == {expected}
+    assert output[expected]['status'] == 'verified'
+    assert output[expected]['inputs'][0]['column'] == 'a'
+
+
+def test_output_rename_option_applies_after_rename_statement():
+    operation = parse_sas('data dst(keep=y rename=(y=z)); set src(keep=a rename=(a=x)); rename x=y; run;').operations[0]
+    output = physical(operation)
+    assert set(output) == {'z'}
+    assert output['z']['inputs'][0]['column'] == 'a'
+    assert output['z']['status'] == 'verified'
+
+
 def physical(operation: Any) -> Any:
     """Handle physical for the test scenario.
 

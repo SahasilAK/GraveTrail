@@ -5,9 +5,10 @@ from typing import Any
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 
 from dataforge.ingestion import Importer
-from dataforge.llm import Profile, assist, merge_claims
+from dataforge.llm import assist, merge_claims
 from dataforge.services import analyze
 from dataforge.store import Store
 
@@ -40,7 +41,7 @@ def request(project: Any, task: Any, body: str) -> Any:
         Value produced for the test scenario.
     """
     store, workspace, fid, _ = project
-    profile = Profile(provider="Ollama", base_url="http://localhost:11434", model="test", context_chars=32000)
+    profile = focused_profile(provider="Ollama", base_url="http://localhost:11434", model="test", context_chars=32000)
     transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": json.dumps(body)}}))
     return assist(store, workspace, profile, fid, 1, 1, task=task, transport=transport)
 

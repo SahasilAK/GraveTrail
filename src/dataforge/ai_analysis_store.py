@@ -5,6 +5,7 @@ Callers own the publication transaction. No network or parser cache writes occur
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 
 from dataforge.asset_identity import source_job
 from dataforge.models import ParseResult, stable_id
@@ -20,11 +21,41 @@ def _json(value):
     return encoded
 
 
+def _reference_expressions(value, source, base=0):
+    """Keep large exact expressions in the immutable blob, not each JSON record."""
+    if isinstance(value, list):
+        return [_reference_expressions(item, source, base) for item in value]
+    if not isinstance(value, dict):
+        return value
+    result = {key: _reference_expressions(item, source, base) for key, item in value.items()}
+    expression = result.get('expression')
+    if isinstance(expression, str) and len(expression) > 4096:
+        start = source.find(expression)
+        if start >= 0:
+            result.pop('expression')
+            result['_expression_source_span'] = [base + start, base + start + len(expression)]
+    return result
+
+
+def _restore_expressions(value, source):
+    if isinstance(value, list):
+        for item in value:
+            _restore_expressions(item, source)
+    elif isinstance(value, dict):
+        if '_expression_source_span' in value:
+            start, end = value.pop('_expression_source_span')
+            if not 0 <= start < end <= len(source):
+                raise ValueError('Expression reference is outside original source')
+            value['expression'] = source[start:end]
+        for item in value.values():
+            _restore_expressions(item, source)
+
+
 def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None,
              configuration=None, summary=None, analysis_run_id=None, accepted_results=None):
     if mode not in {'ai', 'hybrid', 'parser'}:
         raise ValueError('Unknown analysis mode')
-    if status not in TERMINAL | {'planning', 'extracting', 'validating', 'reconciling', 'reviewing', 'ready'}:
+    if status not in TERMINAL | {'planning', 'extracting', 'consolidating', 'validating', 'reconciling', 'reviewing', 'waiting_provider', 'linking', 'resolving', 'ready'}:
         raise ValueError('Unknown AI analysis state')
     old = store.rows('SELECT workspace_id,configuration,summary FROM ai_analysis_runs WHERE run_id=?', [run_id])
     if old and old[0]['workspace_id'] != workspace:
@@ -48,7 +79,7 @@ def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None
                 if start < 0:
                     raise ValueError('Accepted operation differs from immutable original source')
                 operation['source_span'] = [start, start + len(code)]
-                _save_snapshot_part(store, workspace, run_id, metadata, index, operation)
+                _save_snapshot_part(store, workspace, run_id, metadata, index, _reference_expressions(operation, source))
     if old:
         updates = {'mode': mode, 'status': status}
         if manifest is not None:
@@ -87,6 +118,46 @@ def save_unit_result(store, workspace, run_id, unit_id, *, file_id, content_hash
         [unit_id, workspace, run_id, file_id, content_hash, start_char, end_char, context_hash, status, record_id, _json(result or {})])
 
 
+def save_part_extraction(store, workspace, run_id, part, extraction, *, record_id=None, status='completed'):
+    if status not in {'completed', 'unresolved'}:
+        raise ValueError('Invalid extraction checkpoint status')
+    save_unit_result(store, workspace, run_id, part.part_id, file_id=part.file_id, content_hash=part.content_hash,
+        start_char=part.start_offset, end_char=part.end_offset, context_hash='extraction5', status=status,
+        record_id=record_id, result={'contract': 'part5', 'part': part.model_dump(), 'extraction': extraction.model_dump()})
+
+
+def load_file_parts(store, workspace, run_id, file_id=None):
+    from dataforge.ai_analysis_models import FilePart, PartExtraction
+    _run(store, workspace, run_id)
+    rows = store.rows('SELECT result FROM ai_analysis_units WHERE workspace_id=? AND run_id=?' +
+        (' AND file_id=?' if file_id else '') + ' ORDER BY file_id,start_char,unit_id',
+        [workspace, run_id, *([file_id] if file_id else [])])
+    result = []
+    for row in rows:
+        saved = json.loads(row['result'])
+        if saved.get('contract') == 'part5':
+            result.append((FilePart.model_validate(saved['part']), PartExtraction.model_validate(saved['extraction'])))
+    return result
+
+
+def save_file_extraction(store, workspace, run_id, extraction):
+    save_unit_result(store, workspace, run_id, 'file5:' + extraction.file_id,
+        file_id=extraction.file_id, content_hash=extraction.content_hash,
+        status='completed', result={'contract': 'file5', 'extraction': extraction.model_dump()})
+
+
+def load_file_extractions(store, workspace, run_id):
+    from dataforge.ai_analysis_models import FileExtraction
+    _run(store, workspace, run_id)
+    result = []
+    for row in store.rows('SELECT result FROM ai_analysis_units WHERE workspace_id=? AND run_id=? ORDER BY file_id,unit_id',
+                          [workspace, run_id]):
+        saved = json.loads(row['result'])
+        if saved.get('contract') == 'file5':
+            result.append(FileExtraction.model_validate(saved['extraction']))
+    return result
+
+
 def _run(store, workspace, run_id):
     if not store.rows('SELECT 1 FROM ai_analysis_runs WHERE workspace_id=? AND run_id=?', [workspace, run_id]):
         raise ValueError('Analysis run does not belong to workspace')
@@ -123,6 +194,7 @@ def save_claim_decisions(store, workspace, run_id, claims, *, supports=()):
                 raise ValueError('Claim citation differs from immutable source')
             payload = {**payload, 'evidence': {k: v for k, v in evidence.items() if k != 'quote'},
                        '_evidence_reference_version': 2, '_source_encoding': encoding}
+            payload = _reference_expressions(payload, code)
         store.execute('''INSERT INTO ai_analysis_claims VALUES (?,?,?,?,?,?,?,?)
             ON CONFLICT(run_id,claim_id) DO UPDATE SET status=excluded.status,payload=excluded.payload,reasons=excluded.reasons''',
             [claim['claim_id'], workspace, run_id, claim.get('unit_id', ''), claim.get('kind', ''),
@@ -147,31 +219,17 @@ def save_claim_decisions(store, workspace, run_id, claims, *, supports=()):
             support.get('claim_id', ''), support.get('engine', 'ai'), support.get('record_id'), _json(support.get('payload', {}))])
 
 
-def inherited_context_sources(store, workspace, file_ids):
-    """Carry declaration dependencies with preserved per-file representations."""
-    remaining, sources = set(file_ids), {}
-    for run in store.rows("SELECT run_id,manifest,accepted_results FROM ai_analysis_runs WHERE workspace_id=? AND status='committed' ORDER BY created_at DESC,run_id DESC", [workspace]):
-        represented = {item['metadata']['file_id'] for item in _accepted_items(store, workspace, run, hydrate=False)}
-        if remaining & represented:
-            manifest = json.loads(run['manifest'])
-            for entry in manifest if isinstance(manifest, list) else manifest.get('sources', []):
-                sources[(entry['file_id'], entry['content_hash'])] = entry
-            remaining -= represented
-        if not remaining:
-            break
-    return list(sources.values())
-
-
 def load_accepted_file_results(store, workspace, config=None):
     """Latest committed representation per file; stale evidence is never rehydrated."""
     inventory = {m['file_id']: m for m in store.files(workspace)}
     accepted, seen = {}, set()
     for run in store.rows("SELECT * FROM ai_analysis_runs WHERE workspace_id=? AND status='committed' ORDER BY created_at DESC,run_id DESC", [workspace]):
         configuration = json.loads(run['configuration'])
+        parsing_configuration = {k: v for k, v in configuration.items() if k != 'dbt'}
         manifest = json.loads(run['manifest'])
         # The immutable context catalog can cite another file's declarations. Revalidate
         # its evidence as well as the direct source before permitting offline reuse.
-        context_current = True
+        context_current = 'dbt' not in configuration or configuration['dbt'] == store.setting(workspace, 'dbt', {})
         entries = manifest if isinstance(manifest, list) else manifest.get('sources', [])
         for entry in entries:
             current = inventory.get(entry.get('file_id'))
@@ -186,7 +244,7 @@ def load_accepted_file_results(store, workspace, config=None):
                 continue
             seen.add(fid)
             current = inventory.get(fid)
-            if (not current or not context_current or (config is not None and configuration != config)
+            if (not current or not context_current or (config is not None and parsing_configuration != config)
                     or any(current[k] != saved[k] for k in ('content_hash', 'relative_path', 'extension'))
                     or item['job_id'] != source_job(current, config or configuration)):
                 continue
@@ -224,6 +282,7 @@ def attach_published_support(store, workspace, run_id, results, claims):
             if operation.evidence_key:
                 operations[(metadata['file_id'], operation.evidence_key)] = (metadata, parsed, index, operation)
     supports = []
+    source_cache = {}
     for claim in claims:
         if claim.get('status') != 'accepted':
             continue
@@ -235,6 +294,10 @@ def attach_published_support(store, workspace, run_id, results, claims):
         if match is None:
             continue
         metadata, parsed, index, operation = match
+        if '_expression_source_span' in payload:
+            if metadata['file_id'] not in source_cache:
+                source_cache[metadata['file_id']] = store.snapshot_content(metadata)
+            _restore_expressions(payload, source_cache[metadata['file_id']])
         _, oid = operation_ids(workspace, metadata, index, operation)
         kind = payload.get('kind')
         matches = []
@@ -308,7 +371,7 @@ def load_analysis_report(store, workspace, run_id=None, *, include_source=True):
         result[key] = json.loads(result[key])
     result['units'] = store.rows('SELECT * EXCLUDE(result) FROM ai_analysis_units WHERE workspace_id=? AND run_id=?', [workspace, row['run_id']])
     result['claims'] = store.rows("SELECT * FROM ai_analysis_claims WHERE workspace_id=? AND run_id=? AND kind != 'checkpoint'", [workspace, row['run_id']])
-    quotes = {}
+    quotes, sources = {}, {}
     for claim in result['claims']:
         claim['reasons'] = json.loads(claim['reasons'])
         if not include_source:
@@ -320,12 +383,15 @@ def load_analysis_report(store, workspace, run_id=None, *, include_source=True):
             encoding = payload.pop('_source_encoding')
             evidence = payload['evidence']
             key = (evidence['content_hash'], encoding, evidence['start_offset'], evidence['end_offset'])
+            if key[:2] not in sources:
+                sources[key[:2]] = store.snapshot_content({'content_hash': key[0], 'encoding': encoding})
+            source = sources[key[:2]]
             if key not in quotes:
-                source = store.snapshot_content({'content_hash': key[0], 'encoding': encoding})
                 if not 0 <= key[2] < key[3] <= len(source):
                     raise ValueError('Claim reference is outside original source')
                 quotes[key] = source[key[2]:key[3]]
             evidence['quote'] = quotes[key]
+            _restore_expressions(payload, source)
     return result
 
 
@@ -364,6 +430,7 @@ def _accepted_items(store, workspace, run, *, hydrate=True, file_id=None):
             if not 0 <= start < end <= len(source):
                 raise ValueError('Invalid accepted operation reference')
             payload['code'] = source[start:end]
+            _restore_expressions(payload, source)
             current['result']['operations'].append(payload)
         else:
             raise ValueError('Incomplete accepted file snapshot')
@@ -372,7 +439,7 @@ def _accepted_items(store, workspace, run, *, hydrate=True, file_id=None):
 
 
 def save_validation_checkpoint(store, workspace, run_id, unit, context_hash, validated, *, reviewed=False,
-                               record_id=None, cache=None):
+                               record_id=None, cache=None, transaction=True):
     """Only locally validated claims survive; no rejected provider body is retained."""
     header = validated.model_dump(exclude={'accepted'})
     # Minimal host operation shapes; source text is referenced, never copied per claim.
@@ -382,11 +449,12 @@ def save_validation_checkpoint(store, workspace, run_id, unit, context_hash, val
         for decision in header[group]:
             decision['evidence'] = None
     accepted_ids = []
-    with store.transaction():
+    with store.transaction() if transaction else nullcontext():
         for fact in validated.accepted:
             payload = fact.model_dump()
             payload['evidence'] = {'unit_id': unit.unit_id}
             _compact_host(payload['detail'])
+            payload = _reference_expressions(payload, unit.code, unit.start_offset)
             accepted_ids.append(fact.candidate_id)
             save_claim_decisions(store, workspace, run_id, [{'claim_id': 'stage:' + fact.candidate_id,
                 'unit_id': unit.unit_id, 'kind': 'checkpoint', 'status': 'staged', 'payload': payload}])
@@ -432,6 +500,7 @@ def load_validation_checkpoint(store, workspace, run_id, unit, context_hash):
     for cid in header['accepted_ids']:
         payload = claims[cid]
         payload['evidence'] = EvidenceCitation.from_unit(unit).model_dump()
+        _restore_expressions(payload, source)
         hydrate(payload['detail'])
         accepted.append(payload)
     validated = ValidationReport.model_validate({k: v for k, v in header.items()

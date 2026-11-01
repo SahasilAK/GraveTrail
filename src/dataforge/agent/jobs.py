@@ -18,6 +18,47 @@ from dataforge.connections import RuntimeConnections, connection_scope, current_
 TERMINAL = {"completed", "failed", "interrupted", "cancelled"}
 
 
+class ReasoningBuffer:
+    """Transient display only: bounded, credential-redacted, never journaled."""
+    LIMIT = 64 * 1024
+
+    def __init__(self, workspace, run_id, attempt_id, connections):
+        self.identity = (workspace, run_id, attempt_id)
+        self.connections = connections
+        self.raw = ''
+        self.state = 'streaming'
+        self.trimmed = False
+
+    def append(self, delta='', state='streaming'):
+        self.state = state
+        self.raw += delta
+        # Retain extra redaction context before the displayed 64 KiB window.
+        encoded = self.raw.encode('utf-8')
+        if len(encoded) > self.LIMIT + 16384:
+            self.raw = encoded[-(self.LIMIT + 16384):].decode('utf-8', errors='ignore')
+            self.raw = re.sub(r'^\S*', '', self.raw)
+            self.trimmed = True
+
+    def snapshot(self):
+        cut = len(self.raw)
+        if self.state == 'streaming':
+            # Hold unfinished words and every suffix that could be a credential.
+            match = re.search(r'\S+$', self.raw)
+            if match:
+                cut = match.start()
+        for secret in self.connections.redaction_values():
+            for size in range(min(len(secret) - 1, len(self.raw)), 0, -1):
+                if self.raw.endswith(secret[:size]):
+                    cut = min(cut, len(self.raw) - size)
+                    break
+        text = self.connections.redact(self.raw[:cut])
+        encoded = text.encode('utf-8')
+        trimmed = self.trimmed or len(encoded) > self.LIMIT
+        text = encoded[-self.LIMIT:].decode('utf-8', errors='ignore')
+        return {'run_id': self.identity[1], 'attempt_id': self.identity[2], 'text': text,
+            'state': self.state, 'trimmed': trimmed}
+
+
 class Jobs:
     """Manage bounded asynchronous jobs and their local JSON journals."""
 
@@ -30,6 +71,18 @@ class Jobs:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="gravetrail-agent")
         self.lock = threading.RLock()
+        self._reasoning = {}
+
+    def reasoning_snapshot(self, job_id, workspace, run_id):
+        with self.lock:
+            buffer = self._reasoning.get(job_id)
+            if buffer is None or buffer.identity[:2] != (workspace, run_id):
+                return None
+            return buffer.snapshot()
+
+    def discard_reasoning(self, job_id):
+        with self.lock:
+            self._reasoning.pop(job_id, None)
 
     def path(self, job_id: str) -> Path:
         """Return the journal path for a syntactically valid job identifier.
@@ -98,6 +151,7 @@ class Jobs:
         if record["status"] not in TERMINAL and time.time() - record["updated_at"] > 30:
             # Never rewrite a live worker's journal from a polling process.
             record = {**record, "status": "interrupted", "error": "Worker heartbeat expired; retry explicitly"}
+        record['cancel_requested'] = self.path(job_id).with_suffix('.cancel').exists() and record['status'] not in TERMINAL
         return record if private else {k: v for k, v in record.items() if k not in {"access", "request"}}
 
     def create(self, workspace: str, operation: str, access: dict[str, Any] | None=None) -> dict[str, Any]:
@@ -207,6 +261,16 @@ class Jobs:
             def progress(fraction, stage):
                 update(progress=round(fraction, 3), stage=str(stage)[:100], stage_started_at=time.time())
 
+            progress.bind_run = lambda run_id: update(run_id=run_id)
+            def reasoning(run_id, attempt_id, delta='', state='streaming'):
+                with self.lock:
+                    buffer = self._reasoning.get(record['job_id'])
+                    if buffer is None or buffer.identity != (record['workspace_id'], run_id, attempt_id):
+                        buffer = ReasoningBuffer(record['workspace_id'], run_id, attempt_id, current_connections())
+                        self._reasoning[record['job_id']] = buffer
+                    buffer.append(delta, state)
+            progress.reasoning = reasoning
+
             with connection_scope(connections or current_connections()):
                 if cancelled():
                     raise InterruptedError('Job cancelled before execution')
@@ -223,6 +287,10 @@ class Jobs:
             update(status="cancelled" if isinstance(exc, InterruptedError) else "failed", error=code,
                    finished_at=time.time())
         finally:
+            with self.lock:
+                buffer = self._reasoning.get(record['job_id'])
+                if buffer and buffer.state == 'streaming':
+                    buffer.state = 'interrupted'
             marker.unlink(missing_ok=True)
 
     def wait(self, job_id: str, workspace: str, timeout: float=300) -> dict[str, Any]:
@@ -249,6 +317,8 @@ class Jobs:
     def close(self) -> None:
         """Wait for submitted jobs and shut down the executor."""
         self.pool.shutdown(wait=True)
+        with self.lock:
+            self._reasoning.clear()
 
 
 def status_result(record: dict[str, Any], options: Any) -> dict[str, Any]:

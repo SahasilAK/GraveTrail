@@ -9,7 +9,7 @@ COPY ui/ ./ui/
 COPY prompts/ ./prompts/
 COPY app.py ./
 COPY scripts/build/hatch_assets.py ./scripts/build/hatch_assets.py
-COPY .streamlit/config.toml ./.streamlit/config.toml
+COPY ui/streamlit.toml ./.streamlit/config.toml
 RUN uv sync --locked --no-dev --no-editable --no-cache
 
 FROM python:3.11-slim-bookworm AS runtime

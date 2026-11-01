@@ -22,171 +22,129 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-# Nothing stays buried.
+# Nothing stays buried. Every dependency leaves a trail.
 
-## Every dependency leaves a trail.
+<a name="gravetrail"></a>
+<a name="nothing-stays-buried"></a>
+<a name="every-dependency-leaves-a-trail"></a>
 
-**GraveTrail engineering hub** is a local-first workspace for understanding SQL, SAS
-and dbt projects. Import a folder or ZIP, build table lineage, and follow every relationship back
-to the exact source statement. Find direct column references, investigate downstream
-impact, and share an interactive graph that works offline.
+GraveTrail turns SQL, SAS and supported dbt project artifacts into explorable
+lineage, dependencies and source evidence. Follow where data comes from, what
+depends on it, and which code to investigate before making a change.
 
-Built for data engineers, analysts, architects, and developers working through unfamiliar
-pipelines, migrations, and change reviews. Deterministic analysis needs **no LLM, cloud
-account, or paid service**. Imported code is never executed.
+Built for data engineers, analysts, analytics engineers and architects untangling
+unfamiliar pipelines, reviewing changes or planning migrations.
 
-[dbt project support](docs/DBT_SUPPORT.md) covers multiple models, project roots, packages,
-versions and schemas, property YAML, macros and typed resource dependencies. Source-only
-analysis stays conservative around generated SQL; supplied manifests can provide compiled
-expressions with separate JSON evidence. dbt analysis uses the local parser workflow.
-
-## Choose local analysis or optional AI
-
-**Local parser analysis is the primary, default workflow.** Build table lineage,
-column usage and supported column transformations without sending source to an AI
-provider. No model connection, API key or AI token usage is required. In
-**Analysis → Run**, leave **Use AI for analysis** unchecked. Configuring a provider
-alone does not turn ordinary analysis into an AI request.
-
-For large, complex systems where you want additional coverage beyond supported
-parser patterns, optionally enable **Use AI for analysis** and keep **Compare with
-parser** selected. Hybrid analysis compares local results with AI-proposed facts,
-validates original evidence and semantics, and reports omissions and unresolved
-cases. Selected source and relevant context are sent to the configured provider;
-a local gateway may forward them upstream. Project size alone does not require AI.
-
-Both capabilities are available in the same app. AI can help investigate coverage
-gaps; it cannot guarantee that every dependency is discovered or correct.
-[Choose a build and review its limits](docs/AI_ANALYSIS.md).
-
-## From scattered scripts to source evidence
-
-| Investigate | What you get |
-| --- | --- |
-| [Build lineage](docs/USER_GUIDE.md) | SQL AST parsing, dedicated SAS rules, CSV source metadata, and a persistent file inventory. |
-| [Explore dependencies](docs/user-guide/index.md) | Upstream/downstream trees, focused interactive graphs, cycle detection, and temporary-step collapse with provenance. |
-| [Inspect direct column usage](docs/USER_GUIDE.md) | References scoped to the selected source, including usage type, file, and exact lines. Unknown wildcards stay unknown. |
-| [Trace column transformations](docs/TRANSFORMATION_LINEAGE.md) | Follow SQL/SAS output values through scoped expressions, with separate join/filter roles, source evidence and explicit coverage gaps. |
-| [Keep the evidence](docs/DATA_MODEL.md) | Original file bytes, statement ranges, extraction methods, and versioned analysis history. |
-| [Connect tools and agents](docs/integrations/index.md) | CLI and MCP queries over stored analysis, bounded responses, explicit permissions, and managed exports. |
-| [Build with optional AI](docs/AI_ANALYSIS.md) | Explicit hybrid/project analysis, bounded source disclosure and deterministic evidence checks; experimental AI-generated mode. |
-| [Add optional AI assistance](docs/LLM_INTEGRATION.md) | Configurable provider profiles and task routing; grounded output validation and explicit inferred-result merges. |
-| [Operate locally](docs/DATA_MANAGEMENT.md) | Independent workspaces, previewed cleanup, mandatory backups for general cleanup, and restore into a new data home. |
+<a name="from-scattered-scripts-to-source-evidence"></a>
 
 ![Illustrative lineage: two source tables flow through staging to a reporting table, with source evidence attached](docs/assets/diagrams/lineage.svg)
 
 *A workflow illustration, not an application screenshot. Actual results come from your imported files.*
 
 <details>
-<summary><strong>See the application with the included SQL project</strong></summary>
+<summary><strong>See GraveTrail with the included SQL project</strong></summary>
 
-![Actual GraveTrail lineage explorer tracing pub.all_kpis upstream at depth 30](docs/assets/images/gravetrail-lineage-explorer.png)
+![Current GraveTrail Lineage view tracing the supplied SQL sample upstream](docs/assets/images/gravetrail-lineage-explorer.png)
 
-Captured from an isolated local workspace using the supplied SQL fixture. See the
-[user guide](docs/user-guide/index.md) for the dashboard and source-evidence viewer.
+*Real application, disposable workspace, repository sample data. Try the
+[interactive lineage example](docs/examples/interactive-lineage.md).*
 
 </details>
 
-## Start in minutes
+## Follow the questions
 
-Install [Git](https://git-scm.com/downloads), Python 3.11+, and
-[uv](https://docs.astral.sh/uv/getting-started/installation/), then run:
+- **Where does this table come from?** Explore upstream inputs and temporary steps.
+- **What could this change affect?** Follow downstream consumers before investigating them.
+- **Where is the proof?** Inspect the original statement, source version and line range.
+- **How is this column used?** Explore direct references and supported transformations.
+- **What connects this dbt project?** Inspect models, versions, resources and macro impact.
+- **How do I share my findings?** Export reports, graph images or interactive HTML.
+
+<a name="know-the-boundaries"></a>
+
+Lineage supports investigation and migration planning. It does not execute a
+migration or guarantee arbitrary code is correct. Dynamic SQL, runtime macros,
+ambiguous names and unsupported syntax can leave explicit gaps.
+
+<a name="choose-local-analysis-or-optional-ai"></a>
+
+## Local analysis; optional AI
+
+Supported static analysis runs locally after installation. It needs **no AI account,
+API key or paid model service**, including for large projects. Imported SQL, SAS,
+Jinja and Python are inspected as text, never executed.
+
+Optional AI independently extracts inferred lineage from selected source and authorized
+context. An external provider receives that content; a localhost gateway may forward
+it upstream. Installation normally downloads dependencies. Read
+[local operation and disclosure](docs/concepts/local-and-ai.md) for the separate
+static-analysis, HTML-export and documentation-site offline boundaries.
+
+<a name="start-in-minutes"></a>
+
+## Start with the documented version
+
+This documentation describes development commit **1864dc8**, including dbt and the
+current independent AI workflow. These features are **not all in release v0.0.1**.
+Use the pinned source checkout to reproduce the walkthroughs.
+
+Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
+git checkout 1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414
 uv sync --locked --extra dev
-uv run gravetrail-ui
+uv run gravetrail-ui --home ./.dataforge
 ```
 
-Open [http://127.0.0.1:8501](http://127.0.0.1:8501). From the checkout, data is stored
-in ignored `.dataforge/`. Choose a location with `uv run gravetrail-ui --home PATH`.
-Use the same explicit `--home` when switching between UI, CLI, and MCP; **one process
-owns each DuckDB home**. Installed launchers use the platform user-data directory.
+<a name="try-a-real-project"></a>
 
-Use the locked uv installation above while the tested Streamlit/Pillow security override is required. Wheel installations need the supplied `dependency-overrides.txt`; plain pip cannot resolve the upstream version conflict. See the [installation guide](docs/SETUP_AND_DEPLOYMENT.md#temporary-pillow-security-compatibility) for the explicit install command and removal policy.
+Open [the local application](http://127.0.0.1:8501). In **Sources**, import
+[`dataforge_sql_lineage_test_project.zip`](tests/sample_data/dataforge_sql_lineage_test_project.zip)
+with only `sql` selected. In **Analysis → Run**, leave **Use AI for analysis** unchecked
+and choose **Analyze all files**. In **Lineage**, search `pub.all_kpis`, select the exact
+asset and set **Traversal options → Traversal depth** to **30**.
 
-<details>
-<summary><strong>Docker or a standalone build</strong></summary>
+Follow the [first-lineage tutorial](docs/getting-started/quick-start.md) for evidence,
+coverage and export steps, or the [dbt tutorial](docs/examples/dbt.md). Use the same
+explicit home for UI, CLI and MCP. **Stop the UI before another process opens its DuckDB home.**
 
-Build the container from this repository and retain data in a named volume:
+Locked uv includes the tested Streamlit/Pillow compatibility override. Wheel installs
+need `dependency-overrides.txt`; read [installation choices](docs/getting-started/installation.md)
+before using pip, Docker or older release binaries.
 
-```sh
-docker build -t gravetrail:local .
-docker run --rm -p 127.0.0.1:8501:8501 -v dataforge-data:/data gravetrail:local
-```
+<a name="find-your-guide"></a>
 
-Standalone directory bundles can be built for the host OS:
+## Find your trail
 
-```sh
-uv run gravetrail-build --target executable
-```
-
-No public binary or registry image is assumed. Native builds require target-platform
-verification; see [builds and release limits](docs/BUILD_AND_RELEASE.md).
-
-</details>
-
-GraveTrail replaces the DataForge product name. Existing commands, environment
-variables, and data homes remain supported; see
-[rebrand compatibility](docs/BUILD_AND_RELEASE.md#gravetrail-rebrand-compatibility).
-
-## Try a real project
-
-1. Open **Sources** and upload either project ZIP from [`tests/sample_data/`](tests/sample_data/).
-2. Select **only `.sql`** for the SQL ZIP or **only `.sas`** for the SAS ZIP, then import.
-3. Open **Analysis → Run** and select **Analyze all files**. No provider configuration is needed.
-4. In **Lineage**, search `pub.all_kpis`, select the exact asset, and explore
-   upstream with **Traversal options → Traversal depth** set to **30**. Trace seven ETL layers back to all **16 source tables**.
-5. Select a graph edge to inspect source evidence. Explore **Columns** or download
-   a CSV/JSON report, original source bundle, or offline interactive HTML graph.
-
-The fixture expectations are 85 persistent tables and 128 logical lineage edges; SAS
-also includes 16 temporary WORK datasets. See the [walkthrough](docs/getting-started/quick-start.md)
-and [fixture verification limits](docs/TESTING.md).
-
-## Find your guide
-
-| Start here | Go deeper |
+| Your next task | Guide |
 | --- | --- |
-| [Getting started](docs/getting-started/index.md) | [Installation & deployment](docs/SETUP_AND_DEPLOYMENT.md) · [Configuration](docs/getting-started/configuration.md) |
-| [User guide](docs/user-guide/index.md) | [UI reference](docs/USER_GUIDE.md) · [Cleanup & recovery](docs/DATA_MANAGEMENT.md) |
-| [Integrations](docs/integrations/index.md) | [CLI](docs/CLI_GUIDE.md) · [MCP](docs/MCP_INTEGRATION.md) · [Capability matrix](docs/CLI_MCP_CAPABILITIES.md) · [LLM providers](docs/LLM_INTEGRATION.md) |
-| [Architecture](docs/architecture/overview.md) | [Lineage engine](docs/LINEAGE_ENGINE.md) · [SQL](docs/SQL_PARSING.md) · [SAS](docs/SAS_PARSING.md) · [Security](docs/SECURITY.md) |
-| [Development](docs/development/index.md) | [Contributing](CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Build verification](docs/BUILD_AND_RELEASE.md) |
-| [Troubleshooting](docs/troubleshooting/help.md) | [Publish GitHub Pages](docs/deployment/github-pages.md) · [Maintain documentation](docs/development/documentation.md) |
+| Install and complete an example | [Get started](docs/getting-started/index.md) |
+| Import, analyze, explore and share | [User guides](docs/user-guide/index.md) |
+| Understand SQL, SAS or dbt support | [Project types](docs/project-types/index.md) |
+| Judge evidence and uncertainty | [Concepts](docs/concepts/index.md) |
+| Configure optional AI and recovery | [AI analysis](docs/AI_ANALYSIS.md) |
+| Query with scripts or agents | [CLI](docs/CLI_GUIDE.md) · [MCP](docs/MCP_INTEGRATION.md) |
+| Locate code and extension points | [Developer path](docs/development/index.md) |
+| Contribute or report a problem | [Contributing](CONTRIBUTING.md) · [Troubleshooting](docs/troubleshooting/help.md) |
 
-Explore the [live documentation website](https://sahasilak.github.io/GraveTrail/)
-with search and light/dark mode. See the [Pages deployment guide](docs/deployment/github-pages.md)
-for publishing details. GitHub Pages hosts the documentation;
-run the Streamlit application locally or on your own host.
-
-## Know the boundaries
-
-This is **static analysis**, not a database or SAS runtime. Dynamic SQL, runtime macros,
-ambiguous names, and unsupported syntax produce diagnostics rather than guessed edges.
-Direct column usage remains separate from bounded transformation lineage. The dedicated
-Transformation lineage page traces tested SQL and SAS subsets; unsupported constructs
-remain explicit coverage boundaries. See the [coverage guide](docs/TRANSFORMATION_LINEAGE.md).
-
-The UI is intended for one trusted local user and has no multi-user authentication layer.
-Remote AI requests require privacy permission. Supply secrets through masked session
-credentials or named read-only launch variables; never commit them. Exports and backups
-can contain source code. [Read the security guide](docs/SECURITY.md).
+The [documentation website](https://sahasilak.github.io/GraveTrail/) provides search
+and themes; it may reflect an older revision until this branch is reviewed and
+deployed. GitHub Pages serves documentation; run the app locally or on your trusted host.
 
 ## Build with us
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a focused improvement or
-[report a reproducible issue](https://github.com/SahasilAK/GraveTrail/issues/new/choose).
-For security concerns, use [SECURITY.md](SECURITY.md). Development checks:
 
 ```sh
 uv run pytest -q
 uv run ruff check .
+uv run --group docs python scripts/docs/build.py
 ```
 
-GraveTrail uses [Streamlit](https://streamlit.io/), [SQLGlot](https://github.com/tobymao/sqlglot),
-[NetworkX](https://networkx.org/), and [DuckDB](https://duckdb.org/). Documentation is built
-with [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/).
+See [development setup](docs/development/getting-started.md) for focused verification.
+The UI targets one trusted local user. Review [security](SECURITY.md) before remote
+hosting or sharing exports, which can contain source code.
 
-Distributed under the [Apache License 2.0](LICENSE). Dependencies retain their own licenses.
+The [technology guide](docs/development/technology.md) explains Python, Streamlit,
+SQLGlot, DuckDB and NetworkX. Legacy `dataforge` aliases and `DATAFORGE_*` variables
+remain supported. Distributed under the [Apache License 2.0](LICENSE).

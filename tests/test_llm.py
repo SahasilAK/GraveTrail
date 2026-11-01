@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 from pydantic import ValidationError
 
 from dataforge.ingestion import Importer
@@ -91,7 +92,7 @@ def test_privacy_gate_and_malformed_quarantine(tmp_path: Path, content: Any) -> 
     remote = Profile(provider="OpenAI", base_url="https://api.openai.com/v1", model="manual")
     with pytest.raises(ValueError, match="disabled"):
         assist(store, w, remote, fid, 1, 1)
-    local = Profile(provider="Ollama", base_url="http://localhost:11434", model="manual")
+    local = focused_profile(provider="Ollama", base_url="http://localhost:11434", model="manual")
     transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": content}}))
     result = assist(store, w, local, fid, 1, 1, transport=transport)
     assert result["outcome"] == "quarantined"
@@ -115,7 +116,7 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> N
     payload = {"claims": [{"source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1,
         "end_line": 1, "quote": code, "explanation": "Explicit source and target", "confidence": .99}]}
     transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": json.dumps(payload)}}))
-    result = assist(store, w, Profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
+    result = assist(store, w, focused_profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
     assert result["outcome"] == "validated"
     assert merge_claims(store, w, result["record_id"]) == 1
     analyze(store, w)
@@ -123,7 +124,7 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> N
     assert len(inferred) == 1 and inferred[0]["status"] == "inferred"
     assert inferred[0]["confidence"] <= .8
     store.execute("UPDATE llm_records SET created_at=current_timestamp - INTERVAL '31 days' WHERE record_id=?", [result["record_id"]])
-    assist(store, w, Profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
+    assist(store, w, focused_profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
     analyze(store, w)
     assert len([e for e in store.edges(w) if e["method"] == "llm"]) == 1
     Importer(store, w).files([("q.sql", b"select id from raw.a;")], {".sql"})
@@ -177,7 +178,7 @@ def test_fenced_grounded_response_validates_without_accepting_invented_assets(tm
         Importer(store, w).files([("q.sql", code.encode())], {".sql"})
         analyze(store, w)
         fid = store.files(w)[0]["file_id"]
-        profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
+        profile = focused_profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
         claim = {"source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1,
                  "end_line": 1, "quote": code, "explanation": "Explicit dependency", "confidence": .9}
 
@@ -215,7 +216,7 @@ def test_provider_invalid_envelope_raises_controlled_error(body: str) -> None:
     """
     from dataforge.llm import ProviderError
 
-    profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
+    profile = focused_profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
     with Adapter(profile, httpx.MockTransport(lambda request: httpx.Response(200, content=body))) as adapter:
         with pytest.raises(ProviderError, match="JSON|object"):
             adapter.models()
