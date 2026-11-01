@@ -9,20 +9,20 @@ API credentials default to session memory. Optional keyring persistence explicit
 
 ## Subfolders
 - `.github/` — test/security/docs/release workflows and contribution templates; [map](.github/KNOWLEDGE.md).
-- `.streamlit/` — UI defaults; [map](.streamlit/KNOWLEDGE.md).
+- `.streamlit/` — ignored local UI settings.
 - `docs/` — public guides, tutorials, developer architecture and reviewed assets; [map](docs/KNOWLEDGE.md).
 - `src/` — domain/service package; [map](src/KNOWLEDGE.md).
 - `ui/` — Streamlit presentation and components; [map](ui/KNOWLEDGE.md).
 - `prompts/` — versioned manual/project assistance instructions and schemas; [map](prompts/KNOWLEDGE.md).
 - `scripts/` — reproducible qualification, builds/releases and docs tooling; [map](scripts/KNOWLEDGE.md).
 - `tests/` — isolated unit/integration/protocol/AppTest regression suites and fixtures; [map](tests/KNOWLEDGE.md).
-- `plans/` — optional ignored local implementation/evidence records; only its map is tracked; [map](plans/KNOWLEDGE.md).
+- `plans/`, `planning/`, `docs/plans/`, `docs/prompts/`, `superpowers/` — ignored local implementation records and app-building prompts, including their knowledge maps.
 
 ## Root files
-- `app.py` — navigation, selected workspace/home, shared UI frame and session connection scope; guards cached storage reads with explicit reconnect after fatal errors, displays cleanup results after rerun and selects a surviving/default workspace before rendering its selector. Domain decisions stay in services.
+- `app.py` — includes authored Lineage builder alongside the existing routes; navigation, selected workspace/home, shared UI frame and session connection scope; guards cached storage reads with explicit reconnect after fatal errors, displays cleanup results after rerun and selects a surviving/default workspace before rendering its selector. Domain decisions stay in services.
 - `pyproject.toml` / `uv.lock` — dependency/build/entrypoint/test/lint contracts and generated exact lock. Temporary Pillow metadata override also lives in `dependency-overrides.txt`; see SECURITY.md before changing it.
-- `README.md` — branded banner, live-docs link, status badges and quick navigation; “Nothing stays buried. Every dependency leaves a trail.” headline, product introduction, illustrative lineage, expandable real fixture screenshot and pinned-version onboarding; public docs entry point.
-- `mkdocs.yml` — explicit navigation/asset publication list, theme and strict site configuration. Docs builder checks inventory, routes/headings, links/search and exact output contents.
+- `README.md` — branded banner, live-docs link, status badges and quick navigation; “Nothing stays buried. Every dependency leaves a trail.” headline, product introduction, illustrative lineage, expandable real fixture screenshot and pinned-version onboarding; public docs entry point, including a Lineage builder feature/guide link and source-version distinction.
+- `mkdocs.yml` — explicit navigation/asset publication list, theme and strict site configuration. Docs builder checks inventory, routes/headings, links/search and exact output contents; publishes the Lineage builder guide and reviewed synthetic canvas screenshot.
 - `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE` — contribution entry, security/reporting/compatibility policy and license.
 - `Dockerfile`, `compose.yaml`, `.dockerignore` — container build/runtime/ownership and build-context policy; platform evidence is separate from source configuration.
 - `.gitattributes`, `.gitignore`, `.gitleaks.toml`, `.kbignore` — text normalization, source/runtime exclusions, narrowly scoped secret exceptions and local knowledge-scan rules.

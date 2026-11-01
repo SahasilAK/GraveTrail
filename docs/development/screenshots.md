@@ -29,6 +29,29 @@ smaller branch so node names remain readable. Source snippets are public synthet
 fixture data. Never capture credentials, personal absolute paths or private projects.
 Review each replaced image and update this table when controls/fixtures change.
 
+## Lineage builder canvas
+
+`gravetrail-lineage-builder.png` uses builder source commit `a803b6e` and a disposable
+**Color trace demo** workspace. It shows the current fullscreen toolbar, including
+Save canvas, Clear canvas, and Export. To reproduce it:
+
+1. Create source schemas `customers`, `products`, and `unrelated`, intermediate
+   `orders`, and targets `daily_report` and `warehouse_report`. Each has `id INT`
+   and `name STRING`; all names/data are synthetic.
+2. Add them explicitly to the canvas catalog. File customers/products in
+   **Source group**, place the sources on the left, orders in the middle, reports
+   on the right, and the unrelated table below.
+3. Connect customers.id and products.id to orders.id, then orders.id to each
+   report's id. Add a **Left join** between the two source id output ports.
+4. Assign customers blue (`#2563eb`) and products orange (`#f97316`), use the
+   **Crimson Forge** app theme, and enter **Full screen**. Fit the diagram and
+   select the customers header to show downstream highlighting and dimmed peers.
+5. Capture the application viewport without browser chrome, private paths,
+   credentials, or provider configuration. No source analysis or AI call is needed.
+
+The [canvas guide](../user-guide/lineage-builder.md) explains the displayed
+controls and the distinction between workspace schemas and a canvas catalog.
+
 Core diagram sources are editable SVG: [system boundaries](../assets/diagrams/system-boundaries.svg)
 and [analysis sequence](../assets/diagrams/analysis-sequence.svg). Their title/description,
 arrow direction and trust-boundary labels must survive edits. Mermaid sources live with

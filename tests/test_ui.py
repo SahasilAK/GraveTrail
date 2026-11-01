@@ -34,7 +34,7 @@ def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: 
 
     monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "home"))
     config = tmp_path / "config.toml"
-    config.write_bytes(Path(".streamlit/config.toml").read_bytes())
+    config.write_bytes(Path("ui/streamlit.toml").read_bytes())
     monkeypatch.setattr("ui.themes.CONFIG_PATH", config)
     monkeypatch.setattr("ui.themes._loaded_preset", lambda: None)
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()

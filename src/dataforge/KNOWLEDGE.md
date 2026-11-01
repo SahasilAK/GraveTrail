@@ -10,6 +10,11 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 - `parsers/` — Static SQL/SAS/CSV and transformations; [map](parsers/KNOWLEDGE.md).
 - `tokenizer_assets/` — Packaged offline tokenizer data.
 
+## Authored lineage builder
+- `lineage_builder.py` — Authored table/column/link models, bounded sizes, validated folders, explicit catalog visibility and optional validated `#RRGGBB` table trace colors. Current-work revision checks and named `BuilderWork` snapshots retain colors/layout through editable JSON handoffs. `save_canvas_work` accepts optional auto-generated names, explicit overwrite IDs and revision checks; `BuilderWorkExistsError` carries conflicting work metadata for explicit overwrite confirmation. Clear atomically snapshots the design, then clears diagram/catalog state while preserving all workspace table schemas. Normal saves/restores retain omitted schemas hidden from the current catalog. Only `delete_builder_tables` explicitly removes workspace schemas/current links with revision checks; saved snapshots remain. Links distinguish lineage from joins. Schema-only exports filter IDs/roles for JSON/YAML/SQL/CSV/XLSX; SQL preserves validated vendor types. `columns_from_rows` reports missing column names plainly, validates optional decimal parameters and preserves unchanged imported types. Separate from analyzed evidence.
+- `datatypes.py` — Offline suggestions for 22 system choices plus custom entry; `type_entry` splits decimal cells and `format_data_type` leaves bare types/unspecified lengths and precision untouched, validating decimal parameters only when provided. SAS DATA step NUMERIC remains unparameterized; official rule references are retained.
+- `schema_imports.py` — Schema-only SQL DDL, explicit SAS LENGTH/PROC SQL, dbt YAML/manifest/catalog JSON, generic JSON, Informatica XML and CSV/TSV imports. Preserves system metadata; clears graph folder references and trace colors. Upload limits, inert content, DTD/alias rejection and partial-format warnings.
+
 ## Core analysis and storage
 - `column_graph.py` — Bounded source-free column scenes, whole-derivation display caps and cycle-aware layout.
 - `column_evidence.py` — Workspace/run-validated lazy expression and exact analyzed-source lookup.
@@ -55,7 +60,7 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 - `artifacts.py` — Selection/format allowlists, original-version artifacts and checked scoped base64 reads; source permission rechecked at retrieval.
 - `theme_configuration.py` — Eleven native presets and shared UI/graph/site tokens, contrast and atomic TOML updates preserving layout. UI picker: ui/themes.py.
 - `cleanup.py`, `maintenance.py` — Preview-bound cleanup/history, idle guards, validated job journals and mandatory full-home backups. Cleanup rebuilds stale nonunique column indexes through committed DROP/CREATE phases with identifier-only recovery metadata; Store startup resumes interrupted rebuilds. Corrected counts require a fresh preview. Column cleanup preserves table-edge supports; history/recovery and new-home restore remain bounded.
-- `launcher.py`, `storage_locations.py` — Writable runtime homes, validated startup allowlists, bundled UI paths and lazy Streamlit startup; Windows mutex protects UI/CLI/MCP/worker lifetime.
+- `launcher.py`, `storage_locations.py` — Writable runtime homes, validated startup allowlists, bundled UI paths and lazy Streamlit startup; fresh source homes use ui/streamlit.toml to initialize ignored local settings without overwriting existing themes; Windows mutex protects UI/CLI/MCP/worker lifetime.
 - `cli.py`, `build.py`, `__init__.py` — CLI/distribution entry points and package version. GraveTrail and documented legacy dataforge commands/import/storage identifiers stay compatible.
 
 ## Invariants

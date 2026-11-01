@@ -57,7 +57,8 @@ def new_workspace() -> None:
 pages = {
     "Workspace": [st.Page("ui/pages/dashboard.py", title="Overview", icon=":material/space_dashboard:", default=True),
                   st.Page("ui/pages/builder.py", title="Sources", icon=":material/folder_open:"),
-                  st.Page("ui/pages/analysis.py", title="Analysis", icon=":material/play_circle:")],
+                  st.Page("ui/pages/analysis.py", title="Analysis", icon=":material/play_circle:"),
+                  st.Page("ui/pages/lineage_builder.py", title="Lineage builder", icon=":material/polyline:")],
     "Explore": [st.Page("ui/pages/explorer.py", title="Lineage", icon=":material/account_tree:"),
                 st.Page("ui/pages/columns.py", title="Columns", icon=":material/view_column:"),
                 st.Page("ui/pages/transformations.py", title="Transformation lineage", icon=":material/route:"),

@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **405 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **411 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -34,23 +34,23 @@ python scripts/docs/inventory.py --check
 | --- | ---: |
 | [Entry points and package](#entry-points-and-package) | 5 |
 | [Static parsing and identity](#static-parsing-and-identity) | 11 |
-| [Storage and configuration](#storage-and-configuration) | 15 |
+| [Storage and configuration](#storage-and-configuration) | 18 |
 | [Graphs, columns and exports](#graphs-columns-and-exports) | 9 |
 | [AI and provider services](#ai-and-provider-services) | 31 |
 | [dbt](#dbt) | 14 |
 | [CLI and MCP automation](#cli-and-mcp-automation) | 12 |
-| [Streamlit UI](#streamlit-ui) | 37 |
+| [Streamlit UI](#streamlit-ui) | 40 |
 | [Prompts and response schemas](#prompts-and-response-schemas) | 20 |
 | [Verification and release tooling](#verification-and-release-tooling) | 10 |
 | [Documentation tooling](#documentation-tooling) | 6 |
 | [Build and packaging tooling](#build-and-packaging-tooling) | 9 |
 | [Continuous integration and repository templates](#continuous-integration-and-repository-templates) | 8 |
-| [Runtime and development configuration](#runtime-and-development-configuration) | 10 |
+| [Runtime and development configuration](#runtime-and-development-configuration) | 9 |
 | [Test support and fixtures](#test-support-and-fixtures) | 65 |
 | [Tests: AI and providers](#tests-ai-and-providers) | 59 |
 | [Tests: dbt](#tests-dbt) | 13 |
 | [Tests: automation](#tests-automation) | 14 |
-| [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 31 |
+| [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 32 |
 | [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 26 |
 
 ## Entry points and package
@@ -90,9 +90,12 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/connections.py) | Session credentials and explicit process-environment credential entry. | `DEFAULT_KEY_ENV`, `set_credential_environment`, `RuntimeConnections`, `current_connections`, `connection_scope` |
 | `src/dataforge/credentials.py` **new** | Application-owned native credentials; no discovery, fallback or secret serialization. | `SAVED_PREFIX`, `SESSION_PREFIX`, `CredentialError`, `credential_source`, `credential_reference`, `owns_reference`, `approved_backend`, `NativeCredentials` |
 | [`src/dataforge/database_maintenance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/database_maintenance.py) | Exclusive-owner backup, safe restore to a new home and read-only integrity inspection. | `MAX_BACKUP_BYTES`, `MAX_FILES`, `RUNTIME_DIRS`, `MANAGED_FILE`, `inspect_database`, `checkpoint`, `backup`, `restore_backup` |
+| `src/dataforge/datatypes.py` **new** | Offline datatype suggestions and decimal entry rules for authored schemas. | `TYPE_CATALOG`, `TYPE_REFERENCES`, `DECIMAL`, `type_entry`, `format_data_type` |
 | [`src/dataforge/ingestion.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ingestion.py) | Bounded input discovery and immutable source inventory. Never executes source. | `UPSERT_SOURCE`, `Limits`, `ImportReport`, `safe_relative`, `decode`, `Importer` |
+| `src/dataforge/lineage_builder.py` **new** | Authored lineage documents, independent of analyzed source evidence. | `SETTING`, `WORKS_SETTING`, `JOIN_TYPES`, `BuilderModel`, `Position`, `BuilderColumn`, `TableSize`, `BuilderFolder`, `BuilderTable`, `BuilderLink`, `BuilderDocument`, `BuilderWorkInfo`, `BuilderWorkExistsError`, `BuilderWork`, `list_builder_works`, `get_builder_work`, `save_builder_work`, `save_canvas_work`, `load_builder_work`, `load_builder`, `save_builder`, `delete_builder_tables`, `schema_rows`, `link_rows`, `export_tabular`, `export_schemas`, `columns_from_rows` |
 | [`src/dataforge/logging_config.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/logging_config.py) | Structured application events with an explicit safe metadata allowlist. | `JsonFormatter`, `configure_logging`, `save_application_logging` |
 | [`src/dataforge/maintenance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/maintenance.py) | Bounded, recoverable history maintenance. Current facts and source bytes are untouched. | `TABLES`, `MAX_ARCHIVE_BYTES`, `history_plan`, `archive_history`, `list_archives`, `restore_history` |
+| `src/dataforge/schema_imports.py` **new** | Bounded schema-only imports. Uploaded code is never executed. | `MAX_IMPORT_BYTES`, `import_schema` |
 | [`src/dataforge/settings_service.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/settings_service.py) | Typed atomic workspace preferences with content revisions and non-escalation. | `Resources`, `Visualization`, `Privacy`, `TemporaryPreferences`, `SECTIONS`, `LOCAL_ADMIN`, `revision`, `check_revision`, `settings_schema`, `read_settings`, `update_settings`, `save_ui_settings`, `read_json_file` |
 | [`src/dataforge/storage_locations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/storage_locations.py) | Explicit startup-approved storage homes; selecting never copies or moves data. | `allowed_homes`, `validate_home` |
 | [`src/dataforge/store.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/store.py) | Versioned DuckDB persistence with serialized, transactional access. | `AI_INSPECTION_TABLES`, `AI_PIPELINE_TABLES`, `COLUMN_TABLES`, `AI_SNAPSHOT_TABLES`, `AI_ANALYSIS_TABLES`, `SCHEMA`, `Store` |
@@ -197,6 +200,7 @@ python scripts/docs/inventory.py --check
 | [`ui/analysis_sections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/analysis_sections.py) | Lazy diagnostic investigation and run history; source and AI stay explicit. | `render_diagnostics`, `render_history` |
 | [`ui/assistance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/assistance.py) | Focused, user-triggered AI assistance over imported source evidence. | `render` |
 | [`ui/assistance_result.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/assistance_result.py) | Durable AI result presentation shared by manual and diagnostic-assisted review. | `render_budget`, `render_result` |
+| `ui/builder_canvas.py` **new** | Offline SVG authoring canvas; the same renderer powers HTML presentations. | `builder_node_colors`, `COLUMN_BODY`, `BODY`, `CSS`, `COLUMN_JS`, `TRACE_JS`, `JS`, `column_editor`, `canvas`, `builder_html` |
 | `ui/column_graph.py` **new** | Source-free selectable SVG column graph. | `resolve_selection`, `column_graph_view` |
 | `ui/column_lineage.py` **new** | Shared lineage controls and selection-driven graph inspection. | `render_column_lineage` |
 | `ui/column_references.py` **new** | No module docstring; inspect the linked source. | `render_column_references` |
@@ -214,12 +218,14 @@ python scripts/docs/inventory.py --check
 | [`ui/pages/connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/connections.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/dashboard.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/dashboard.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/explorer.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/explorer.py) | No module docstring; inspect the linked source. | — |
+| `ui/pages/lineage_builder.py` **new** | Create schema catalogs and author column-level lineage. | `commit`, `table_form` |
 | [`ui/pages/management.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/management.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/settings.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/tools.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/tools.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/transformations.py) | Compatibility route for existing transformation-lineage bookmarks. | — |
 | [`ui/presentation.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/presentation.py) | Small, theme-derived presentation helpers for the native Streamlit shell. | `ICON_PATH`, `brand_title`, `apply_style`, `eyebrow`, `empty_state`, `section`, `sync_context` |
 | [`ui/provider_settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/provider_settings.py) | Provider profiles and task routing. Secrets remain environment references. | `render` |
+| `ui/streamlit.toml` **new** | TOML configuration or package/build metadata. | — |
 | [`ui/style.css`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/style.css) | UI stylesheet. | — |
 | [`ui/temporary_cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/temporary_cleanup.py) | Explicit, previewed and recoverable application staging-file cleanup. | `render` |
 | [`ui/themes.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/themes.py) | Native Streamlit theme picker over shared, non-UI theme configuration. | `CONFIG_PATH`, `render_theme_picker` |
@@ -313,7 +319,6 @@ python scripts/docs/inventory.py --check
 | [`.gitattributes`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/.gitattributes) | Repository configuration, packaging input or resource; inspect source for exact values. | — |
 | [`.gitignore`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/.gitignore) | Repository configuration, packaging input or resource; inspect source for exact values. | — |
 | [`.gitleaks.toml`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/.gitleaks.toml) | TOML configuration or package/build metadata. | — |
-| [`.streamlit/config.toml`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/.streamlit/config.toml) | TOML configuration or package/build metadata. | — |
 | [`Dockerfile`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/Dockerfile) | Repository configuration, packaging input or resource; inspect source for exact values. | — |
 | [`compose.yaml`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/compose.yaml) | YAML configuration. | — |
 | [`dependency-overrides.txt`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/dependency-overrides.txt) | Repository configuration, packaging input or resource; inspect source for exact values. | — |
@@ -510,6 +515,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_hardening.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_hardening.py) | No module docstring; inspect the linked source. | 6 test functions; helpers/constants: `workspace` |
 | [`tests/test_ingestion.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ingestion.py) | No module docstring; inspect the linked source. | 7 test functions; helpers/constants: `archive`, `setup` |
 | [`tests/test_job_identity.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_job_identity.py) | No module docstring; inspect the linked source. | 10 test functions |
+| `tests/test_lineage_builder.py` **new** | No module docstring; inspect the linked source. | 12 test functions |
 | [`tests/test_lineage_qol.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_lineage_qol.py) | Navigation and direction regressions against real imported lineage. | 6 test functions; helpers/constants: `lineage`, `choose`, `sources` |
 | [`tests/test_lineage_tree.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_lineage_tree.py) | No module docstring; inspect the linked source. | 3 test functions; helpers/constants: `tree_app`, `bounded_tree_app` |
 | [`tests/test_maintenance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_maintenance.py) | No module docstring; inspect the linked source. | 9 test functions; helpers/constants: `populated` |

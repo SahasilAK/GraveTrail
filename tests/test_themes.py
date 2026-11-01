@@ -30,7 +30,7 @@ def test_theme_presets_apply_both_modes_and_preserve_other_configuration(tmp_pat
     from ui.themes import PRESETS, apply_preset, current_preset
 
     config = tmp_path / "config.toml"
-    original = Path(".streamlit/config.toml").read_text(encoding="utf-8")
+    original = Path("ui/streamlit.toml").read_text(encoding="utf-8")
     config.write_text(original, encoding="utf-8")
     expected = tomllib.loads(original)
     for name in PRESETS:

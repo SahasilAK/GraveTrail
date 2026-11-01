@@ -71,6 +71,18 @@ declared dependencies and compiled SQL evidence without executing dbt.
 </div>
 </div>
 
+## Design lineage before implementation
+
+Open **Workspace → Lineage builder** in the app to define table schemas and build
+an interactive diagram. Add tables to a canvas catalog, connect columns and joins,
+trace downstream paths with colors, and save or transfer an editable design.
+Clearing a canvas preserves workspace schemas.
+
+[Use the lineage builder and canvas](user-guide/lineage-builder.md){ .md-button }
+
+The builder guide includes the source version needed for this development feature;
+the older introductory tutorial checkout does not include it.
+
 ## Local analysis first. AI when you choose.
 
 Static analysis runs locally after installation without an API key, AI account

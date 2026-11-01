@@ -42,6 +42,7 @@ extra:
     - assets/javascripts/themes.js
     - assets/images/gravetrail-workspace-dashboard.png
     - assets/images/gravetrail-lineage-explorer.png
+    - assets/images/gravetrail-lineage-builder.png
     - assets/images/gravetrail-source-evidence.png
     - assets/examples/lineage.html
     - assets/images/gravetrail-source-import.png
@@ -93,6 +94,7 @@ nav:
       - user-guide/index.md
       - Import sources: user-guide/sources.md
       - Run analysis: user-guide/analysis.md
+      - Lineage builder and canvas: user-guide/lineage-builder.md
       - Explore lineage and impact: user-guide/explore.md
       - Inspect evidence: user-guide/evidence.md
       - Columns and transformations: user-guide/columns.md
