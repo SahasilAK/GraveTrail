@@ -66,6 +66,8 @@ unfamiliar pipelines, reviewing changes or planning migrations.
 
 ## Design lineage on a canvas
 
+![Lineage builder canvas with its table catalog, column links, a join, and highlighted downstream paths](docs/assets/images/gravetrail-lineage-builder.png)
+
 Open **Workspace → Lineage builder** to create or import reusable table schemas,
 then explicitly add tables to a canvas catalog. Drag and resize table boxes,
 connect columns and joins, organize folders, and highlight complete downstream
