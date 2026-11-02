@@ -17,7 +17,9 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `troubleshooting/` — symptom-based help routing; [map](troubleshooting/KNOWLEDGE.md).
 - `assets/` — explicitly published graphics, real screenshots, self-contained reviewed HTML and styles/scripts; [map](assets/KNOWLEDGE.md).
 - `overrides/` — shared registry theme injection without app dependencies; [map](overrides/KNOWLEDGE.md).
-- `prompts/`, `superpowers/` — internal context/requirements, excluded from public output; [prompt map](prompts/KNOWLEDGE.md), [planning map](superpowers/KNOWLEDGE.md).
+- `prompts/`, `superpowers/` — ignored local app-building context and requirements, including their knowledge maps; excluded from public output.
+
+The authored Lineage builder guide is in user-guide/lineage-builder.md, linked from the site homepage, user-guide index, export/recovery references and MkDocs navigation. Its source pin a803b6e is newer than the introductory tutorial baseline.
 
 ## Root references
 - `index.md` — public homepage and learning-path entry; eight full-card navigation links include task descriptions, including developer code walkthroughs and CLI/MCP tools.

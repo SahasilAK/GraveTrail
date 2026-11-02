@@ -18,7 +18,7 @@ class AssetsHook(BuildHookInterface):
         root = Path(self.root)
         files = {"app.py": "dataforge/_app/app.py",
                  "dependency-overrides.txt": "dataforge/dependency-overrides.txt",
-                 ".streamlit/config.toml": "dataforge/_app/.streamlit/config.toml"}
+                 "ui/streamlit.toml": "dataforge/_app/.streamlit/config.toml"}
         for folder, extensions, destination in (("ui", {".py", ".css", ".png"}, "dataforge/_app/ui"),
                                                  ("prompts", {".md", ".json"}, "dataforge/prompts")):
             for path in (root / folder).rglob("*"):

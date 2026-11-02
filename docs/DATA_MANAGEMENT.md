@@ -67,6 +67,29 @@ remain restorable and upgrade when opened. Column transformation tables particip
 integrity checks, backups and cleanup previews. **Columns** cleanup clears direct usages
 and transformation coverage; analyze again to rebuild it.
 
+## Lineage builder tables and saved work
+
+Schemas created or imported in **Lineage builder → Schemas & data entry** belong
+to the workspace. Add them explicitly to a design through the **Table catalog**
+inside **Build lineage**. Removing a box or catalog entry preserves its schema.
+
+**Clear canvas** saves a named or automatically named snapshot first, then clears
+the current diagram, relationships, folders, and canvas catalog entries. Workspace
+schemas remain available through **Add table**. Loading a saved design also
+retains other workspace schemas absent from that design. Use **Saved work** to
+load a backup or import an editable design from another user; these snapshots
+are separate from analyzed-source history and full runtime backups.
+
+For explicit table deletion, open **Data management → Cleanup & recovery →
+Lineage builder table schemas**. Search/select the schemas, review the number of
+affected current relationships, enable **Permanently delete the selected workspace
+table schemas**, then choose **Delete workspace table schemas**. This removes
+those workspace schemas and their current relationships. Named saved-work
+snapshots remain available and can restore their copies.
+
+See the [lineage builder guide](user-guide/lineage-builder.md#save-overwrite-and-clear)
+for save/overwrite choices, canvas recovery, and JSON transfer.
+
 ## Automation
 
 Workspace cleanup uses the same service through CLI. Save an exact preview first:

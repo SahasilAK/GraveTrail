@@ -58,11 +58,11 @@ path = "scripts/build/hatch_assets.py"
 exclude = ["**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", ".streamlit/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "/dependency-overrides.txt", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
+include = ["src/**", "ui/**", "prompts/**", "tests/**", "docs/**", "scripts/**", "app.py", "README.md", "CONTRIBUTING.md", "SECURITY.md", "/dependency-overrides.txt", "mkdocs.yml", "LICENSE", "pyproject.toml", "uv.lock", "Dockerfile", "compose.yaml", ".dockerignore", ".github/**"]
 exclude = ["docs/prompts/**", "docs/plans/**", "docs/superpowers/**", "**/KNOWLEDGE.md", "**/__pycache__/**", "**/*.pyc", "**/.env*", "**/secrets.toml", "**/*.duckdb*"]
 
 [tool.hatch.build.targets.sdist.force-include]
-".streamlit/config.toml" = ".streamlit/config.toml"
+"ui/streamlit.toml" = "ui/streamlit.toml"
 "scripts/build/hatch_assets.py" = "scripts/build/hatch_assets.py"
 "scripts/build/frozen_entry.py" = "scripts/build/frozen_entry.py"
 "scripts/build/build_executable.py" = "scripts/build/build_executable.py"

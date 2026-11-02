@@ -9,10 +9,11 @@ Public branding plus real browser captures using safe synthetic fixtures and dis
 - `gravetrail-source-import.png` — real Sources import controls with SQL fixture selection.
 - `gravetrail-analysis-results.png` — real successful static analysis view with AI unchecked.
 - `gravetrail-lineage-explorer.png` — readable stg.orders_clean upstreamdepth30, temporary collapse, 3nodes/2edges; larger all_kpis separately verified.
+- `gravetrail-lineage-builder.png` — Current authored canvas with safe customers/products → orders → report branches, join, catalog, Save/Clear and downstream trace selection; capture recipe pins builder a803b6e.
 - `gravetrail-source-evidence.png` — exact analyzed original 03_staging/036_orders_clean.sql, version metadata and numbered statement.
 - `gravetrail-columns.png` — direct usage for stg.orders_clean.
 - `gravetrail-export-controls.png` — real Lineage SVG export popover/options.
 - `gravetrail-dbt-resources.png` — real synthetic dbt workspace resource and macro-impact panel after local source-mode analysis.
 - `lineage-example.png` — standalone safe scenario graph with selected relationship/evidence, four assets/three relationships.
 
-The nine-image recipe distinguishes real application captures from the standalone fixture graph. Local browser proof/intermediate captures remain excluded from publication.
+The screenshot recipes distinguish real application captures from the standalone fixture graph. Local browser proof/intermediate captures remain excluded from publication.

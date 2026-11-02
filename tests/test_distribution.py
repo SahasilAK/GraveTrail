@@ -101,6 +101,10 @@ def test_runtime_theme_is_copied_once_and_package_is_unchanged(tmp_path: Path) -
     target.write_text("[theme]\nbase = 'light'\n")
     assert prepare_runtime(home, assets).read_text() == "[theme]\nbase = 'light'\n"
     assert (assets / ".streamlit/config.toml").read_text() == original
+    source_assets = tmp_path / "source"
+    (source_assets / "ui").mkdir(parents=True)
+    (source_assets / "ui/streamlit.toml").write_text(original)
+    assert prepare_runtime(source_assets, source_assets).read_text() == original
 
 
 def test_manifest_detects_tampering_missing_and_unsafe_files(tmp_path: Path) -> None:
@@ -161,7 +165,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path: Path) -> Non
     (tmp_path / "ui/__init__.py").write_text("")
     shutil.copyfile(root / "ui/style.css", tmp_path / "ui/style.css")
     (tmp_path / "prompts/prompt.md").write_text("packaged prompt")
-    shutil.copyfile(root / ".streamlit/config.toml", tmp_path / ".streamlit/config.toml")
+    shutil.copyfile(root / "ui/streamlit.toml", tmp_path / "ui/streamlit.toml")
     for name in ("ui/.env", "ui/secrets.toml", "ui/cache.duckdb", ".streamlit/secrets.toml", "src/dataforge/.env"):
         (tmp_path / name).write_text("DUMMY_PACKAGING_SECRET_CANARY")
     subprocess.run(["uv", "build", "--out-dir", "dist"], cwd=tmp_path,
@@ -194,7 +198,7 @@ def test_source_distribution_includes_release_toolkit_and_compose(tmp_path: Path
             relative = Path(name).parts[1:]
             assert not any(part in {"plans", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
                            for part in relative), name
-        for expected in ('.streamlit/config.toml', 'dependency-overrides.txt', 'compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
+        for expected in ('ui/streamlit.toml', 'dependency-overrides.txt', 'compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
                          'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py',
                          'scripts/build/windows.iss', 'scripts/build/windows_installer.ps1',
                          'scripts/build/sign_windows.ps1', 'scripts/build/smoke_installer.py'):

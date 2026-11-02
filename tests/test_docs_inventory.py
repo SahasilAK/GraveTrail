@@ -12,7 +12,7 @@ def test_inventory_covers_first_party_python_and_resources() -> None:
         "scripts/docs/inventory.py", "tests/test_docs_inventory.py", "tests/test_ai_full_build.py",
         "tests/fixtures/dbt/input/models/py_orders.py", "prompts/project_lineage/extract.md",
         "prompts/schemas/project_lineage_wire_response.json", ".github/workflows/tests.yml",
-        ".streamlit/config.toml", "scripts/build/windows_installer.ps1", "pyproject.toml", "uv.lock",
+        "ui/streamlit.toml", "scripts/build/windows_installer.ps1", "pyproject.toml", "uv.lock",
     } <= paths
     git_files = inventory.git_paths(inventory.ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
     assert {name for name in git_files if name.endswith(".py")
