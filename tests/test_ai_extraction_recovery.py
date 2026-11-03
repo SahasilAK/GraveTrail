@@ -342,6 +342,8 @@ def test_non_object_usage_metadata_does_not_crash_or_claim_known_usage(tmp_path,
 def test_resume_keeps_pinned_definitions_when_feedback_reserve_changes_part_plan(tmp_path, monkeypatch):
     import dataforge.ai_batching as batching
     import dataforge.analysis_service as service
+    # Keep retries pending until cancellation, regardless of runner speed.
+    monkeypatch.setattr(service, 'time', lambda: 1000.)
     reserve = batching.RECOVERY_FEEDBACK_RESERVE
     monkeypatch.setattr(batching, 'RECOVERY_FEEDBACK_RESERVE', {})  # Existing checkpoint's fitting behavior.
     stopped = [False]
