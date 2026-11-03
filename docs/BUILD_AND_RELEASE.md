@@ -204,12 +204,11 @@ The publish workflow builds Windows x64 only; existing direct native/archive, Py
 and Docker build targets remain available. No macOS notarization or Linux packaging
 was added.
 
-Leave **release_mode** set to **unsigned** (the default) to build without a signing
-certificate or dedicated signing runner. This uses the regular hosted Windows runner
-and creates the complete application, unsigned installer and portable ZIP. Signing
-status does not change the application's functionality. Select **production** only
-after configuring publisher signing as described below; **development** remains a
-compatibility alias for unsigned releases.
+Choose **release_mode**: **development** (the default) or **production**. Both currently
+build without a signing certificate or dedicated signing runner, using the regular
+hosted Windows runner to create the complete application, unsigned installer and
+portable ZIP. Production is unsigned for now. Signing status does not change the
+application's functionality; there is no separate unsigned or signed workflow choice.
 
 Choose either:
 
@@ -231,7 +230,7 @@ final Windows installer/portable ZIP, verifies integrity and the installed paylo
 repeats install/launch/upgrade/uninstall checks and generates notes. The
 `verified-windows-release` Actions artifact retains the release assets and notes.
 No tag or public release is created. To publish, select the default branch and
-uncheck dry_run. Production signing always requires the default branch, including
+uncheck dry_run. Production mode always requires the default branch, including
 validation-only runs. Publication stages a draft first and makes it public only
 after asset upload succeeds. Failed drafts/tags require deliberate operator cleanup
 or a new version; reruns do not overwrite them.
@@ -269,23 +268,19 @@ may prevent an older application opening it; restore a compatible backup before
 rolling back. Installed processes hold a named Windows mutex; setup/uninstall ask
 the user to close GraveTrail and never forcibly close live analysis.
 
-Two signing paths are explicit:
+The standalone workflow offers only **development** and **production**. Both create
+`gravetrail-VERSION-windows-amd64-setup-unsigned.exe` and an unsigned portable ZIP,
+without a certificate, paid signing service or self-hosted signing runner. Both map
+to the existing internal `development` build/evidence policy, so manifests and notes
+accurately report unsigned artifacts. Production retains the `windows-production`
+environment and default-branch restriction, without requiring signing variables.
 
-- **unsigned** (default; **development** is a compatibility alias): unsigned
-  `gravetrail-VERSION-windows-amd64-setup-unsigned.exe` and an unsigned portable ZIP.
-  This mode requires no certificate, paid signing service or self-hosted signing runner.
-  The workflow maps it to the existing internal `development` build/evidence mode.
-- **production**: `gravetrail-VERSION-windows-amd64-setup.exe`, a signed application,
-  signed installer and signed uninstaller. Missing identity, key, timestamp or failed
-  trust checks stop the release; no unsigned downgrade is permitted.
+The lower-level installer scripts and reusable build workflow still support a signed
+internal `production` policy; the standalone workflow does not select it. That policy
+requires a signed application, installer and uninstaller, and rejects missing identity,
+key, timestamp or failed trust checks.
 
-If a run reports missing `WINDOWS_SIGNING_THUMBPRINT`, `WINDOWS_TIMESTAMP_URL` or
-`WINDOWS_PUBLISHER`, it was launched in signed **production** mode. Rerun with
-**unsigned**, or supply those environment variables and the signing runner before
-selecting production. The workflow lists the missing variables and setup location;
-it never silently changes a requested signed release to unsigned.
-
-Production external setup (not provisioned by this change):
+External setup for that lower-level signed build path (not required for standalone releases):
 
 1. Create/protect the GitHub `windows-production` environment with required reviewers
    and default-branch-only deployment rules. Restrict the `gravetrail-signing` runner
