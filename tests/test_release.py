@@ -297,7 +297,7 @@ def release_policy(tmp_path, *, mode=None, ref='refs/heads/main', dry_run='true'
     return result, output.read_text() if output.exists() else '', summary.read_text() if summary.exists() else ''
 
 
-@pytest.mark.parametrize('mode', [None, 'unsigned', 'development'])
+@pytest.mark.parametrize('mode', [None, 'development', 'production'])
 @pytest.mark.parametrize('dry_run', ['true', 'false'])
 def test_unsigned_release_policy_requires_no_signing_setup(tmp_path, mode, dry_run):
     result, output, summary = release_policy(tmp_path, mode=mode, dry_run=dry_run)
@@ -306,26 +306,19 @@ def test_unsigned_release_policy_requires_no_signing_setup(tmp_path, mode, dry_r
     assert 'unsigned' in summary.lower()
 
 
-def test_signed_release_policy_explains_missing_configuration(tmp_path):
-    result, output, _ = release_policy(tmp_path, mode='production')
-    assert result.returncode != 0
-    assert output == ''
-    assert all(name in result.stdout for name in (
-        'WINDOWS_SIGNING_THUMBPRINT', 'WINDOWS_TIMESTAMP_URL', 'WINDOWS_PUBLISHER', 'unsigned', 'windows-production'))
-
-
-def test_configured_signed_release_preserves_production_mode(tmp_path):
+def test_production_release_remains_unsigned_with_signing_configuration(tmp_path):
     result, output, _ = release_policy(tmp_path, mode='production', signing={
         'WINDOWS_SIGNING_THUMBPRINT': 'a' * 40, 'WINDOWS_TIMESTAMP_URL': 'https://timestamp.example.test',
         'WINDOWS_PUBLISHER': 'Example publisher',
     })
     assert result.returncode == 0, result.stdout + result.stderr
-    assert output == 'build_mode=production\n'
+    assert output == 'build_mode=development\n'
 
 
 @pytest.mark.parametrize('mode,ref,dry_run', [
-    ('unsigned', 'refs/heads/feature', 'false'), ('production', 'refs/heads/feature', 'true'),
-    ('unexpected', 'refs/heads/main', 'true'),
+    ('development', 'refs/heads/feature', 'false'), ('production', 'refs/heads/feature', 'true'),
+    ('production', 'refs/heads/feature', 'false'), ('unexpected', 'refs/heads/main', 'true'),
+    ('unsigned', 'refs/heads/main', 'true'), ('signed', 'refs/heads/main', 'true'),
 ])
 def test_release_policy_rejects_wrong_branch_or_unknown_mode(tmp_path, mode, ref, dry_run):
     result, output, _ = release_policy(tmp_path, mode=mode, ref=ref, dry_run=dry_run)
@@ -333,8 +326,8 @@ def test_release_policy_rejects_wrong_branch_or_unknown_mode(tmp_path, mode, ref
     assert output == ''
 
 
-def test_unsigned_release_validation_remains_branch_safe(tmp_path):
-    result, output, _ = release_policy(tmp_path, mode='unsigned', ref='refs/heads/feature')
+def test_development_release_validation_remains_branch_safe(tmp_path):
+    result, output, _ = release_policy(tmp_path, mode='development', ref='refs/heads/feature')
     assert result.returncode == 0, result.stdout + result.stderr
     assert output == 'build_mode=development\n'
 
@@ -345,8 +338,8 @@ def test_release_build_and_publish_jobs_use_validated_mode():
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.load((root / '.github/workflows/publish-release.yml').read_text(), Loader=yaml.BaseLoader)
     inputs = workflow['on']['workflow_dispatch']['inputs']
-    assert inputs['release_mode']['default'] == 'unsigned'
-    assert set(inputs['release_mode']['options']) == {'unsigned', 'development', 'production'}
+    assert inputs['release_mode']['default'] == 'development'
+    assert inputs['release_mode']['options'] == ['development', 'production']
     jobs = workflow['jobs']
     assert jobs['prepare']['outputs']['build_mode'] == '${{ steps.policy.outputs.build_mode }}'
     assert jobs['builds']['with']['release_mode'] == '${{ needs.prepare.outputs.build_mode }}'
