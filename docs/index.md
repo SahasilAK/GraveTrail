@@ -21,8 +21,14 @@ GraveTrail helps data engineers, analysts and architects understand SQL, SAS and
 dbt projects. Turn source code and supported project artifacts into explorable
 lineage, dependency relationships and the source evidence behind them.
 
+<nav class="gt-hero-actions" aria-label="Get started and GitHub" markdown>
+
 [Build your first lineage](getting-started/quick-start.md){ .md-button .md-button--primary }
 [Explore a live example](examples/interactive-lineage.md){ .md-button }
+[Visit repository](https://github.com/SahasilAK/GraveTrail){ .md-button }
+[<span aria-hidden="true">☆</span> Leave a star](https://github.com/SahasilAK/GraveTrail){ .md-button .gt-star-button aria-label="Star GraveTrail on GitHub" }
+
+</nav>
 
 Local static analysis. No AI account required. Imported code is never executed.
 { .gt-local }

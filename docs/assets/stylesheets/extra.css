@@ -103,6 +103,10 @@ body { -webkit-font-smoothing: antialiased; }
 .md-typeset .gt-hero h1 { font-size: clamp(2.8rem,6.5vw,4.7rem); line-height: 1.02; letter-spacing: -.055em; margin: .3rem 0 1.3rem; }
 .md-typeset .gt-hero .gt-tagline { font-size: clamp(1.7rem,4.2vw,3.1rem); line-height: 1.15; letter-spacing: -.035em; margin: .7rem 0 1.4rem; }
 .gt-hero p { max-width: 35rem; margin: 1.2rem auto; font-size: 1rem; line-height: 1.65; color: var(--gt-muted); }
+.gt-hero-actions > p { display: grid; grid-template-columns: repeat(3, max-content); justify-content: center;
+  align-items: center; gap: .6rem .3rem; max-width: none; }
+.gt-hero-actions .md-button { white-space: nowrap; }
+.md-typeset .gt-hero-actions .gt-star-button { grid-column: 2; justify-self: center; padding: .4em 1em; font-size: .68rem; }
 .gt-hero .gt-local { font-size: .69rem; margin-top: 1.4rem; }
 .gt-product { margin: .5rem auto 3rem; max-width: 59rem; }
 .gt-product img { width: 100%; display: block; border: 1px solid var(--gt-line); border-radius: .85rem; box-shadow: var(--gt-shadow); }
@@ -136,6 +140,9 @@ body { -webkit-font-smoothing: antialiased; }
   .gt-hero { padding: 1.5rem 0 1rem; }
   .md-typeset .gt-hero h1 { font-size: 2.8rem; }
   .gt-hero p { font-size: .9rem; }
+  .gt-hero-actions > p { grid-template-columns: max-content; }
+  .gt-hero-actions .md-button { justify-self: center; }
+  .md-typeset .gt-hero-actions .gt-star-button { grid-column: 1; }
   .gt-questions, .gt-start, .gt-guides { grid-template-columns: 1fr; gap: 1rem; }
   .gt-start { padding: 1.2rem; }
   .md-typeset h1 { font-size: 2rem; }

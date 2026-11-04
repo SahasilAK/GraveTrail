@@ -4,6 +4,8 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 
 `TRANSFORMATION_LINEAGE.md` and `USER_GUIDE.md` retain column graph inspection, exact historical source and bounded mutation coverage alongside current independent AI guidance. Parser 21 documents dialect-aware aliases and intermediate identities.
 
+`index.md` groups hero actions in `.gt-hero-actions`: first lineage, live example and Visit repository, with a smaller Leave a star link beneath the middle action. Both repository links open SahasilAK/GraveTrail on GitHub; starring is confirmed there.
+
 ## Subfolders
 - `getting-started/` — install, first static lineage and configuration; [map](getting-started/KNOWLEDGE.md).
 - `concepts/` — workspaces/projects, evidence/coverage, table/column meaning and local/AI/offline boundaries; [map](concepts/KNOWLEDGE.md).
