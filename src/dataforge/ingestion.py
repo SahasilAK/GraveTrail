@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import re
 import stat
@@ -15,6 +16,7 @@ from typing import Any
 
 from charset_normalizer import from_bytes
 
+from dataforge.configuration import ParsingSettings
 from dataforge.models import stable_id
 
 UPSERT_SOURCE = """INSERT INTO source_files(file_id,workspace_id,ingestion_id,file_name,
@@ -113,7 +115,8 @@ class Importer:
         self.limits = limits or Limits()
 
     def zip(self, data: bytes, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
-            cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
+            cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,
+            sql_dialect: str | None = None) -> ImportReport:
         """Import supported files from a ZIP upload.
 
         Args:
@@ -157,10 +160,12 @@ class Importer:
                     return f.read(self.limits.max_file_bytes + 1)
 
             return self._import(((e.filename, lambda e=e: read(e)) for e in entries), extensions,
-                                "ZIP upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options)
+                                "ZIP upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options,
+                                sql_dialect=sql_dialect)
 
     def directory(self, directory: str | Path, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
-                  cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
+                  cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,
+                  sql_dialect: str | None = None) -> ImportReport:
         """Import supported files beneath an authorized directory.
 
         Args:
@@ -219,11 +224,12 @@ class Importer:
                     yield p.relative_to(path).as_posix(), read
 
         return self._import(discover(), extensions, str(path), progress, cancelled,
-                            source_kind=source_kind, dbt_options=dbt_options)
+                            source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect)
 
     def files(self, entries: Iterable[tuple[str, bytes]], extensions: set[str],
               progress: Callable[[ImportReport], Any] | None = None,
-              cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
+              cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,
+              sql_dialect: str | None = None) -> ImportReport:
         """Import files supplied as browser upload entries.
 
         Args:
@@ -236,11 +242,12 @@ class Importer:
             Import report for the upload.
         """
         return self._import(((name, lambda data=data: data) for name, data in entries), extensions,
-                            "Browser upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options)
+                            "Browser upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options,
+                            sql_dialect=sql_dialect)
 
     def _import(self, entries: Iterable[tuple[str, Callable[[], bytes]]], extensions: set[str], source: str,
                 progress: Callable[[ImportReport], Any] | None, cancelled: Callable[[], bool] | None,
-                *, source_kind: str = 'files', dbt_options=None) -> ImportReport:
+                *, source_kind: str = 'files', dbt_options=None, sql_dialect: str | None = None) -> ImportReport:
         """Validate entries and record accepted source files transactionally.
 
         Args:
@@ -256,10 +263,10 @@ class Importer:
         Raises:
             ValueError: If extension selection or aggregate import limits are invalid.
         """
-        import json
-
         if source_kind not in {'files', 'dbt'}:
             raise ValueError('Unknown source kind')
+        if sql_dialect is not None:
+            ParsingSettings(dialect=sql_dialect)
         admission, buffered = None, {}
         if source_kind == 'dbt':
             from dataforge.dbt.imports import DbtImportOptions, preview_dbt_import
@@ -330,10 +337,13 @@ class Importer:
                     if not blob.exists():
                         blob.write_bytes(data)
                     fid = stable_id(self.workspace, relative)
+                    if admission is not None:
+                        metadata = admission.paths[relative]
+                    else:
+                        metadata = {'sql_dialect': sql_dialect} if ext == '.sql' and sql_dialect is not None else {}
                     records.append([fid, self.workspace, ingestion, PurePosixPath(relative).name, ext, relative,
                          source + "/" + relative, "blobs/" + digest, text, digest, len(data), encoding,
-                         len(text.splitlines()), "pending", warning,
-                         json.dumps(admission.paths[relative]) if admission is not None else "{}"])
+                         len(text.splitlines()), "pending", warning, json.dumps(metadata)])
                     report.accepted += 1
                     if warning:
                         report.diagnostics.append(f"{relative}: {warning}")

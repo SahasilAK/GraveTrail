@@ -106,6 +106,7 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> N
         tmp_path: Temporary directory supplied by pytest.
     """
     from dataforge.llm import merge_claims
+    from dataforge.services import set_source_dialect
     store = Store(tmp_path)
     w = store.create_workspace("A")
     code = "create table mart.x as select id from raw.a;"
@@ -123,9 +124,18 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> N
     assert len(inferred) == 1 and inferred[0]["status"] == "inferred"
     assert inferred[0]["confidence"] <= .8
     store.execute("UPDATE llm_records SET created_at=current_timestamp - INTERVAL '31 days' WHERE record_id=?", [result["record_id"]])
-    assist(store, w, Profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
+    review = assist(store, w, Profile(provider="Ollama", base_url="http://localhost:11434", model="manual"),
+                    fid, 1, 1, transport=transport)
     analyze(store, w)
     assert len([e for e in store.edges(w) if e["method"] == "llm"]) == 1
+    set_source_dialect(store, w, fid, 'databricks')
+    with pytest.raises(ValueError, match='dialect changed'):
+        merge_claims(store, w, review['record_id'])
+    analyze(store, w)
+    assert not [e for e in store.edges(w) if e['method'] == 'llm']
+    set_source_dialect(store, w, fid, None)
+    analyze(store, w)
+    assert len([e for e in store.edges(w) if e['method'] == 'llm']) == 1
     Importer(store, w).files([("q.sql", b"select id from raw.a;")], {".sql"})
     analyze(store, w)
     assert not [e for e in store.edges(w) if e["method"] == "llm"]

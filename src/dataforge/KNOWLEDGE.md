@@ -6,7 +6,8 @@ Static facts, persistence, analysis and export APIs. Keep UI imports out of this
 workspace/job/scoped column identities, revision-bound expressions/roles, bounded traversal,
 unknown-writer alternatives and cycle/limit/coverage markers. `models.column_key` shares
 quote-aware identity with schema reconciliation; downstream effects query full indexed roles
-before display truncation. Plain INSERT wildcards map source positions to destination DDL. Operation.derivations cache
+before display truncation. Shared SQL maps INSERT positions after wildcard expansion and
+resolves unqualified join inputs against complete trusted layouts. Operation.derivations cache
 round-trips additively; parser11/migration5 preserve direct usage/table contracts. Cleanup,
 integrity and full-home backup/restore include all four column tables and legacy v4 restores.
 
@@ -32,13 +33,13 @@ integrity and full-home backup/restore include all four column tables and legacy
 - `exports.py` — graph_data/graph_html share validated label/palette/edge appearance, SVG fullscreen and exact-name copy controls; live node focus is a separate double-click callback. COPY_JS reuses clipboard/fallback behavior; graph lifecycle cleans listeners/timers. Reports escape values; source_bundle preserves analyzed originals.
 - `excel_exports.py` — lineage_xlsx renders streaming literal-text XLSX paths/steps and optional evidence, overlapping eight-dataset continuation segments, coverage/scope legend, typed cells, filters/frozen context and bounded text/evidence/time/bytes; owned temporary files are cleaned on failures.
 - `graph.py` — LineageGraph retains missing-endpoint evidence in unresolved_edges, excludes anonymous nodes and propagates incomplete-view state; bounded paths preserve source-to-target order with optional relationship/evidence budgets and explicit raw-code opt-in. Excel contraction preserves parallel routes and caps evidence before multiplication.
-- `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Directory inputs are lexically normalized and checked against separator-bounded, case-normalized startup roots before filesystem resolution; resolved containment and child symlink guards remain. Original blobs are SHA-256 named.
+- `ingestion.py` — Importer and Limits/ImportReport validate ZIP/folder/browser sources; safe_relative/decode and bounded batch inventory writes. Non-dbt SQL files can persist an optional SQLGlot key in source metadata. Directory inputs are checked against separator-bounded, case-normalized startup roots; resolved containment and symlink guards remain. Original blobs are SHA-256 named.
 - `llm.py` — Profile/Adapter implement protocols/discovery/nonstreaming chat with request-local sent-credential redaction across environment rotation; response_object accepts one enclosing JSON fence; assist/assist_task enforce privacy/routing and optional preview hash pinning; strict grounded claims/quarantine and inferred merge.
 - `logging_config.py` — JsonFormatter/configure_logging emit application events with an explicit safe metadata allowlist; no raw source/key fields.
 - `maintenance.py` — history_plan protects current references/latest completed runs; bounded archive_history journals recovery with removal, writes an extra checksummed file; restore_history inserts missing IDs atomically, preferring the DB journal.
 - `models.py` — Parser contracts: stable_id, canonical, file_asset, AssetRef, Usage, Operation, Diagnostic, ParseResult; safe statement splitting including SAS inline data.
 - `schemas.py` — collect_schemas reconciles typed DDL through the lineage identity resolver, retaining immutable declaration evidence; conflicting/incomplete/schema-changing declarations disable expansion without guessing execution order.
-- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; column_report/column_names/compare_runs use stored facts. analysis_is_current shares freshness checks; export_lineage_excel snapshots committed graph/settings/revision, validates bounded scope and generates workbooks for UI/CLI/MCP without analysis or AI. Parser version9 refreshes literal SQL bodies and known-value SAS macro expressions.
+- `services.py` — analyze orchestrates bounded parsing/cache and atomic materialization; column_report/column_names/compare_runs use stored facts. source_dialect resolves explicit SQL choice, folder, extension and workspace default. Effective dialect and parser version govern reuse and freshness. export_lineage_excel snapshots committed graph/settings/revision and generates bounded workbooks for UI/CLI/MCP.
 - `store.py` — Store owns locked DuckDB access, migrations v1–v4 (history and temporary recovery journals), validated workspace creation/editing, settings, source versions, immutable snapshots and transactional boundaries.
 
 ## Invariants
@@ -86,7 +87,7 @@ Graph images: graph_images.py serializes inert SVG from exports.graph_data paths
 - `ai_context.py` — Offline immutable source/settings snapshots, complete statement/SAS block project plans without the manual 50-chunk guard; selected-source declaration catalog and memory-only physical-attempt budgets/cancellation/deadline.
 - `ai_validation.py` — Exact full-source operation/citation and role checks; bounded static UPDATE/MERGE verification, semantic rejection/abstention and normalized claims. Never executes source.
 - `ai_reconciliation.py` — Operation-scoped parser/AI comparison, sparse accepted table pairs and shared writers; hybrid preserves parser-only facts, AI mode omits them.
-- `ai_analysis_store.py` — Migration6 runs/units/claims/support checkpoints, inherited declaration freshness, accepted per-file offline snapshots, support rebinding, interrupted-run recovery and bounded reports.
+- `ai_analysis_store.py` — Migration6 runs/units/claims/support checkpoints, inherited declaration freshness, dialect/version-bound accepted per-file snapshots, support rebinding, interrupted-run recovery and bounded reports.
 - `analysis_service.py` — Offline preview, physical-attempt budgeting, cache revalidation, optional bounded review and atomic freshness-checked publication. Failures preserve the previous graph.
 - `project_analysis.py` — AgentService mixin for policy-gated project preview/build/report and job cancellation; exact profile-bound session credentials.
 

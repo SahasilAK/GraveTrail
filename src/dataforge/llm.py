@@ -639,6 +639,9 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
     version = "2" if task in TASK_SCHEMAS else "1"
     prompt_hash = hashlib.sha256((system + template + json.dumps(schema, sort_keys=True)).encode()).hexdigest()
     settings = {k: store.setting(workspace, k, value) for k, value in ParsingSettings().model_dump().items()}
+    from dataforge.services import source_dialect
+
+    dialect = source_dialect(source, settings)
     job = source_job(source, settings)
     if expected_job is not None and job != expected_job:
         raise ValueError("Source job changed; refresh the evidence preview before requesting assistance")
@@ -662,8 +665,7 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
         usage = json.loads(redact(json.dumps(usage)))
         validated = response_model.model_validate(response_object(raw))
         if task in TASK_SCHEMAS:
-            from dataforge.services import source_dialect
-            settings["dialect"] = source_dialect(source, settings)
+            settings["dialect"] = dialect
             validate_advisory(validated, source, known, first, last, settings)
         else:
             validate_response(validated, source["raw_content"], known, first, last)
@@ -671,6 +673,7 @@ def _assist(store: Store, workspace: str, profile: Profile, file_id: str, first:
         outcome, reason = "quarantined", type(exc).__name__
         retryable = isinstance(exc, ProviderError) and exc.retryable
     details = {"content_hash": source["content_hash"], "reason": reason, "schema_version": version, "job_id": job,
+               "dialect": dialect,
                "result": validated.model_dump() if outcome == "validated" else None}
     if store.setting(workspace, "llm_history", False):
         details.update(context=focused, response=raw)
@@ -730,6 +733,10 @@ def _merge_claims(store: Store, workspace: str, record_id: str) -> int:
         raise ValueError("Source changed; run assistance again before merging")
     response = GroundedResponse.model_validate(details["result"])
     config = {key: store.setting(workspace, key, value) for key, value in ParsingSettings().model_dump().items()}
+    from dataforge.services import source_dialect
+
+    if source_dialect(source, config) != details.get('dialect', source_dialect({**source, 'metadata': '{}'}, config)):
+        raise ValueError('Source dialect changed; request assistance again before merging')
     job = source_job(source, config)
     if details.get("job_id", "workspace") != job:
         raise ValueError("Source job/session assignment changed; request assistance again before merging")

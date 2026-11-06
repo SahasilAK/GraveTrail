@@ -11,7 +11,7 @@ Existing /builder, /explorer, /columns, /tools and /settings routes remain suppo
 
 ## Files
 - `dashboard.py` — Overview: contextual next action, real inventory/evidence counts, hotspots, health and recent work; no automatic analysis.
-- `builder.py` — Sources: Import (ZIP/directory/allowed host, report and next Analysis link) / Inventory (filter, compact columns, report exports, lazy original source and metadata).
+- `builder.py` — Sources Import handles ZIP/folder/allowed host inputs and optional SQL dialect. Inventory shows the effective dialect and supports correcting it before reanalysis, plus exports and lazy source inspection.
 - `analysis.py` — Run / Diagnostics / History; explicit analyze selected/all, force rebuild and evidence validation, scoped completion notice and next actions. Delegates lazy sections to analysis_sections.py.
 - `explorer.py` — Lineage: exact asset/All, graph focus and Back/Forward history; direction-aware graph/tree evidence. Asset-specific paths export JSON/CSV and shared XLSX with reviewable scope, temporary/evidence/excerpt controls, explicit preparation and download without rerun.
 - `columns.py` — Direct column usage/comma-term filtering/grouping, inferred wildcard provenance, declared schema evidence and exports. Unfiltered distinct used and conservatively known unused names have individual/list copy controls; unused panel stays lazy. Shares valid asset context with Lineage/Impact.

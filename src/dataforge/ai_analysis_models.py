@@ -53,6 +53,7 @@ class AnalysisUnit(StrictModel):
     content_hash: Name
     path: str = Field(max_length=4000)
     extension: Literal['.sql', '.sas']
+    dialect: str | None = None
     job_id: str = Field(default='', max_length=500)
     first: int = Field(ge=1)
     last: int = Field(ge=1)

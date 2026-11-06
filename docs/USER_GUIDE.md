@@ -52,6 +52,11 @@ encoding, size, lines, hashes and parsing status. Duplicate content at different
 traceable. Reimporting an existing path replaces the active inventory entry without losing
 original bytes needed by prior evidence. Imports are additive; omitted files are not deleted.
 
+When SQL is selected, choose its **SQL source type**. The default inherits workspace rules.
+An explicit choice, including **Generic SQL**, applies only to SQL files in the batch. To
+correct a file, open **Inventory → Inspect a source file**, save the new choice, and reanalyze.
+See [SQL parsing coverage](SQL_PARSING.md#databricks-lineage).
+
 Open **Analysis → Run**, then choose **Analyze all files** or select paths. Normal analysis reuses unchanged parses; Rebuild
 forces parsing. Diagnostics explain ambiguous/dynamic constructs. A failed run preserves
 the previous committed facts. A newer file imported during a run remains pending.

@@ -358,7 +358,8 @@ def workspace_summary(ctx: typer.Context, workspace: Workspace) -> None:
 @app.command("ingest")
 def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str = "sql,sas,csv", background: bool = False,
            source_kind: str = 'files', dbt_mode: str = 'source', artifact_path: list[str] = typer.Option(None),
-           include_packages: bool = False) -> None:
+           include_packages: bool = False,
+           sql_dialect: str | None = typer.Option(None, help='SQLGlot dialect key for SQL files. Omit to inherit; use an empty value for Generic SQL.')) -> None:
     """Import supported source files from a directory.
 
     Args:
@@ -368,7 +369,8 @@ def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str
         extensions: Comma-separated file extensions to include.
         background: Whether to queue work as a background job."""
     invoke(ctx, "ingest", workspace, background, path=str(path.resolve()), extensions=extensions.split(","),
-        source_kind=source_kind, dbt_options={'mode': dbt_mode, 'artifact_paths': artifact_path or [],
+        source_kind=source_kind, sql_dialect=sql_dialect,
+        dbt_options={'mode': dbt_mode, 'artifact_paths': artifact_path or [],
                                             'include_packages': include_packages} if source_kind == 'dbt' else None)
 
 

@@ -38,7 +38,8 @@ def parse_model_query(query, *, output, dialect, primary_evidence, relation_map,
         for d in op.derivations:
             if not d.get('scope'):
                 d['target_table'], d['target_identity'] = output.name, output.identity
-            for item in d.get('inputs', []):
+            candidates = [source for column in d.get('unqualified_columns', []) for source in column['sources']]
+            for item in [*d.get('inputs', []), *candidates]:
                 if not item.get('scope') and item['table'] in relation_map:
                     ref = relation_map[item['table']]
                     item['table'], item['table_identity'] = ref.name, ref.identity

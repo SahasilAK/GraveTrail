@@ -48,6 +48,7 @@ Unit, integration, security and AppTest regressions. Use temporary Store homes; 
 - `test_lineage_tree.py` — AppTest covers lazy compact branches, Expand all/Collapse all, inline files, both directions, optional evidence details, cycle stops and depth/entry limits.
 - `test_hardening.py` — Behavioral regression tests for hardening. Run with pytest; temporary runtime data only.
 - `test_ingestion.py` — ZIP/browser/directory ingestion; unapproved absolute/relative/traversal/sibling-prefix paths and empty roots fail before filesystem access. Valid roots, normalized nested paths and filesystem-root allowlists preserve original bytes. Symlink escape/child exclusion runs where OS permissions allow link creation. Temporary data only.
+- `test_sql_source_type.py` — Mixed ZIP and legacy precedence, reopen, same-byte replacement and publication race, CLI/MCP import, Sources AppTest correction, and stale AI fact rejection.
 - `test_llm.py` — Provider protocols, grounding/privacy, fenced JSON rejection boundaries, malformed HTTP envelopes including 80/1100-level nesting across Python decoder versions, and inferred merge retention. Temporary runtime data only.
 - `test_logging.py` — Behavioral regression tests for logging. Run with pytest; temporary runtime data only.
 - `test_maintenance.py` — History archive/restore bounds, workspace/reference protection, idempotence, tamper rejection, transaction rollback, v3 migration and journal recovery after lost file/restart.

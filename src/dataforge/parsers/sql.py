@@ -11,7 +11,13 @@ from sqlglot.errors import ErrorLevel, OptimizeError, ParseError, TokenError
 from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, statements
-from dataforge.parsers.sql_transformations import extract_transformations, identifier
+from dataforge.parsers import sql_databricks
+from dataforge.parsers.sql_databricks_relations import generator_bindings, pivot_bindings, usage_scope_mapping
+from dataforge.parsers.sql_transformations import (
+    extract_transformations,
+    identifier,
+    is_recursive_self_reference,
+)
 
 log = logging.getLogger(__name__)
 # SQLGlot fallback warnings include raw imported statements; keep sensitive source out of logs.
@@ -150,7 +156,7 @@ def usage_context(column: exp.Column) -> str:
 
 
 def declared_schema(tree: exp.Expression, start: int, end: int,
-                    operation_index: int) -> list[dict[str, Any]]:
+                    operation_index: int, databricks: bool = False) -> list[dict[str, Any]]:
     """Extract explicit table/view schema declarations and invalidations.
 
     Args:
@@ -158,6 +164,7 @@ def declared_schema(tree: exp.Expression, start: int, end: int,
         start: First source line for the statement.
         end: Last source line for the statement.
         operation_index: Index of the associated operation in the result.
+        databricks: Whether to accept schema-preserving Databricks properties.
 
     Returns:
         Schema records; unsupported or incomplete declarations carry ``None`` columns.
@@ -181,8 +188,9 @@ def declared_schema(tree: exp.Expression, start: int, end: int,
                        exp.UniqueColumnConstraint, exp.CheckColumnConstraint)
         simple_schema = all(isinstance(c, constraints) for c in tree.this.expressions)
         properties = tree.args.get("properties")
-        simple_properties = properties is None or all(isinstance(p, exp.TemporaryProperty)
-                                                      for p in properties.expressions)
+        simple_properties = properties is None or all(
+            isinstance(p, exp.TemporaryProperty) or databricks and sql_databricks.ddl_schema_property(p)
+            for p in properties.expressions)
         if (simple_schema and simple_properties and definitions and len(definitions) <= 4096
                 and all(c.args.get("kind") is not None for c in definitions)):
             columns = [{"name": c.name, "type": c.args["kind"].sql()} for c in definitions]
@@ -288,14 +296,30 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
         Operations, metadata, and diagnostics produced from the statements.
     """
     result = ParseResult()
+    namespace = None
     for code, start, end in statements(content):
         routine_header = None
         try:
             dialect = sqlglot.Dialect.get_or_raise(dialect or None)
             routine_header = _routine_header(code, dialect.tokenizer_class.NESTED_COMMENTS)
-            tree = sqlglot.parse_one(code, read=dialect or None, error_level=ErrorLevel.RAISE)
+            databricks = sql_databricks.is_native_dialect(dialect)
+            shared_sql = dialect.parser_class is type(dialect).parser_class
+            if databricks:
+                if namespace is None:
+                    namespace = sql_databricks.Namespace()
+                tree = sql_databricks.parse_statement(code, dialect)
+            else:
+                tree = sqlglot.parse_one(code, read=dialect or None, error_level=ErrorLevel.RAISE)
             if tree is None:
                 continue
+            if namespace is not None:
+                if isinstance(tree, exp.Use):
+                    diagnostic = namespace.use(tree)
+                    if diagnostic:
+                        result.diagnostics.append(Diagnostic(diagnostic, start))
+                    continue
+                result.diagnostics.extend(Diagnostic(message, start)
+                                          for message in sql_databricks.normalize_statement(tree))
             if routine_header and not (isinstance(tree, exp.Create) and isinstance(tree.expression, (exp.Heredoc, exp.Literal))):
                 # A semicolon may split an unsupported procedure before its body ends.
                 result.diagnostics.append(Diagnostic("Unsupported procedural body format; remainder of file not analyzed", start))
@@ -346,32 +370,64 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                                 if isinstance(using, exp.Subquery) and s.expression is using.this), None)
             if using_scope is not None:
                 visit(using_scope)
+            dml = isinstance(tree, (exp.Update, exp.Delete, exp.Merge))
             cte_scopes = {s.expression.parent.alias_or_name.casefold(): s for s in all_scopes
-                          if isinstance(s.expression.parent, exp.CTE)}
-            if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
+                          if isinstance(s.expression.parent, exp.CTE)
+                          and (not databricks or not dml or s.expression.parent.parent is tree.args.get("with_"))}
+
+            def in_query(table: exp.Table) -> bool:
+                return table.find_ancestor(exp.Select, exp.SetOperation, exp.Subquery, exp.CTE) is not None
+
+            def is_outer_cte(table: exp.Table) -> bool:
+                if databricks and (table.args.get("db") or table.args.get("catalog")):
+                    return False
+                return table.name.casefold() in cte_scopes
+
+            if dml:
                 for table in tree.find_all(exp.Table):
-                    if table.find_ancestor(exp.CTE) is None and table.name.casefold() in cte_scopes:
+                    outside_ctes = not in_query(table) if databricks else table.find_ancestor(exp.CTE) is None
+                    if outside_ctes and is_outer_cte(table):
                         visit(cte_scopes[table.name.casefold()])
             scopes = [s for s in all_scopes if id(s) in active]
             inactive_nodes = {id(n) for s in all_scopes if id(s) not in active for n in s.expression.walk()}
             target = target_table(tree)
+            if databricks and isinstance(tree, exp.Create) and tree.kind.upper() not in {"TABLE", "VIEW"}:
+                target = None
+            if databricks and target is not None and not sql_databricks.static_table(target):
+                result.diagnostics.append(Diagnostic("Dynamic Databricks SQL target cannot be resolved", start))
+                target = None
             into = select_into(tree)
             temp = bool(tree.find(exp.TemporaryProperty, exp.VolatileProperty)) or (
                 temporary_identifier(target)) or (
                 isinstance(into, exp.Into) and bool(into.args.get("temporary")))
-            targets = [AssetRef(table_name(target), temp)] if target is not None else []
             base_tables: dict[int, exp.Table] = {}
             for scope in scopes:
                 for _, source in scope.selected_sources.values():
                     if isinstance(source, exp.Table) and isinstance(source.this, exp.Identifier):
+                        if (databricks and not sql_databricks.static_table(source)
+                                or shared_sql and is_recursive_self_reference(source, case_insensitive=databricks)):
+                            continue
                         base_tables[id(source)] = source
             cte_names = {c.alias_or_name.casefold() for c in tree.find_all(exp.CTE)}
             # DML owns table references outside query scopes (UPDATE FROM / MERGE USING).
-            if not isinstance(tree, (exp.Select, exp.Union, exp.Create, exp.Insert)):
+            outer_reads = dml if databricks else not isinstance(tree, (exp.Select, exp.SetOperation, exp.Create, exp.Insert))
+            if outer_reads:
                 for table in tree.find_all(exp.Table):
-                    if table is not target and table.name.casefold() not in cte_names and id(table) not in inactive_nodes:
+                    cte = is_outer_cte(table) if databricks else table.name.casefold() in cte_names
+                    if table is not target and not cte and id(table) not in inactive_nodes:
+                        if databricks and (not sql_databricks.static_table(table) or in_query(table)):
+                            continue
                         if isinstance(table.this, exp.Identifier):
                             base_tables[id(table)] = table
+            if namespace is not None:
+                for table in base_tables.values():
+                    namespace.bind(table)
+                if target is not None and not temp:
+                    namespace.bind(target)
+                if isinstance(tree, (exp.Alter, exp.Drop)) and tree.args.get("kind") in {"TABLE", "VIEW"}:
+                    for table in tree.find_all(exp.Table):
+                        namespace.bind(table)
+            targets = [AssetRef(table_name(target), temp)] if target is not None else []
             sources = list({table_name(t): AssetRef(table_name(t), temporary=temporary_identifier(t))
                             for t in base_tables.values()}.values())
             usages = []
@@ -387,12 +443,39 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                     scope: Current query scope for correlated source lookup.
                 """
                 handled.add(id(column))
+                if databricks and isinstance(column, exp.Column):
+                    parent = column.parent
+                    while parent is not None and parent.this is column and (
+                        isinstance(parent, exp.Paren) or isinstance(parent, exp.Dot)
+                        and isinstance(parent.expression, (exp.Identifier, exp.Star))
+                    ):
+                        column, parent = parent, parent.parent
+                        handled.add(id(column))
                 alias = column.table if isinstance(column, exp.Column) else ""
                 name = column.name if isinstance(column, exp.Column) else "*"
-                star = column.this if isinstance(column, exp.Column) else column
+                parts = sql_databricks.column_parts(column) if databricks else []
+                if databricks and isinstance(column, exp.Dot) and not parts:
+                    return
+                star = parts[-1] if parts else column.this if isinstance(column, exp.Column) else column
                 wildcard_safe = isinstance(star, exp.Star) and not any(star.args.values())
                 source = None
-                if alias:
+                if parts:
+                    source, consumed = sql_databricks.qualified_source(mapping, parts)
+                    parent = scope.parent if scope and scope.can_be_correlated else None
+                    if source is None and parent and len(parts) > 1 and any(
+                            isinstance(item, Scope) and parts[0].name.casefold() in {
+                                name.casefold() for name in item.outer_columns or item.expression.named_selects
+                            } for item in mapping.values()):
+                        return  # This path can name a local struct, ahead of an outer alias.
+                    while source is None and parent:
+                        parent_mapping = {k.casefold(): v[1] for k, v in parent.selected_sources.items()}
+                        source, consumed = sql_databricks.qualified_source(parent_mapping, parts)
+                        parent = parent.parent
+                    alias = ".".join(part.name for part in parts[:consumed])
+                    name = ".".join(identifier(part) for part in parts[consumed:])
+                    if len(parts) - consumed > 1:
+                        wildcard_safe = False
+                if source is None and alias:
                     source = mapping.get(alias.casefold())
                     # A correlated subquery may reference an enclosing scope directly.
                     parent = scope.parent if scope else None
@@ -400,47 +483,58 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                         parent_mapping = {k.casefold(): v[1] for k, v in parent.selected_sources.items()}
                         source = parent_mapping.get(alias.casefold())
                         parent = parent.parent
-                elif len({id(v) for v in mapping.values()}) == 1:
+                elif source is None and len({id(v) for v in mapping.values()}) == 1:
                     source = next(iter(mapping.values()))
-                elif name == "*":
+                elif source is None and name == "*":
                     for item in mapping.values():
-                        if isinstance(item, exp.Table):
+                        if isinstance(item, exp.Table) and (not databricks or id(item) in base_tables):
                             usages.append(Usage(table_name(item), "*", "SELECT", "", "*", "unresolved",
                                                 wildcard_safe=wildcard_safe))
                     return
-                else:
+                elif source is None:
                     # Do not attribute unqualified ORDER BY aliases to a source column.
                     if scope and usage_context(column) == "ORDER BY" and name in scope.expression.named_selects:
                         return
                     result.diagnostics.append(Diagnostic(
                         f"Ambiguous unqualified column {name}; base table cannot be established", start, symbol=name))
                     return
-                if isinstance(source, exp.Table):
+                if isinstance(source, exp.Table) and (not databricks or id(source) in base_tables or source is target):
+                    if shared_sql and is_recursive_self_reference(source, case_insensitive=databricks):
+                        return
+                    status = "unresolved" if name == "*" or databricks and isinstance(star, exp.Star) else "verified"
                     usages.append(Usage(table_name(source), name, usage_context(column), alias,
                                         column.parent.sql() if column.parent else column.sql(),
-                                        "unresolved" if name == "*" else "verified", wildcard_safe=wildcard_safe))
+                                        status, wildcard_safe=wildcard_safe))
                 elif source is None and alias:
                     result.diagnostics.append(Diagnostic(f"Unresolved column alias {alias}", start, symbol=alias))
                 # Scope sources are CTEs/subqueries. Their inner references are counted once.
 
             for scope in scopes:
+                if databricks and isinstance(scope.expression, exp.Lateral) and scope.expression.args.get("view"):
+                    continue  # The parent scope owns generator collection references.
                 mapping = {k.casefold(): v[1] for k, v in scope.selected_sources.items()}
-                for col in [*scope.columns, *scope.stars]:
+                generators = generator_bindings(scope) if databricks else {}
+                pivots = pivot_bindings(scope) if databricks else {}
+                stars = ([projection for projection in scope.expression.expressions if isinstance(projection, exp.Star)]
+                         if isinstance(scope.expression, exp.Select) else [])
+                for col in [*scope.columns, *scope.stars, *stars]:
                     if id(col) not in handled:
-                        attribute(col, mapping, scope)
-                if isinstance(scope.expression, exp.Select):
-                    for projection in scope.expression.expressions:
-                        if isinstance(projection, exp.Star):
-                            attribute(projection, mapping, scope)
-            if isinstance(tree, (exp.Update, exp.Delete, exp.Merge)):
-                visible_tables = [t for t in tree.find_all(exp.Table)
-                                  if t.find_ancestor(exp.Select, exp.Subquery, exp.CTE) is None]
-                mapping = {t.alias_or_name.casefold(): t for t in visible_tables
-                           if isinstance(t.this, exp.Identifier) and t.name.casefold() not in cte_names and id(t) not in inactive_nodes}
+                        physical = usage_scope_mapping(col, mapping, generators, pivots) if generators or pivots else mapping
+                        if physical is not None:
+                            attribute(col, physical, scope)
+            if dml:
+                visible_tables = [t for t in tree.find_all(exp.Table) if not in_query(t)]
+                if databricks:
+                    mapping = {t.alias_or_name.casefold(): t for t in visible_tables
+                               if id(t) in base_tables or t is target}
+                else:
+                    mapping = {t.alias_or_name.casefold(): t for t in visible_tables
+                               if isinstance(t.this, exp.Identifier) and t.name.casefold() not in cte_names
+                               and id(t) not in inactive_nodes}
                 if using_scope is not None and using.alias:
                     mapping[using.alias.casefold()] = using_scope
                 for table in visible_tables:
-                    if table.name.casefold() in cte_scopes and id(table) not in inactive_nodes:
+                    if is_outer_cte(table) and id(table) not in inactive_nodes:
                         mapping[table.alias_or_name.casefold()] = cte_scopes[table.name.casefold()]
                 if target is not None:
                     mapping[table_name(target).casefold()] = target
@@ -460,7 +554,7 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                                                    derivations=derivations))
             elif not isinstance(tree, (exp.Set, exp.Use)):
                 result.diagnostics.append(Diagnostic("No statically analyzable table references", start, severity="info"))
-            declarations = declared_schema(tree, start, end, len(result.operations) - 1)
+            declarations = declared_schema(tree, start, end, len(result.operations) - 1, databricks)
             if declarations:
                 result.metadata.setdefault("declared_schemas", []).extend(declarations)
         except (ParseError, TokenError, OptimizeError, ValueError, RecursionError) as exc:

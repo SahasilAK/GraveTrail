@@ -1,8 +1,10 @@
 # SQL parsing
 
-SQLGlot is used as an AST parser; imported SQL is never sent to DuckDB for execution. Configure
-an explicit dialect for vendor syntax or folder prefixes; generic SQL is the default. Parse
-failures are diagnostics, never silently replaced by regex guesses or alternate dialects.
+SQLGlot parses imported SQL without executing it. In **Sources → Import**, select **SQL source
+type** when importing SQL. The choice applies to SQL files in the batch, including ZIP members.
+**Use workspace settings** follows the longest matching folder rule, then the extension rule,
+then the workspace default. **Generic SQL** explicitly selects the generic parser even in a
+Databricks workspace. Parse failures produce diagnostics without switching dialects.
 
 Supported tested operations: CTAS, CREATE VIEW/OR REPLACE, INSERT with UNION, UPDATE FROM,
 MERGE USING, DELETE USING, SELECT, temporary tables, multiple statements, aliases, qualified
@@ -12,9 +14,34 @@ dialect syntax, but tests define demonstrated coverage. Imported SQL is never ex
 Table dependencies include reachable `MERGE USING (SELECT ...)` inputs and scalar or
 `EXISTS` subqueries in `UPDATE`/`DELETE`. Unreferenced CTEs remain excluded. Following a
 subquery's table inputs does not establish an outer alias's value-column ownership;
-unsupported DML transformations remain unresolved. Parser cache 13 refreshes the local
-results on the next explicit analysis. Paused AI runs created with older parser or
+unsupported DML transformations remain unresolved. Parser version 17 refreshes local
+results on the next analysis. To correct an existing file, open **Sources → Inventory →
+Inspect a source file**, save its SQL source type, then run **Analysis**. A successful
+run replaces the previous facts even when the file bytes are unchanged. Paused AI runs created with older parser or
 validator semantics require a new run, preserving the previous published graph.
+
+## Databricks lineage
+
+Select **Databricks** or inherit the `databricks` dialect. The cases below describe
+the tested forms. Source statements and projection evidence retain the imported spelling.
+
+| Construct | Coverage and boundaries |
+| --- | --- |
+| `USE CATALOG`, `USE SCHEMA` | Qualify subsequent reads and writes within that script. Fully qualified names keep their identity. |
+| `STREAM(t) AS f` | Bind the alias to a static table, including with streaming read options. Dynamic names retain a diagnostic. |
+| CTE stars and positional INSERT | Expand named CTE outputs in order, including chained stars and renames. Positional INSERT uses consistent imported target DDL and matching widths. Physical stars also need consistent source DDL. `BY NAME` uses exposed query names. |
+| Structs | Retain qualified field paths such as `f.soil.ph`, including quoted dots in a field name. Expand a physical struct star only from consistent typed DDL. |
+| Lateral column aliases | A uniquely bound preceding projection alias can supply a value. Local input columns take precedence. A physical input needs declared columns when precedence is uncertain. |
+| Scalar subqueries | Follow one named or scalar SELECT output, including an aggregate, and keep qualified correlated predicates in row selection. Ambiguous correlations retain coverage gaps. |
+| Pipeline expectations | Track predicates over named output projections as warning, drop, or failure inputs. Supports streaming tables, materialized views and legacy `CREATE LIVE TABLE` syntax. A constraint name creates no output column. The external legacy `LIVE` virtual schema configuration is unavailable to static analysis. |
+| `EXCEPT`, `INTERSECT` | Align explicit projections by position for `ALL` and `DISTINCT`. Both sides affect row membership. Values trace to the left. Unknown widths or mismatched widths stay unresolved. |
+| `LATERAL VIEW` | Trace explicitly named `EXPLODE`, `OUTER EXPLODE`, and `POSEXPLODE` outputs to their collection. Unsupported generators leave their affected outputs unresolved. |
+| `PIVOT` | Track each statically named bucket's aggregate, key and grouping columns. Grouping context needs known intermediate outputs or consistent input DDL. Dynamic buckets, chained or compound pivots, and ambiguous names retain coverage gaps. |
+| `AUTO CDC` | Bind a static change feed to a declared destination with a named flow or inline flow. Separate payload values from match keys, sequencing, delete/truncate conditions and history. Wildcard payload and history layouts require consistent schemas. Snapshot flows, per-row update masks and generated SCD system columns are outside this coverage. |
+| Recursive CTEs | Trace explicit anchor and step projections for a `UNION ALL` with one direct self-reference. The scoped feedback is a bounded cycle in the trace. Other recursive shapes retain coverage gaps. |
+
+See the [Databricks name-resolution reference](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-name-resolution)
+and the [AUTO CDC reference](https://docs.databricks.com/aws/en/ldp/developer/ldp-sql-ref-apply-changes-into).
 
 ## Literal procedure and dynamic SQL bodies
 
@@ -45,21 +72,23 @@ refreshes older analysis on the next run; previously built packages must be rebu
 
 ## Column transformation coverage
 
-The dedicated [Transformation lineage](TRANSFORMATION_LINEAGE.md) view adds output/value
-mapping for projections, aliases, expressions, constants, CASE, aggregates/windows, scoped
-CTEs/derived tables, explicit INSERT positions and positional UNION branches. Join/filter
-context stays separate from value dependencies. `COUNT(*)` retains a rowset dependency.
-Consistent imported DDL can infer plain wildcard and INSERT target mappings; it is not
-runtime schema verification. A single plain INSERT wildcard maps expanded source positions
-to declared destination names only when both schemas have matching cardinality; mixed or
-unknown layouts remain unresolved. DDL retains original identifier quoting alongside the
-existing name/type schema fields, so expansion preserves quoted case. UPDATE/MERGE/DELETE
-transformations, recursive SQL,
-scalar/correlated value subqueries, unknown functions and unsupported wildcard layouts
-have explicit coverage boundaries. Named windows, EXCEPT/INTERSECT, lateral projection aliases,
-base-table positional column aliases and duplicate outputs also remain conservative boundaries.
-The broader operation list above describes table
-lineage, not complete column coverage.
+Use [Transformation lineage](TRANSFORMATION_LINEAGE.md) to trace a column upstream through
+expressions, CTEs, and physical tables, or downstream to see where it contributes values or
+filters rows. The shared SQL parser keeps join and filter inputs separate from value inputs.
+`COUNT(*)` retains a rowset dependency.
+
+Plain stars expand from named CTE and derived-table outputs or a consistent imported source
+schema. A positional INSERT uses an explicit target list or consistent target DDL and requires
+matching widths after expansion. For unqualified join columns, a complete set of trusted input
+layouts must identify one owner. DDL-backed mappings are inferred.
+
+The shared parser follows single-output scalar subqueries with qualified correlations,
+`EXCEPT` and `INTERSECT` with known positions, and explicit recursive `UNION ALL` CTEs with one
+direct self-reference in the step. Set comparisons add row-membership dependencies on both
+sides, and left-side expressions supply values. Incomplete layouts or ambiguous bindings retain
+coverage gaps. Other boundaries include `EXISTS` membership, unsupported UPDATE/MERGE/DELETE
+assignments, named windows, unknown functions, and dialect-specific projection aliases, generators,
+and pivots outside the tested forms above.
 
 Only reachable CTE scopes contribute source assets/direct columns; unused CTEs are excluded.
 CTEs and subqueries do not become persistent tables. Inner base-table column uses are counted;
@@ -68,7 +97,7 @@ Qualified aliases bind within scopes, including supported correlated parents. Am
 unqualified references are diagnosed. Plain wildcards expand only from consistent imported
 typed SQL DDL declarations when enabled in Workspace settings → Parsing. Expanded references
 are labeled inferred and retain their query evidence and schema declaration provenance.
-Unknown or modified wildcards remain unresolved instead of fabricating names.
+Unknown or modified wildcards remain unresolved except for the supported Databricks cases above.
 
 Display names preserve spelling. Dotted quoted components retain their boundaries. Lookup
 defaults to case-insensitive normalization; configure case sensitivity for your environment.

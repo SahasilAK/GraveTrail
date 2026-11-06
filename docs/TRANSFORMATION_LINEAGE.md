@@ -8,7 +8,7 @@ the value of every output column.
 ## Trace a column
 
 1. Import sources and run **Analysis**. Existing workspaces keep their table/direct-usage
-   facts after upgrade; transformation coverage appears after analysis with parser 11.
+   facts after upgrade. Run analysis with parser version 17 to refresh SQL coverage.
 2. Choose an exact asset, including its job identity for temporary tables. Select a
    physical output column, or paste a column name or exact column ID.
 3. Choose **How it is produced** (upstream) or **What it affects** (downstream), depth
@@ -24,7 +24,7 @@ and unit_price. `WHERE o.status = 'COMPLETE'` is `row_filter` context; join keys
 the `join` role. CASE/IF tests use `value_selection`; windows preserve `partition` and
 `order`. Aggregates/windows retain relation `rowset` context. `COUNT(*)` does not depend
 on every column. A literal-only output is a constant with zero value inputs; row context
-can still apply. Downstream paths label value effects separately from row-selection effects.
+can still apply. Downstream paths distinguish values, row selection and pipeline controls.
 Display input limits do not change those labels. Equivalent quoted and unquoted column names share an
 identity under workspace case rules; quoted case and escaped identifier characters are retained.
 
@@ -34,17 +34,20 @@ identity under workspace case rules; quoted case and escaped identifier characte
 | --- | --- |
 | SQL projection, alias, expression, literal, CAST, CASE/IF | Named output derivations and distinct dependency roles |
 | Aggregation/window | Argument columns, rowsets and partition/order roles |
-| CTE/derived table | Statement-local intermediate columns; each expression remains inspectable |
-| INSERT SELECT | Explicit target lists map by position; consistent imported target DDL can infer a mapping after a single plain wildcard expands. Unknown or mismatched target schemas and mixed wildcard layouts stay unresolved |
-| UNION | Branch-specific derivations map by position; incompatible cardinality stays unresolved |
-| Plain wildcard | Single-source consistent imported DDL may expand as inferred; modifiers, scoped/branch schemas and ambiguous layouts stay unresolved |
+| CTE/derived table | Statement-local intermediate columns, including chains of named projections and plain stars |
+| INSERT SELECT | Explicit target lists or consistent imported target DDL map by position. Widths must agree after wildcard expansion |
+| UNION, EXCEPT, INTERSECT | Known branch positions remain inspectable. EXCEPT and INTERSECT distinguish left-side values from membership inputs on both sides |
+| Scalar subquery | A single projected value and qualified correlated predicates remain separate |
+| Recursive CTE | Explicit `UNION ALL` anchor and direct step trace through a bounded scope cycle |
+| Plain wildcard | Expand from named scoped outputs or a single consistent imported physical schema. Unknown layouts stay unresolved |
 | SAS PROC SQL | Shared SQL contract, with SAS library/WORK identity and original source evidence |
 | SAS DATA | Ordered explicit assignment versions, simple single SET and explicit KEEP/DROP/RENAME where ownership/output names are established |
 
-SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL and Snowflake
-syntax cases; supported syntax is bounded by the fixtures, not by SQLGlot's full dialect list.
-UPDATE/MERGE/DELETE value transformations, recursive SQL, EXCEPT/INTERSECT, named windows,
-scalar/correlated value subqueries, unknown UDF semantics, lateral projection/QUALIFY alias
+SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL, Snowflake and
+[Databricks](SQL_PARSING.md#databricks-lineage) syntax. The following gaps apply outside the tested
+Databricks forms described in the SQL guide.
+UPDATE/MERGE/DELETE value transformations, unsupported recursive shapes, named windows,
+ambiguous correlations, EXISTS membership, unknown UDF semantics, lateral projection/QUALIFY alias
 references, base-table positional column aliases, duplicate output names, query-level ordering
 and unsupported wildcard layouts have coverage gaps.
 SAS MERGE BY, multi-SET ownership, arrays, variable lists, loops, conditional retention,

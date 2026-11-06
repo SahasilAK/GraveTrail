@@ -10,7 +10,7 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def populate(tmp_path: Path, sql: str) -> tuple[Any, ...]:
+def populate(tmp_path: Path, sql: str, *, dialect: str | None = None) -> tuple[Any, ...]:
     """Populate the test inputs required by the scenario.
 
     Args:
@@ -22,7 +22,7 @@ def populate(tmp_path: Path, sql: str) -> tuple[Any, ...]:
     """
     store = Store(tmp_path / 'home')
     workspace = store.create_workspace('Columns')
-    Importer(store, workspace).files([('a.sql', sql.encode())], {'.sql'})
+    Importer(store, workspace).files([('a.sql', sql.encode())], {'.sql'}, sql_dialect=dialect)
     analyze(store, workspace)
     return store, workspace
 
@@ -39,6 +39,214 @@ def asset_id(store: Any, workspace: Any, name: str) -> Any:
         Value produced for the test scenario.
     """
     return next(a['asset_id'] for a in store.assets(workspace) if a['name'] == name)
+
+
+@pytest.mark.parametrize(("declarations", "columns"), [
+    ("CREATE TABLE src (id INT, s STRUCT<ph DOUBLE, `a.b` INT>); "
+     "CREATE TABLE dst (x DOUBLE, y INT, z INT);", {"x", "y", "z"}),
+    ("CREATE TABLE dst (x DOUBLE, y INT, z INT);", {"*"}),
+    ("CREATE TABLE src (id INT, s STRUCT<ph DOUBLE, `a.b` INT>);", {"*"}),
+    ("CREATE TABLE src (id INT, s STRUCT<ph DOUBLE, `a.b` INT>); "
+     "CREATE TABLE dst (x DOUBLE, y INT);", {"*"}),
+    ("CREATE TABLE src (id INT, s STRUCT<ph DOUBLE, `a.b` INT>); "
+     "CREATE TABLE dst (x DOUBLE, y INT, z INT); CREATE TABLE dst (a INT, b INT, c INT);", {"*"}),
+])
+def test_databricks_struct_star_and_insert_require_trusted_layouts(tmp_path, declarations, columns):
+    from dataforge.transformations import column_catalog, trace_columns
+
+    sql = declarations + " INSERT INTO dst SELECT f.s.*, f.id AS ignored FROM src f;"
+    store, w = populate(tmp_path, sql, dialect="databricks")
+    try:
+        target = asset_id(store, w, "dst")
+        assert len(store.edges(w)) == 1
+        assert {c["column_name"] for c in column_catalog(store, w, target)} == columns
+        if columns == {"*"}:
+            records = trace_columns(store, w, target, "*", include_source=True)["derivations"]
+            assert all(r["status"] == "unresolved" and r["coverage"] for r in records)
+        else:
+            for output, input_name in [("x", "s.ph"), ("y", 's."a.b"'), ("z", "id")]:
+                record = trace_columns(store, w, target, output, include_source=True)["derivations"][0]
+                assert [(i["table"], i["column_name"]) for i in record["inputs"]] == [("src", input_name)]
+                assert "INSERT INTO dst SELECT f.s.*" in record["evidence"]["code"]
+    finally:
+        store.close()
+
+
+def test_databricks_by_name_and_lateral_alias_with_declared_input(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    sql = """CREATE TABLE src (x INT, a INT);
+    CREATE TABLE dst (b INT, a INT);
+    INSERT INTO dst BY NAME SELECT x AS a, a+1 AS b FROM src;
+    CREATE TABLE absent (x INT);
+    CREATE TABLE fallback AS SELECT x AS a, a+1 AS b FROM absent;
+    CREATE TABLE unknown AS SELECT x AS a, a+1 AS b FROM undeclared;
+    """
+    store, w = populate(tmp_path, sql, dialect="databricks")
+    try:
+        for table, source, input_name in [("dst", "src", "a"), ("fallback", "absent", "x")]:
+            record = trace_columns(store, w, asset_id(store, w, table), "b")["derivations"][0]
+            assert {(i["table"], i["column_name"]) for i in record["inputs"]} == {(source, input_name)}
+        record = trace_columns(store, w, asset_id(store, w, "unknown"), "b")["derivations"][0]
+        assert record["status"] == "unresolved" and not record["inputs"]
+    finally:
+        store.close()
+
+
+def test_databricks_recursive_trace_terminates_with_evidence(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    sql = """CREATE TABLE dst AS WITH RECURSIVE q(n) AS (
+        SELECT id FROM anchor UNION ALL SELECT q.n + step.delta
+        FROM q JOIN step ON q.n=step.id WHERE q.n < 10
+    ) SELECT * FROM q;"""
+    store, w = populate(tmp_path, sql, dialect="databricks")
+    try:
+        trace = trace_columns(store, w, asset_id(store, w, "dst"), "n", depth=30, include_source=True)
+        assert {a["name"] for a in store.assets(w)} == {"anchor", "step", "dst"}
+        assert any(item["reason"] == "cycle" for item in trace["coverage"])
+        assert {(i["table"], i["column_name"]) for d in trace["derivations"]
+                for i in d["inputs"] if i["role"] == "value" and not i["scope"]} == {
+            ("anchor", "id"), ("step", "delta"),
+        }
+    finally:
+        store.close()
+
+
+def test_databricks_pivot_star_uses_trusted_grouping_columns(tmp_path):
+    from dataforge.transformations import column_catalog, trace_columns
+
+    sql = """CREATE TABLE sales (store INT, region STRING, amount INT);
+        CREATE TABLE dst AS SELECT p.* FROM sales
+        PIVOT (SUM(amount) FOR region IN ('east', 'west')) AS p;"""
+    store, w = populate(tmp_path, sql, dialect="databricks")
+    try:
+        target = asset_id(store, w, "dst")
+        assert {c["column_name"] for c in column_catalog(store, w, target)} == {"store", "east", "west"}
+        trace = trace_columns(store, w, target, "east")["derivations"][0]
+        assert trace["status"] == "inferred"
+        assert {(i["column_name"], i["role"]) for i in trace["inputs"]} == {
+            ("amount", "value"), ("region", "value_selection"), ("store", "value_selection"), ("", "rowset"),
+        }
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_databricks_cdc_star_exclusions_need_trusted_schema(tmp_path, declared):
+    from dataforge.transformations import column_catalog, trace_columns
+
+    declaration = "CREATE TABLE feed (id INT, amount DOUBLE, stamp BIGINT);" if declared else ""
+    sql = declaration + """CREATE STREAMING TABLE dst;
+        CREATE FLOW update_dst AS AUTO CDC INTO dst FROM STREAM(feed)
+        KEYS (id) SEQUENCE BY stamp COLUMNS * EXCEPT (stamp)
+        STORED AS SCD TYPE 2 TRACK HISTORY ON * EXCEPT (id);"""
+    store, w = populate(tmp_path, sql, dialect="databricks")
+    try:
+        target = asset_id(store, w, "dst")
+        assert len(store.edges(w)) == 1
+        assert {c["column_name"] for c in column_catalog(store, w, target)} == (
+            {"id", "amount"} if declared else {"*"})
+        d = trace_columns(store, w, target, "amount" if declared else "*")["derivations"][0]
+        assert {(i["column_name"], i["role"]) for i in d["inputs"]} == (
+            {("amount", "value"), ("id", "match_key"), ("stamp", "sequence"),
+             ("amount", "history")} if declared else
+            {("*", "value"), ("id", "match_key"), ("stamp", "sequence")})
+        if not declared:
+            assert d["status"] == "unresolved"
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("dialect", ["", "postgres", "snowflake"])
+def test_sql_trace_crosses_files_ctes_and_physical_stars(tmp_path, dialect):
+    from dataforge.transformations import trace_columns
+
+    files = [
+        ("schema.sql", "CREATE TABLE raw.orders (id INT, qty INT, price INT, active INT); "
+                       "CREATE TABLE stage.orders (id INT, gross INT); "
+                       "CREATE TABLE mart.orders (order_id INT, net INT, source_system INT);"),
+        ("stage.sql", "INSERT INTO stage.orders (id, gross) WITH base AS (SELECT * FROM raw.orders), "
+                      "calc AS (SELECT base.id, base.qty * base.price AS gross FROM base "
+                      "WHERE base.active = 1) SELECT * FROM calc;"),
+        ("load.sql", "INSERT INTO mart.orders SELECT stage.*, 10 AS source_system FROM stage.orders stage;"),
+        ("report.sql", "CREATE TABLE report.totals AS SELECT SUM(net) AS sales FROM mart.orders WHERE net > 0;"),
+    ]
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("SQL traces")
+        Importer(store, w).files([(name, sql.encode()) for name, sql in files], {".sql"}, sql_dialect=dialect)
+        analyze(store, w)
+        assets = {a["asset_id"]: a["name"] for a in store.assets(w)}
+        assert {(assets[e["source_id"]], assets[e["target_id"]]) for e in store.edges(w)} == {
+            ("raw.orders", "stage.orders"), ("stage.orders", "mart.orders"), ("mart.orders", "report.totals"),
+        }
+        upstream = trace_columns(store, w, asset_id(store, w, "report.totals"), "sales", depth=15, include_source=True)
+        assert {d["evidence"]["relative_path"] for d in upstream["derivations"]} == {
+            "stage.sql", "load.sql", "report.sql",
+        }
+        gross = next(d for d in upstream["derivations"] if d["expression"] == "base.qty * base.price AS gross")
+        assert {(i["column_name"], i["role"]) for i in gross["inputs"]} == {
+            ("qty", "value"), ("price", "value"), ("active", "row_filter"),
+        }
+        assert {i["column_name"] for d in upstream["derivations"] for i in d["inputs"]
+                if i["table"] == "raw.orders" and not i["scope"]} == {"qty", "price", "active"}
+        downstream = trace_columns(store, w, asset_id(store, w, "raw.orders"), "qty", direction="downstream", depth=15)
+        assert any(d["target"]["table"] == "report.totals" and d["target"]["column_name"] == "sales"
+                   for d in downstream["derivations"])
+        impact = trace_columns(store, w, asset_id(store, w, "raw.orders"), "active", direction="downstream", depth=15)
+        report = next(d["derivation_id"] for d in impact["derivations"] if d["target"]["table"] == "report.totals")
+        assert {p["effect"] for p in impact["paths"] if p["derivation_id"] == report} == {"row_selection"}
+    finally:
+        store.close()
+
+
+def test_explicit_insert_columns_use_declared_star_positions(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, """CREATE TABLE src (one INT, two INT);
+        INSERT INTO dst (renamed_one, renamed_two) SELECT * FROM src;""")
+    try:
+        d = trace_columns(store, w, asset_id(store, w, "dst"), "renamed_two")["derivations"][0]
+        assert {(i["table"], i["column_name"]) for i in d["inputs"]} == {("src", "two")}
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("right_ddl,expected", [
+    ("CREATE TABLE adjustments (id INT, factor INT);", {("orders", "amount")}),
+    ("CREATE TABLE adjustments (id INT, amount INT);", set()),
+    ("", set()),
+])
+def test_sql_join_binds_unqualified_inputs_only_with_complete_schemas(tmp_path, right_ddl, expected):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, f"""CREATE TABLE orders (id INT, amount INT); {right_ddl}
+        CREATE TABLE result AS SELECT amount AS total, o.id AS order_id
+        FROM orders o JOIN adjustments a ON o.id = a.id;""", dialect="postgres")
+    try:
+        target = asset_id(store, w, "result")
+        assert len(store.edges(w)) == 2
+        total = trace_columns(store, w, target, "total")["derivations"][0]
+        assert {(i["table"], i["column_name"]) for i in total["inputs"] if i["role"] == "value"} == expected
+        assert total["status"] == ("inferred" if expected else "unresolved")
+        sibling = trace_columns(store, w, target, "order_id")["derivations"][0]
+        assert sibling["status"] == "verified"
+        assert {(i["table"], i["column_name"]) for i in sibling["inputs"] if i["role"] == "value"} == {
+            ("orders", "id"),
+        }
+    finally:
+        store.close()
+
+
+def test_unsupported_recursive_self_reference_does_not_create_a_physical_table(tmp_path):
+    store, w = populate(tmp_path, """CREATE TABLE dst AS WITH RECURSIVE loop(n) AS
+        (SELECT loop.n FROM loop JOIN src ON loop.n=src.id) SELECT n FROM loop;""", dialect="postgres")
+    try:
+        assert {a["name"] for a in store.assets(w)} == {"src", "dst"}
+        assert len(store.edges(w)) == 1
+    finally:
+        store.close()
 
 
 def test_derivation_parser_cache_roundtrip() -> None:

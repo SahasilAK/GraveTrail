@@ -24,6 +24,9 @@ home: stop Streamlit/MCP before a separate CLI opens its home, or choose another
 home. CLI reports `storage_busy`, exit 5, rather than bypassing the database lock.
 Do not copy an open database. A single MCP process shares its Store and jobs.
 
+Use `ingest --sql-dialect databricks` to set the dialect for SQL files in an import.
+Omit the option to inherit workspace rules. Pass an empty value to explicitly select Generic SQL.
+
 ## Commands
 
 Verified against the registered interface on 2026-10-19: **103 executable command
@@ -85,7 +88,7 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `history preview` | — | `--workspace`, `-w` **required**; `--keep-runs`; `--keep-imports`; `--batch-size`; `--help` |
 | `history restore` | `ARCHIVE_ID` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
 | `impact analyze` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
-| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--background`, `--no-background`; `--source-kind`; `--dbt-mode`; `--artifact-path`; `--include-packages`, `--no-include-packages`; `--help` |
+| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--sql-dialect`; `--background`, `--no-background`; `--source-kind`; `--dbt-mode`; `--artifact-path`; `--include-packages`, `--no-include-packages`; `--help` |
 | `dbt projects` | — | `--workspace`, `-w` **required**; `--help` |
 | `dbt resources` | — | `--workspace`, `-w` **required**; `--project-id`; `--resource-type`; `--help` |
 | `dbt resource` | `RESOURCE_ID` | `--workspace`, `-w` **required**; `--help` |

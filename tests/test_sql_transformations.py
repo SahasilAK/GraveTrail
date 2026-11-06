@@ -1,6 +1,8 @@
 """Transformation facts stay separate from direct column usage."""
 from typing import Any
 
+import pytest
+
 from dataforge.parsers.sql import parse_sql
 
 
@@ -30,6 +32,129 @@ def inputs(record: Any, role: Any="value") -> Any:
         Value produced for the test scenario.
     """
     return {(item["table"], item["column"]) for item in record["inputs"] if item["role"] == role}
+
+
+def databricks_query(query):
+    parsed = parse_sql("CREATE TABLE dst AS " + query, "databricks")
+    assert parsed.operations, parsed.diagnostics
+    return parsed.operations[-1]
+
+
+def test_databricks_cte_stars_use_reachable_named_outputs():
+    op = databricks_query("""WITH unused AS (SELECT * FROM hidden),
+        q AS (SELECT x AS first, y AS second FROM src),
+        q2 AS (SELECT q.* FROM q) SELECT * FROM q2""")
+    assert {s.name for s in op.sources} == {"src"}
+    assert [t.name for t in op.targets] == ["dst"]
+    physical = [r for r in op.derivations if not r["scope"]]
+    assert [(r["target_column"], r["expression"], inputs(r)) for r in physical] == [
+        ("first", "*", {("q2", "first")}), ("second", "*", {("q2", "second")})]
+    duplicate = databricks_query("WITH q AS (SELECT x AS a, y AS a FROM src) SELECT * FROM q")
+    assert not any(r["target_column"] == "a" for r in duplicate.derivations)
+    assert any("Duplicate" in gap for r in duplicate.derivations for gap in r["coverage"])
+    unknown = databricks_query("WITH q AS (SELECT * FROM src) SELECT * FROM q")
+    assert unknown.derivations[-1]["status"] == "unresolved"
+
+
+@pytest.mark.parametrize(("columns", "expected"), [
+    ("x", {("q", "x")}), ("x, a", {("q", "a")}),
+])
+def test_databricks_lateral_alias_respects_local_column_precedence(columns, expected):
+    op = databricks_query(f"WITH q AS (SELECT {columns} FROM src) SELECT x AS a, a+1 AS b FROM q")
+    assert {s.name for s in op.sources} == {"src"}
+    assert inputs(op.derivations[-1]) == expected
+    assert op.derivations[-1]["status"] == "verified"
+
+
+@pytest.mark.parametrize("projections", ["a+1 AS b, x AS a", "x AS a, x+2 AS a, a+1 AS b"])
+def test_databricks_lateral_alias_is_conservative(projections):
+    op = databricks_query(f"WITH q AS (SELECT x FROM src) SELECT {projections} FROM q")
+    output = next(r for r in op.derivations if r["target_column"] == "b")
+    assert output["status"] == "unresolved" and not inputs(output)
+
+
+def test_databricks_struct_paths_preserve_quoted_components():
+    op = databricks_query("SELECT f.soil.ph AS ph, f.soil.more.inner.`odd.dot` AS odd FROM raw.soils f")
+    assert {s.name for s in op.sources} == {"raw.soils"}
+    assert [inputs(r) for r in op.derivations] == [
+        {("raw.soils", "soil.ph")}, {("raw.soils", 'soil.more.inner."odd.dot"')}]
+
+
+def test_databricks_scalar_aggregate_keeps_local_and_correlated_bindings():
+    op = databricks_query("""SELECT (SELECT MAX(b.amount) FROM inner_src b
+        WHERE b.id = a.id) AS total, (SELECT b.amount FROM shadow_src b) AS shadow
+        FROM outer_src a JOIN unused_src b ON a.id=b.id""")
+    assert {s.name for s in op.sources} == {"outer_src", "unused_src", "inner_src", "shadow_src"}
+    total, shadow = [r for r in op.derivations if not r["scope"]]
+    inner, shadow_query = [next(r for r in op.derivations if r["scope"] == out["inputs"][0]["scope"])
+                           for out in (total, shadow)]
+    assert inputs(inner) == {("inner_src", "amount")}
+    assert inputs(inner, "row_filter") == {("inner_src", "id"), ("outer_src", "id")}
+    assert inputs(shadow_query) == {("shadow_src", "amount")}
+    assert "MAX(b.amount)" in total["expression"]
+
+
+def test_databricks_unqualified_correlated_column_is_never_guessed_as_inner():
+    op = databricks_query("""SELECT (SELECT MAX(b.amount) FROM inner_src b
+        WHERE b.id = outer_id) AS total FROM outer_src a""")
+    assert {s.name for s in op.sources} == {"inner_src", "outer_src"}
+    scalar = next(r for r in op.derivations if r["scope"])
+    assert inputs(scalar) == {("inner_src", "amount")}
+    assert inputs(scalar, "row_filter") == {("inner_src", "id")}
+    assert scalar["status"] == "unresolved"
+
+
+def test_databricks_local_struct_shadows_correlated_alias():
+    op = databricks_query("""SELECT (SELECT a.x FROM (
+        SELECT named_struct('x', i.n) AS a FROM inner_src i
+        ) q) AS scalar FROM outer_src a""")
+    assert {s.name for s in op.sources} == {"inner_src", "outer_src"}
+    assert not any(("outer_src", "x") in inputs(record) for record in op.derivations)
+    assert not any((usage.table, usage.column) == ("outer_src", "x") for usage in op.usages)
+
+
+@pytest.mark.parametrize("operator", ["EXCEPT", "EXCEPT ALL", "INTERSECT DISTINCT", "INTERSECT ALL"])
+def test_databricks_set_membership_is_separate_from_values(operator):
+    op = databricks_query(f"SELECT a, b FROM lhs {operator} SELECT x, y FROM rhs")
+    assert {s.name for s in op.sources} == {"lhs", "rhs"}
+    records = [r for r in op.derivations if r["target_column"] == "a"]
+    assert set.union(*(inputs(r) for r in records)) == {("lhs", "a")}
+    assert set.union(*(inputs(r, "row_membership") for r in records)) == {
+        ("lhs", "a"), ("lhs", "b"), ("rhs", "x"), ("rhs", "y")}
+    bad = databricks_query(f"SELECT a, b FROM lhs {operator} SELECT x FROM rhs")
+    assert all(r["target_column"] == "*" and r["status"] == "unresolved" for r in bad.derivations)
+
+
+def test_databricks_recursive_feedback_uses_scoped_output_positions():
+    sql = """WITH RECURSIVE walk(n, carry) AS (
+        SELECT id, label FROM anchor UNION ALL
+        SELECT w.n + step.delta, w.carry FROM walk w JOIN step ON w.n=step.id WHERE w.n < 10
+    ) SELECT * FROM walk"""
+    op = databricks_query(sql)
+    assert {s.name for s in op.sources} == {"anchor", "step"}
+    step = next(r for r in op.derivations if r["target_column"] == "n" and r["branch"] == 1)
+    assert inputs(step) == {("walk", "n"), ("step", "delta")}
+    assert next(i for i in step["inputs"] if i["table"] == "walk")["scope"] == step["scope"]
+    assert ("walk", "n") in inputs(step, "row_filter")
+    carry = next(r for r in op.derivations if r["target_column"] == "carry" and r["branch"] == 1)
+    assert inputs(carry) == {("walk", "carry")}
+    bad = databricks_query(sql.replace("UNION ALL", "UNION"))
+    assert {s.name for s in bad.sources} == {"anchor", "step"}
+    assert any("recursive" in gap.lower() for r in bad.derivations for gap in r["coverage"])
+
+
+def test_databricks_window_qualify_and_aggregate_roles():
+    op = databricks_query("""WITH q AS (SELECT id, amount, account, ts FROM src)
+        SELECT id, SUM(amount) OVER (PARTITION BY account ORDER BY ts) AS running,
+        ROW_NUMBER() OVER (PARTITION BY account ORDER BY ts) AS rn
+        FROM q QUALIFY rn = 1""")
+    assert {s.name for s in op.sources} == {"src"}
+    records = {r["target_column"]: r for r in op.derivations if not r["scope"]}
+    assert inputs(records["running"]) == {("q", "amount")}
+    assert inputs(records["running"], "partition") == {("q", "account")}
+    assert inputs(records["running"], "order") == {("q", "ts")}
+    assert inputs(records["id"], "row_filter") == {("q", "account"), ("q", "ts")}
+    assert inputs(records["id"]) == {("q", "id")}
 
 
 def test_expression_and_context_are_separate() -> None:
@@ -141,7 +266,7 @@ def test_quoted_column_identity_and_exact_expression() -> None:
 
 def test_recursive_and_union_mismatch_are_coverage_boundaries() -> None:
     """Verify that recursive and union mismatch are coverage boundaries."""
-    records = derivations("CREATE TABLE dst AS WITH RECURSIVE x AS (SELECT a FROM src UNION ALL SELECT a FROM x) SELECT a FROM x")
+    records = derivations("CREATE TABLE dst AS WITH RECURSIVE x AS (SELECT a FROM src UNION SELECT a FROM x) SELECT a FROM x")
     assert records[0]["status"] == "unresolved"
     assert any("recursive" in c.lower() for c in records[0]["coverage"])
     records = derivations("CREATE TABLE dst AS SELECT a, b FROM src UNION ALL SELECT c FROM other")
@@ -170,13 +295,22 @@ def test_insert_values_and_insert_mapping_hook() -> None:
     assert record["ordinal"] == 0
 
 
-def test_scalar_correlated_subquery_is_an_explicit_boundary() -> None:
-    """Verify that scalar correlated subquery is an explicit boundary."""
-    records = derivations("CREATE TABLE dst AS SELECT (SELECT MAX(b.value) FROM b WHERE b.id = a.id) AS v FROM a")
-    record = next(r for r in records if r["target_table"] == "dst")
-    assert record["status"] == "unresolved"
-    assert any("subquery" in c.lower() for c in record["coverage"])
-    assert inputs(record) == set()
+@pytest.mark.parametrize("dialect", ["", "postgres", "tsql"])
+def test_scalar_correlated_subquery_retains_scoped_value_and_predicates(dialect):
+    projection = "SELECT (SELECT MAX(b.value) FROM b WHERE b.id = a.id) AS v"
+    sql = projection + " INTO dst FROM a" if dialect == "tsql" else "CREATE TABLE dst AS " + projection + " FROM a"
+    inner, outer = derivations(sql, dialect)
+    assert outer["target_column"] == "v"
+    assert outer["inputs"][0]["scope"] == inner["scope"]
+    assert inputs(inner) == {("b", "value")}
+    assert inputs(inner, "row_filter") == {("b", "id"), ("a", "id")}
+    assert inner["status"] == outer["status"] == "verified"
+
+
+def test_exists_does_not_copy_the_nested_select_value():
+    inner, outer = derivations("CREATE TABLE dst AS SELECT EXISTS (SELECT b.secret FROM b) AS present FROM a")
+    assert inputs(inner) == {("b", "secret")}
+    assert not inputs(outer) and outer["status"] == "unresolved"
 
 
 def test_row_number_is_rowset_dependent_and_runtime_function_is_not_constant() -> None:
@@ -215,7 +349,8 @@ def test_join_without_column_predicate_retains_relation_context() -> None:
 def test_wildcard_with_explicit_target_list_cannot_expand_by_source_names() -> None:
     """Verify that wildcard with explicit target list cannot expand by source names."""
     record = derivations("INSERT INTO dst (x, y) SELECT * FROM src")[0]
-    assert record["wildcard_safe"] is False
+    assert record["wildcard_safe"] is True
+    assert record["insert_target_names"] == ["x", "y"]
     assert record["target_column"] == "*"
     assert record["status"] == "unresolved"
 
@@ -245,12 +380,47 @@ def test_named_window_does_not_claim_complete_dependencies() -> None:
 def test_except_and_intersect_do_not_become_union_value_branches() -> None:
     """Verify that except and intersect do not become union value branches."""
     for operator in ("EXCEPT", "INTERSECT"):
-        records = derivations(f"CREATE TABLE dst AS SELECT a FROM src {operator} SELECT a FROM other")
-        assert len(records) == 1
-        assert records[0]["target_column"] == "*"
-        assert records[0]["status"] == "unresolved"
-        assert inputs(records[0]) == set()
-        assert any(operator in c for c in records[0]["coverage"])
+        left, right = derivations(f"CREATE TABLE dst AS SELECT a FROM src {operator} SELECT z FROM other")
+        assert left["target_column"] == right["target_column"] == "a"
+        assert inputs(left) == {("src", "a")}
+        assert inputs(right) == set()
+        assert inputs(left, "row_membership") == {("src", "a")}
+        assert inputs(right, "row_membership") == {("other", "z")}
+
+
+@pytest.mark.parametrize("dialect", ["", "postgres", "tsql", "snowflake", "bigquery", "oracle", "teradata"])
+def test_shared_cte_star_and_named_join_ownership(dialect):
+    query = """WITH amounts AS (
+        SELECT id, qty * price AS gross FROM raw.orders
+    ), named AS (SELECT amounts.* FROM amounts),
+    rates AS (SELECT id, tax FROM raw.rates)
+    SELECT named.*, gross * tax AS tax_due {into}FROM named JOIN rates ON named.id = rates.id"""
+    sql = query.format(into="INTO dst ") if dialect == "tsql" else "CREATE TABLE dst AS " + query.format(into="")
+    records = derivations(sql, dialect)
+    outputs = [r for r in records if not r["scope"]]
+    assert [r["target_column"] for r in outputs] == ["id", "gross", "tax_due"]
+    assert inputs(outputs[-1]) == {("named", "gross"), ("rates", "tax")}
+    assert inputs(outputs[-1], "join") == {("named", "id"), ("rates", "id")}
+    assert all(r["status"] == "verified" for r in outputs)
+
+
+def test_postgres_recursive_step_keeps_feedback_scoped():
+    records = derivations("""CREATE TABLE dst AS WITH RECURSIVE walk(n) AS (
+        SELECT id FROM seed UNION ALL SELECT w.n + d.delta FROM walk w JOIN delta d ON d.id = w.n
+    ) SELECT * FROM walk""", "postgres")
+    anchor, step, output = records
+    assert inputs(anchor) == {("seed", "id")}
+    assert inputs(step) == {("walk", "n"), ("delta", "delta")}
+    assert next(i for i in step["inputs"] if i["table"] == "walk")["scope"] == step["scope"]
+    assert inputs(output) == {("walk", "n")}
+
+
+def test_recursive_cte_name_preserves_quoted_case():
+    parsed = parse_sql('CREATE TABLE dst AS WITH RECURSIVE "Walk" AS '
+                       '(SELECT id FROM "walk") SELECT id FROM "Walk"', "postgres")
+    op = parsed.operations[-1]
+    assert [source.name for source in op.sources] == ["walk"]
+    assert inputs(op.derivations[0]) == {("walk", "id")}
 
 
 def test_duplicate_projection_names_are_unresolved_without_conflating_targets() -> None:

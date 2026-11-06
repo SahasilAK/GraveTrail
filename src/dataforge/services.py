@@ -20,20 +20,25 @@ from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 from dataforge.store import Store
 
-PARSER_VERSION = "15"
+PARSER_VERSION = "17"
 log = logging.getLogger(__name__)
 
 
 def analysis_is_current(store: Store, workspace: str) -> bool:
     """Check whether the latest completed analysis matches current files and settings."""
     from dataforge.dbt.service import dbt_settings_current
-    files = store.files(workspace)
-    runs = store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
-    config = ParsingSettings.model_validate({key: store.setting(workspace, key, default)
-        for key, default in ParsingSettings().model_dump().items()}).model_dump()
-    return bool(runs) and dbt_settings_current(store, workspace) and all(f['parsing_status'] != 'pending' for f in files) and (
-        json.loads(runs[0]['snapshot'])['files'] == {f['relative_path']: f['content_hash'] for f in files}
-        and json.loads(runs[0]['configuration']) == config)
+    with store.lock:
+        files = store.files(workspace)
+        runs = store.rows("SELECT snapshot,configuration FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1", [workspace])
+        if not runs or any(f['parsing_status'] == 'pending' for f in files):
+            return False
+        snapshot = json.loads(runs[0]['snapshot'])
+        config = ParsingSettings.from_store(store, workspace).model_dump()
+        return (snapshot.get('parser_version') == PARSER_VERSION
+                and snapshot['files'] == {f['relative_path']: f['content_hash'] for f in files}
+                and snapshot.get('dialects') == _analysis_dialects(files, config)
+                and json.loads(runs[0]['configuration']) == config
+                and dbt_settings_current(store, workspace))
 
 
 def export_lineage_excel(store: Store, workspace: str, asset: str, *, direction: str='upstream', max_paths: int=50, max_depth: int=15,
@@ -169,14 +174,14 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
         Exception: If the operation cannot complete."""
     start = time.perf_counter()
     run_id = uuid.uuid4().hex
-    config = ParsingSettings.model_validate({k: store.setting(workspace, k, default)
-        for k, default in ParsingSettings().model_dump().items()}).model_dump()
+    with store.lock:
+        config = ParsingSettings.from_store(store, workspace).model_dump()
+        files = store.files(workspace)
+        dbt_settings_snapshot = store.setting(workspace, 'dbt', {})
     store.execute("INSERT INTO analysis_runs(run_id,workspace_id,status,configuration) VALUES (?,?,?,?)",
                   [run_id, workspace, "running", json.dumps(config)])
     analyzed = cached = 0
     results = []
-    files = store.files(workspace)
-    dbt_settings_snapshot = store.setting(workspace, 'dbt', {})
     try:
         from dataforge.dbt.service import is_dbt, prepare_dbt_analysis
         dbt_projects, dbt_counts = prepare_dbt_analysis(store, workspace, file_ids, force, cancelled)
@@ -188,7 +193,7 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
                 if is_dbt(metadata):
                     continue
                 fid = metadata["file_id"]
-                key = stable_id(PARSER_VERSION, metadata["content_hash"], metadata["relative_path"], json.dumps(config, sort_keys=True))
+                key = _parse_cache_key(metadata, config)
                 existing = store.rows("SELECT result FROM parse_cache WHERE cache_key=?", [key])
                 selected = file_ids is None or fid in file_ids
                 if existing and (not force or not selected):
@@ -200,10 +205,17 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
         cached = sum(job[3] is None for job in jobs) + dbt_counts['cached']
         _restore_ai_results(store, workspace, results, config)
         with store.transaction():
-            current_files = {m['file_id']: m['content_hash'] for m in store.files(workspace) if is_dbt(m)}
-            if dbt_projects and (current_files != {m['file_id']: m['content_hash'] for m in files if is_dbt(m)}
-                    or store.setting(workspace, 'dbt', {}) != dbt_settings_snapshot):
-                raise ValueError('Inventory changed during analysis; previous lineage retained')
+            current_files = store.files(workspace)
+            before, current = _source_choices(files), _source_choices(current_files)
+            # Replaced bytes stay pending under the existing content-hash check. A source
+            # choice can change without a new hash, so guard publication explicitly.
+            if (any(before[key] != current[key] for key in before.keys() & current.keys())
+                    or ParsingSettings.from_store(store, workspace).model_dump() != config
+                    or (dbt_projects and (
+                        {m['file_id']: m['content_hash'] for m in current_files if is_dbt(m)}
+                        != {m['file_id']: m['content_hash'] for m in files if is_dbt(m)}
+                        or store.setting(workspace, 'dbt', {}) != dbt_settings_snapshot))):
+                raise ValueError('Inventory changed during analysis or parsing settings changed; previous lineage retained')
             snapshot = _materialize(store, workspace, run_id, results, config, dbt_projects=dbt_projects)
             duration = time.perf_counter() - start
             store.execute("UPDATE analysis_runs SET status='completed',analyzed=?,cached=?,duration=?,snapshot=? WHERE run_id=?",
@@ -218,13 +230,61 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
         raise
 
 
+def explicit_source_dialect(metadata: dict[str, Any]) -> str | None:
+    """Return the stored SQL source choice, preserving explicit Generic SQL."""
+    return json.loads(metadata.get('metadata') or '{}').get('sql_dialect') if metadata['extension'] == '.sql' else None
+
+
 def source_dialect(metadata: dict[str, Any], config: dict[str, Any]) -> str:
-    """Select the SQL dialect using extension defaults and longest matching folder prefix."""
-    dialect = config.get("dialect_by_extension", {}).get(metadata["extension"], config["dialect"])
-    for prefix, override in sorted(config["dialect_by_folder"].items(), key=lambda p: len(p[0])):
+    """Resolve an explicit source choice, then folder, extension, and workspace settings."""
+    explicit = explicit_source_dialect(metadata)
+    if explicit is not None:
+        return explicit
+    dialect = config.get("dialect_by_extension", {}).get(metadata["extension"], config.get("dialect", ""))
+    for prefix, override in sorted(config.get("dialect_by_folder", {}).items(), key=lambda p: len(p[0])):
         if metadata["relative_path"].startswith(prefix):
             dialect = override
     return dialect
+
+
+def set_source_dialect(store: Store, workspace: str, file_id: str, sql_dialect: str | None) -> None:
+    """Save a SQL file's override and mark it pending reanalysis."""
+    from dataforge.dbt.service import is_dbt
+
+    if sql_dialect is not None:
+        ParsingSettings(dialect=sql_dialect)
+    with store.transaction():
+        rows = store.rows('SELECT extension,metadata FROM source_files WHERE workspace_id=? AND file_id=?',
+                          [workspace, file_id])
+        if not rows or rows[0]['extension'] != '.sql' or is_dbt(rows[0]):
+            raise ValueError('Choose a SQL file in this workspace')
+        metadata = json.loads(rows[0]['metadata'] or '{}')
+        if metadata.get('sql_dialect') == sql_dialect:
+            return
+        if sql_dialect is None:
+            metadata.pop('sql_dialect', None)
+        else:
+            metadata['sql_dialect'] = sql_dialect
+        store.execute("UPDATE source_files SET metadata=?,parsing_status='pending',error_details='' WHERE file_id=?",
+                      [json.dumps(metadata), file_id])
+
+
+def _source_choices(files: list[dict[str, Any]]) -> dict[tuple[str, str], str | None]:
+    return {(f['file_id'], f['content_hash']): explicit_source_dialect(f)
+            for f in files if f['extension'] == '.sql'}
+
+
+def _analysis_dialects(files: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, str]:
+    from dataforge.dbt.service import is_dbt
+
+    return {f['relative_path']: source_dialect(f, config) for f in files
+            if f['extension'] in {'.sql', '.sas'} and not is_dbt(f)}
+
+
+def _parse_cache_key(metadata: dict[str, Any], config: dict[str, Any]) -> str:
+    dialect = source_dialect(metadata, config) if metadata['extension'] in {'.sql', '.sas'} else ''
+    return stable_id(PARSER_VERSION, metadata['content_hash'], metadata['relative_path'],
+                     dialect, json.dumps(config, sort_keys=True))
 
 
 def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] | None=None, force: bool=False,
@@ -242,8 +302,7 @@ def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] |
     started = time.perf_counter()
     from dataforge.dbt.service import is_dbt, prepare_dbt_analysis
     dbt_projects, dbt_counts = prepare_dbt_analysis(store, workspace, file_ids, force, cancelled)
-    config = ParsingSettings.model_validate({k: store.setting(workspace, k, default)
-        for k, default in ParsingSettings().model_dump().items()}).model_dump()
+    config = ParsingSettings.from_store(store, workspace).model_dump()
     accepted = load_accepted_file_results(store, workspace, config)
     saved_scope = accepted_file_ids(store, workspace)
     if file_ids is not None:
@@ -260,7 +319,7 @@ def prepare_analysis_results(store: Store, workspace: str, file_ids: list[str] |
             if not selected and fid in accepted:
                 results.append(accepted[fid])
                 continue
-            key = stable_id(PARSER_VERSION, metadata['content_hash'], metadata['relative_path'], json.dumps(config, sort_keys=True))
+            key = _parse_cache_key(metadata, config)
             cached = store.rows('SELECT result FROM parse_cache WHERE cache_key=?', [key])
             if cached and (not force or not selected):
                 jobs.append((metadata, key, ParseResult.from_dict(json.loads(cached[0]['result'])), None))
@@ -385,7 +444,11 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
         errors = any(d.severity == "error" for d in parsed.diagnostics)
         status = "failed" if errors and not parsed.operations and not parsed.assets else (
             "partial" if any(d.severity != "info" for d in parsed.diagnostics) else "success")
-        statuses.append([status, json.dumps(parsed.metadata), "\n".join(d.message for d in parsed.diagnostics), fid, metadata["content_hash"]])
+        source_metadata = dict(parsed.metadata)
+        explicit = explicit_source_dialect(metadata)
+        if explicit is not None:
+            source_metadata['sql_dialect'] = explicit
+        statuses.append([status, json.dumps(source_metadata), "\n".join(d.message for d in parsed.diagnostics), fid, metadata["content_hash"]])
     for aid, schema in schemas.items():
         if aid in registry and registry[aid][4] != "unresolved":
             registry[aid][6] = json.dumps({**schema, **json.loads(registry[aid][6])})
@@ -414,7 +477,8 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
     refresh_published_support(store, workspace, results)
     return {"assets": [{"name": a[3], "kind": a[4], "job_id": json.loads(a[6]).get("job_id")} for a in registry.values()],
             "edges": sorted({(e[2], e[3]) for e in rows["edges"]}),
-            "files": {m["relative_path"]: m["content_hash"] for m, _ in results}}
+            "files": {m["relative_path"]: m["content_hash"] for m, _ in results},
+            "parser_version": PARSER_VERSION, "dialects": _analysis_dialects([m for m, _ in results], config)}
 
 
 def column_report(store: Store, workspace: str, asset_id: str) -> list[dict]:
@@ -482,6 +546,8 @@ def restore_manual_ai_results(store: Store, workspace: str, results: list[tuple[
         if parsed.metadata.get('source_kind') == 'dbt':
             continue
         if metadata["content_hash"] != details["content_hash"]:
+            continue
+        if source_dialect(metadata, config) != details.get('dialect', source_dialect({**metadata, 'metadata': '{}'}, config)):
             continue
         if details.get("job_id", "workspace") != source_job(metadata, config):
             continue

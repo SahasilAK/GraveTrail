@@ -72,14 +72,14 @@ def prepare_analysis(store, workspace, request, *, progress=None):
     """Pin inventory, settings, original bytes and previous publication under one read lock."""
     request = AnalysisRequest.model_validate(request)
     from dataforge.dbt.service import reject_dbt_ai
+    from dataforge.services import explicit_source_dialect, source_dialect
     reject_dbt_ai(store, workspace, request.file_ids)
     with store.lock:
         inventory = store.files(workspace)
         selected = set(request.file_ids) if request.file_ids is not None else {f['file_id'] for f in inventory}
         if selected - {f['file_id'] for f in inventory}:
             raise ValueError('Selected source does not belong to the workspace')
-        settings = ParsingSettings.model_validate({k:store.setting(workspace,k,v)
-            for k,v in ParsingSettings().model_dump().items()}).model_dump()
+        settings = ParsingSettings.from_store(store, workspace).model_dump()
         revisions = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1",[workspace])
         sources = []
         if progress:
@@ -92,7 +92,9 @@ def prepare_analysis(store, workspace, request, *, progress=None):
                     progress('Reading selected files', len(sources), len(selected))
         sources = tuple(sources)
         manifest = [{'file_id':f['file_id'],'content_hash':f['content_hash'],'path':f['relative_path'],
-                     'extension':f['extension'],'job_id':source_job(f,settings)} for f in inventory]
+                     'extension':f['extension'],'job_id':source_job(f,settings),
+                     'dialect': source_dialect(f, settings),
+                     'sql_dialect_override': explicit_source_dialect(f)} for f in inventory]
     settings_json = json.dumps(settings,sort_keys=True)
     inventory_json = json.dumps(manifest,sort_keys=True)
     digest = hashlib.sha256((inventory_json+settings_json).encode()).hexdigest()
@@ -140,16 +142,18 @@ def _unit_spans(code, extension):
 
 def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source=False, progress=None):
     """Page complete units without the manual selector's 50-chunk limit."""
+    from dataforge.ai_semantic import proc_sql_spans, unit_dialect
+
     if type(max_chars) is not int or not 1 <= max_chars <= 200000:
         raise ValueError('Invalid complete-unit budget')
     units,blocked,empty,disclosure,catalog = [],[],[],[],[]
+    dialects = {entry['file_id']: entry.get('dialect') for entry in prepared.manifest}
     for index, source in enumerate(prepared.sources):
         if progress:
             progress('Splitting source into tasks', index, len(prepared.sources))
         if source.extension not in {'.sql','.sas'}:
             continue
         spans = list(_unit_spans(source.code,source.extension))
-        from dataforge.ai_semantic import proc_sql_spans
         spans = [part for a,b in spans for part in (
             [(a+x,a+y) for x,y in proc_sql_spans(source.code[a:b])]
             if source.extension == '.sas' and b-a > max_chars and proc_sql_spans(source.code[a:b]) else [(a,b)])]
@@ -166,6 +170,7 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
                 continue
             unit = AnalysisUnit(unit_id=stable_id(prepared.workspace,source.file_id,source.content_hash,str(start),str(end)),
                 file_id=source.file_id,content_hash=source.content_hash,path=source.path,extension=source.extension,
+                dialect=dialects.get(source.file_id),
                 job_id=source.job_id,first=source.code.count('\n',0,start)+1,last=source.code.count('\n',0,end)+1,
                 start_offset=start,end_offset=end,code=code)
             units.append(unit)
@@ -186,10 +191,7 @@ def plan_ai_units(prepared, *, max_chars=100000, remote=False, allow_full_source
             progress('Building shared source context', index, len(units))
         if unit.extension != '.sql':
             continue
-        dialect = prepared.settings.get('dialect_by_extension',{}).get(unit.extension,prepared.settings.get('dialect',''))
-        for prefix,override in sorted(prepared.settings.get('dialect_by_folder',{}).items(),key=lambda x:len(x[0])):
-            if unit.path.startswith(prefix):
-                dialect = override
+        dialect = unit_dialect(unit, prepared.settings)
         for record in parse_sql(unit.code,dialect).metadata.get('declared_schemas',[]):
             name = record['table']
             temporary = name.casefold().startswith('work.')

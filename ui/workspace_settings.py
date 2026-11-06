@@ -14,6 +14,18 @@ from dataforge.settings_service import save_ui_settings
 from dataforge.store import Store
 from ui.common import allowed_roots, open_storage_home, storage_homes
 
+SQL_DIALECTS = ['', 'databricks', 'tsql', *sorted(sqlglot.Dialect.classes.keys() - {'', 'databricks', 'tsql'})]
+
+
+def dialect_label(dialect: str) -> str:
+    """Display a SQLGlot key using the engine's familiar name."""
+    return {
+        '': 'Generic SQL', 'tsql': 'SQL Server', 'bigquery': 'BigQuery', 'clickhouse': 'ClickHouse',
+        'duckdb': 'DuckDB', 'dax': 'DAX', 'mysql': 'MySQL', 'postgres': 'PostgreSQL', 'prql': 'PRQL',
+        'risingwave': 'RisingWave', 'singlestore': 'SingleStore', 'spark2': 'Spark 2', 'sqlite': 'SQLite',
+        'starrocks': 'StarRocks',
+    }.get(dialect, dialect.capitalize())
+
 
 def render_parsing(store: Store, w: str) -> None:
     """Render SQL/SAS parsing, identity, and diagnostic display settings.
@@ -26,8 +38,8 @@ def render_parsing(store: Store, w: str) -> None:
         st.success(notice)
     with st.form("parsing_settings_" + w):
         st.subheader("Parsing defaults")
-        dialects = [""] + sorted(k for k in sqlglot.Dialect.classes if k)
-        dialect = st.selectbox("Default SQL dialect", dialects, index=dialects.index(store.setting(w, "dialect", "")), format_func=lambda x: x or "Generic SQL")
+        dialect = st.selectbox("Default SQL dialect", SQL_DIALECTS,
+                               index=SQL_DIALECTS.index(store.setting(w, "dialect", "")), format_func=dialect_label)
         case = st.checkbox("Case-sensitive asset identities", value=store.setting(w, "case_sensitive", False))
         expand = st.checkbox("Expand plain SQL wildcards using consistent declared schemas", value=store.setting(w, "expand_wildcards", True))
         csv_sample_rows = st.number_input("CSV sample rows", 0, 100, int(store.setting(w, "csv_sample_rows", 25)),
@@ -58,8 +70,6 @@ def render_parsing(store: Store, w: str) -> None:
                     obj = json.loads(value)
                     if not isinstance(obj, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in obj.items()):
                         raise ValueError("Mappings must be JSON objects with string keys and values")
-                    if key == "dialect_by_folder" and any(v not in dialects for v in obj.values()):
-                        raise ValueError("Unknown SQL dialect in folder mappings")
                     data[key] = obj
                 data = ParsingSettings.model_validate(data).model_dump()
                 data.update(AnalysisPreferences(min_lineage_confidence=confidence, include_inferred=inferred,
