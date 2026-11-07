@@ -363,7 +363,7 @@ def retained_publication_results(store, workspace, selected, config, prior_revis
                 raise ValueError('Unselected dbt publication changed; include its project for reanalysis')
             result.append((metadata, dbt[fid]))
             continue
-        key = stable_id(PARSER_VERSION, metadata['content_hash'], metadata['relative_path'], json.dumps(parsing_config, sort_keys=True))
+        key = _parse_cache_key(metadata, parsing_config)
         cached = store.rows('SELECT result FROM parse_cache WHERE cache_key=?', [key])
         if not cached:
             raise ValueError('Unselected saved publication is incompatible; include affected files for reanalysis')
