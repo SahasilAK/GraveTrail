@@ -10,12 +10,15 @@ flowchart LR
   Inventory --> SQL[SQLGlot AST scopes]
   Inventory --> SAS[SAS static rule blocks]
   Inventory --> CSV[Streaming CSV metadata]
-  SQL & SAS & CSV --> Facts[Transactional DuckDB facts]
+  Inventory --> DBT[Offline dbt project and artifact inspection]
+  SQL & SAS & CSV & DBT --> Facts[Transactional DuckDB facts]
   Facts --> Graph[Focused NetworkX graph]
   Facts --> Columns[Direct column reports]
   Graph & Columns --> UI[Streamlit workspace]
   UI --> Exports[Offline HTML / JSON / CSV / original ZIP]
-  Facts --> AI[Optional privacy-gated grounded assistance]
+  Inventory --> ProjectAI[Optional independent project AI extraction]
+  ProjectAI --> Validation
+  Facts --> AI[Optional privacy-gated manual assistance]
   AI --> Validation[Schema and source validation]
   Validation --> Facts
 ```
@@ -84,8 +87,10 @@ installed code and maintained documentation. No schema tables are dropped.
 Whole-home backups use DuckDB `COPY FROM DATABASE` to a checkpointed snapshot, then archive
 managed runtime files with a SHA-256 manifest. Restore validates bounded archive contents and
 schema, opens the staged database read-only and renames staging into a new destination. This
-is distinct from the bounded history/staging recovery journals. Schema versions are additive through 5;
-maintenance adds no destructive upgrade. See [setup and deployment](SETUP_AND_DEPLOYMENT.md).
+is distinct from the bounded history/staging recovery journals. Schema migrations are
+additive through 10 in this checkout; dbt adds migration 8, durable AI journals migration 9
+and optional request/response capture migration 10. See [data model](DATA_MODEL.md) and
+[setup and deployment](SETUP_AND_DEPLOYMENT.md).
 
 ## Distribution boundary
 
@@ -103,3 +108,16 @@ Checksums prove file integrity, not publisher authenticity or runtime correctnes
 artifacts need native runner smoke tests. Docker runs the installed wheel as a non-root user
 with persistent `/data`. UI and MCP are alternative owners of a home, not concurrent services
 against one DuckDB file. See [build verification](BUILD_AND_RELEASE.md).
+
+
+## Resumable AI analysis
+
+`analysis_service.run_analysis` coordinates independent protocol 5 file extraction,
+one frozen-context completion wave, bounded file consolidation and deterministic operation
+linking. It persists source/part/file records and physical-attempt reservations, with one
+active provider request per build and no database transaction held over network I/O.
+Structural/source validation preserves inferred status without requiring parser answers.
+After bounded item recovery, valid work can publish with explicit incomplete coverage;
+fatal/stale/cancelled work retains the previous graph. Compatible resume reuses saved work.
+The static parser and manual-assistance paths remain independent. See
+[AI pipeline architecture](architecture/ai-analysis-pipeline.md).

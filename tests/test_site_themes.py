@@ -12,8 +12,8 @@ def test_site_publishes_eleven_palettes_with_native_persistence() -> None:
     """Verify that site publishes eleven palettes with native persistence."""
     config = on_config(pytest.importorskip('mkdocs.config').load_config('mkdocs.yml'))
     schemes = [palette['scheme'] for palette in config.theme['palette']]
-    assert schemes == ['obsidian-ember', 'celadon', 'slate', 'arctic-mint', 'amethyst-terminal',
-        'fossil-copper', 'carbon-volt', 'crimson-forge', 'cobalt-atlas', 'rose-circuit', 'steel-glacier']
+    assert schemes == ['crimson-forge', 'celadon', 'slate', 'obsidian-ember', 'arctic-mint',
+        'amethyst-terminal', 'fossil-copper', 'carbon-volt', 'cobalt-atlas', 'rose-circuit', 'steel-glacier']
     assert all('media' not in palette for palette in config.theme['palette'])
     assert 'assets/javascripts/themes.js' in config.extra_javascript
     assert 'assets/javascripts/themes.js' in config.extra['public_assets']

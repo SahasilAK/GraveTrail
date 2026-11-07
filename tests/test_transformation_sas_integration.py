@@ -21,7 +21,8 @@ def test_sas_where_option_precedence_and_distinct_downstream_effects(tmp_path):
         Importer(store, w).files([('filters.sas', code)], {'.sas'})
         analyze(store, w)
         assets = {a['name']: a['asset_id'] for a in store.assets(w)}
-        upstream = trace_columns(store, w, assets['mart.out'], 'net')
+        upstream = trace_columns(store, w, assets['mart.out'], 'NET')
+        assert upstream['root']['column_name'] == 'net'
         assert all(i['column_name'] != 'ignored' for d in upstream['derivations'] for i in d['inputs'])
         assert any(p['depth'] == 2 and p['parent_column_id'] != p['column_id'] for p in upstream['paths'])
         impact = trace_columns(store, w, assets['raw.orders'], 'amount', direction='downstream')

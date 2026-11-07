@@ -3,6 +3,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 
 from dataforge.ingestion import Importer
 from dataforge.models import stable_id
@@ -158,7 +159,7 @@ def test_ai_merge_uses_source_job_not_last_matching_name(tmp_path: Path) -> None
     Args:
         tmp_path: Temporary directory supplied by pytest.
     """
-    from dataforge.llm import Profile, assist, merge_claims
+    from dataforge.llm import assist, merge_claims
 
     store = Store(tmp_path)
     try:
@@ -172,7 +173,7 @@ def test_ai_merge_uses_source_job_not_last_matching_name(tmp_path: Path) -> None
         body = {"claims": [{"source": "work.stage", "target": "mart.one", "operation": "CREATE",
             "start_line": 1, "end_line": 1, "quote": code, "explanation": "Direct", "confidence": .9}]}
         transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": json.dumps(body)}}))
-        result = assist(store, w, Profile(provider="Ollama", base_url="http://localhost:11434", model="test"), fid, 1, 1, transport=transport)
+        result = assist(store, w, focused_profile(provider="Ollama", base_url="http://localhost:11434", model="test"), fid, 1, 1, transport=transport)
         assert result["outcome"] == "validated"
         merge_claims(store, w, result["record_id"])
         edge = next(e for e in store.edges(w) if e["method"] == "llm")

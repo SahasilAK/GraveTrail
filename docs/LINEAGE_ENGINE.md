@@ -43,6 +43,21 @@ only control state, never a rendered tree or source content, lives in session st
 
 ## Explicit AI builds
 
-`analysis_service` stages immutable context, original-unit AI extraction, deterministic validation and operation-based reconciliation before publication. The `parser` path retains `services.analyze`; `hybrid` adds validated AI support to parser facts, while experimental `ai` excludes unmatched parser SQL/SAS facts. CSV metadata remains local. Accepted project operations use explicit sparse table pairs, avoiding an input × output cross-product. Shared original operation evidence keys deduplicate corroboration and preserve distinct statements/writers.
+`analysis_service` pins immutable sources/context, independently extracts protocol 5 AI
+file parts, validates source identity/coordinates and links saved operations before
+publication. `parser` calls `services.analyze`; `ai` publishes inferred AI facts without
+parser semantic approval or filling omitted facts from parser output. One build selects
+SQL, SAS or dbt as its family; dbt includes its admitted YAML/macros/artifacts and other
+project members. Hybrid comparison and additional review are retired.
 
-Atomic publication checks the source/context manifest, relevant settings and prior committed revision. Failed, stale, incomplete or cancelled work retains committed facts. Saved accepted project facts can rehydrate offline if hash/config/job identity remains compatible. Unresolved graph/column evidence remains inspectable and stops confident traversal; an independent accepted parallel support may still supply a traversable relationship. See [AI project analysis](AI_ANALYSIS.md).
+`ai_linking.build_operation_graph` creates a versioned operation MultiDiGraph from saved
+file records. Resource/scope/version and operation identities preserve distinct writers
+and data-dependency roles; linking does not invent a Cartesian input/output product or
+execution order. dbt structural inventory is retained alongside AI-derived data edges.
+
+Atomic publication checks sources, configuration and the prior committed revision.
+Fatal failures, stale inputs and cancellation retain committed facts. Bounded item recovery
+can publish available validated work with explicit incomplete coverage; compatible retries
+reuse saved successes. Unresolved graph/column evidence remains inspectable and stops
+confident traversal. Explicit static builds use static results. See
+[AI project analysis](AI_ANALYSIS.md) and [operation linking](architecture/ai-analysis-pipeline.md).

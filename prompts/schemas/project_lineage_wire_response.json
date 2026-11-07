@@ -135,6 +135,11 @@
           "title": "Expression",
           "type": "string"
         },
+        "fragment": {
+          "default": false,
+          "title": "Fragment",
+          "type": "boolean"
+        },
         "category": {
           "maxLength": 100,
           "minLength": 1,

@@ -148,9 +148,7 @@ def evaluate_archive(path, language, *, split='development', limit=None, live=Fa
         predictions, stats = _live_predictions(cases, key_env=key_env,
                                                max_attempts=max_attempts, max_seconds=max_seconds, max_tokens=8192)
         modes['ai'] = {key: _table_pairs(value) for key, value in predictions.items()}
-        modes['hybrid'] = {key: _table_pairs(value) for key, value in stats['hybrid_predictions'].items()}
         abstentions['ai'] = {key: value.get('abstain', False) for key, value in predictions.items()}
-        abstentions['hybrid'] = {key: value.get('abstain', False) for key, value in stats['hybrid_predictions'].items()}
     results = {}
     for mode, predictions in modes.items():
         actual, expected = set(), set()

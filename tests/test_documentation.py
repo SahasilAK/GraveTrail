@@ -159,6 +159,41 @@ def test_document_routes_do_not_collide_on_case_insensitive_hosts() -> None:
     assert outputs == {"architecture/index.html", "architecture/overview/index.html", "index.html"}
 
 
+def test_only_reviewed_html_example_can_be_published(tmp_path: Path) -> None:
+    """A reviewed digest admits one fixture, never arbitrary executable HTML."""
+    from scripts.docs.hooks import public_files
+
+    name = 'assets/examples/lineage.html'
+    source = Path('docs') / name
+    target = tmp_path / name
+    target.parent.mkdir(parents=True)
+    target.write_bytes(source.read_bytes())
+    assert public_files(tmp_path, {name}) == {name}
+    target.write_bytes(source.read_bytes() + b'<script src="https://example.org/x.js"></script>')
+    with pytest.raises(ValueError, match='reviewed HTML'):
+        public_files(tmp_path, {name})
+    (tmp_path / 'arbitrary.html').write_text('<script>alert(1)</script>', encoding='utf-8')
+    with pytest.raises(ValueError, match='Unsafe'):
+        public_files(tmp_path, {'arbitrary.html'})
+
+
+def test_fixture_html_blocks_network_and_contains_only_safe_relative_evidence() -> None:
+    """The downloadable snapshot has explicit isolation and known fixture text."""
+    import json
+
+    from scripts.docs.validate import Links
+
+    source = Path('docs/assets/examples/lineage.html').read_text(encoding='utf-8')
+    assert 'Content-Security-Policy' in source
+    assert "default-src 'none'" in source
+    assert Links(source).links == []
+    payload = json.loads(source.split('mountGraph(document.body,', 1)[1].rsplit(',null);', 1)[0])
+    assert {node['name'] for node in payload['nodes']} == {
+        'file:input/customers.csv', 'work.customers_stage', 'staging.customers', 'mart.customer_summary'}
+    assert len(payload['edges']) == 3
+    assert all(not node.get('workspace_id') for node in payload['nodes'])
+
+
 def test_site_links_validate_project_prefix_fragments_and_missing_targets(tmp_path: Path) -> None:
     """Verify that site links validate project prefix fragments and missing targets.
 
@@ -195,3 +230,16 @@ def test_output_inventory_rejects_runtime_and_unexpected_files(tmp_path: Path) -
     assert any("workspace.duckdb" in error for error in inspect_inventory(tmp_path, {"index.html"}))
     (tmp_path / "index.html").unlink()
     assert any("Missing" in error for error in inspect_inventory(tmp_path, {"index.html"}))
+
+
+def test_legacy_routes_report_missing_pages_and_heading_aliases(tmp_path: Path) -> None:
+    from scripts.docs.validate import inspect_legacy_routes
+
+    routes = {'index.html': ['old-section'], 'guide/index.html': []}
+    (tmp_path / 'index.html').write_text('<h1 id="old-section">Guide</h1>', encoding='utf-8')
+    assert inspect_legacy_routes(tmp_path, routes) == ['Missing legacy page: guide/index.html']
+    (tmp_path / 'guide').mkdir()
+    (tmp_path / 'guide/index.html').write_text('Guide', encoding='utf-8')
+    assert inspect_legacy_routes(tmp_path, routes) == []
+    (tmp_path / 'index.html').write_text('Changed', encoding='utf-8')
+    assert inspect_legacy_routes(tmp_path, routes) == ['Missing legacy anchor: index.html#old-section']

@@ -103,6 +103,8 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
             sid, oid = operation_ids(workspace, metadata, op_index, op)
             outputs = {t.identity or resolver.norm(t.name): resolver.resolve(t, metadata, parsed, 'output')[0]
                        for t in op.targets}
+            unresolved_identities = {r.identity for r in [*op.sources, *op.targets, *parsed.assets]
+                                     if r.kind == 'unresolved'}
 
             def declared(table, identity=''):
                 aid, _ = resolver.resolve(AssetRef(table, identity=identity), metadata, parsed)
@@ -114,7 +116,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 return schemas.get(aid, {}).get('column_identifiers') or query_layouts.get(aid, [])
 
             def reference(table, name, scope='', version='', output=False, identity=''):
-                if scope:
+                if scope and not identity:
                     # Scope records live under their output asset without polluting table lineage.
                     anchor = next(iter(outputs.values()), None)
                     if anchor is None:
@@ -127,7 +129,12 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                     else:
                         inferred = False
                 key = column_key(name, config['case_sensitive'])
-                cid = stable_id(workspace, aid, key, sid if scope or version else '', scope, version)
+                resolved_ai = (op.method == 'ai-project' and identity and identity not in unresolved_identities
+                               and resolver.registry[aid][4] != 'unresolved')
+                # AI asset identities already encode resource scope/version. Static
+                # expression scopes and unresolved references stay statement-local.
+                cid = (stable_id(workspace, aid, key) if resolved_ai else
+                       stable_id(workspace, aid, key, sid if scope or version else '', scope, version))
                 if not scope:
                     table = resolver.registry[aid][2]
                 references[cid] = [cid, workspace, aid, table, name, key, scope, version]
@@ -603,6 +610,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             boundary('item_limit')
         return result
     root = candidates[0]
+    result['root'] = _ref(root)
     queue = deque([(root['column_id'], 0, 'value', ())])
     scheduled = {(root['column_id'], 'value')}
     discovered_edges = set()
@@ -631,7 +639,6 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
         cid, level, effect, ancestors = queue.popleft()
         if cid in ancestors:
             boundary('cycle', column_id=cid)
-            continue
         if (cid, effect) in visited:
             continue
         visited.add((cid, effect))
@@ -643,7 +650,6 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             clause = '''EXISTS (SELECT 1 FROM column_dependencies i WHERE i.workspace_id=d.workspace_id
                 AND i.derivation_id=d.derivation_id AND i.source_column_id=?)'''
             params = [cid]
-        remaining = max(1, limit - len(emitted))
         steps = store.rows('''SELECT d.* EXCLUDE(expression),substr(d.expression,1,12000) AS expression,
             length(d.expression)>12000 AS expression_truncated,s.start_line,s.end_line,s.content_hash AS source_hash,
             f.relative_path,o.method''' + (',substr(s.code,1,12000) AS code,length(s.code)>12000 AS source_truncated'
@@ -652,7 +658,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             JOIN source_files f ON d.file_id=f.file_id AND d.workspace_id=f.workspace_id
             JOIN operations o ON d.operation_id=o.operation_id AND d.workspace_id=o.workspace_id
             WHERE d.workspace_id=? AND d.run_id=? AND ''' + clause + '''
-            ORDER BY d.statement_id,d.ordinal,d.branch,d.derivation_id LIMIT ?''', [w, run_id, *params, remaining + 1])
+            ORDER BY d.statement_id,d.ordinal,d.branch,d.derivation_id LIMIT ?''', [w, run_id, *params, limit + 1])
         if not steps:
             continue
         if virtual:
@@ -663,11 +669,11 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             boundary('depth_limit', column_id=cid)
             result['truncated'] = True
             continue
-        limited_steps = len(steps) > remaining
+        limited_steps = len(steps) > limit
         if limited_steps:
             boundary('item_limit')
             result['truncated'] = True
-            steps = steps[:remaining]
+            steps = steps[:limit]
         ambiguous = direction == 'upstream' and len({s['operation_id'] for s in steps}) > 1
         if direction == 'upstream' and limited_steps and not ambiguous:
             writers = store.rows('''SELECT DISTINCT operation_id FROM column_derivations
@@ -761,7 +767,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                         result['truncated'] = True
                     if item[0] in item[3]:
                         boundary('cycle', column_id=item[0])
-                    elif (item[0], item[2]) not in scheduled:
+                    if (item[0], item[2]) not in scheduled:
                         if len(scheduled) >= limit * 2:
                             boundary('item_limit')
                             result['truncated'] = True

@@ -205,11 +205,11 @@ def release_notes(github_notes: str, commits: str, summary: str | None = None,
         f"{highlights}{github_notes.strip()}\n\n"
         f"## Commit history\n\n{commits.strip()}\n\n"
         "## Downloads and startup\n\n"
-        "Windows x64: choose the per-user `setup.exe` (or `setup-unsigned.exe` in development releases), "
+        "Windows x64: choose the per-user `setup.exe` (or `setup-unsigned.exe` in unsigned releases), "
         "or extract the portable ZIP and keep its complete `gravetrail/` directory together. "
         "Verify downloads against `SHA256SUMS`. Run `gravetrail.exe`; the app opens in your browser "
         "and does not require Python. "
-        + ("Development build: installer and application are unsigned.\n\n" if mode == "development" else
+        + ("Unsigned release: installer and application are unsigned.\n\n" if mode == "development" else
            "Production build: publisher signatures and timestamps were verified; "
            "Windows reputation prompts may still appear.\n\n") +
         "Back up your existing GraveTrail data home with all app/CLI/MCP owners stopped before upgrading. "

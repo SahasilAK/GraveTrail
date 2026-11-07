@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="810" viewBox="0 0 1120 810" role="img" aria-labelledby="title desc">
+  <title id="title">AI request and persistence sequence</title>
+  <desc id="desc">After authorization, the host pins source and run state, journals a planned attempt, sends provider HTTP with no open database transaction, checks returned source references and consistency, saves reusable checkpoints, then freshness-checks and atomically publishes inferred facts. Semantic completeness is not proven.</desc>
+  <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M1 1L8 4.5L1 8" fill="none" stroke="#496777" stroke-width="1.5"/></marker></defs>
+  <style>text{font-family:Segoe UI,Arial,sans-serif;fill:#163343}.heading{font-size:24px;font-weight:700}.label{font-size:18px;font-weight:600}.body{font-size:15px}.small{font-size:14px}.arrow{fill:none;stroke:#496777;stroke-width:2;marker-end:url(#arrow)}.box{fill:#fff;stroke:#9eb9c7;stroke-width:1.5}.ai{fill:#fff6ec;stroke:#b3743b;stroke-width:1.5}.store{fill:#e9f4f3;stroke:#5d9591;stroke-width:1.5}</style>
+  <rect x="1" y="1" width="1118" height="808" rx="14" fill="#f4f8fa" stroke="#c3d4dd"/>
+  <text x="35" y="43" class="heading">AI request and persistence sequence</text><text x="35" y="73" class="body">Host-owned source/run pins and short database writes are separate from provider network waits.</text>
+  <g class="box"><rect x="15" y="104" width="240" height="69" rx="8"/><rect x="300" y="104" width="240" height="69" rx="8"/><rect x="580" y="104" width="240" height="69" rx="8"/></g><rect x="860" y="104" width="240" height="69" rx="8" class="store"/>
+  <g text-anchor="middle"><text x="135" y="133" class="label">Authorized service</text><text x="135" y="157" class="small">launch + workspace policy</text><text x="420" y="133" class="label">AI coordinator</text><text x="420" y="157" class="small">analysis_service</text><text x="700" y="133" class="label">Provider</text><text x="700" y="157" class="small">HTTP adapter</text><text x="980" y="133" class="label">Store</text><text x="980" y="157" class="small">DuckDB + originals</text></g>
+  <g fill="none" stroke="#a2b7c2" stroke-width="1.4" stroke-dasharray="5 5"><path d="M135 173V735"/><path d="M420 173V735"/><path d="M700 173V735"/><path d="M980 173V735"/></g>
+  <path d="M135 211H420" class="arrow"/><text x="278" y="201" class="small" text-anchor="middle">1. Start / continue a permitted run</text>
+  <path d="M420 267H980" class="arrow"/><text x="700" y="249" class="small" text-anchor="middle">2. Pin file/hash/offsets, inventory, settings, protocol and profile</text>
+  <path d="M420 327H980" class="arrow"/><text x="700" y="309" class="small" text-anchor="middle">3. Journal request and begin attempt (short write)</text>
+  <path d="M420 389H700" class="arrow"/><text x="560" y="371" class="small" text-anchor="middle">4. Authorized provider HTTP</text>
+  <rect x="758" y="359" width="310" height="57" rx="8" class="ai"/><text x="913" y="382" class="body" text-anchor="middle">No database transaction</text><text x="913" y="403" class="small" text-anchor="middle">held across the network wait</text>
+  <path d="M700 451H420" class="arrow"/><text x="560" y="435" class="small" text-anchor="middle">5. Response / unknown outcome</text>
+  <rect x="295" y="481" width="250" height="84" rx="8" class="ai"/><text x="420" y="507" class="label" text-anchor="middle">6. validate_extraction</text><text x="420" y="531" class="small" text-anchor="middle">Source refs + internal consistency</text><text x="420" y="552" class="small" text-anchor="middle">No static semantic approval</text>
+  <path d="M420 596H980" class="arrow"/><text x="700" y="580" class="small" text-anchor="middle">7. Persist checked parts/files; reuse compatible successes</text>
+  <rect x="540" y="618" width="510" height="44" rx="8" class="box"/><text x="795" y="646" class="small" text-anchor="middle">Context completion / consolidation / deterministic linking</text>
+  <path d="M420 709H980" class="arrow"/><text x="700" y="691" class="small" text-anchor="middle">8. Freshness check + atomic fact publication (one transaction)</text>
+  <text x="35" y="762" class="body">Publication remains inferred: complete=False; semantic_coverage_not_proven.</text><text x="35" y="788" class="small">Durable checkpoints are reusable work; they are not the current graph. Unknown outcomes retain attempt accounting.</text>
+</svg>

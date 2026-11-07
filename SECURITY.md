@@ -5,6 +5,13 @@ and protect data homes, exports and backups: they can contain complete source co
 Read the [security and privacy guide](docs/SECURITY.md) for the implemented threat
 boundaries, credential lifecycle, import protections and deployment requirements.
 
+Optional saved API keys use the Python `keyring` library with an explicitly selected native
+backend. Windows credentials are forced to current-user/local-machine persistence; other OS
+backends remain disabled pending qualification. There is no independent master-password lock
+or guarantee against malware running as the same user. See [secure configuration](docs/SECURE_CONFIGURATION.md)
+for source selection, launch grants, deletion, restore and failure handling. Deleting local
+storage does not revoke a provider key.
+
 ## Report a vulnerability
 
 Do not post credentials, private source, live databases, backups or sensitive exploit
@@ -50,6 +57,12 @@ Reports about source ingestion, path/resource boundaries, evidence exports, cred
 cleanup/restore and CLI/MCP authorization are relevant. This repository does not publish
 a supported-version matrix or guaranteed security maintenance period. Include the exact
 revision or package version you tested; verify fixes on the intended target platform.
+
+On 2026-10-25, the locked build extra's setuptools was updated from 84.0.0 to
+84.1.0 for [GHSA-xmj3-9gf7-h52w](https://github.com/pypa/setuptools/security/advisories/GHSA-xmj3-9gf7-h52w).
+The complete locked-dependency and clean installed-wheel audits remain enabled;
+no advisory is ignored. This is a build-tool lock update, not a runtime dependency
+or data-format change.
 
 ## Temporary Streamlit/Pillow compatibility exception
 

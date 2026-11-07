@@ -123,7 +123,7 @@ def _source_spans(code, extension, dialect):
     return tuple(spans)
 
 
-def source_references(unit, settings=None):
+def source_references(unit, settings=None, *, partial=False):
     from dataforge.ai_semantic import source_view, unit_dialect
 
     settings = settings or {}
@@ -132,8 +132,10 @@ def source_references(unit, settings=None):
     result, seen = [], set()
     for a, b, kind, statement, ordinal, name in _source_spans(unit.code, unit.extension, dialect):
         start, end = unit.start_offset + a, unit.start_offset + b
-        if (not 0 <= a < b <= len(unit.code) or b - a > 20000
-                or not any(v['start_offset'] <= start < end <= v['end_offset'] for v in visible)):
+        complete = any(v['start_offset'] <= start < end <= v['end_offset'] for v in visible)
+        intersects = any(max(start, v['start_offset']) < min(end, v['end_offset']) for v in visible)
+        if (not 0 <= a < b <= len(unit.code) or (not partial and b - a > 20000)
+                or (not complete and not (partial and unit.source_focus and intersects))):
             continue
         key = (start, end, kind)
         if key in seen:
@@ -144,5 +146,6 @@ def source_references(unit, settings=None):
                                  unit.job_id, unit.extension, dialect, str(start), str(end), kind,
                                  hashlib.sha256(text.encode()).hexdigest())
         result.append({'reference_id': reference_id, 'kind': kind, 'statement': statement,
-                       'ordinal': ordinal, 'name': name, 'start_offset': start, 'end_offset': end, 'text': text})
+                       'ordinal': ordinal, 'name': name, 'start_offset': start, 'end_offset': end, 'text': text,
+                       **({'partial': True} if not complete else {})})
     return sorted(result, key=lambda item: (item['start_offset'], item['end_offset'], item['kind']))

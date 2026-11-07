@@ -65,7 +65,10 @@ def prepare_runtime(home: Path, assets: Path) -> Path:
     if not target.exists():
         # Exclusive creation preserves settings when two launchers race.
         try:
-            with target.open("xb") as stream, (assets / ".streamlit/config.toml").open("rb") as source:
+            defaults = assets / ".streamlit/config.toml"
+            if not defaults.exists():
+                defaults = assets / "ui/streamlit.toml"
+            with defaults.open("rb") as source, target.open("xb") as stream:
                 shutil.copyfileobj(source, stream)
         except FileExistsError:
             pass
@@ -89,6 +92,8 @@ def main(argv: list[str] | None = None) -> None:
     if not source:
         os.environ.setdefault("DATAFORGE_THEME_CONFIG", str(prepare_runtime(home, assets)))
         os.chdir(home)
+    else:
+        prepare_runtime(assets, assets)
     sys.path.insert(0, str(assets))
     from dataforge.store import Store
 

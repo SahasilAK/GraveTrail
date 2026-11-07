@@ -85,12 +85,45 @@ def is_dbt(metadata):
     return json.loads(metadata.get('metadata') or '{}').get('source_kind') == 'dbt'
 
 
-def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled=None):
-    files = [m for m in store.files(workspace) if is_dbt(m)]
+def prepare_ai_dbt_inventory(prepared, results):
+    """Safe resource inventory and AI-derived data relationships; no static lineage."""
+    from dataforge.dbt.evidence import evidence
+    from dataforge.dbt.models import DbtProjectResult, DbtRelationship
+    from dataforge.dbt.resources import collect_resources
+    sources = {s.file_id: s for s in prepared.sources if s.source_kind == 'dbt'}
+    if not sources:
+        return []
+    files = [m for m, _ in results if m['file_id'] in sources]
+    snapshots = discover_dbt_snapshots(files, lambda ref: sources[ref.file_id].code,
+                                      prepared.settings.get('dbt', {}))
+    projects = []
+    for snapshot in snapshots:
+        resources, diagnostics = collect_resources(snapshot, lambda ref: sources[ref.file_id].code)
+        manifests = [s for s in snapshot.sources if s.relative_path.rsplit('/', 1)[-1] == 'manifest.json']
+        if manifests and snapshot.context.mode != 'source':
+            from dataforge.dbt.artifacts import manifest_resources, read_artifact
+            resources, _ = manifest_resources(read_artifact(manifests[0], sources[manifests[0].file_id].code), snapshot)
+        ids = {r.resource_id for r in resources}
+        selected = tuple((m, p) for m, p in results if m['file_id'] in {s.file_id for s in snapshot.sources})
+        relationships = []
+        for metadata, parsed in selected:
+            text = sources[metadata['file_id']].code
+            for operation in parsed.operations:
+                ref = evidence(metadata, text, origin='ai_inferred')
+                for source in operation.sources:
+                    for target in operation.targets:
+                        a, b = source.identity.removeprefix('dbt:'), target.identity.removeprefix('dbt:')
+                        if a in ids and b in ids:
+                            relationships.append(DbtRelationship(a, b, 'data_read', 'resolved', (ref,)))
+        projects.append(DbtProjectResult(snapshot, tuple(resources), tuple(relationships), file_results=selected,
+            coverage={'ai_mode': 'ai', 'columns': 'inferred', 'semantic_completeness': 'not_proven'}))
+    return projects
+
+
+def discover_dbt_snapshots(files, read_source, stored_settings):
     by_id = {m['file_id']: m for m in files}
-    stored_settings = store.setting(workspace, 'dbt', {})
     settings = DbtSettings.model_validate(stored_settings)
-    snapshots = discover_projects(source_refs(files), lambda ref: store.snapshot_content(by_id[ref.file_id]), settings=settings)
+    snapshots = discover_projects(source_refs(files), read_source, settings=settings)
     if 'mode' not in stored_settings:
         from dataclasses import replace
 
@@ -102,14 +135,27 @@ def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled
             adjusted.append(replace(snapshot, context=replace(snapshot.context, mode=mode),
                                     fingerprint=stable_id(snapshot.fingerprint, mode)))
         snapshots = tuple(adjusted)
+    return snapshots
+
+
+def prepare_dbt_analysis(store, workspace, file_ids=None, force=False, cancelled=None):
+    from dataforge.services import PARSER_VERSION
+
+    files = [m for m in store.files(workspace) if is_dbt(m)]
+    by_id = {m['file_id']: m for m in files}
+    stored_settings = store.setting(workspace, 'dbt', {})
+    snapshots = discover_dbt_snapshots(files, lambda ref: store.snapshot_content(by_id[ref.file_id]), stored_settings)
     previous = {r.snapshot.project_id: r for r in load_committed_dbt_results(store, workspace)}
+    publication = store.rows('SELECT parser_version FROM column_analysis WHERE workspace_id=?', [workspace])
+    current_parser = bool(publication) and publication[0]['parser_version'] == PARSER_VERSION
     projects, analyzed, cached = [], 0, 0
     for snapshot in snapshots:
         if cancelled and cancelled():
             raise InterruptedError('dbt analysis cancelled; previous lineage retained')
         selected = file_ids is None or bool(set(file_ids) & {s.file_id for s in snapshot.sources})
         old = previous.get(snapshot.project_id)
-        if old and old.snapshot.fingerprint == snapshot.fingerprint and not (force and selected):
+        if (old and current_parser and not old.coverage.get('ai_mode')
+                and old.snapshot.fingerprint == snapshot.fingerprint and not (force and selected)):
             result = old
             cached += len(snapshot.sources)
         elif selected or old:
@@ -133,8 +179,3 @@ def dbt_settings_current(store, workspace):
     settings = DbtSettings.model_validate(store.setting(workspace, 'dbt', {})).model_dump()
     return all(json.loads(row['context_json']).get('settings') == settings
                for row in store.rows('SELECT context_json FROM dbt_projects WHERE workspace_id=?', [workspace]))
-
-
-def reject_dbt_ai(store, workspace, file_ids=None):
-    if any(is_dbt(m) and (file_ids is None or m['file_id'] in file_ids) for m in store.files(workspace)):
-        raise ValueError('dbt projects currently require parser analysis; AI/hybrid dbt analysis is unsupported')

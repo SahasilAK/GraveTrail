@@ -10,7 +10,10 @@ See [local preview and publishing](../deployment/github-pages.md) for setup.
 README.md                    Repository introduction and quick start
 docs/index.md                Documentation website landing page
 docs/getting-started/         First lineage and configuration
-docs/user-guide/              Workflow navigation
+docs/user-guide/              Task-focused how-to guides
+docs/concepts/                Explanations and coverage boundaries
+docs/project-types/           SQL, SAS and dbt workflows
+docs/examples/                Reproducible tutorials and interactive snapshot
 docs/integrations/            CLI, MCP and optional provider navigation
 docs/architecture/            Architecture and coverage navigation
 docs/deployment/              Runtime options and GitHub Pages publishing
@@ -39,7 +42,7 @@ and agents browsing the repository; they are excluded from documentation site pa
    from HTML and search, even if it exists under `docs/`.
 4. Link to Markdown source paths relative to the current document. MkDocs rewrites
    them to site URLs. Use exact heading fragments. References outside `docs/` need
-   an explicit GitHub `blob/main` or `tree/main` URL, not `../../src/...` site links.
+   an explicit GitHub source URL pinned to the documented implementation commit, not `../../src/...` site links.
 5. Preview and build:
 
    ```sh
@@ -49,7 +52,7 @@ and agents browsing the repository; they are excluded from documentation site pa
    uv run --group docs pytest tests/test_documentation.py -q
    ```
 
-6. Review desktop/mobile presentation, keyboard navigation, all four themes, the theme selector and search.
+6. Review desktop/mobile presentation, keyboard navigation, the supported light/dark palettes, the theme selector and search.
    Update implementation status/affected knowledge maps for substantial changes.
 7. Open a pull request. After it merges to `main`, the workflow publishes relevant changes.
 
@@ -60,8 +63,7 @@ Keep public assets under `docs/assets/` and individually list each in
 isolated application screenshots only; never present a mockup as the running product.
 Remove credentials, user paths and proprietary source before saving a screenshot.
 
-The homepage uses a brief CSS entrance animation on its illustration; reduced-motion
-preferences disable it. Preserve visible keyboard focus and readable light/dark colors.
+Preserve visible keyboard focus, reduced-motion preferences and readable light/dark colors.
 Fonts are system fonts, so no font service is required. Mermaid fences use Material's
 supported integration; interactive Mermaid rendering can require the theme's external
 Mermaid module. The static SVG diagrams remain usable without that module.
@@ -89,3 +91,61 @@ publication tests. Review the lock diff and browser rendering before committing.
 CI uses the docs-only locked environment; it does not need application data, model
 credentials, Docker, Node.js or a running Streamlit server to publish documentation.
 The existing application and release workflows retain their own checks.
+
+## Keep code and documentation aligned
+
+Treat tutorials as complete working journeys, how-to guides as one task, concepts as
+explanations, and reference as precise supported behavior. Keep canonical detail in
+one place; section indexes orient and link. Retain old page paths and heading IDs or
+provide meaningful compatibility anchors when reorganizing. Never use knowledge maps
+as public pages.
+
+When a parser, import mode, UI label, provider policy, data contract, command, export
+or packaging behavior changes, review its task guide, coverage reference, example and
+source-map entry together. Label unreleased behavior and update checkout instructions;
+a package version alone is insufficient during development. CLI/MCP tables are tested
+against actual registrations.
+
+Regenerate the complete first-party inventory with:
+
+```sh
+uv run python scripts/docs/inventory.py
+uv run python scripts/docs/inventory.py --check
+uv run --group docs pytest tests/test_documentation.py tests/test_docs_inventory.py tests/test_site_themes.py -q
+```
+
+The inventory uses AST/Git paths, never imports app modules. Curated responsibilities,
+contracts and extension guidance belong in the adjacent developer pages. Update affected
+KNOWLEDGE maps separately, outside public navigation.
+
+## Reproduce screenshots and diagrams
+
+Use a disposable home such as `.dataforge/docs-capture` on a separate loopback port.
+Import only tracked safe fixtures, run static analysis without credentials, and capture
+actual app controls. See [capture recipes](screenshots.md) for the fixture, page, selection
+and capture context for each image. Replace captions/alt text with the capture, remove
+personal paths and review visible source before sharing. Do not use generated imagery
+as application evidence.
+
+Edit standalone SVG diagram sources in `docs/assets/diagrams`; preserve title/description,
+legible labels and arrow meanings. For Mermaid, check actual browser rendering and
+keep the SVG fallback usable when an external Mermaid module is unavailable.
+
+## Review the executable HTML asset
+
+The sole public HTML snapshot is `assets/examples/lineage.html`. Recreate it with:
+
+```sh
+uv run python scripts/docs/example.py
+```
+
+Review all embedded labels, evidence snippets and relative paths. Reopen the result
+in a browser and test fit, zoom, pan, search, selection and keyboard access. The generator
+adds a content policy blocking network use; no external scripts/assets are needed.
+It uses a temporary home and no provider. Run-local IDs can change between captures.
+
+After reviewing, update only its SHA-256 entry in `scripts/docs/hooks.py`, then run the
+strict build and publication tests. Do not add general `.html` support or copy the supplied
+personal export into the site. The exact-name/digest exception and sandboxed iframe keep
+other HTML and all unlisted assets excluded. Browser network-disabled verification is
+separate from source inspection/content-policy enforcement; record which was exercised.

@@ -329,6 +329,127 @@ def _sql_write(tree, target, code, dialect):
     return records
 
 
+def _write_ranges(code: str, dialect: Dialect, *, values: bool = False) -> list[tuple[int, int]]:
+    """Recover assignment or first VALUES-row spans without AST regeneration."""
+    tokens = dialect.tokenize(code)
+    keyword = 'VALUES' if values else 'SET'
+    index = next((i for i, token in enumerate(tokens) if token.token_type.name == keyword), None)
+    if index is None:
+        return []
+    cursor = index + (2 if values else 1)
+    if cursor >= len(tokens):
+        return []
+    start, depth, ranges = tokens[cursor].start, 0, []
+    for token in tokens[cursor:]:
+        kind = token.token_type.name
+        if depth == 0 and (kind in {'WHERE', 'RETURNING', 'SEMICOLON'} or values and kind == 'R_PAREN'):
+            ranges.append((start, token.start))
+            break
+        if depth == 0 and kind == 'COMMA':
+            ranges.append((start, token.start))
+            start = token.end + 1
+        if kind == 'L_PAREN':
+            depth += 1
+        elif kind == 'R_PAREN':
+            depth -= 1
+    else:
+        ranges.append((start, len(code)))
+    return [(a + len(code[a:b]) - len(code[a:b].lstrip()), b - len(code[a:b]) + len(code[a:b].rstrip()))
+            for a, b in ranges]
+
+
+def _postgres_update(tree: exp.Update, code: str, dialect: Dialect, target: exp.Table) -> list[dict[str, Any]] | None:
+    """Map a narrow SET slice to isolated old values; never infer write order."""
+    if dialect.__class__.__name__.casefold() != 'postgres':
+        return None
+    if (any(value for key, value in tree.args.items() if key not in {'this', 'expressions', 'where'})
+            or not isinstance(target.this, exp.Identifier)
+            or any(value for key, value in target.args.items() if key not in {'this', 'db', 'catalog', 'alias'})):
+        return None
+    assignments = tree.expressions
+    if not assignments or any(not isinstance(a, exp.EQ) or not isinstance(a.this, exp.Column)
+                              or a.this.table or not isinstance(a.this.this, exp.Identifier) for a in assignments):
+        return None
+    names = [identifier(a.this.this) for a in assignments]
+    keys = [name[1:-1] if name.startswith('"') else name.casefold() for name in names]
+    if len(set(keys)) != len(keys):
+        return None
+    scalar = (exp.Column, exp.Identifier, exp.Literal, exp.Null, exp.Boolean, exp.Paren,
+              exp.Neg, exp.Add, exp.Sub, exp.Mul, exp.Div, exp.Mod)
+    predicate = (*scalar, exp.Where, exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE,
+                 exp.And, exp.Or, exp.Not, exp.Is)
+    nodes = [(a.expression, scalar) for a in assignments]
+    if tree.args.get('where') is not None:
+        nodes.append((tree.args['where'], predicate))
+    allowed_qualifier = target.args.get('alias')
+    allowed_qualifier = allowed_qualifier.this if allowed_qualifier is not None else target.this
+    for node, allowed in nodes:
+        if any(not isinstance(child, allowed) for child in node.walk()):
+            return None
+        for column in node.find_all(exp.Column):
+            qualifier = column.args.get('table')
+            if (column.name.upper() == 'DEFAULT' and not column.this.args.get('quoted')
+                    or column.args.get('db') or column.args.get('catalog') or (
+                    qualifier is not None and identifier(qualifier) != identifier(allowed_qualifier))):
+                return None
+    spans = _write_ranges(code, dialect)
+    if len(spans) != len(assignments):
+        return None
+    table = relation(target)
+    result = []
+    for ordinal, (assignment, name, (start, end)) in enumerate(zip(assignments, names, spans)):
+        category = 'direct' if isinstance(assignment.expression, exp.Column) else 'expression'
+        if not list(assignment.expression.find_all(exp.Column)):
+            category = 'constant'
+        record = _record(table, name, '', code[start:end], category, [
+            'UPDATE prior rows and unchanged columns are not established; partial writes and writer order are unresolved'],
+            ordinal=ordinal, _expression_offset=start)
+        for node, role in [(assignment.expression, 'value'), (tree.args.get('where'), 'row_filter')]:
+            if node is not None:
+                for column in node.find_all(exp.Column):
+                    item = {'table': table, 'column': identifier(column.this), 'role': role,
+                            'scope': 'update:prior', 'version': 'prior'}
+                    if item not in record['inputs']:
+                        record['inputs'].append(item)
+        record['inputs'].append({'table': table, 'column': '', 'role': 'rowset',
+                                 'scope': 'update:prior', 'version': 'prior'})
+        result.append(record)
+    return result
+
+
+def _postgres_values(tree: exp.Insert, code: str, dialect: Dialect, target: exp.Table) -> list[dict[str, Any]] | None:
+    """Map one explicit literal row while retaining unknown existing target rows."""
+    if dialect.__class__.__name__.casefold() != 'postgres':
+        return None
+    schema, values = tree.this, tree.expression
+    if (not isinstance(schema, exp.Schema) or not isinstance(values, exp.Values)
+            or len(values.expressions) != 1
+            or any(value for key, value in tree.args.items() if key not in {'this', 'expression'})
+            or not isinstance(target.this, exp.Identifier)
+            or any(value for key, value in target.args.items() if key not in {'this', 'db', 'catalog'})):
+        return None
+    columns, row = schema.expressions, values.expressions[0]
+    if not columns or not isinstance(row, exp.Tuple) or len(columns) != len(row.expressions):
+        return None
+    if any(not isinstance(c, exp.Identifier) for c in columns):
+        return None
+    keys = [c.name if c.args.get('quoted') else c.name.casefold() for c in columns]
+    if len(set(keys)) != len(keys):
+        return None
+    for value in row.expressions:
+        if isinstance(value, exp.Neg) and isinstance(value.this, exp.Literal) and not value.this.is_string:
+            continue
+        if not isinstance(value, (exp.Literal, exp.Null, exp.Boolean)):
+            return None
+    spans = _write_ranges(code, dialect, values=True)
+    if len(spans) != len(columns):
+        return None
+    return [_record(relation(target), identifier(column), '', code[start:end], 'constant', [
+        'INSERT VALUES describes inserted rows only; prior target rows and omitted-column defaults are not established'],
+        ordinal=ordinal, _expression_offset=start)
+        for ordinal, (column, (start, end)) in enumerate(zip(columns, spans))]
+
+
 def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, scopes: list[Scope], target: exp.Table | None=None) -> list[dict[str, Any]]:
     """Extract scope-preserving column derivations and explicit uncertainty coverage.
 
@@ -356,6 +477,21 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
     if shared_sql and not sas_sql and isinstance(tree, (exp.Update, exp.Merge)):
         if records := _sql_write(tree, target, code, dialect):
             return records
+    if isinstance(tree, exp.Update) and target is not None:
+        update = _postgres_update(tree, code, dialect, target)
+        if update is not None:
+            return [*update, _record(target_name, '*', root_scope, code, 'partial_write', [
+                'UPDATE prior rows and unchanged columns are not established'], ordinal=len(update)),
+                _record(target_name, '*', 'update:prior', code, 'partial_write', [
+                    'UPDATE operation prior state is not established'],
+                    target_version='prior', ordinal=len(update) + 1)]
+    if not sas_sql and isinstance(tree, exp.Insert) and isinstance(tree.expression, exp.Values):
+        inserted = _postgres_values(tree, code, dialect, target) if target is not None else None
+        if inserted is not None:
+            return [*inserted, _record(target_name, '*', root_scope, code, 'partial_write', [
+                'INSERT VALUES prior target rows and omitted-column defaults are not established'], ordinal=len(inserted))]
+        return [_record(target_name, '*', root_scope, code, coverage=[
+            'Unsupported INSERT VALUES column transformation'])]
     if isinstance(tree, (exp.Update, exp.Merge, exp.Delete)):
         return [_record(target_name, "*", root_scope, code, coverage=[
             f"Unsupported {tree.key.upper()} column transformation"])]
@@ -405,6 +541,16 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         share_destination(scope)
 
     ranges = _projection_ranges(code, dialect)
+    # SQLGlot drops unary plus. Preserve that distinction when classifying
+    # GROUP BY positions, including parentheses/comments around the number.
+    plus_positions = set()
+    previous = None
+    for token in dialect.tokenize(code):
+        if token.text == '(':
+            continue
+        if previous is not None and previous.text == '+':
+            plus_positions.add(token.start)
+        previous = token
     records = []
     branch_counts = {}
     scope_by_expression = {id(scope.expression): scope for scope in scopes}
@@ -450,10 +596,11 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                 recursive_gaps[id(scope)] = "Unsupported recursive CTE shape"
 
     def name_key(name: str) -> str:
-        if name.startswith('"'):
-            name = name[1:-1].replace('""', '"')
-            return name.casefold() if databricks else name
-        return name.casefold()
+        quoted = name.startswith('"')
+        value = name[1:-1].replace('""', '"') if quoted else name
+        if databricks:
+            return value.casefold()
+        return dialect.normalize_identifier(exp.Identifier(this=value, quoted=quoted)).name
 
     @cache
     def bindings(scope: Scope) -> dict[str, exp.Table | Scope]:
@@ -468,12 +615,24 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
     def pivots(scope: Scope):
         return {bindings(scope)[alias]: binding for alias, binding in pivot_bindings(scope).items()}
 
-    def lookup(mapping, alias):
+    @cache
+    def binding_keys(scope):
+        keys = {}
+        for name, (node, _) in scope.selected_sources.items():
+            if isinstance(node, exp.Query) and isinstance(node.parent, (exp.Subquery, exp.CTE)):
+                node = node.parent
+            alias = node.args.get('alias')
+            part = alias.this if alias else node.this
+            keys[name] = (name.casefold() if databricks else
+                          dialect.normalize_identifier(part.copy()).name if isinstance(part, exp.Identifier) else name)
+        return keys
+
+    def lookup(scope, alias):
         if alias is None:
             return None
-        if not databricks and isinstance(alias, exp.Identifier) and alias.args.get("quoted"):
-            return mapping.get(alias.name)
-        matches = [source for name, source in mapping.items() if name.casefold() == alias.name.casefold()]
+        key = alias.name.casefold() if databricks else dialect.normalize_identifier(alias.copy()).name
+        keys = binding_keys(scope)
+        matches = [source for name, source in bindings(scope).items() if keys[name] == key]
         return matches[0] if len(matches) == 1 else None
 
     def star_of(projection):
@@ -505,7 +664,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                     source, consumed = qualified_source(visible, parts)
                     candidates = [source] if consumed == len(parts) - 1 else []
                 elif isinstance(projection, exp.Column):
-                    candidates = [lookup(mapping, projection.args["table"])] if len(projection.parts) == 2 else []
+                    candidates = [lookup(scope, projection.args["table"])] if len(projection.parts) == 2 else []
                 elif any(j.args.get("using") or j.args.get("method") == "NATURAL"
                          for j in scope.expression.args.get("joins", [])):
                     candidates = []  # These joins can coalesce columns and change the star order.
@@ -603,6 +762,19 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if shared_sql and parent.expression.args.get("by_name"):
                 coverage.append("Set operation BY NAME layout is not resolved")
             output_scope = output_scope.parent
+        owners = [scope.expression]
+        owner = scope
+        while owner is not output_scope:
+            owner = owner.parent
+            owners.append(owner.expression)
+        owners.extend(q.parent for q in list(owners) if isinstance(q.parent, exp.Subquery))
+        if any(isinstance(q, exp.Union) and q.args.get('distinct') for q in owners):
+            coverage.append('Set duplicate-selection context is not resolved')
+        if any(q.args.get('offset') is not None or (q.args.get('limit') is not None
+                and (q is not query or not q.args.get('order') or not shared_sql)) for q in owners):
+            coverage.append('Row limiting/offset selection context is not resolved')
+        if any(q.args.get('sample') is not None for q in owners):
+            coverage.append('Query sampling selection context is not resolved')
         projections = [(query, "", None)] if membership_query else layout(scope)
         names = [""] if membership_query else output_names(output_scope)
         if (isinstance(tree, (exp.Insert, exp.Create)) and not scope_key and isinstance(tree.this, exp.Schema)
@@ -654,6 +826,10 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             "cardinality mismatch" in gap or "wildcard positions" in gap or "recursive" in gap.lower() or "BY NAME" in gap
             for gap in coverage)
         mapping = bindings(scope)
+        if len(set(binding_keys(scope).values())) != len(mapping):
+            coverage.append('Relation aliases are ambiguous under dialect identifier rules')
+        if any(isinstance(source, exp.Table) and source.args.get('sample') is not None for source in mapping.values()):
+            coverage.append('Table sampling selection context is not resolved')
         generated = generators(scope) if databricks else {}
         pivoted = pivots(scope) if databricks else {}
         visible_mapping = {**mapping, **{pivot.alias: source for source, pivot in pivoted.items() if pivot.alias}}
@@ -735,16 +911,17 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                     return
             if isinstance(source, Scope):
                 outputs = output_names(source)
-                matches = sum(name_key(n) == name_key(name) for n in outputs)
-                if shared_sql and "*" in outputs and matches <= 1 and id(source) in destinations:
+                matches = [n for n in outputs if name_key(n) == name_key(name)]
+                if shared_sql and "*" in outputs and len(matches) <= 1 and id(source) in destinations:
                     source_table, source_scope = source_ref(source)
                     record.setdefault("scoped_columns", []).append({
                         "table": source_table, "scope": source_scope, "column": name, "role": role,
                     })
                     return
-                if matches != 1:
+                if len(matches) != 1:
                     record["coverage"].append(f"Intermediate output column cannot be established: {name}")
                     return
+                name = matches[0]
             add_input(record, source, name, role)
 
         def defer_unqualified(record, candidates, name, role):
@@ -892,11 +1069,11 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                             and defer_unqualified(record, candidates, name, role)):
                         return
             else:
-                source = lookup(mapping, column.args["table"]) if column.table else None
+                source = lookup(scope, column.args["table"]) if column.table else None
                 if shared_sql and column.table and scope.can_be_correlated:
                     parent = scope.parent
                     while source is None and parent is not None:
-                        source = lookup(bindings(parent), column.args["table"])
+                        source = lookup(parent, column.args["table"])
                         parent = parent.parent
                 if not column.table:
                     candidates = list(mapping.values())
@@ -1096,7 +1273,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                             record["struct_path"] = [part.name for part in path]
                         wildcard_mapping = [source]
                 elif isinstance(value, exp.Column):
-                    wildcard_mapping = [lookup(mapping, value.args["table"])]
+                    wildcard_mapping = [lookup(scope, value.args["table"])]
                 if databricks and len(wildcard_mapping) == 1 and wildcard_mapping[0] in pivoted:
                     pivot = pivoted[wildcard_mapping[0]]
                     record["wildcard_safe"] &= not bool(pivot.coverage)
@@ -1140,7 +1317,47 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                 if join.args.get("using") or join.args.get("method") == "NATURAL":
                     record["coverage"].append("JOIN USING/NATURAL matching context is not resolved")
             if query.args.get("group") is not None:
-                dependencies(query.args["group"], "value_selection", record)
+                group = query.args['group']
+                for grouping in group.expressions:
+                    while isinstance(grouping, exp.Paren):
+                        grouping = grouping.this
+                    positional = grouping.is_int or isinstance(grouping, exp.Neg) and grouping.this.is_int
+                    if positional:
+                        if grouping.meta.get('start') in plus_positions:
+                            record['coverage'].append('Unary-plus grouping syntax is not resolved as a position')
+                            continue
+                        position = int(grouping.sql())
+                        if (dialect.__class__.__name__.casefold() not in {
+                                'dialect', 'postgres', 'duckdb', 'snowflake', 'bigquery'}
+                                or not 1 <= position <= len(query.expressions)):
+                            record['coverage'].append('GROUP BY position cannot be established for this dialect')
+                            continue
+                        selected = query.expressions[position - 1]
+                        selected = selected.this if isinstance(selected, exp.Alias) else selected
+                        # This is a source expression, not a reference to a SELECT alias.
+                        resolving_context = False
+                        dependencies(selected, 'value_selection', record)
+                        resolving_context = True
+                    else:
+                        dependencies(grouping, 'value_selection', record)
+                if any(value for key, value in group.args.items() if key != 'expressions'):
+                    record['coverage'].append('Extended grouping context is not resolved')
+            distinct = query.args.get('distinct')
+            if distinct is not None:
+                if distinct.args.get('on') is not None:
+                    dependencies(distinct.args['on'], 'value_selection', record)
+                    record['coverage'].append('DISTINCT ON row choice is not resolved')
+                else:
+                    resolving_context = False
+                    for selected in query.expressions:
+                        selected = selected.this if isinstance(selected, exp.Alias) else selected
+                        if selected.is_star:
+                            record['coverage'].append('DISTINCT wildcard selection requires a known output layout')
+                        else:
+                            dependencies(selected, 'value_selection', record)
+                    resolving_context = True
+                for source in mapping.values():
+                    add_input(record, source, '', 'rowset')
             if order := query.args.get("order"):
                 if shared_sql and not any(isinstance(term.this, exp.Literal) and term.this.is_int
                                           for term in order.expressions):

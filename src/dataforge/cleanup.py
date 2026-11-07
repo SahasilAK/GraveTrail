@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import stat
 import time
@@ -21,6 +22,56 @@ WORKSPACE_TABLES = (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records',
                     'history_archives', 'temporary_recovery', 'llm_profiles', 'settings', 'workspaces')
 CATEGORIES = ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'cache', 'reset',
               'workspace', 'orphans', 'application')
+_INDEX_REBUILD_KEY = 'cleanup_index_rebuild'
+
+
+def _recover_cleanup_indexes(store: Store) -> None:
+    """Finish an interrupted index rebuild using identifiers only, never stored SQL."""
+    indexes = store.setting('__application__', _INDEX_REBUILD_KEY, [])
+    if not indexes:
+        return
+    if not isinstance(indexes, list) or len(indexes) > 1000:
+        raise ValueError('Invalid cleanup index recovery record')
+    statements = []
+    identifier = r'[a-zA-Z_][a-zA-Z_0-9]*'
+    for index in indexes:
+        if (not isinstance(index, dict) or not isinstance(index.get('name'), str)
+                or not re.fullmatch(identifier, index['name'])
+                or index.get('table') not in (*WORKSPACE_TABLES, 'parse_cache', 'prompt_versions')
+                or not isinstance(index.get('columns'), list) or not 1 <= len(index['columns']) <= 64
+                or any(not isinstance(column, str) or not re.fullmatch(identifier, column)
+                       for column in index['columns'])):
+            raise ValueError('Invalid cleanup index recovery record')
+        columns = ','.join('"' + column + '"' for column in index['columns'])
+        statements.append(f'CREATE INDEX IF NOT EXISTS "{index["name"]}" ON main."{index["table"]}" ({columns})')
+    with store.transaction():
+        for statement in statements:
+            store.execute(statement)
+        store.execute('DELETE FROM settings WHERE workspace_id=? AND key=?', ['__application__', _INDEX_REBUILD_KEY])
+
+
+def _rebuild_cleanup_indexes(store: Store, tables: list[str]) -> None:
+    """Journal and rebuild app-table nonunique column indexes before destructive DML."""
+    _recover_cleanup_indexes(store)
+    if not tables:
+        return
+    marks = ','.join('?' for _ in tables)
+    records = store.rows(f'''SELECT index_name,table_name,expressions FROM duckdb_indexes()
+        WHERE database_name=current_database() AND schema_name='main' AND table_name IN ({marks})
+        AND NOT is_unique ORDER BY index_name''', tables)
+    indexes = []
+    for record in records:
+        columns = re.fullmatch(r'\[([a-zA-Z_][a-zA-Z_0-9]*(?:,\s*[a-zA-Z_][a-zA-Z_0-9]*)*)\]', record['expressions'])
+        if columns and re.fullmatch(r'[a-zA-Z_][a-zA-Z_0-9]*', record['index_name']):
+            indexes.append({'name': record['index_name'], 'table': record['table_name'],
+                            'columns': [column.strip() for column in columns[1].split(',')]})
+    if indexes:
+        # DuckDB needs DROP committed before CREATE; retain recovery metadata in that same commit.
+        with store.transaction():
+            store.set_setting('__application__', _INDEX_REBUILD_KEY, indexes)
+            for index in indexes:
+                store.execute('DROP INDEX main."' + index['name'] + '"')
+        _recover_cleanup_indexes(store)
 
 
 def checked_path(home: Path, relative: str | Path) -> Path:
@@ -55,6 +106,25 @@ def _job_files(store: Store) -> list[Path]:
     return paths
 
 
+def _job_record(store: Store, path: Path) -> dict[str, Any]:
+    """Refuse malformed journals instead of guessing whether a job is idle."""
+    checked_path(store.home, path.relative_to(store.home))
+    if path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError('Job journal exceeds maintenance limit')
+    try:
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if (not isinstance(record, dict)
+                or not isinstance(record.get('workspace_id'), str)
+                or not re.fullmatch(r'[a-f0-9]{32}', record['workspace_id'])
+                or not isinstance(record.get('status'), str) or not record['status']
+                or type(record.get('updated_at')) not in (int, float)
+                or not math.isfinite(record['updated_at']) or record['updated_at'] < 0):
+            raise ValueError('Invalid job fields')
+    except (ValueError, OverflowError):
+        raise ValueError('Job journal is invalid; repair it before maintenance') from None
+    return record
+
+
 def assert_idle(store: Store, workspace: str='') -> None:
     """Also catch queued imports and provider requests which do not own analysis_lock.
 
@@ -68,10 +138,7 @@ def assert_idle(store: Store, workspace: str='') -> None:
     if has_active_requests(store.home, workspace):
         raise ValueError('An active AI request blocks cleanup')
     for path in _job_files(store):
-        checked_path(store.home, path.relative_to(store.home))
-        if path.stat().st_size > 16 * 1024 * 1024:
-            raise ValueError('Job journal exceeds maintenance limit')
-        record = json.loads(path.read_text(encoding='utf-8'))
+        record = _job_record(store, path)
         if (not workspace or record['workspace_id'] == workspace) and record['status'] not in {'completed', 'failed', 'interrupted', 'cancelled'}:
             if time.time() - record['updated_at'] <= 30:
                 raise ValueError('An active job blocks cleanup')
@@ -109,7 +176,7 @@ def _files(store: Store, workspace: str, category: str) -> list[dict[str, Any]]:
     files = []
     if category in {'jobs', 'workspace', 'application'}:
         for path in _job_files(store):
-            record = json.loads(checked_path(store.home, path.relative_to(store.home)).read_text(encoding='utf-8'))
+            record = _job_record(store, path)
             if category == 'application' or record['workspace_id'] == workspace:
                 if record['status'] in {'completed', 'failed', 'interrupted', 'cancelled'} or time.time() - record['updated_at'] > 30:
                     files.append(path)
@@ -189,6 +256,8 @@ def _selection(store: Store, workspace: str, category: str, file_ids: list[str] 
     selected = {}
     for table in tables:
         where, params = ('TRUE', []) if global_scope else ('workspace_id=?', [workspace])
+        if category == 'columns' and table == 'analysis_fact_support':
+            where += " AND fact_type IN ('usage','derivation')"
         if table == 'source_files' and file_ids:
             if len(file_ids) > 10000 or not set(file_ids) <= {f['file_id'] for f in store.files(workspace)}:
                 raise ValueError('Selected files do not belong to this workspace')
@@ -240,7 +309,8 @@ def cleanup_plan(store: Store, workspace: str='', category: str='lineage', file_
         return plan
 
 
-def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, backup_first: bool=True) -> dict[str, Any]:
+def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, backup_first: bool=True,
+                  *, allowed_credential_refs: tuple[str, ...] | None = None) -> dict[str, Any]:
     """Apply a current cleanup preview after explicit confirmation and backup.
 
     Args:
@@ -269,8 +339,25 @@ def apply_cleanup(store: Store, preview: dict[str, Any], confirmation: str, back
         if backup_first:
             from dataforge.database_maintenance import _backup
             backup_path = str(_backup(store))
+        selected = _selection(store, workspace, category, preview.get('file_ids'), preview.get('run_id'))
+        _rebuild_cleanup_indexes(store, list(selected))
+        current = cleanup_plan(store, workspace, category, preview.get('file_ids'), preview.get('run_id'))
+        if current['token'] != preview.get('token'):
+            raise ValueError('Storage indexes were repaired; refresh the cleanup preview before deleting data')
+        if category in {'workspace', 'application'}:
+            from dataforge.credentials import CredentialError, NativeCredentials, credential_source
+            from dataforge.llm import Profile
+            rows = store.rows('SELECT workspace_id,profile_id,config FROM llm_profiles' +
+                (' WHERE workspace_id=?' if category == 'workspace' else ''), [workspace] if category == 'workspace' else [])
+            profiles = [(row, Profile.model_validate_json(row['config'])) for row in rows]
+            references = {p.saved_key_ref or p.key_env for _, p in profiles
+                          if p.saved_key_ref or credential_source(p.key_env) == 'saved'}
+            if allowed_credential_refs is not None and references - set(allowed_credential_refs):
+                raise CredentialError('Approve every saved reference at launch before deleting its workspace.')
+            for row, profile in profiles:
+                NativeCredentials().delete(store.home, row['workspace_id'], row['profile_id'], profile)
         with store.transaction():
-            for table, (where, params) in _selection(store, workspace, category, preview.get('file_ids'), preview.get('run_id')).items():
+            for table, (where, params) in selected.items():
                 store.execute(f'DELETE FROM {table} WHERE {where}', params)
             if category in {'sources', 'lineage', 'ai', 'reset'}:
                 for source in store.files(workspace):

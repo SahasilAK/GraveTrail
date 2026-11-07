@@ -12,3 +12,10 @@ condition = "AND"
 paths = ['''(?:^|[/!])tests/test_connections\.py$''']
 regexTarget = "secret"
 regexes = ['''^dummy-(?:environment-)?sensitive-123$''']
+
+[[rules.allowlists]]
+description = "Exact lookup-state vocabulary in the internal AI implementation plan; not a credential"
+condition = "AND"
+paths = ['''(?:^|[/!])docs/superpowers/plans/2026-10-21-resumable-ai-lineage\.md$''']
+regexTarget = "secret"
+regexes = ['''^positive/negative/ambiguous$''']

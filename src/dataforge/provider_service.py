@@ -1,4 +1,5 @@
 """Profile/routing operations with launch-bound references and recipient origins."""
+import json
 import time
 import uuid
 from typing import Any
@@ -9,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import RuntimeConnections, connection_scope
+from dataforge.credentials import CredentialError, NativeCredentials, credential_source, owns_reference
 from dataforge.llm import ROUTABLE_TASKS as TASKS
 from dataforge.llm import Adapter, Profile, ProviderError, is_local, response_object
 from dataforge.llm_resources import request_slot
@@ -65,7 +67,7 @@ def get_profile(store: Store, workspace: str, profile_id: str) -> Profile:
 
 def save_profile(store: Store, policy: AccessPolicy, workspace: str,
                  profile: Profile | dict[str, Any], expected_revision: str,
-                 profile_id: str = '') -> dict[str, Any]:
+                 profile_id: str = '', *, new_profile_id: str = '') -> dict[str, Any]:
     """Validate and persist a provider profile after permission and revision checks.
 
     Args:
@@ -81,15 +83,39 @@ def save_profile(store: Store, policy: AccessPolicy, workspace: str,
     """
     policy.require('config')
     check_revision(store, workspace, expected_revision)
+    if not profile_id:
+        values = profile.model_dump(exclude_unset=True) if isinstance(profile, Profile) else dict(profile)
+        if values.get('provider') == 'OmniRoute':
+            defaults = {'unknown_retries': 2, 'retries': 2}
+            if 'timeout' not in values and 'read_timeout' not in values:
+                defaults['read_timeout'] = 300
+            profile = {**defaults, **values}
     profile = Profile.model_validate(profile, strict=True)
     if profile.key_env and profile.key_env not in policy.allowed_credential_refs:
         raise AgentError('credential_unavailable', 'Approve this named credential reference at launch before saving')
+    if profile.saved_key_ref and profile.saved_key_ref not in policy.allowed_credential_refs:
+        raise AgentError('credential_unavailable', 'Approve this saved credential reference at launch before binding')
     if profile_id:
-        get_profile(store, workspace, profile_id)
+        previous = get_profile(store, workspace, profile_id)
     else:
-        profile_id = uuid.uuid4().hex
-    store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?) ON CONFLICT(profile_id) DO UPDATE SET name=excluded.name,config=excluded.config',
-                  [profile_id, workspace, profile.name, profile.model_dump_json()])
+        profile_id = new_profile_id or uuid.uuid4().hex
+        if store.rows('SELECT profile_id FROM llm_profiles WHERE profile_id=?', [profile_id]):
+            raise AgentError('conflict', 'New profile identity is already in use')
+        previous = None
+    if credential_source(profile.key_env) == 'saved' and not owns_reference(store.home, workspace, profile_id, profile):
+        raise AgentError('credential_unavailable', 'Saved credential identity changed; explicitly rebind or save a new key')
+    saved_ref = profile.saved_key_ref or (profile.key_env if credential_source(profile.key_env) == 'saved' else '')
+    if saved_ref and not owns_reference(store.home, workspace, profile_id, profile.model_copy(update={'key_env': saved_ref})):
+        raise AgentError('credential_unavailable', 'Delete the saved key before changing its recipient, or explicitly rebind after restore')
+    old_ref = (previous.saved_key_ref or (previous.key_env if credential_source(previous.key_env) == 'saved' else '')) if previous else ''
+    if old_ref and old_ref != saved_ref:
+        if old_ref not in policy.allowed_credential_refs:
+            raise AgentError('credential_unavailable', 'Approve the previous saved reference before replacing it')
+    with store.transaction():
+        store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?) ON CONFLICT(profile_id) DO UPDATE SET name=excluded.name,config=excluded.config',
+                      [profile_id, workspace, profile.name, profile.model_dump_json()])
+        if old_ref and old_ref != saved_ref:
+            NativeCredentials().delete(store.home, workspace, profile_id, previous)
     return {'profile_id': profile_id, 'settings_revision': revision(store, workspace)}
 
 
@@ -163,7 +189,14 @@ class ProviderOperations:
         key = (w, profile_id)
         manager = self.runtime_connections.get(key)
         if manager is not None and self.runtime_profiles.get(key) != runtime_profile(profile):
+            invalidated_override = ('DATAFORGE_RUNTIME_CREDENTIAL' in manager._credentials and
+                json.loads(self.runtime_profiles.get(key) or '{}').get('key_env') == profile.key_env)
             manager.clear()
+            if invalidated_override:
+                manager.disconnect(profile.key_env)
+            if profile.key_env in manager._disconnected:
+                self.runtime_profiles[key] = runtime_profile(profile)
+                return manager
             self.runtime_connections.pop(key, None)
             self.runtime_profiles.pop(key, None)
             return None
@@ -181,6 +214,8 @@ class ProviderOperations:
         data = profile.model_dump()
         if data['key_env'] not in self.policy.allowed_credential_refs:
             data['key_env'] = ''
+        if data['saved_key_ref'] not in self.policy.allowed_credential_refs:
+            data['saved_key_ref'] = ''
         return data
 
     def _providers_list(self, w: str, opts: QueryOptions) -> dict[str, Any]:
@@ -246,10 +281,15 @@ class ProviderOperations:
         """
         self.policy.require('config')
         check_revision(self.store, w, expected_revision)
-        get_profile(self.store, w, profile_id)
+        profile = get_profile(self.store, w, profile_id)
         route = self._routing_get(w, opts)['routing']
         if profile_id in {route['default_profile'], *route['task_models'].values(), *route['fallback_profiles']}:
             raise AgentError('conflict', 'Remove routing references before removing this profile')
+        saved_ref = profile.saved_key_ref or (profile.key_env if credential_source(profile.key_env) == 'saved' else '')
+        if saved_ref:
+            if saved_ref not in self.policy.allowed_credential_refs:
+                raise AgentError('credential_unavailable', 'Approve this saved reference at launch before deleting its profile')
+            NativeCredentials().delete(self.store.home, w, profile_id, profile)
         self.store.execute('DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [w, profile_id])
         manager = self.runtime_connections.pop((w, profile_id), None)
         self.runtime_profiles.pop((w, profile_id), None)
@@ -300,7 +340,8 @@ class ProviderOperations:
         manager = self._runtime_manager(w, profile_id, profile)
         approved = not profile.key_env or profile.key_env in self.policy.allowed_credential_refs
         return {'profile_id': profile_id, 'reference': profile.key_env if approved else '',
-                'approved': approved, 'connected': manager is not None,
+                'approved': approved, 'connected': manager is not None and profile.key_env not in manager._disconnected,
+                'source': credential_source(profile.key_env),
                 'restart': 'Bindings last only for this owning process; UI sessions are separate'}
 
     def _runtime_connect(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
@@ -319,14 +360,15 @@ class ProviderOperations:
         """
         profile = get_profile(self.store, w, profile_id)
         authorize_provider(self.store, self.policy, w, profile)
-        manager = RuntimeConnections()
+        manager = RuntimeConnections().for_workspace(self.store.home, w).for_profile(profile_id, profile)
         secret = manager.resolve(profile.key_env)
         if profile.key_env and not secret:
             manager.clear()
             raise AgentError('credential_unavailable', 'Approved launch reference is unavailable')
         # Internal alias supports legacy launch names without mutating environment or saved profiles.
-        if secret:
+        if secret and credential_source(profile.key_env) != 'saved':
             manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)
+        manager._request_secrets.clear()
         self.runtime_connections[(w, profile_id)] = manager
         self.runtime_profiles[(w, profile_id)] = runtime_profile(profile)
         return self._runtime_status(w, opts, profile_id)
@@ -342,11 +384,16 @@ class ProviderOperations:
         Returns:
             Credential approval and process-local connection status after clearing.
         """
-        get_profile(self.store, w, profile_id)
+        profile = get_profile(self.store, w, profile_id)
         manager = self.runtime_connections.pop((w, profile_id), None)
         self.runtime_profiles.pop((w, profile_id), None)
         if manager:
             manager.clear()
+        if credential_source(profile.key_env) == 'saved':
+            manager = RuntimeConnections()
+            manager.disconnect(profile.key_env)
+            self.runtime_connections[(w, profile_id)] = manager
+            self.runtime_profiles[(w, profile_id)] = runtime_profile(profile)
         return self._runtime_status(w, opts, profile_id)
 
     def _provider_operation(self, w: str, opts: QueryOptions, profile_id: str,
@@ -368,11 +415,15 @@ class ProviderOperations:
         profile = get_profile(self.store, w, profile_id)
         authorize_provider(self.store, self.policy, w, profile)
         recipient_profile = profile
-        manager = self._runtime_manager(w, profile_id, profile) or RuntimeConnections()
+        manager = (self._runtime_manager(w, profile_id, profile) or RuntimeConnections()).for_workspace(
+            self.store.home, w).for_profile(profile_id, profile)
         if manager.registered('DATAFORGE_RUNTIME_CREDENTIAL'):
             profile = profile.model_copy(update={'key_env': 'DATAFORGE_RUNTIME_CREDENTIAL'})
-        if profile.key_env and not manager.resolve(profile.key_env):
-            raise AgentError('credential_unavailable', 'Approved credential is unavailable; use a launch reference or hidden local prompt')
+        try:
+            if profile.key_env and not manager.resolve(profile.key_env):
+                raise AgentError('credential_unavailable', 'Selected credential is unavailable; reconnect or choose session-only storage')
+        except CredentialError as exc:
+            raise AgentError('credential_unavailable', str(exc)) from None
         resources = LLMResourceSettings.model_validate({k: self.store.setting(w, k, v) for k, v in LLMResourceSettings().model_dump().items()})
         started = time.perf_counter()
         try:

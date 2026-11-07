@@ -61,8 +61,9 @@ so an old click cannot authorize a newly reanalyzed file. `ui/assistance_result.
 AI records by workspace/ID and owns shared explicit merge presentation. Keep future queues
 offline on render; do not use model confidence to clear deterministic diagnostics.
 
-`ui/themes.py` owns eight named native presets (four palettes × dark/light), current detection
-and atomic theme-only configuration updates. Explicit presets use root `theme.base` and colors;
+`src/dataforge/theme_configuration.py` owns eleven named native presets, current detection
+and atomic theme-only configuration updates; `ui/themes.py` provides the picker and applies them.
+Explicit presets use root `theme.base` and colors;
 dual appearance sections are consolidated so a dark choice applies even after browser Light
 selection. Non-color layout/sidebar overrides are retained. A bounded native fragment waits
 for `st.get_option` to reflect the configuration watcher before rerunning; no private theme API

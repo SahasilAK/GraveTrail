@@ -78,6 +78,27 @@ def test_catalog_trace_paging_and_source_gate(engine: Any) -> None:
         service.call("column_lineage", w, asset="mart.totals", column="total", options={"detail_level": "detailed"})
 
 
+def test_shared_agent_preserves_mixed_paths_and_usage_coverage(engine):
+    from dataforge.transformations import trace_columns
+
+    service, store, w = engine
+    Importer(store, w).files([('mixed.sql', b'''CREATE TABLE dst AS SELECT a FROM src WHERE a>0;
+        CREATE TABLE fin AS SELECT a FROM dst;''')], {'.sql'})
+    analyze(store, w)
+    source = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'src')
+    direct = trace_columns(store, w, source, 'a', direction='downstream')
+    response = service.call('column_lineage', w, asset=source, column='a', direction='downstream')
+    for row in response['items']:
+        assert row['paths'] == [p for p in direct['paths'] if p['derivation_id'] == row['derivation_id']]
+        assert {p['effect'] for p in row['paths']} == {'value', 'row_selection'}
+    usage = service.call('columns', w, asset=source)
+    assert usage['usage_coverage'] == {'complete': True, 'reasons': []}
+    Importer(store, w).files([('ambiguous.sql', b'SELECT a FROM src JOIN other ON src.a=other.a;')], {'.sql'})
+    analyze(store, w)
+    usage = service.call('columns', w, asset=source)
+    assert not usage['usage_coverage']['complete'] and usage['usage_coverage']['reasons']
+
+
 def test_scope_constants_limits_and_mcp_parity(engine: Any) -> None:
     """Verify that scope constants limits and mcp parity.
 
@@ -199,6 +220,7 @@ def test_transformation_ui_native_flow_and_workspace_context(tmp_path: Path, mon
     assert view.get("popover")
     assert {d.proto.label for d in view.get("download_button")} >= {"Download JSON", "Download CSV"}
     assert not view.code  # Original source is loaded only inside the evidence inspector.
+    next(s for s in view.selectbox if s.label == "Transformation step").select_index(1).run()
     view.session_state["transformation_inspector_" + w + "_" + asset] = True
     view.session_state["transformation_step_" + w + "_" + asset] = 999
     from dataforge.transformations import column_catalog
@@ -215,7 +237,7 @@ def test_transformation_ui_native_flow_and_workspace_context(tmp_path: Path, mon
         """
         return [{**row, "column_id": "revision-" + row["column_id"]} for row in column_catalog(*args, **kwargs)]
 
-    monkeypatch.setattr("dataforge.transformations.column_catalog", changed_column_ids)
+    monkeypatch.setattr("ui.column_lineage.column_catalog", changed_column_ids)
     view.run()
     assert not view.exception and any("gross + 1" in code.value for code in view.code)
     assert view.session_state["transformation_column_" + w + "_" + asset].startswith("revision-")

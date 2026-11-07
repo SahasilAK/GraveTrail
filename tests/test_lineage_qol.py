@@ -165,9 +165,13 @@ def test_shared_graph_focus_survives_first_500_limit(lineage: Any, monkeypatch: 
     from dataforge.graph import LineageGraph
     from ui import common
 
-    app, _, w, _ = lineage
+    app, store, w, _ = lineage
     graph = LineageGraph([{"asset_id": f"a{i}", "name": f"table_{i:03}", "kind": "table",
                            "temporary": False, "metadata": "{}"} for i in range(501)], [])
+    # Graph selection must identify a real workspace asset for coverage queries.
+    with store.transaction():
+        store.db.executemany('INSERT INTO assets VALUES (?,?,?,?,?,?,?)',
+            [(f'a{i}', w, f'table_{i:03}', f'table_{i:03}', 'table', False, '{}') for i in range(501)])
     monkeypatch.setattr(common, "_cached_graph", lambda *args: graph)
     app.text_input(key="asset_search_lineage").set_value("table_500").run()
     choose(app, "a500")

@@ -12,26 +12,72 @@ redaction; a mismatch is rejected rather than approximated.
 
 ## Project extraction and review contracts
 
-`prompts/project_lineage/` contains extraction prompt 4; `prompts/lineage_review/` retains review prompt 3. Their generated `project_lineage_response.json` and `lineage_review_response.json` schemas match strict Pydantic models in `ai_analysis_models.py`; parity tests cover schema equality and exactly one `{{context}}` placeholder. Prompt identity hashes system + optional focus instructions + template + transmitted schema; validator/reconciliation identity remains separate.
+Current project builds load `prompts/project_lineage/extract.md` through
+`ai_batching.extraction_instructions`. The system prefix includes the compact JSON-serialized
+Pydantic `PartExtraction` item schema; the response is an `ExtractionEnvelope` containing
+independently validated items. Source parts, relevant definitions, settings and optional
+saved details are JSON user data. System instructions contain no imported source.
 
-Project output cites host-issued complete units and preferably source-only expression references, which the host resolves to exact original coordinates. Review decides exactly the host-issued candidate set, without new publishable facts. Source is JSON user data; system messages never interpolate source. Examples distinguish constants, value/row roles, unused CTEs, ambiguous aliases, unknown wildcards, SAS runtime macros and repeated writers. Separate holdout fixtures under `tests/fixtures/ai_analysis/` are scorer labels and must never be included as model context. See [AI project analysis](AI_ANALYSIS.md).
+File/hash/offset ownership and identity validation are separate from AI semantic inference.
+Parser answers are not prompt context or semantic approval. Completion and file consolidation
+share protocol 5 and its durable attempt ledger. Protocol/instruction/schema identity is
+pinned for compatible resume. The complete actual provider envelope and framing estimate
+count in preview/dispatch budgets; explicit source-disclosure limits apply separately.
+Preview never downloads tokenizer assets.
 
-Transmitted project JSON uses compact separators. Schema annotations (`title`, `default`, `description`, `examples`) are omitted recursively; named properties and every validation keyword remain. Prompt identity hashes the actual transmitted schema/system/template. Generated schema assets retain full Pydantic annotations for parity and documentation. Both previews and dispatch still count the full resulting envelope against unchanged privacy/profile limits.
-
-The v1 project protocol supplies a host citation template and explicit operation/context/category names. SQL derivations retain complete projections including aliases; UPDATE/MERGE uses assignment right-hand sides, while SAS assignment/version scopes follow the task instructions. Omitted expression offsets are host-resolved only for a unique exact substring; explicit incorrect spans still fail. Review omits repeated evidence from compact candidates, targets 2,000 candidate characters per batch, and checks larger singleton candidates against the actual full envelope. Every eligible candidate belongs to a batch; none receive approval by overflow omission.
+`project_lineage` is the sole current project route. Legacy extraction/review system/template
+and generated response/wire schemas remain packaged for retained contracts; their prompt
+numbers and review contracts are not the current build protocol. Historical sections below
+explain those formats. Holdout gold is scorer data and must never become model context.
+See [AI project analysis](AI_ANALYSIS.md).
 
 ## Project protocol v2
 
-`project_lineage` and `lineage_review` use root `prompts/` system/template files and generated `*_wire_response.json` schemas. Model citations contain only `unit_id`; the host expands exact source hashes/offsets/lines/text before existing canonical validation. The canonical `*_response.json` schemas and legacy accepted facts remain readable. Prompt/schema hashes invalidate incompatible extraction caches. Durable unit caches use compact references; rejected provider text remains history-opt-in.
+**Historical contract:** pre-protocol-5 extraction/review used root system/template files
+and generated `*_wire_response.json` schemas. Unit-only citations expanded to exact source
+identity/coordinates before canonical validation. Canonical schemas and saved accepted
+facts remain readable; old paused runs require a new build. This is not the current
+`ExtractionEnvelope`/`PartExtraction` wire format.
 
 ## Source focus and review batches
 
-Extraction instructions keep conditional projection guidance in root `prompts/project_lineage/focus.md`. This file contains no source and is loaded only for a focused task, keeping ordinary requests small. Its content is included in the focused prompt identity. Continuation pins both prompt variants, so editing it invalidates incompatible cached focus results and saved continuation. Ordinary extraction hashes continue to identify the actual transmitted prompt. Unit evidence remains compact; extraction uses protocol v3 source-expression references while review stays v2. Canonical evidence shapes are unchanged.
+**Historical execution:** `project_lineage/focus.md` supplied conditional projection
+guidance, with original header/projection/shared-context coordinates and output ordinals.
+Focused prompt variants, candidate batches and completed review IDs were checkpointed.
+Current builds prefer whole files and otherwise use exact contiguous parts, one bounded
+completion wave and file-local consolidation. They do not execute this focus/reviewer flow.
 
-Focused requests carry exact original header/projection/shared-context segments and absolute coordinates. Instructions preserve original output ordinals and assign shared facts to the first task. The host independently checks the partition and complete original semantics. Review instructions require exactly the supplied batch IDs; durable host checkpoints retain completed IDs, not model approval of unseen candidates.
+## Extraction protocol v4
 
-## Extraction protocol v3
+**Historical wire contract:** prompt 6 supported source-only `expression_references` and
+`expression_reference` derivations. `ai_wire.decode_project_result` regenerated source
+locations and resolved them to exact expressions before legacy semantic validation.
+Foreign/stale/conflicting or hidden references failed validation. `ai_citations.py` and
+legacy wire/schema parity tests preserve these retained formats. Parser 14 / validator 4
+were qualification versions at that checkpoint, rather than current build settings.
+Current protocol 5 cites original file-part source references and does not require a
+parser-generated expression catalog to accept inferred transformations.
 
-Prompt 4 issues source-only `expression_references` and accepts `expression_reference` on a derivation. The model omits expression text/offsets for this path; `ai_wire.decode_project_result` regenerates the catalog with the same dialect/settings and resolves exact original text/absolute coordinates before canonical validation. Conflicting supplied text/positions, foreign IDs and references hidden by projection focus fail closed. Semantic validation still checks the exact occurrence, branch, SAS version and dependency roles.
+## Resumable AI analysis
 
-`ai_citations.py` creates locations from original syntax and tokens, including paged static PROC SQL and bounded SAS format syntax. It supplies no parser lineage answers. Full catalog metadata counts in preview/dispatch limits; redundant source/coordinate copies are omitted from the transmitted catalog. The runtime wire schema and generated `project_lineage_wire_response.json` change together, with parity tests. Legacy strict text/offset responses and compact canonical v2 checkpoints remain readable. Parser 14 / validator 3 plus prompt/schema hashes invalidate incompatible continuations and caches. Independent column labels and live precision qualification are separate work.
+Each current build selects SQL, SAS or dbt as its family. dbt parts carry disclosed
+project/resource/YAML/macro/artifact context with explicit origins, rather than computed
+parser lineage answers. Every valid item is checkpointed independently, so failed siblings
+do not erase successes. Token capacity and expected output determine packing; no fixed
+eight-unit, files-per-request, reviewer or execution-window policy governs new builds.
+See the [AI pipeline](architecture/ai-analysis-pipeline.md) and
+[detailed flow](user-guide/ai-analysis-flow.md).
+
+## Protocol 5 file extraction (2026-10-23)
+
+New project builds use independent AI extraction from exact file parts, token-budgeted
+items envelopes, persisted file records, one frozen-context completion wave, bounded file
+consolidation and deterministic operation-graph publication. Static analysis and manual
+assistance remain independent. Accepted AI facts stay inferred; exact citations and valid
+JSON do not prove semantic completeness. See [AI analysis](AI_ANALYSIS.md) and
+[pipeline architecture](architecture/ai-analysis-pipeline.md).
+
+Offline qualification uses nonempty independent SQL/SAS/dbt golden transport fixtures.
+The oracle scores table, column and file relationships separately and catches semantic
+omissions despite complete model JSON. Mock results do not establish live-model accuracy;
+live precision/recall and cost evaluation remain pending. Ordinary tests spend no provider credits.

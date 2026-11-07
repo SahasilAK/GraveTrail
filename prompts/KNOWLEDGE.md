@@ -20,3 +20,8 @@ Project tasks are separate from five manual contracts: `project_lineage/` and `l
 Project extraction/review now use protocol v2 compact unit references; manual task protocols stay v1. Host hydration restores immutable citations before canonical validation. Both canonical and wire generated schemas are packaged.
 
 Extraction now uses wire3/prompt4 source-only expression references, restored by the host before canonical validation. Review stays wire2/prompt3; durable compact-v2 records remain readable. Root runtime assets and generated schema parity tests change together.
+
+- `project_resolution/` — Targeted source uncertainty instructions; ordinary extraction schema and host validation stay authoritative. See [project_resolution/KNOWLEDGE.md](project_resolution/KNOWLEDGE.md).
+Batch protocol1 wraps existing item contracts; dbt/SAS source instructions are hashed with unit-kind prompts.
+
+Protocol 5: project_lineage/extract.md and consolidate.md are active; old focus/system/review/resolution dispatch prompts are retired. project_lineage_response.json is the unbounded items envelope generated from ExtractionEnvelope. Legacy wire schemas remain historical readers.

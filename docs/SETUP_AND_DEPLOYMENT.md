@@ -1,12 +1,17 @@
 # GraveTrail Setup and Deployment
 
+This is the detailed installation and operations reference. For a short supported
+path, start with [Install the documented version](getting-started/installation.md).
+These pages describe development commit **1864dc8**; dbt and the current independent
+AI workflow postdate release v0.0.1.
+
 This is the main installation and operations reference. For recorded verification and
 remaining release gates, see [build verification](BUILD_AND_RELEASE.md).
 
 ## 1. Introduction
 
 GraveTrail engineering hub helps data engineers, analysts and architects investigate SQL,
-SAS and CSV projects. Import files, generate evidence-backed table lineage, trace upstream
+SAS, CSV and supported dbt projects. Import files, generate evidence-backed table lineage, trace upstream
 and downstream dependencies, inspect original statements and direct column usage, and
 export results. SQL/SAS scripts are analyzed statically; imported code is never executed.
 
@@ -25,7 +30,7 @@ does not imply that a public binary or container registry release has been publi
 | --- | --- |
 | Python | `pyproject.toml` requires Python 3.11 or newer. Use the locked environment for reproducible source builds. |
 | OS | Python code and build scripts target Windows, Linux and macOS. Local verification is recorded by platform in implementation status; do not infer native binary compatibility from source compatibility. |
-| Tools | Git for cloning; [uv](https://docs.astral.sh/uv/) for the documented locked development/build commands. Ordinary pip supports source/wheel installation. |
+| Tools | Git for cloning; [uv](https://docs.astral.sh/uv/) for the documented locked development/build commands. Wheel/source installation must use the documented temporary Pillow override; ordinary pip resolution fails on the upstream conflict. |
 | Browser | A current browser capable of running Streamlit and JavaScript graph components. |
 | CPU/RAM | Begin with 2 CPU cores and 4 GB RAM for small projects as a planning allowance, not a benchmarked minimum. Increase resources for large sources, graphs or executable builds. |
 | Disk | Reserve space for Python dependencies, complete imported originals, DuckDB, retained history and backups. Builds require additional temporary space. |
@@ -48,6 +53,7 @@ For engineers starting from this repository, use the locked source environment:
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
+git checkout 1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414
 uv sync --locked --extra dev
 uv run gravetrail-ui
 ```
@@ -296,7 +302,7 @@ endpoint and fetch available models before saving. Select a **Fetched models** e
 the editable model identifier or type one manually, then **Save provider profile**.
 Changing the endpoint, credential reference or authentication discards previous model choices.
 
-Under **Session-only credential (optional)**, enter the masked **Runtime credential** and choose
+Select **This session only** (the default); under **API key**, enter the masked **Runtime credential** and choose
 **Connect for this session**. It stays in that browser session's runtime manager and is
 passed directly to adapters. **Clear runtime credentials** removes these in-memory values.
 This session action does not save entered keys to DuckDB, files, exports or the OS environment.
@@ -525,7 +531,14 @@ resource budgets and parameterized storage SQL protect ingestion boundaries. Sou
 originals deliberately retain complete content and may themselves contain secrets.
 Protect homes, exports and backups using OS permissions and encryption where required.
 
-Entered credentials remain in memory; launch variables remain read-only. Profiles allow
+Session-entered credentials remain in memory. Explicit **Remember on this device** keys use
+`keyring>=25.7,<26` with the approved Windows backend forced to local-machine persistence.
+The wheel declares native backend dependencies and the frozen build explicitly collects
+keyring/win32ctypes; headless containers and unqualified macOS/Linux stores fail closed to
+an explicit session-only choice. Saved keys last until deleted, have no independent master
+password, and remain accessible to software with the same OS-user privileges. Settings
+rendering does not decrypt them. See [secure configuration](SECURE_CONFIGURATION.md) for
+disconnect/delete, namespace, restore and launch-grant rules. Profiles allow
 non-secret preferences only. Redaction is best effort; never deliberately import secrets
 or send them to providers. External LLM requests require privacy gates and explicit user
 action; opening an assistance panel does not send code. Retained AI bodies are opt-in.

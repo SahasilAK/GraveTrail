@@ -4,12 +4,12 @@ from typing import Any
 
 from dataforge.agent.contracts import AgentError, QueryOptions
 from dataforge.asset_identity import source_job
-from dataforge.assistance_queue import diagnostic_context, diagnostic_queue
+from dataforge.assistance_queue import diagnostic_context, diagnostic_queue, preview_review
 from dataforge.configuration import ParsingSettings
-from dataforge.connections import RuntimeConnections, connection_scope
-from dataforge.llm import TASKS, Profile, assist_task, merge_claims
+from dataforge.connections import RuntimeConnections, connection_scope, current_connections
+from dataforge.llm import TASKS, Profile, assist_task, merge_claims, preview_assistance
 from dataforge.llm_resources import context_chunks
-from dataforge.provider_service import authorize_provider
+from dataforge.provider_service import authorize_provider, get_profile
 from dataforge.services import analyze
 from dataforge.store import Store
 
@@ -32,7 +32,7 @@ def preview_ai_evidence(
     source = store.file(file_id)
     from dataforge.dbt.service import is_dbt
     if is_dbt(source):
-        raise AgentError('validation_failed', 'dbt currently requires parser analysis')
+        raise AgentError('validation_failed', 'Use project AI analysis for dbt; this manual assistance path lacks project context')
     if source['workspace_id'] != workspace or source['extension'] not in {'.sql', '.sas'}:
         raise AgentError('not_found', 'Select an SQL/SAS source in this workspace')
     chunks = context_chunks(source['raw_content'], source['extension'], first, last,
@@ -54,9 +54,12 @@ def merge_ai_result(store: Store, workspace: str, record_id: str, refresh: bool 
             raise AgentError('validation_failed', 'Advisory results cannot be merged')
         already = row['outcome'] == 'merged'
         try:
-            count = len(json.loads(row['details'])['result']['claims']) if already else merge_claims(store, workspace, record_id)
-        except ValueError:
-            raise AgentError('source_changed', 'Result is unvalidated, source/job changed or evidence no longer resolves; request a new review') from None
+            count = merge_claims(store, workspace, record_id)
+        except ValueError as exc:
+            from dataforge.focused_grounding import GroundingError
+            if isinstance(exc, GroundingError):
+                raise AgentError(exc.failure['code'], str(exc)) from None
+            raise AgentError('validation_failed', 'Result is unvalidated or evidence no longer resolves; request a new review') from None
     result = {'record_id': record_id, 'merged': count, 'already_merged': already, 'refresh_required': not refresh}
     if refresh:
         try:
@@ -74,6 +77,19 @@ class AIOperations:
         """Return paginated evidence chunks for one source and AI task."""
         self._workspace(w, source=True)
         preview = preview_ai_evidence(self.store, w, file_id, first, last, task)
+        chosen = self.store.setting(w, 'task_models', {}).get(task) or self.store.setting(w, 'default_profile', '')
+        manager = current_connections()
+        if self.store.rows('SELECT 1 FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [w, chosen]):
+            profile = get_profile(self.store, w, chosen)
+            manager = self._runtime_manager(w, chosen, profile) or manager
+        with connection_scope(manager):
+            prepared = preview_assistance(self.store, w, file_id, first, last, task,
+                                          expected_hash=preview['content_hash'])
+            preview['budget'] = prepared['budget']
+            preview['request_fingerprint'] = prepared['request_fingerprint']
+            for chunk in preview['chunks']:
+                if self.store.setting(w, 'redact_secrets', True):
+                    chunk['code'] = manager.redact(chunk['code'])
         chunks = preview.pop('chunks')
         return self._page(w, opts, ['chunks', file_id, first, last, task], chunks, **preview)
 
@@ -92,9 +108,21 @@ class AIOperations:
     ) -> dict[str, Any]:
         """Preview bounded source chunks around a current diagnostic."""
         self._workspace(w, source=True)
-        item = diagnostic_context(self.store, w, diagnostic_id)
-        return self._ai_chunks(w, opts, item['file_id'], item['first'] if first is None else first,
-                               item['last'] if last is None else last, item['task'])
+        diagnostic = diagnostic_context(self.store, w, diagnostic_id)
+        chosen = self.store.setting(w, 'task_models', {}).get(diagnostic['task']) or self.store.setting(w, 'default_profile', '')
+        manager = current_connections()
+        if self.store.rows('SELECT 1 FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [w, chosen]):
+            profile = get_profile(self.store, w, chosen)
+            manager = self._runtime_manager(w, chosen, profile) or manager
+        with connection_scope(manager):
+            item = preview_review(self.store, w, diagnostic_id, first, last)
+        code = item.pop('code')
+        chunks = [{'first': item['first'], 'last': item['last'], 'code': code}]
+        return self._page(w, opts, ['review', diagnostic_id, item['first'], item['last']], chunks,
+                          file_id=item['file_id'], content_hash=item['content_hash'],
+                          job_id=item.get('job_id', 'workspace'), task=item['task'],
+                          first=item['first'], last=item['last'], budget=item['budget'],
+                          request_fingerprint=item['request_fingerprint'])
 
     def _review_request(
         self,
@@ -105,12 +133,14 @@ class AIOperations:
         first: int,
         last: int,
         expected_job: str = 'workspace',
+        expected_request: str = '',
     ) -> dict[str, Any]:
         """Request an AI review for a diagnostic after checking its source version."""
         item = diagnostic_context(self.store, w, diagnostic_id)
         if item['content_hash'] != expected_hash:
             raise AgentError('source_changed', 'Diagnostic source changed; refresh its preview')
-        return self._ai_request(w, opts, item['file_id'], first, last, item['task'], expected_hash, expected_job)
+        return self._ai_request(w, opts, item['file_id'], first, last, item['task'], expected_hash, expected_job,
+                                expected_request=expected_request)
 
     def _ai_request(
         self,
@@ -122,11 +152,14 @@ class AIOperations:
         task: str,
         expected_hash: str,
         expected_job: str = 'workspace',
+        expected_request: str = '',
     ) -> dict[str, Any]:
         """Run a provider request after authorization and source/job revalidation."""
         self._workspace(w, write=True, source=True)
         self.policy.require('network')
-        preview = preview_ai_evidence(self.store, w, file_id, first, last, task)
+        source = self.store.file(file_id)
+        config = {k: self.store.setting(w, k, v) for k, v in ParsingSettings().model_dump().items()}
+        preview = {'content_hash': source['content_hash'], 'job_id': source_job(source, config)}
         if preview['content_hash'] != expected_hash or preview['job_id'] != expected_job:
             raise AgentError('source_changed', 'Source hash/job changed; refresh the evidence preview')
         manager = RuntimeConnections()
@@ -139,21 +172,28 @@ class AIOperations:
             if profile.key_env:
                 if credentials is not None:
                     reference = 'DATAFORGE_RUNTIME_CREDENTIAL' if credentials.registered('DATAFORGE_RUNTIME_CREDENTIAL') else profile.key_env
-                    secret = credentials.resolve(reference)
+                    secret = credentials.for_workspace(self.store.home, w).for_profile(pid, profile).resolve(reference)
                 else:
-                    secret = manager.resolve(profile.key_env)
+                    secret = manager.for_workspace(self.store.home, w).for_profile(pid, profile).resolve(profile.key_env)
                 if not secret:
                     raise AgentError('credential_unavailable', 'Approved provider credential unavailable')
                 manager.register('DATAFORGE_RUNTIME_CREDENTIAL', secret)
-                return profile.model_copy(update={'key_env': 'DATAFORGE_RUNTIME_CREDENTIAL'})
+                from dataforge.model_capabilities import bind_capabilities
+                approved = profile.model_copy(update={'key_env': 'DATAFORGE_RUNTIME_CREDENTIAL'})
+                if profile.model_capabilities and profile.model_capabilities.current_for(profile):
+                    approved.model_capabilities = bind_capabilities(profile.model_capabilities, approved)
+                return approved
             return profile
 
         try:
             with connection_scope(manager):
                 result = assist_task(self.store, w, file_id, first, last, task,
-                    transport=self.provider_transport, expected_hash=expected_hash, authorize=authorize, expected_job=expected_job)
+                    transport=self.provider_transport, expected_hash=expected_hash, authorize=authorize,
+                    expected_job=expected_job, expected_request=expected_request)
             # Detailed result retrieval is a separate explicit, source-gated read.
             return {k: v for k, v in result.items() if k != 'result'}
+        except ValueError as exc:
+            raise AgentError('validation_failed', str(exc)) from None
         finally:
             manager.clear()
 

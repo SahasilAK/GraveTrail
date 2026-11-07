@@ -25,6 +25,9 @@ def queued(tmp_path: Path) -> Iterator[Any]:
     Importer(store, workspace).files([("q.sql", (code + "\nCREATE TABLE mart.y AS SELECT id FROM raw.b;").encode())], {".sql"})
     analyze(store, workspace)
     profile = Profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="synthetic")
+    from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
+    profile.source_limit_policy = 'token_capacity'
+    profile.model_capabilities = bind_capabilities(ModelCapabilities(context_tokens=100000, source='manual'), profile)
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["test-profile", workspace, "Synthetic", profile.model_dump_json()])
     store.set_setting(workspace, "default_profile", "test-profile")
     yield store, workspace, code

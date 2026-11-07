@@ -1,14 +1,19 @@
 # docs/assets/images/
 
-- `icon.png` — Supplied navy/orange icon with transparent exterior prepared using ImageGen; identical to ui/icon.png. Published logo/favicon.
-- `mark.svg` — Previous vector mark, retained source; no longer published.
-- `banner.svg` — README vector hero with “Nothing stays buried.” / “Every dependency leaves a trail.” copy and accessible description; existing data-flow motion/reduced-motion fallback.
-- `gravetrail-workspace-dashboard.png` — Actual redesigned Overview, isolated SQL fixture home: 86 scripts, 92 registered assets, 128 dependencies, no diagnostics.
-- `gravetrail-lineage-explorer.png` — Actual redesigned Lineage/Graph with pub.all_kpis and traversal depth30; focused ancestor graph, not the whole workspace inventory.
-- `gravetrail-source-evidence.png` — Actual original analyzed SQL selector, version metadata and numbered statement, with the new grouped navigation.
-- `gravetrail-sql-example.mp4` — Silent Ink Dark recording of the bundled SQL example, its upstream graph and the original evidence for `rpt.finance` → `pub.all_kpis`.
+Public branding plus real browser captures using safe synthetic fixtures and disposable homes. Capture/control/fixture recipes: docs/development/screenshots.md. Synchronize referenced files with mkdocs.yml; never substitute generated controls or expose private home/source/credentials.
 
-The three workspace screenshots are actual browser captures. Preserve fixture provenance and avoid
-private home data. README/user-guide references and mkdocs.yml public asset allowlist stay
-synchronized. Before/after and responsive captures live locally under
-.dataforge/verification/ui-redesign/screenshots/ and are excluded from distribution.
+- `icon.png` — supplied navy/orange transparent icon, shared with UI; logo/favicon.
+- `banner.svg` — accessible README hero with existing motion/reduced-motion fallback.
+- `mark.svg` — retained earlier vector source; not automatically public.
+- `gravetrail-workspace-dashboard.png` — static SQL sample Overview after import/analysis.
+- `gravetrail-source-import.png` — real Sources import controls with SQL fixture selection.
+- `gravetrail-analysis-results.png` — real successful static analysis view with AI unchecked.
+- `gravetrail-lineage-explorer.png` — readable stg.orders_clean upstreamdepth30, temporary collapse, 3nodes/2edges; larger all_kpis separately verified.
+- `gravetrail-lineage-builder.png` — Current authored canvas with safe customers/products → orders → report branches, join, catalog, Save/Clear and downstream trace selection; capture recipe pins builder a803b6e.
+- `gravetrail-source-evidence.png` — exact analyzed original 03_staging/036_orders_clean.sql, version metadata and numbered statement.
+- `gravetrail-columns.png` — direct usage for stg.orders_clean.
+- `gravetrail-export-controls.png` — real Lineage SVG export popover/options.
+- `gravetrail-dbt-resources.png` — real synthetic dbt workspace resource and macro-impact panel after local source-mode analysis.
+- `lineage-example.png` — standalone safe scenario graph with selected relationship/evidence, four assets/three relationships.
+
+The screenshot recipes distinguish real application captures from the standalone fixture graph. Local browser proof/intermediate captures remain excluded from publication.

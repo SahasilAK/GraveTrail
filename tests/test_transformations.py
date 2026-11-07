@@ -124,6 +124,25 @@ def test_databricks_by_name_and_lateral_alias_with_declared_input(tmp_path):
         store.close()
 
 
+def test_group_by_ordinal_downstream_and_parser_upgrade(tmp_path, monkeypatch):
+    from dataforge import services
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, 'CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src GROUP BY 1')
+    try:
+        result = trace_columns(store, w, asset_id(store, w, 'src'), 'a', direction='downstream')
+        assert {d['target']['column_name'] for d in result['derivations']} == {'a', 's'}
+        assert analyze(store, w)['analyzed'] == 0
+        monkeypatch.setattr(services, 'PARSER_VERSION', 'future-parser')
+        assert any(c['reason'] == 'reanalysis_required' for c in trace_columns(
+            store, w, asset_id(store, w, 'src'), 'a')['coverage'])
+        assert analyze(store, w)['analyzed'] == 1
+        assert not any(c['reason'] == 'reanalysis_required' for c in trace_columns(
+            store, w, asset_id(store, w, 'src'), 'a')['coverage'])
+    finally:
+        store.close()
+
+
 def test_databricks_recursive_trace_terminates_with_evidence(tmp_path):
     from dataforge.transformations import trace_columns
 
@@ -140,6 +159,24 @@ def test_databricks_recursive_trace_terminates_with_evidence(tmp_path):
                 for i in d["inputs"] if i["role"] == "value" and not i["scope"]} == {
             ("anchor", "id"), ("step", "delta"),
         }
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize('context', ['WHERE s.a > 0', 'JOIN other o ON s.a=o.a'])
+def test_downstream_preserves_value_and_filter_effects(tmp_path, context):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, f'''CREATE TABLE dst AS SELECT s.a FROM src s {context};
+        CREATE TABLE fin AS SELECT a FROM dst;''')
+    try:
+        result = trace_columns(store, w, asset_id(store, w, 'src'), 'a', direction='downstream')
+        assert len(result['derivations']) == 2
+        for step in result['derivations']:
+            assert {p['effect'] for p in result['paths'] if p['derivation_id'] == step['derivation_id']} == {
+                'value', 'row_selection'}
+        limited = trace_columns(store, w, asset_id(store, w, 'src'), 'a', direction='downstream', limit=1)
+        assert limited['truncated'] and not limited['complete']
     finally:
         store.close()
 
@@ -228,6 +265,22 @@ def test_sql_trace_crosses_files_ctes_and_physical_stars(tmp_path, dialect):
         impact = trace_columns(store, w, asset_id(store, w, "raw.orders"), "active", direction="downstream", depth=15)
         report = next(d["derivation_id"] for d in impact["derivations"] if d["target"]["table"] == "report.totals")
         assert {p["effect"] for p in impact["paths"] if p["derivation_id"] == report} == {"row_selection"}
+    finally:
+        store.close()
+
+
+def test_cycle_propagates_new_effect_states_to_other_outputs(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, '''CREATE TABLE b AS SELECT id FROM a WHERE id>0;
+        CREATE TABLE a AS SELECT id FROM b; CREATE TABLE c AS SELECT id FROM a;''')
+    try:
+        result = trace_columns(store, w, asset_id(store, w, 'a'), 'id', direction='downstream', depth=10)
+        output = next(d for d in result['derivations'] if d['target']['table'] == 'c')
+        assert {p['effect'] for p in result['paths'] if p['derivation_id'] == output['derivation_id']} == {
+            'value', 'row_selection'}
+        assert any(c['reason'] == 'cycle' for c in result['coverage'])
+        assert not result['complete'] and len(result['paths']) < 20
     finally:
         store.close()
 
@@ -346,6 +399,32 @@ def test_bundled_ecommerce_columns_reach_their_origins(tmp_path):
         timestamp = trace_columns(store, w, target, "published_at")
         assert any(step["category"] == "runtime" and step["expression"] == "CURRENT_TIMESTAMP AS published_at"
                    for step in timestamp["derivations"])
+    finally:
+        store.close()
+
+
+def test_repaired_roles_survive_reopen_cache_and_failed_publication(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, '''CREATE TABLE dst AS SELECT a, SUM(b) AS s FROM src WHERE a>0 GROUP BY 1;
+        CREATE TABLE fin AS SELECT a FROM dst;''')
+    source = asset_id(store, w, 'src')
+    before = trace_columns(store, w, source, 'a', direction='downstream')
+    assert {d['target']['column_name'] for d in before['derivations']} == {'a', 's'}
+    assert {p['effect'] for p in before['paths']} == {'value', 'row_selection'}
+    store.close()
+    store = Store(tmp_path / 'home')
+    try:
+        assert trace_columns(store, w, source, 'a', direction='downstream') == before
+        assert analyze(store, w)['analyzed'] == 0
+        cached = trace_columns(store, w, source, 'a', direction='downstream')
+        # A cached parse is republished under a fresh analysis run.
+        assert [{k: v for k, v in d.items() if k != 'run_id'} for d in cached['derivations']] == [
+            {k: v for k, v in d.items() if k != 'run_id'} for d in before['derivations']]
+        assert cached['paths'] == before['paths']
+        with pytest.raises(InterruptedError):
+            analyze(store, w, force=True, cancelled=lambda: True)
+        assert trace_columns(store, w, source, 'a', direction='downstream') == cached
     finally:
         store.close()
 

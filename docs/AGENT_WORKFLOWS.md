@@ -43,7 +43,8 @@ paths and analyze again: content hashes reuse unchanged parse results. Selected
 file IDs and `force=true` retain the existing service's refresh semantics. Import
 does not delete previously imported files absent from a later folder snapshot.
 Read `get_analysis_issues` to discover unsupported constructs, then export bounded
-findings with `export_results`. No source is sent to an external model.
+findings with `export_results`. The default `mode="parser"` sends no source to a model;
+explicit `mode="ai"` is a separate provider operation with source/write/network grants.
 
 CLI equivalent: see [CLI_GUIDE.md](CLI_GUIDE.md). Use `--background` for detached
 import/build and `jobs status --wait` to poll from CI. Every job has a persistent
@@ -71,3 +72,20 @@ Run `uv run python scripts/verify_agents.py --home .dataforge/verification/agent
 --output .dataforge/verification/agent-results.json` for static fixture comparisons
 and output-size measurements. Use a separate closed home. This executes neither
 SQL transformations nor SAS, and makes no DuckDB/SAS runtime compatibility claim.
+
+
+## dbt resources and optional project AI
+
+Use [the dbt workflow](project-types/dbt.md) and [retail example](examples/dbt.md) for
+project import and expected evidence. `list_dbt_projects` reports actual coverage;
+`list_dbt_resources` resolves exact root/package/version identities. Request
+`get_dbt_resource` with detailed options only when source access is authorized.
+`trace_dbt_dependencies` follows resolved typed links, including macro consumers;
+respect depth boundaries, completeness and paging separately from the production graph.
+
+Project AI preview is offline and discloses its actual selected file family and context.
+A dbt member includes its admitted project closure. Explicit AI extraction sends exact
+original parts/definitions, independently of parser results. Use the pinned token budgets,
+inspect inferred/partial coverage, and reuse compatible saved successes on resume.
+Hybrid/additional-review and execution-window/parallel-build controls are retired.
+See [AI controls and recovery](user-guide/ai-analysis-controls-and-recovery.md).

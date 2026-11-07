@@ -1,0 +1,131 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GraveTrail lineage</title><style>body{margin:20px}
+.df-graph{font:14px/1.5 system-ui,sans-serif;color:var(--st-text-color,#23334a);background:var(--st-background-color,#fff);padding:12px;box-sizing:border-box;
+--node-neutral:#edf0f4;--node-unresolved:#fff0d4;--node-temporary:#ece7f7;--node-source:#e0efeb;--node-table:#e3ecfb;--node-text:#23334a;--node-border:#8d9cb1}
+.df-graph .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0 0 12px}
+.df-graph button,.df-graph input{font:inherit;min-height:36px;padding:6px 12px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:7px;background:transparent;color:inherit;box-sizing:border-box;max-width:100%}
+.df-graph button{cursor:pointer;touch-action:manipulation}.df-graph button:active{transform:scale(.97)}
+.df-graph :is(button,input):focus-visible{outline:2px solid var(--st-primary-color,#2869c7);outline-offset:3px}
+.df-graph svg{display:block;width:100%;height:420px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;background:var(--st-secondary-background-color,#f5f7fa)}
+.df-graph .node{cursor:pointer}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
+.df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;fill:none}
+.df-graph .chosen{stroke:#d67d0d!important;stroke-width:4!important}
+.df-graph .edge.chosen{stroke-width:var(--df-selected-edge-width,4)!important}
+.df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:13px/1.7 ui-monospace,Consolas,monospace;padding:12px;border-radius:8px;background:var(--st-secondary-background-color,#f5f7fa)}
+.df-graph .hint{font-size:12px;color:inherit;opacity:.8}
+.df-graph .status{font-size:12px;min-height:18px}
+.df-graph[data-themed]{color:var(--node-text);background:var(--graph-bg);color-scheme:var(--graph-mode)}
+.df-graph[data-themed] svg{background:var(--graph-bg);border-color:var(--graph-border)}
+.df-graph[data-themed] :is(button,input,.detail){background:var(--graph-surface);border-color:var(--graph-border)}
+.df-graph[data-themed] .edge{stroke:var(--graph-edge)}
+.df-graph[data-themed] .edge.chosen{stroke:var(--graph-path)!important}
+.df-graph[data-themed] rect.chosen,.df-graph[data-themed] .node:focus rect{stroke:var(--graph-selected)!important;stroke-width:3!important}
+.df-graph[data-themed] .edge:focus{stroke:var(--graph-path)}
+.df-graph[data-themed] :is(button,input):focus-visible{outline-color:var(--graph-path)}
+.df-graph[data-light] :is(rect.chosen,.node:focus rect,.edge.chosen,.edge:focus){filter:drop-shadow(1px 0 0 var(--node-text)) drop-shadow(-1px 0 0 var(--node-text)) drop-shadow(0 1px 0 var(--node-text)) drop-shadow(0 -1px 0 var(--node-text))}
+.df-graph[data-light] :is(button,input):focus-visible{outline-color:var(--node-text)}
+.df-graph .copy-node{cursor:pointer}.df-graph .copy-node:focus{outline:2px solid var(--st-primary-color,#2869c7)}
+.df-graph:fullscreen{width:100vw;height:100dvh;display:flex;flex-direction:column;overflow:auto}
+.df-graph:fullscreen svg{flex:1;min-height:200px;height:auto}
+.df-graph:fullscreen .detail{max-height:20vh;flex-shrink:0}
+@media(prefers-color-scheme:dark){.df-graph{--node-neutral:#303b48;--node-unresolved:#4c3823;--node-temporary:#3b3354;--node-source:#203f3d;--node-table:#273d58;--node-text:#edf2f9;--node-border:#7489a3}}
+@media(prefers-reduced-motion:reduce){.df-graph button:active{transform:none}}
+@media(prefers-contrast:more){.df-graph .hint{opacity:1}.df-graph button,.df-graph input{border-color:currentColor}}
+</style></head><body><h1>GraveTrail lineage</h1><p>Static dependencies with source evidence. Logical ordering is not execution order.</p><div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div><script>
+async function copyText(text, target=document.body) {
+ try {await navigator.clipboard.writeText(text);return true} catch (_) {
+   const input=document.createElement('textarea');input.value=text;input.style.position='fixed';input.style.opacity='0';
+   target.appendChild(input);input.select();
+   let copied=false;try{copied=document.execCommand('copy')}catch(_){}finally{input.remove()}
+   return copied;
+ }
+}
+
+function mountGraph(root, data, notify, navigate) {
+ if(root._graphCleanup)root._graphCleanup();
+ const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
+ const container=root.querySelector('.df-graph'),status=root.querySelector('.status');
+ const theme=data.theme;
+ if(data.boundaries?.length)status.textContent='Unresolved evidence: '+data.boundaries.length+' support(s); traversal stops where accepted support is absent.';
+ container.toggleAttribute('data-themed',!!theme);
+ container.toggleAttribute('data-light',theme?.mode==='light');
+ if(theme){
+   const tokens={'node-text':theme.text,'graph-bg':theme.graph,'graph-mode':theme.mode,'graph-border':theme.border,
+     'graph-surface':theme.surface,'graph-edge':theme.edge,'graph-path':theme.path,'graph-selected':theme.selected};
+   Object.entries(tokens).forEach(([key,value])=>container.style.setProperty('--'+key,value));
+ }else{
+   ['node-text','graph-bg','graph-mode','graph-border','graph-surface','graph-edge','graph-path','graph-selected'].forEach(key=>container.style.removeProperty('--'+key));
+ }
+ root.querySelector('#df-arrow path').setAttribute('fill',theme?theme.edge:'#829ab1');
+ let clickTimer=null;
+ const appearance=data.appearance||{},labels=appearance.graph_labels||'compact';
+ const edgeWidth=appearance.graph_edge_width||2;
+ root.querySelector('.df-graph').style.setProperty('--df-selected-edge-width',edgeWidth+2);
+ const ns='http://www.w3.org/2000/svg';
+ const make=(tag,attrs,parent)=>{const e=document.createElementNS(ns,tag);Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));parent.appendChild(e);return e};
+ stage.replaceChildren();
+ const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
+ const nodeLabel=n=>n.job_id&&n.job_id!=='workspace'?n.name+' [job: '+n.job_id+']':n.name;
+ const fitted=data.bounds;
+ let box=[...fitted];
+ const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
+ const highlight=(ids)=>{stage.querySelectorAll('.chosen').forEach(e=>e.classList.remove('chosen'));ids.forEach(id=>{stage.querySelectorAll('[data-node]').forEach(e=>{if(e.dataset.node===id)e.classList.add('chosen')})});};
+ const inspectNode=(n,emit=true)=>{
+   let related=new Set([n.asset_id]),pending=[n.asset_id];
+   while(pending.length){let id=pending.pop();data.edges.forEach(e=>{if(e.target===id&&!related.has(e.source)){related.add(e.source);pending.push(e.source)}})}
+   highlight(related);stage.querySelectorAll('[data-edge]').forEach(p=>{let e=data.edges[Number(p.dataset.edge)];if(related.has(e.source)&&related.has(e.target))p.classList.add('chosen')});
+   details.textContent=nodeLabel(n)+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodeLabel(nodes.get(e.source))+' → '+nodeLabel(nodes.get(e.target))+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n')+(data.boundaries||[]).filter(e=>e.source_id===n.asset_id||e.target_id===n.asset_id).map(e=>'\nUnresolved evidence: '+(e.relative_path||'')+':'+(e.start_line||'')+' ['+(e.edge_id||'')+']\n'+(e.code||'')).join('\n');
+   if(emit&&notify)notify({node:n.asset_id});
+ };
+ data.edges.forEach((edge,i)=>{
+   const a=nodes.get(edge.source),b=nodes.get(edge.target);
+   const d=edge.path;
+   const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':nodeLabel(a)+' to '+nodeLabel(b)},stage);
+   p.style.strokeWidth=edgeWidth;
+   const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
+   p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show()}};
+ });
+ data.nodes.forEach(n=>{
+   const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':nodeLabel(n)},stage);
+   const role=theme&&(n.kind==='unresolved'?theme.selected:n.source?theme.source:n.target?theme.target:theme.intermediate);
+   const semantic=theme&&appearance.graph_palette!=='neutral';
+   const color=theme?(semantic?`color-mix(in srgb, ${role} 25%, ${theme.graph})`:theme.surface):appearance.graph_palette==='neutral'?'var(--node-neutral)':n.kind==='unresolved'?'var(--node-unresolved)':n.temporary?'var(--node-temporary)':n.source?'var(--node-source)':'var(--node-table)';
+   make('rect',{width:n.width,height:48,rx:9,fill:color,stroke:theme?(semantic?role:theme.border):'var(--node-border)','data-node':n.asset_id},g);
+   if(labels!=='hidden'){
+     const text=make('text',{x:12,y:29,fill:'var(--node-text)','font-size':13},g);
+     const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>22?label.slice(0,21)+'…':label;
+     if(text.getComputedTextLength()>n.width-52){text.setAttribute('textLength',n.width-52);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
+   }
+   make('title',{},g).textContent=nodeLabel(n);
+   g.onclick=()=>{clearTimeout(clickTimer);inspectNode(n,false);clickTimer=setTimeout(()=>{if(notify)notify({node:n.asset_id})},350)};
+   g.ondblclick=e=>{e.preventDefault();clearTimeout(clickTimer);if(navigate)navigate(n.asset_id);else inspectNode(n)};
+   g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(e.key==='Enter'&&e.altKey&&navigate)navigate(n.asset_id);else inspectNode(n)}};
+   const copy=make('g',{'class':'copy-node',transform:`translate(${n.x+n.width-32},${n.y+10})`,tabindex:0,role:'button','aria-label':'Copy '+n.name},stage);
+   make('rect',{width:26,height:28,rx:5,fill:color},copy);
+   make('text',{x:5,y:20,fill:'var(--node-text)','font-size':19,'pointer-events':'none'},copy).textContent='⧉';
+   make('title',{},copy).textContent='Copy '+n.name;
+   copy.onclick=async e=>{e.stopPropagation();clearTimeout(clickTimer);status.textContent=await copyText(n.name,container)?'Copied '+n.name:'Copy failed. Select the name in the details and copy manually.'};
+   copy.ondblclick=e=>{e.stopPropagation();e.preventDefault()};
+   copy.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();copy.onclick(e)}};
+ });
+ const fullscreen=root.querySelector('.fullscreen');
+ const doc=container.ownerDocument;
+ const syncFullscreen=()=>{fullscreen.textContent=container.matches(':fullscreen')?'Exit fullscreen':'Fullscreen'};
+ fullscreen.onclick=async()=>{
+   try{if(container.matches(':fullscreen'))await doc.exitFullscreen();else await container.requestFullscreen();syncFullscreen()}
+   catch(_){status.textContent='Fullscreen is unavailable in this browser.'}
+ };
+ if(doc){doc.addEventListener('fullscreenchange',syncFullscreen);syncFullscreen()}
+ root.querySelector('.fit').onclick=()=>{box=[...fitted];view()};
+ const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
+ root.querySelector('.plus').onclick=()=>zoom(.8);root.querySelector('.minus').onclick=()=>zoom(1.25);
+ svg.onwheel=e=>{e.preventDefault();zoom(e.deltaY>0?1.1:.9)};
+ let drag=null;
+ svg.onpointerdown=e=>{if(e.target===svg){drag=[e.clientX,e.clientY,...box];svg.setPointerCapture(e.pointerId)}};
+ svg.onpointermove=e=>{if(drag){box=[drag[2]-(e.clientX-drag[0])*drag[4]/svg.clientWidth,drag[3]-(e.clientY-drag[1])*drag[5]/svg.clientHeight,drag[4],drag[5]];view()}};
+ svg.onpointerup=()=>drag=null;svg.onpointercancel=()=>drag=null;
+ root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
+ root._graphCleanup=()=>{clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
+ return root._graphCleanup;
+}
+
+mountGraph(document.body,{"nodes": [{"asset_id": "8d05276af7cdb4b72cdf09ce0a1580be", "name": "file:input/customers.csv", "canonical_name": "file:input/customers.csv", "kind": "file", "temporary": false, "metadata": "{\"columns\": [{\"name\": \"customer_id\", \"type\": \"integer (sampled)\"}, {\"name\": \"customer_name\", \"type\": \"text (sampled)\"}, {\"name\": \"active\", \"type\": \"integer (sampled)\"}], \"row_count\": 2, \"delimiter\": \",\", \"header_presence\": \"assumed first row\", \"preview\": [[\"1\", \"Ada\", \"1\"], [\"2\", \"Grace\", \"1\"]], \"schema_fingerprint\": \"f57d2f1092b9e0f59b42f9669b549f43ad50ef46b630d8bf72368150db16ab27\"}", "x": 20, "y": 20, "width": 215, "source": true, "target": false, "job_id": null}, {"asset_id": "0a102f7746506766af7c25156a68d335", "name": "work.customers_stage", "canonical_name": "work.customers_stage", "kind": "table", "temporary": true, "metadata": "{\"job_id\": \"workspace\"}", "x": 320, "y": 20, "width": 215, "source": false, "target": false, "job_id": "workspace"}, {"asset_id": "7eade2df25d9bf105fcf5aeb11a57c88", "name": "staging.customers", "canonical_name": "staging.customers", "kind": "table", "temporary": false, "metadata": "{}", "x": 620, "y": 20, "width": 215, "source": false, "target": false, "job_id": null}, {"asset_id": "6fed13323040e74f064e679b56296574", "name": "mart.customer_summary", "canonical_name": "mart.customer_summary", "kind": "table", "temporary": false, "metadata": "{\"schema_status\": \"unresolved\", \"columns\": [], \"schema_evidence\": [{\"file_id\": \"946d1897439a826794043e1ca78a172a\", \"relative_path\": \"02_summary.sql\", \"source_hash\": \"7ceb775d2949252341cd63a27e169cf79a7dfd22da53d3af548d0a947f8b42cf\", \"start_line\": 1, \"end_line\": 7, \"statement_id\": \"ed3a7bace583296c67b2d4468996c311\"}], \"column_identifiers\": []}", "x": 920, "y": 20, "width": 215, "source": false, "target": true, "job_id": null}], "edges": [{"source": "7eade2df25d9bf105fcf5aeb11a57c88", "target": "6fed13323040e74f064e679b56296574", "evidence": [{"edge_id": "ad8d014897fea3867f97b134f2d95a70", "workspace_id": "c8109585091440b89a8305c58e0b732a", "source_id": "7eade2df25d9bf105fcf5aeb11a57c88", "target_id": "6fed13323040e74f064e679b56296574", "operation_id": "6fb4838096a89e45b6e206a23d68d10e", "statement_id": "ed3a7bace583296c67b2d4468996c311", "file_id": "946d1897439a826794043e1ca78a172a", "kind": "CREATE", "method": "parser", "confidence": 1.0, "status": "verified", "run_id": "95cb241431364f14a97437415deefd95", "start_line": 1, "end_line": 7, "code": "CREATE TABLE mart.customer_summary AS\nWITH active_customers AS (\n    SELECT c.customer_id, c.customer_name\n    FROM staging.customers c\n    WHERE c.active = 1\n)\nSELECT customer_id, customer_name FROM active_customers;", "source_hash": "7ceb775d2949252341cd63a27e169cf79a7dfd22da53d3af548d0a947f8b42cf", "relative_path": "02_summary.sql"}], "intermediates": [], "path": "M 835 44 C 905 44 850 44 920 44"}, {"source": "8d05276af7cdb4b72cdf09ce0a1580be", "target": "0a102f7746506766af7c25156a68d335", "evidence": [{"edge_id": "00d9d2eab1c1b8a8f28ff2067dc7461a", "workspace_id": "c8109585091440b89a8305c58e0b732a", "source_id": "8d05276af7cdb4b72cdf09ce0a1580be", "target_id": "0a102f7746506766af7c25156a68d335", "operation_id": "658d001c9fd0ee1a1a66965c735f78be", "statement_id": "999d70fbbea88695e143b07134128702", "file_id": "f65ef5bc70e55589e165581a2aaf327e", "kind": "PROC IMPORT", "method": "sas-rules", "confidence": 1.0, "status": "verified", "run_id": "95cb241431364f14a97437415deefd95", "start_line": 1, "end_line": 3, "code": "/* Customer delivery job: an explicitly referenced CSV source. */\nproc import datafile=\"input/customers.csv\" out=work.customers_stage dbms=csv replace;\nrun;", "source_hash": "20919a5d688b3e8b77e690d57ab37e1636b0cb7b1b3f6fa7a137a41f9674d97a", "relative_path": "01_import.sas"}], "intermediates": [], "path": "M 235 44 C 305 44 250 44 320 44"}, {"source": "0a102f7746506766af7c25156a68d335", "target": "7eade2df25d9bf105fcf5aeb11a57c88", "evidence": [{"edge_id": "49f27db993f82f98530e86a2b211d3c7", "workspace_id": "c8109585091440b89a8305c58e0b732a", "source_id": "0a102f7746506766af7c25156a68d335", "target_id": "7eade2df25d9bf105fcf5aeb11a57c88", "operation_id": "51d679fcbe74960dc05ef8465ccea02a", "statement_id": "29ffdf90218e4c164d8e05826bd30003", "file_id": "f65ef5bc70e55589e165581a2aaf327e", "kind": "DATA", "method": "sas-rules", "confidence": 1.0, "status": "verified", "run_id": "95cb241431364f14a97437415deefd95", "start_line": 4, "end_line": 7, "code": "data staging.customers;\n    set work.customers_stage;\n    keep customer_id customer_name active;\nrun;", "source_hash": "20919a5d688b3e8b77e690d57ab37e1636b0cb7b1b3f6fa7a137a41f9674d97a", "relative_path": "01_import.sas"}], "intermediates": [], "path": "M 535 44 C 605 44 550 44 620 44"}], "bounds": [-80, -80, 1315, 360], "boundaries": [], "complete": true, "appearance": {"graph_labels": "compact", "graph_palette": "semantic", "graph_edge_width": 2}},null);</script></body></html>

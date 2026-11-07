@@ -10,6 +10,19 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
+def render_budget(budget: dict) -> None:
+    """Present the same offline request estimate in both Diagnostics panels."""
+    st.caption(f"Profile {budget['profile_id'] or 'unconfigured'} · {budget['provider']} · {budget['model']} · "
+               f"estimated input {budget['estimated_input_tokens']} / {budget['input_allowance']} tokens · "
+               f"output reservation {budget['reserved_output']} · counting {budget['counting_method']}.")
+    if scope := budget.get('context_scope'):
+        st.caption(f"Asset context: {scope['prompt_assets']:,} names referenced in this range "
+                   f"from {scope['available_assets']:,} job-visible assets. "
+                   "Source syntax can support new resource proposals. No source or relevant names are truncated.")
+    for message in budget['messages']:
+        st.warning(message)
+
+
 def render_result(store: Store, workspace: str, state_key: str) -> None:
     """Render an AI result and controls for explicitly merging eligible claims.
 
@@ -37,7 +50,11 @@ def render_result(store: Store, workspace: str, state_key: str) -> None:
     if job != source_job(store.file(record["file_id"]), config):
         st.warning("Source job/session assignment changed since this result. Request assistance again for the current context.")
     if record["outcome"] == "quarantined":
-        st.warning(f"Response quarantined ({details.get('reason', 'validation failed')}); no relationships were added.")
+        failure = details.get('failure')
+        if failure:
+            st.warning(f"Response quarantined: {failure['message']} ({failure['code']}). No relationships were added.")
+        else:
+            st.warning("Historical response quarantined. Detailed validation reasons were not saved; request a new review. No relationships were added.")
     else:
         result = details["result"]
         if record["task"] in {"column_usage", "code_explanation"}:
@@ -67,7 +84,21 @@ def render_result(store: Store, workspace: str, state_key: str) -> None:
                                "ai-result.json", "application/json", key=state_key + "_download_" + record_id)
             st.json(json.loads(record["usage"]))
             return
+        if details.get('static_findings'):
+            st.write('Existing static findings in this selection')
+            st.dataframe(details['static_findings'], hide_index=True)
+        grounding = details.get('grounding') or {}
+        if grounding.get('resources'):
+            st.write('Validated AI resource proposals — explicit merge preview')
+            st.dataframe([{k: r[k] for k in ('name', 'kind', 'temporary', 'job_id', 'action')}
+                          for r in grounding['resources']], hide_index=True)
+        for correction in grounding.get('corrections', []):
+            st.info(f"Evidence coordinates corrected by unique exact quote: "
+                    f"{correction['reported']} → {correction['corrected']}. Original model coordinates are retained.")
+        st.write('Validated AI relationship proposals')
         st.json(result)
+        if not (details.get('settings') or {}).get('dialect'):
+            st.caption('If dialect-specific syntax is unresolved, configure its SQL dialect in Parsing settings and rerun static analysis. Fixture comments do not configure a dialect.')
         st.caption("Validated quotes do not establish runtime correctness. Merged relationships remain inferred; diagnostics are not automatically marked resolved.")
         if record["outcome"] == "validated" and details["result"]["claims"]:
             if st.button("Merge grounded relationships as inferred", key=state_key + "_merge_" + record_id):

@@ -12,8 +12,7 @@ from dataforge.agent.contracts import AccessPolicy
 from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
 from dataforge.ai_analysis_store import load_accepted_file_results, save_run
-from dataforge.ai_context import plan_ai_units, prepare_analysis
-from dataforge.ai_semantic import unit_dialect
+from dataforge.ai_context import prepare_analysis
 from dataforge.cli import app as cli
 from dataforge.configuration import ParsingSettings
 from dataforge.ingestion import Importer
@@ -128,7 +127,7 @@ def test_ai_checkpoint_and_accepted_facts_invalidate_on_dialect_change(tmp_path,
         importer = Importer(store, w)
         importer.files([('orders.sql', DATABRICKS)], {'.sql'}, sql_dialect='databricks')
         prepared = prepare_analysis(store, w, {'mode': 'hybrid'})
-        assert unit_dialect(plan_ai_units(prepared).units[0], prepared.settings) == 'databricks'
+        assert prepared.sources[0].dialect == 'databricks'
         results, config, _ = services.prepare_analysis_results(store, w)
         fid = results[0][0]['file_id']
         save_run(store, w, 'accepted', mode='hybrid', status='committed',
@@ -142,7 +141,7 @@ def test_ai_checkpoint_and_accepted_facts_invalidate_on_dialect_change(tmp_path,
         store.set_setting(w, 'dialect_by_folder', {'orders': 'databricks'})
         corrected = prepare_analysis(store, w, {'mode': 'hybrid'})
         assert corrected.manifest_hash != prepared.manifest_hash
-        assert unit_dialect(plan_ai_units(corrected).units[0], corrected.settings) == ''
+        assert corrected.sources[0].dialect == ''
         assert fid not in load_accepted_file_results(store, w, config)
         assert services.analyze(store, w)['edges'] == 0
     finally:

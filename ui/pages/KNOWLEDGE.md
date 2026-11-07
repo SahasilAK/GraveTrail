@@ -1,17 +1,21 @@
 # ui/pages/
 
+Columns checks shared usage coverage before computing unused names; unresolved or stale
+coverage displays reasons and suppresses unused claims while retaining known references.
+
 dbt: builder chooses project/mode/artifact paths; analysis displays coverage;
 explorer adds resource/macro impact alongside the shared logical graph and column IDs.
 
 Analysis Run delegates explicit AI controls, worker progress and validation reporting to
 ui/analysis_ai.py; parser stays the unchecked default. History includes durable project runs.
 
-Eleven focused direct scripts registered by app.py using native st.Page/st.navigation.
+Twelve focused direct scripts registered by app.py using native st.Page/st.navigation.
 Existing /builder, /explorer, /columns, /tools and /settings routes remain supported.
 
 ## Files
-- `dashboard.py` — Overview: empty-workspace SQL example imports the bundled archive on request, analyzes locally and opens the full upstream trace for `pub.all_kpis`. Populated workspaces show next actions, counts, hotspots, health and recent work.
-- `builder.py` — Sources Import handles ZIP/folder/allowed host inputs and optional SQL dialect. Inventory shows the effective dialect and supports correcting it before reanalysis, plus exports and lazy source inspection.
+- `lineage_builder.py` — Schemas & data entry / Build lineage / Export schemas / Saved work. Schema creation/imports save workspace definitions without canvas membership; schema edits preserve membership. Only canvas catalog Add/Create actions register tables in that design before placement, with plain missing-name errors and optional datatype length/precision; schema edits retain sizes, folders, visibility and trace colors. Canvas Save/Clear callbacks use revision-checked backend snapshots, auto names, explicit overwrite and save-before-reset transactions; typed name conflicts return overwrite metadata and every attempt returns a new acknowledgement; session current-work identity follows save/load and resets on Clear; schema editing has no permanent table-delete control; counts distinguish workspace schemas from placed tables; Export includes editable JSON. Named saved works and JSON handoffs retain authored colors; selected work survives tab changes. Role/search schema exports and full-builder transfer remain. Shared datatype editor/palette, typed joins and linked-column deletion; schema-only imports reset graph folders/colors/catalog hiding.
+- `dashboard.py` — Overview: contextual next action, real inventory/evidence counts, hotspots, health and recent work; no automatic analysis.
+- `builder.py` — Sources: Import (ZIP/directory/allowed host, report and next Analysis link) / Inventory (filter, compact columns, report exports, lazy original source and metadata).
 - `analysis.py` — Run / Diagnostics / History; explicit analyze selected/all, force rebuild and evidence validation, scoped completion notice and next actions. Delegates lazy sections to analysis_sections.py.
 - `explorer.py` — Lineage: exact asset/All, graph focus and Back/Forward history; direction-aware graph/tree evidence. Asset-specific paths export JSON/CSV and shared XLSX with reviewable scope, temporary/evidence/excerpt controls, explicit preparation and download without rerun.
 - `columns.py` — Direct column usage/comma-term filtering/grouping, inferred wildcard provenance, declared schema evidence and exports. Unfiltered distinct used and conservatively known unused names have individual/list copy controls; unused panel stays lazy. Shares valid asset context with Lineage/Impact.
@@ -26,4 +30,10 @@ Tests: AppTest route/state/guard checks plus real-browser review of graph, theme
 responsive layouts, first import/analysis journey and actual offline HTML download.
 Hidden source/AI/tree/maintenance bodies are gated. Business rules stay in src/dataforge.
 
+Analysis Run renders the active AI progress fragment and Cancel before inventory reads; nonterminal jobs skip full controls/preparation until completion. Offline preview reuse and persistent budget widgets are owned by `ui/analysis_ai.py`. New requests expose parser or AI; the obsolete hybrid button label is removed.
+
 Explorer Export prepares fitted SVG/PNG through services.export_graph_image; summarizes scope/appearance, explains pan/zoom independence and metadata privacy, and keeps generation errors in place. Images are built only on Prepare and are not cached.
+
+AI analysis uses shared durable response/part counters and an independent transient reasoning fragment; selected-run Continue and explicit new-run Start fresh are rendered by ui.analysis_ai.
+
+Columns contains lazy Direct references/Lineage graph views. transformations.py is a compatibility route; its sidebar duplicate is hidden.

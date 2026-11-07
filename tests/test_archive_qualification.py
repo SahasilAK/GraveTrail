@@ -52,7 +52,7 @@ def test_split_groups_by_scenario_and_is_stable():
 
 
 def test_offline_archive_scores_table_labels_but_column_gate_stays_open(tmp_path, monkeypatch):
-    monkeypatch.setattr('dataforge.llm.invoke_analysis_unit', lambda *a, **k: pytest.fail('offline network'))
+    monkeypatch.setattr('dataforge.llm.Adapter.complete', lambda *a, **k: pytest.fail('offline network'))
     report = evaluate_archive(archive(tmp_path), 'sql', split='all')
     assert report['modes']['parser']['table_edges']['tp'] == 1
     assert report['modes']['parser']['table_edges']['precision'] == 1
@@ -85,10 +85,11 @@ def test_live_comparison_retains_omissions_and_never_qualifies_table_only_result
         assert 'fake.leak' not in cases[0]['code']
         assert kwargs['max_attempts'] == 1
         return {}, {'requests': 1, 'usage_known': False, 'input_tokens': None, 'output_tokens': None,
-                    'failed_cases': 1, 'hybrid_predictions': {}, 'failures_by_case': {'query.sql': 'quarantined'}}
+                    'failed_cases': 1, 'failures_by_case': {'query.sql': 'quarantined'}}
     monkeypatch.setattr('scripts.benchmark_lineage_archives._live_predictions', failed)
     report = evaluate_archive(archive(tmp_path), 'sql', live=True, split='development', limit=1, max_attempts=1)
     assert report['modes']['ai']['table_edges']['fn'] == 1
-    assert report['modes']['hybrid']['cases'][0]['failure'] == 'quarantined'
+    assert report['modes']['ai']['cases'][0]['failure'] == 'quarantined'
+    assert set(report['modes']) == {'parser', 'ai'}
     assert report['modes']['ai']['table_edges']['precision'] is None
     assert report['release_gate'] == 'insufficient_evidence'

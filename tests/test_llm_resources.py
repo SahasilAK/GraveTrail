@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 
 
 def test_chunks_preserve_complete_statements_and_original_coordinates() -> None:
@@ -87,7 +88,7 @@ def test_busy_or_cancelled_assistance_does_not_transmit(tmp_path: Path) -> None:
         tmp_path: Temporary directory supplied by pytest.
     """
     from dataforge.ingestion import Importer
-    from dataforge.llm import Profile, assist
+    from dataforge.llm import assist
     from dataforge.llm_resources import request_slot
     from dataforge.store import Store
 
@@ -95,7 +96,7 @@ def test_busy_or_cancelled_assistance_does_not_transmit(tmp_path: Path) -> None:
     w = store.create_workspace("Resources")
     Importer(store, w).files([("q.sql", b"select id from raw.a;")], {".sql"})
     fid = store.files(w)[0]["file_id"]
-    profile = Profile(provider="Ollama", base_url="http://localhost:11434", model="test")
+    profile = focused_profile(provider="Ollama", base_url="http://localhost:11434", model="test")
     transport = httpx.MockTransport(lambda req: pytest.fail("request must not be sent"))
     try:
         with request_slot(tmp_path, w, 1):
@@ -146,7 +147,7 @@ def test_chunk_ui_previews_offline_and_sends_only_selected_original_range(tmp_pa
     from streamlit.testing.v1 import AppTest
 
     from dataforge.ingestion import Importer
-    from dataforge.llm import Profile, assist_task
+    from dataforge.llm import assist_task
     from dataforge.services import analyze
     from dataforge.store import Store
 
@@ -155,7 +156,7 @@ def test_chunk_ui_previews_offline_and_sends_only_selected_original_range(tmp_pa
     lines = ["select id from raw.a /*" + "a" * 300 + "*/;", "select id from raw.b /*" + "b" * 300 + "*/;"]
     Importer(store, workspace).files([("q.sql", "\n".join(lines).encode())], {".sql"})
     analyze(store, workspace)
-    profile = Profile(provider="Ollama", base_url="http://localhost:11434", model="test")
+    profile = focused_profile(provider="Ollama", base_url="http://localhost:11434", model="test")
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["test", workspace, "Test", profile.model_dump_json()])
     store.set_setting(workspace, "default_profile", "test")
     store.set_setting(workspace, "llm_chunk_chars", 500)
@@ -216,13 +217,12 @@ def test_provider_connection_checks_share_request_admission(tmp_path: Path, monk
     """
     from streamlit.testing.v1 import AppTest
 
-    from dataforge.llm import Profile
     from dataforge.llm_resources import request_slot
     from dataforge.store import Store
 
     store = Store(tmp_path)
     w = store.create_workspace("Connection admission")
-    profile = Profile(provider="Ollama", base_url="http://localhost:11434", model="test")
+    profile = focused_profile(provider="Ollama", base_url="http://localhost:11434", model="test")
     store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["profile", w, "Local", profile.model_dump_json()])
     monkeypatch.setattr("ui.provider_settings.Adapter.complete", lambda *args: ('{"status":"connected"}', {}))
 

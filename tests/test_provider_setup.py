@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 import pytest
+from streamlit.elements.lib import policies
 from streamlit.testing.v1 import AppTest
 
 from dataforge.llm import Adapter
@@ -75,6 +76,8 @@ def test_unsaved_provider_setup_sets_key_tests_endpoint_and_saves_fetched_model(
     config = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
     assert config['model'] == 'auto/best-reasoning'
     assert config['key_env'] == 'DATAFORGE_OMNIROUTE_API_KEY'
+    assert config['read_timeout'] == 300 and config['connect_timeout'] == 5
+    assert config['unknown_retries'] == config['retries'] == 2
     assert config['model_capabilities']['context_tokens'] == 128000
     assert config['model_capabilities']['dynamic'] is True
     assert 'test-key' not in str(view.session_state.to_dict())
@@ -159,3 +162,32 @@ def test_invalid_draft_fields_keep_connection_page_editable(setup_app):
     assert next(b for b in view.button if b.label == 'Inspect selected model limits').disabled
     next(f for f in view.text_input if f.label == 'API base URL').set_value('http://localhost:20128/v1').run()
     assert not view.exception
+
+
+def test_saved_model_can_be_edited_and_replaced_without_state_warning(setup_app, monkeypatch, caplog):
+    """Saved defaults, manual edits and fetched selections share one widget state."""
+    view, store = setup_app
+    next(s for s in view.selectbox if s.label == 'Provider').select('LM Studio').run()
+    next(f for f in view.text_input if f.label == 'Model or deployment identifier').set_value('saved-model')
+    next(b for b in view.button if b.label == 'Save provider profile').click().run()
+    profile_id = store.rows('SELECT profile_id FROM llm_profiles')[0]['profile_id']
+    next(s for s in view.selectbox if s.label == 'Provider profile').select(profile_id).run()
+    assert next(f for f in view.text_input if f.label == 'Model or deployment identifier').value == 'saved-model'
+
+    next(f for f in view.text_input if f.label == 'Model or deployment identifier').set_value('manual-model').run()
+    view.run()
+    assert next(f for f in view.text_input if f.label == 'Model or deployment identifier').value == 'manual-model'
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={'data': [{'id': 'fetched-model'}]}))
+    monkeypatch.setattr('ui.provider_settings.Adapter', partial(Adapter, transport=transport))
+    monkeypatch.setattr(policies, '_shown_default_value_warning', False)
+    monkeypatch.setattr(policies._LOGGER, 'handlers', [caplog.handler])
+    next(b for b in view.button if b.label == 'Discover models').click().run()
+    next(s for s in view.selectbox if s.label == 'Fetched models').select('fetched-model').run()
+    assert not view.exception and not view.error
+    assert next(f for f in view.text_input if f.label == 'Model or deployment identifier').value == 'fetched-model'
+    next(b for b in view.button if b.label == 'Save provider profile').click().run()
+    assert not view.exception and not view.error
+    config = json.loads(store.rows('SELECT config FROM llm_profiles WHERE profile_id=?', [profile_id])[0]['config'])
+    assert config['model'] == 'fetched-model'
+    assert not any('was created with a default value' in record.getMessage() for record in caplog.records)

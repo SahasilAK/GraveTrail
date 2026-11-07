@@ -1,11 +1,44 @@
 from pathlib import Path
 
+import pytest
+
 from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer
 from dataforge.services import analyze, column_report
 from dataforge.store import Store
 
 FIXTURES = Path(__file__).parent / "fixtures" / "scenario"
+
+
+@pytest.mark.parametrize('historical', [False, True])
+def test_reopened_parser_upgrade_is_stale_in_reports_and_exports(tmp_path, monkeypatch, historical):
+    from dataforge.agent.service import AgentService
+    from dataforge.services import analysis_is_current, export_graph_image, export_lineage_excel
+
+    store = Store(tmp_path)
+    w = store.create_workspace('upgrade')
+    Importer(store, w).files([('q.sql', b'create table dst as select id from raw.src')], {'.sql'})
+    analyze(store, w)
+    assert analysis_is_current(store, w)
+    if historical:
+        store.execute('DELETE FROM column_analysis WHERE workspace_id=?', [w])
+    store.close()
+    monkeypatch.setattr('dataforge.services.PARSER_VERSION', 'future-parser')
+    store = Store(tmp_path)
+    service = AgentService(store)
+    try:
+        assert not analysis_is_current(store, w)
+        assert not service.call('lineage', w, asset='dst')['analysis_current']
+        aid = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'dst')
+        assert not export_graph_image(store, w, aid)[1]['coverage']['analysis_current']
+        excel = export_lineage_excel(store, w, aid)[1]
+        assert not excel['complete']
+        assert any('not current' in warning for warning in excel['warnings'])
+        analyze(store, w)
+        assert analysis_is_current(store, w)
+    finally:
+        service.close()
+        store.close()
 
 
 def test_full_persisted_workflow_and_incremental(tmp_path: Path) -> None:

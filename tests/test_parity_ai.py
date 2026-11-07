@@ -5,12 +5,12 @@ from typing import Any
 
 import httpx
 import pytest
+from focused_test_profiles import focused_profile
 
 from dataforge.agent.contracts import AccessPolicy, AgentError, AgentSettings
 from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
 from dataforge.ingestion import Importer
-from dataforge.llm import Profile
 from dataforge.services import analyze
 from dataforge.store import Store
 
@@ -28,7 +28,7 @@ def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path: Path, mo
     Importer(store, w).files([('q.sql', code.encode())], {'.sql'})
     analyze(store, w)
     fid = store.files(w)[0]['file_id']
-    p = Profile(provider='Ollama', base_url='http://localhost:11434', model='manual')
+    p = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='manual')
     store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['profile', w, 'test', p.model_dump_json()])
     store.set_setting(w, 'default_profile', 'profile')
     service = AgentService(store, AccessPolicy(allow_write=True, allow_llm=True, allowed_llm_origins=('http://localhost:11434',)))
@@ -39,21 +39,12 @@ def test_ai_offline_preview_grounded_request_merge_and_revoke(tmp_path: Path, mo
             'end_line': 1, 'quote': code, 'explanation': 'Explicit source and target', 'confidence': .99}]}
         service.provider_transport = httpx.MockTransport(lambda req: httpx.Response(200, json={'message': {'content': json.dumps(payload)}}))
         server = create_server(service)
-        from dataforge.ai_service import preview_ai_evidence
-        def reassigned_after_preview(*args: Any) -> Any:
-            """Handle reassigned after preview for the test scenario.
-
-            Args:
-                args: Positional arguments forwarded to the operation.
-
-            Returns:
-                Value produced for the test scenario.
-            """
-            snapshot = preview_ai_evidence(*args)
+        from dataforge.provider_service import authorize_provider
+        def reassigned_after_authorization(*args):
+            authorize_provider(*args)
             store.set_setting(w, 'default_job', 'reassigned')
-            return snapshot
         with monkeypatch.context() as changed:
-            changed.setattr('dataforge.ai_service.preview_ai_evidence', reassigned_after_preview)
+            changed.setattr('dataforge.ai_service.authorize_provider', reassigned_after_authorization)
             stale = asyncio.run(server.call_tool('request_ai_assistance', {'workspace_id': w, 'file_id': fid,
                 'first': 1, 'last': 1, 'task': 'sql_lineage', 'expected_hash': digest}))
             assert stale.isError, 'A changed job must be refused before transmission'
@@ -116,7 +107,7 @@ def test_fallback_uses_its_own_approved_credential(tmp_path: Path, monkeypatch: 
     monkeypatch.setenv('DATAFORGE_FIRST_KEY', 'first-profile-canary')
     monkeypatch.setenv('DATAFORGE_SECOND_KEY', 'second-profile-canary')
     for pid, ref in [('first', 'DATAFORGE_FIRST_KEY'), ('second', 'DATAFORGE_SECOND_KEY')]:
-        profile = Profile(provider='OpenAI compatible', base_url='http://localhost:1234/v1', model=pid, key_env=ref, retries=0)
+        profile = focused_profile(provider='OpenAI compatible', base_url='http://localhost:1234/v1', model=pid, key_env=ref, retries=0)
         store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', [pid, w, pid, profile.model_dump_json()])
     store.set_setting(w, 'default_profile', 'first')
     store.set_setting(w, 'fallback_profiles', ['second'])
@@ -169,8 +160,8 @@ def test_all_five_tasks_through_actual_mcp_handler(tmp_path: Path, task: str) ->
     elif task == 'code_explanation':
         payload = {'explanations': [{**citation, 'text': 'Direct projection creates mart.x from raw.a.', 'assets': ['raw.a', 'mart.x']}]}
     else:
-        payload = {'claims': [{**citation, 'source': 'raw.a', 'target': 'mart.x', 'operation': 'CREATE', 'explanation': 'Direct input/output', 'confidence': .9}]}
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='mock')
+        payload = {'claims': [{**citation, 'source': 'raw.a', 'target': 'mart.x', 'operation': 'DATA' if task == 'sas_lineage' else 'CREATE', 'explanation': 'Direct input/output', 'confidence': .9}]}
+    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='mock')
     store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', w, 'p', profile.model_dump_json()])
     store.set_setting(w, 'default_profile', 'p')
     service = AgentService(store, AccessPolicy(allow_write=True, allow_llm=True, allowed_llm_origins=('http://localhost:11434',)))

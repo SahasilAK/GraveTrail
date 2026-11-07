@@ -107,15 +107,14 @@ def test_versioned_models_resolve_latest_and_explicit_version(tmp_path):
             ('1', 'pinned'), ('2', 'latest')}
 
 
-def test_dbt_ai_is_rejected_before_context_disclosure(tmp_path):
+def test_dbt_ai_prepares_project_context_offline(tmp_path):
     from dataforge.ai_context import prepare_analysis
     with closing(Store(tmp_path)) as store:
         w = store.create_workspace('AI guard')
         Importer(store, w).files([('dbt_project.yml', b'name: shop'),
             ('models/a.sql', b'select 1 as id')], set(), source_kind='dbt')
-        import pytest
-        with pytest.raises(ValueError, match='parser analysis'):
-            prepare_analysis(store, w, {'mode': 'hybrid'})
+        prepared = prepare_analysis(store, w, {'mode': 'hybrid'})
+        assert all(source.source_kind == 'dbt' for source in prepared.sources)
 
 
 def test_supplied_package_models_share_project_context_without_becoming_other_project(tmp_path):

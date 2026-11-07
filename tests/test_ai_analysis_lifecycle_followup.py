@@ -29,7 +29,7 @@ def test_republication_rebinds_committed_provenance_and_prunes_missing_facts(tmp
     assert attach_published_support(store, w, 'ai-run', results, [claim]) == 1
     store.execute('DELETE FROM analysis_fact_support')
     analyze(store, w)
-    assert len(store.rows('SELECT * FROM analysis_fact_support')) == 1
+    assert not store.rows('SELECT * FROM analysis_fact_support')  # Static publication replaces project AI support.
     store.execute('DELETE FROM edges')
     assert refresh_published_support(store, w, results) == 0
     assert not store.rows('SELECT * FROM analysis_fact_support')
