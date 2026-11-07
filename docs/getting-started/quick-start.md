@@ -39,6 +39,8 @@ The example opens the full seven-layer upstream trace. Continue to
 [inspect and export](#4-inspect-and-export), or use the manual import steps below
 to try SAS or practice with an upload.
 
+<a id="2-import-one-sample-project"></a>
+
 ## 3. Try a manual ZIP import
 
 Create a workspace in the sidebar, then open **Sources**. Choose a ZIP from
@@ -54,6 +56,8 @@ Import the selected files and inspect the inventory. The archives include expect
 lineage manifests and other supporting files; selecting only the script extension
 keeps those reference files out of the analysis. Each project contains 85 persistent
 tables across seven ETL layers. The SAS project also has 16 temporary WORK datasets.
+
+<a id="3-generate-and-explore-lineage"></a>
 
 1. Open **Analysis → Run**, leave **Use AI for analysis** unchecked, then choose **Analyze all files** and review the reported diagnostics.
 2. Open **Lineage**, search for `pub.all_kpis`, and select that exact asset.
