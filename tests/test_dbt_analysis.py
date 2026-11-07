@@ -90,7 +90,7 @@ def test_source_only_macro_and_unknown_branch_do_not_invent_reads(tmp_path):
         w = store.create_workspace('partial')
         entries = fixture_entries() + [('retail/models/dynamic.sql', b'''
 {% if env_var('SECRET') %}select * from {{ ref('mart_orders') }}{% endif %}
-''')]
+'''), ('retail/models/dynamic_args.sql', b"select * from {{ ref('mart_orders', **kwargs) }}")]
         Importer(store, w).files(entries, set(), source_kind='dbt')
         analyze(store, w)
         assert len(store.edges(w)) == 3
@@ -116,6 +116,62 @@ select * from input
         assert any(i['table'] == 'file:retail/seeds/feed.csv' and i['column_name'] == 'amount'
                    for d in trace['derivations'] for i in d['inputs'])
         assert not trace_columns(store, w, assets['out'], 'unlisted')['derivations']
+
+
+def test_opaque_aliased_projection_preserves_sibling_and_refuses_dynamic_relation(tmp_path):
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('Partially static dbt models')
+        entries = fixture_entries() + [
+            ('retail/models/partial.sql', b"""
+select order_id, {{ opaque('amount') }} as derived from {{ ref('stg_orders') }}
+"""),
+            ('retail/models/partial_star.sql', b"select * from {{ ref('partial') }}"),
+            ('retail/models/dynamic_relation.sql', b"select q.id from {{ opaque('orders') }} as q"),
+        ]
+        Importer(store, w).files(entries, set(), source_kind='dbt')
+        analyze(store, w)
+        assets = {a['name']: a['asset_id'] for a in store.assets(w)}
+        known = trace_columns(store, w, assets['partial'], 'order_id')
+        assert [d['target']['table'] for d in known['derivations']] == ['partial', 'stg_orders']
+        assert known['derivations'][0]['status'] == 'inferred'
+        opaque = trace_columns(store, w, assets['partial'], 'derived')
+        step = opaque['derivations'][0]
+        assert step['status'] == 'unresolved' and not step['inputs']
+        assert step['expression'] == "{{ opaque('amount') }} as derived"
+        assert trace_columns(store, w, assets['partial_star'], 'order_id')['state'] == 'unresolved'
+        assert not trace_columns(store, w, assets['dynamic_relation'], 'id')['derivations']
+        assert not any(name.startswith('__gt_dbt_') for name in assets)
+
+
+def test_dbt_implicit_qualifiers_and_unpinned_version_follow_logical_assets(tmp_path):
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('Qualified and versioned dbt references')
+        entries = [('retail/dbt_project.yml', b'name: retail\n'),
+                   ('retail/models/properties.yml', b"""version: 2
+sources:
+  - name: raw
+    tables: [{name: orders, identifier: landing_orders}]
+models:
+  - name: orders
+    versions: [{v: 2}, {v: 10}]
+"""),
+                   ('retail/models/orders_v2.sql', b"select id as old_id from {{ source('raw', 'orders') }}"),
+                   ('retail/models/orders_v10.sql', b"""{{ config(alias='latest_orders') }}
+select landing_orders.id as order_id from {{ source('raw', 'orders') }}
+"""),
+                   ('retail/models/mart.sql', b"select latest_orders.order_id from {{ ref('orders') }}"),
+                   ('retail/models/pinned.py', b'def model(dbt, session):\n    return dbt.ref("orders", version=2)\n')]
+        Importer(store, w).files(entries, set(), source_kind='dbt')
+        analyze(store, w)
+        mart = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'mart')
+        trace = trace_columns(store, w, mart, 'order_id')
+        assert [(d['target']['table'], d['target']['column_name']) for d in trace['derivations']] == [
+            ('mart', 'order_id'), ('orders', 'order_id')]
+        assert [(i['table'], i['column_name']) for i in trace['derivations'][-1]['inputs']] == [('raw.orders', 'id')]
+        assert all(d['status'] == 'verified' for d in trace['derivations'])
+        pinned = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'pinned')
+        assert trace_columns(store, w, pinned, 'old_id')['state'] == 'known'
+        assert not trace_columns(store, w, pinned, 'order_id')['derivations']
 
 
 def test_cancelled_dbt_analysis_retains_previous_graph(tmp_path):

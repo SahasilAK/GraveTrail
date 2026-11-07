@@ -6,7 +6,7 @@ from bisect import bisect_right
 
 from dataforge.dbt.evidence import evidence
 from dataforge.dbt.models import DbtLimits, DbtProjectResult, DbtRelationship
-from dataforge.dbt.resolution import asset_ref, resolve_bindings, resolve_reference
+from dataforge.dbt.resolution import asset_ref, relation_identifier, resolve_bindings, resolve_reference
 from dataforge.dbt.resources import DATA_TYPES, collect_resources, scan_python_model
 from dataforge.dbt.templates import ReferenceCall, expression_macros, scan_template
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, file_asset
@@ -73,15 +73,20 @@ def python_passthrough(text):
                 args=ast.arguments(posonlyargs=[], args=[ast.arg(arg='dbt'), ast.arg()],
                                    vararg=None, kwonlyargs=[], kwarg=None, defaults=[]), body=[
                 ast.Return(value=ast.Call(func=ast.Attribute(value=ast.Name(id='dbt'), attr='ref'),
-                                          args=[ast.Constant(value=str())], keywords=[]))])]:
-            return True
+                                          args=args, keywords=keywords))])]:
+            return (len(args) in {1, 2} and all(isinstance(arg, ast.Constant) and isinstance(arg.value, str) for arg in args)
+                    and all(keyword.arg in {'v', 'version'} and isinstance(keyword.value, ast.Constant)
+                            for keyword in keywords))
         case _:
             return False
 
 
 def parse_model_query(query, *, output, dialect, primary_evidence, relation_map,
-                      expression_map=None, macro_spans=None, fallback_sources=()):
-    result = parse_sql(query, dialect, query_output=output)
+                      expression_map=None, macro_spans=None, fallback_sources=(), ambiguous_relations=(),
+                      opaque_spans=None, compiled=False):
+    result = parse_sql(query, dialect, query_output=output,
+                       fold_query_identifiers=compiled and dialect == 'postgres')
+    opaque_used = set()
 
     def bind(item):
         if not item.get('scope') and (ref := relation_map.get(item['table'])):
@@ -89,9 +94,10 @@ def parse_model_query(query, *, output, dialect, primary_evidence, relation_map,
 
     for op in result.operations:
         generated = op.code
-        op.sources = [relation_map.get(ref.name, ref) for ref in op.sources]
+        op.sources = [relation_map.get(ref.name, ref) for ref in op.sources if ref.name not in ambiguous_relations]
         op.code, op.start, op.end = primary_evidence.excerpt, primary_evidence.start_line, primary_evidence.end_line
         op.kind, op.method = 'DBT_MODEL_READ', 'dbt-parser'
+        op.usages = [usage for usage in op.usages if usage.table not in ambiguous_relations]
         for usage in op.usages:
             ref = relation_map.get(usage.table)
             if ref:
@@ -103,21 +109,59 @@ def parse_model_query(query, *, output, dialect, primary_evidence, relation_map,
             if expression_map and d['expression']:
                 start = offset + len(query) - len(query.lstrip()) if offset is not None else None
                 if start is not None and generated[offset:offset + len(d['expression'])] == d['expression']:
-                    end = start + len(d['expression'])
+                    expression = d['expression']
+                    end = start + len(expression)
                     left, right = expression_map(start), expression_map(end, True)
                     d['expression'] = op.code[left:right]
                     d['evidence_notes'] = [f'Static dbt macro expands to {value.strip()}'
                                            for (a, b), value in (macro_spans or {}).items() if left < b and a < right]
+                    token = (opaque_spans or {}).get(left)
+                    if token and re.fullmatch(rf'{token}\(\)\s+as\s+[A-Za-z_]\w*', expression, re.I):
+                        opaque_used.add(left)
+                        d['category'] = 'expression'
+                        d['status'] = 'unresolved'
+                        d['coverage'] = [gap for gap in d['coverage'] if token not in gap.casefold()]
+                        d['coverage'].append('Aliased dbt macro expression requires compiled SQL for value lineage')
                 elif d['expression'] not in op.code:
                     d['expression'] = op.code
-            candidates = [source for column in d.get('unqualified_columns', []) for source in column['sources']]
-            choices = d.get('lateral_choices', [])
-            fallback = [item for choice in choices for item in choice['inputs']]
-            pivot = [d['pivot_grouping']] if d.get('pivot_grouping') else []
-            for item in [*d.get('inputs', []), *candidates, *choices, *fallback, *pivot, *d.get('schema_controls', [])]:
-                bind(item)
+            ambiguous = set()
+
+            def bind_group(items):
+                blocked = {item['table'] for item in items
+                           if not item.get('scope') and item['table'] in ambiguous_relations}
+                ambiguous.update(blocked)
+                if not blocked:
+                    for item in items:
+                        bind(item)
+                return not blocked
+
+            for key in ('inputs', 'schema_controls'):
+                if key in d:
+                    d[key] = [item for item in d[key] if bind_group([item])]
+            if 'unqualified_columns' in d:
+                d['unqualified_columns'] = [column for column in d['unqualified_columns'] if bind_group(column['sources'])]
+            if 'lateral_choices' in d:
+                d['lateral_choices'] = [choice for choice in d['lateral_choices'] if bind_group([choice, *choice['inputs']])]
+            if 'pivot_grouping' in d and not bind_group([d['pivot_grouping']]):
+                del d['pivot_grouping']
+            if ambiguous:
+                d['status'] = 'unresolved'
+                d['coverage'].extend(f'Ambiguous compiled dbt relation {name}' for name in sorted(ambiguous))
     result.assets.append(output)
-    if result.operations and result.operations[0].derivations:
+    if opaque_spans:
+        if opaque_used != opaque_spans.keys():
+            # An opaque tag in a relation or clause can change sibling bindings.
+            result.operations.clear()
+        else:
+            result.diagnostics.append(Diagnostic('Aliased dbt macro expression has partial column coverage',
+                                                 primary_evidence.start_line))
+            for op in result.operations:
+                for d in op.derivations:
+                    if d['status'] != 'unresolved':
+                        d['status'] = 'inferred'
+                        d.setdefault('evidence_notes', []).append(
+                            'Sibling lineage assumes the aliased dbt macro produces one value')
+    if result.operations and result.operations[0].derivations and not opaque_spans:
         result.metadata['declared_schemas'] = [layout(output, primary_evidence)]
     elif not result.operations:
         gap = 'Unsupported dbt query. Column coverage is partial'
@@ -139,6 +183,7 @@ def analyze_dbt_project(snapshot, read_source, limits=None):
         return analyze_manifest_project(snapshot, read_source, manifests[0], limits)
     resources, warnings = collect_resources(snapshot, read_source)
     expand_macro = expression_macros(resources)
+    custom_alias = any(r.enabled and r.resource_type == 'macro' and r.name == 'generate_alias_name' for r in resources)
     results = {s.file_id: ({'file_id': s.file_id, 'content_hash': s.content_hash,
         'relative_path': s.relative_path, 'extension': '.' + s.relative_path.rsplit('.', 1)[-1].lower()},
         ParseResult(metadata={'source_kind': 'dbt', 'dbt_project_id': snapshot.project_id,
@@ -235,6 +280,11 @@ def analyze_dbt_project(snapshot, read_source, limits=None):
                     kind, 'candidate' if candidate else 'resolved', (support,)))
                 if not candidate and not ordering and resource.resource_type in {'model', 'snapshot'}:
                     token = '__gt_dbt_' + target.resource_id
+                    identifier = relation_identifier(target)
+                    if (target.resource_type == 'source' or not custom_alias) and re.fullmatch(r'[A-Za-z_]\w*', identifier):
+                        if target.metadata.get('config', {}).get('materialized') == 'ephemeral':
+                            identifier = '__dbt__cte__' + identifier
+                        token += '.' + identifier
                     refs[token] = asset_ref(target)
                     replacements.append((call.start, call.end, token))
             elif call.name in {'ref', 'source'}:
@@ -277,6 +327,8 @@ def analyze_dbt_project(snapshot, read_source, limits=None):
             continue
         unsupported = bool(facts.diagnostics)
         macro_spans = {}
+        opaque_spans = {}
+        expression_calls = {call.start for call in calls if not call.conditional and call.name not in {'ref', 'source'}}
         replacements_by_span = {(a, b): value for a, b, value in replacements}
         for start, end, body in facts.tags:
             if (start, end) not in replacements_by_span:
@@ -284,10 +336,17 @@ def analyze_dbt_project(snapshot, read_source, limits=None):
                         or snapshot_sql and (body.startswith('snapshot ') or body == 'endsnapshot')):
                     replacements_by_span[start, end] = ''.join('\n' if c == '\n' else ' ' for c in text[start:end])
                 else:
-                    expansion = (expand_macro(body, resource.package_name) if text[start:start + 2] == '{{'
-                                 and re.match(r'\s+as\s+[\w"]', text[end:], re.I) else None)
+                    aliased = text[start:start + 2] == '{{' and re.match(r'\s+as\s+[\w"`\[]', text[end:], re.I)
+                    expansion = expand_macro(body, resource.package_name) if aliased else None
                     if expansion and re.search(r'[+*/-]', expansion) and not any(c in expansion for c in ('--', '/*', '*/')):
                         replacements_by_span[start, end] = macro_spans[start, end] = expansion
+                    elif aliased and start in expression_calls:
+                        token = f'__gt_dbt_opaque_{start}'
+                        if token in text.casefold():
+                            unsupported = True
+                        else:
+                            opaque_spans[start] = token
+                            replacements_by_span[start, end] = token + '()'
                     else:
                         unsupported = True
         if unsupported:
@@ -302,7 +361,7 @@ def analyze_dbt_project(snapshot, read_source, limits=None):
         query, expression_map = rewrite_query(text, replacements_by_span)
         model = parse_model_query(query, output=asset_ref(resource), dialect=snapshot.context.dialect,
             primary_evidence=resource.definition, relation_map=refs, expression_map=expression_map,
-            macro_spans=macro_spans, fallback_sources=refs.values())
+            macro_spans=macro_spans, fallback_sources=refs.values(), opaque_spans=opaque_spans)
         offset = len(parsed.operations)
         if resource.resource_type == 'model':
             parsed.metadata.setdefault('declared_schemas', []).extend({**record,
@@ -400,8 +459,9 @@ def analyze_manifest_project(snapshot, read_source, manifest_source, limits):
             components = [meta.get('database'), meta.get('schema'), identifier]
             for index in range(3):
                 if all(isinstance(p, str) and p for p in components[index:]):
-                    key = '.'.join(components[index:])
+                    key = '.'.join('"' + p.replace('"', '""') + '"' if '.' in p else p for p in components[index:])
                     physical.setdefault(key, []).append(asset_ref(resource))
+    ambiguous_relations = {key for key, refs in physical.items() if len(refs) > 1}
     physical = {key: refs[0] for key, refs in physical.items() if len(refs) == 1}
     for uid, (resource, node, section) in nodes.items():
         if not resource.enabled:
@@ -438,7 +498,8 @@ def analyze_manifest_project(snapshot, read_source, manifest_source, limits):
                 'bigquery': 'bigquery', 'duckdb': 'duckdb', 'databricks': 'databricks',
                 'spark': 'spark', 'redshift': 'redshift'}.get(document.data['metadata'].get('adapter_type'), '')
             model = parse_model_query(query, output=asset_ref(resource), dialect=dialect,
-                primary_evidence=resource.definition, relation_map=physical)
+                primary_evidence=resource.definition, relation_map=physical, ambiguous_relations=ambiguous_relations,
+                compiled=True)
             generated = artifact_evidence(document, (section, uid, 'compiled_code'), origin='compiled_sql')
             generated_evidence.append((resource.resource_id, generated))
             direct = {ref.identity for ref in dependency_sources}

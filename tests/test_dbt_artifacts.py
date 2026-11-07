@@ -62,6 +62,27 @@ def test_compiled_external_read_and_generated_evidence_are_preserved(tmp_path):
         assert store.rows("SELECT * FROM dbt_evidence WHERE json_pointer='/nodes/model.retail.a/compiled_code' AND origin='compiled_sql'")
 
 
+def test_ambiguous_compiled_relation_keeps_manifest_edges_without_guessed_column(tmp_path):
+    data = manifest()
+    uid = 'source.retail.other.orders'
+    data['sources'][uid] = {**data['sources']['source.retail.raw.orders'], 'unique_id': uid,
+                            'schema': 'other_landing', 'source_name': 'other'}
+    data['nodes']['model.retail.a']['compiled_code'] = 'select id from ORDERS'
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('Ambiguous relation')
+        Importer(store, w).files([('manifest.json', json.dumps(data).encode())], set(), source_kind='dbt',
+            dbt_options={'mode': 'artifact', 'artifact_paths': ('manifest.json',)})
+        analyze(store, w)
+        assets = {a['asset_id']: a['name'] for a in store.assets(w)}
+        assert ('raw.orders', 'a') in {(assets[e['source_id']], assets[e['target_id']]) for e in store.edges(w)}
+        assert 'orders' not in assets.values()
+        target = next(aid for aid, name in assets.items() if name == 'a')
+        trace = trace_columns(store, w, target, 'id')
+        assert trace['state'] == 'unresolved'
+        assert not trace['derivations'][0]['inputs']
+        assert any('ambiguous' in gap.lower() for gap in trace['derivations'][0]['coverage'])
+
+
 @pytest.mark.parametrize('compiled', [False, True])
 def test_standalone_manifest_produces_dag_with_actual_json_evidence(tmp_path, compiled):
     with closing(Store(tmp_path)) as store:
@@ -95,13 +116,14 @@ def test_artifact_reader_rejects_unknown_schema_and_duplicate_keys():
 @pytest.mark.parametrize('catalog_errors', [False, True])
 def test_catalog_wildcard_traces_through_compiled_models(tmp_path, catalog_errors):
     data = manifest()
-    data['nodes']['model.retail.a']['compiled_code'] = 'select * from landing.orders'
+    data['nodes']['model.retail.a']['compiled_code'] = 'select * from LANDING."Orders.Monthly"'
     data['nodes']['model.retail.b']['compiled_code'] = 'select * from mart.a'
     uid = 'source.retail.raw.orders'
+    data['sources'][uid]['identifier'] = 'Orders.Monthly'
     catalog = {'metadata': {'dbt_schema_version': 'https://schemas.getdbt.com/dbt/catalog/v1.json',
                             'project_name': 'retail'},
                'nodes': {}, 'sources': {uid: {
-                   'metadata': {'database': 'db', 'schema': 'landing', 'name': 'orders'},
+                   'metadata': {'database': 'db', 'schema': 'landing', 'name': 'Orders.Monthly'},
                    'columns': {'amount': {'name': 'amount', 'type': 'DECIMAL', 'index': 2},
                                'id': {'name': 'id', 'type': 'INTEGER', 'index': 1}}}}}
     if catalog_errors:

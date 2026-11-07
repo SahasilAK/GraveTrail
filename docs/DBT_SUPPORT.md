@@ -35,19 +35,23 @@ Traces follow named values through `ref()`, `source()`, model versions, and ephe
 models. Wildcards can expand from known model projections, CSV seed headers, or matching
 catalog columns. Documented YAML columns alone provide descriptive metadata.
 
-Parser version 23 refreshes dbt column coverage. Run **Analyze all files** after upgrading.
+Parser version 24 refreshes dbt column coverage. Run **Analyze all files** after upgrading.
 
 **dbt resources and macro impact** in Lineage lists models, sources, seeds, snapshots,
 macros, tests and other declared resources. Inspect upstream dependencies or downstream
 consumers. Macro calls, test attachments, exposures and semantic dependencies are typed
 relationships, separate from the production model graph. Versions resolve using explicit
-`v`/`version` or a declared latest version. Included package references can be qualified.
+`v`/`version`, a declared latest version, or the highest comparable version. Included
+package references can be qualified. Default and configured relation qualifiers can bind
+columns in source mode. Custom alias-generation macros may require an explicit SQL alias.
 Resource pages expose the full inventory. Large impact tables show a bounded preview;
 CLI/MCP continuation cursors provide the complete dependency traversal.
 
 The source analyzer substitutes a bounded arithmetic macro used as an aliased projection.
 The trace preserves the original Jinja invocation and shows the inferred SQL expression.
-Dynamic refs, control flow, and other generated SQL retain explicit coverage gaps.
+For a standalone aliased macro with unknown value lineage, sibling traces are inferred
+under a single-expression assumption. Dynamic refs, control flow, and generated relations
+retain explicit coverage gaps.
 Seeds trace to the imported CSV headers. A Python model that directly returns a single
 literal `dbt.ref()` can pass through a known layout. General DataFrame transformations
 remain unresolved. Snapshots trace known business columns and report runtime history
@@ -62,7 +66,8 @@ not separately resolved. See dbt's [semantic YAML migration guide](https://docs.
 The initial qualified manifest schema is **v12**. Compiled model SQL, when present, supplies
 expression facts independently from declared DAG dependencies. Manifest DAG edges have
 method `dbt-manifest`; these are artifact-declared dependencies rather than proof of a
-warehouse read. Ephemeral logical nodes remain present in that DAG.
+warehouse read. Ephemeral logical nodes remain present in that DAG. Ambiguous compiled
+relation names retain their manifest dependencies and report unresolved column bindings.
 
 Original source text and generated SQL retain different origins. Artifact operations cite
 real raw JSON slices, including escaping; decoded SQL is never represented as original JSON

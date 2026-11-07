@@ -8,6 +8,7 @@ from typing import Any
 import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ErrorLevel, OptimizeError, ParseError, TokenError
+from sqlglot.optimizer.normalize_identifiers import normalize_identifiers
 from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, statements
@@ -269,22 +270,25 @@ def wrapped_sql(tree: exp.Expression, dialect: sqlglot.Dialect, depth: int, code
     return parsed
 
 
-def parse_sql(content: str, dialect: str | sqlglot.Dialect = "", *, query_output: AssetRef | None = None) -> ParseResult:
+def parse_sql(content: str, dialect: str | sqlglot.Dialect = "", *, query_output: AssetRef | None = None,
+              fold_query_identifiers: bool = False) -> ParseResult:
     """Parse SQL text into static operations, usage records, and diagnostics.
 
     Args:
         content: SQL source text.
         dialect: Optional SQLGlot dialect name or dialect instance.
         query_output: Logical output for one standalone query, such as a dbt model.
+        fold_query_identifiers: Apply adapter case rules to a standalone query.
 
     Returns:
         Static parse result. Unsupported runtime constructs remain diagnostics.
     """
-    return _parse_sql(content, dialect, query_output=query_output)
+    return _parse_sql(content, dialect, query_output=query_output, fold_query_identifiers=fold_query_identifiers)
 
 
 def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
-               restricted: bool = False, query_output: AssetRef | None = None) -> ParseResult:
+               restricted: bool = False, query_output: AssetRef | None = None,
+               fold_query_identifiers: bool = False) -> ParseResult:
     """Parse statements recursively, optionally enforcing static wrapper boundaries.
 
     Args:
@@ -320,6 +324,8 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 continue
             if query_output and not isinstance(tree, (exp.Select, exp.SetOperation)):
                 return ParseResult(diagnostics=[Diagnostic("Expected a single dbt model query", start)])
+            if query_output and fold_query_identifiers:
+                normalize_identifiers(tree, dialect)
             if (shared_sql and dialect.__class__.__name__ == "TSQL" and isinstance(tree, exp.Command)
                     and tree.name.upper() == "GO" and tree.expression is None):
                 continue

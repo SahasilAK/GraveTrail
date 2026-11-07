@@ -210,6 +210,8 @@ def scan_template(text, source=None, limits=None, variables=None):
                 raise ValueError('Template call budget exceeded')
             for node in calls:
                 try:
+                    if node.dyn_args is not None or node.dyn_kwargs is not None:
+                        raise ValueError('Dynamic Jinja arguments')
                     args = tuple(constant(n, variables) for n in node.args)
                     kwargs = {p.key: constant(p.value, variables) for p in node.kwargs}
                 except ValueError:

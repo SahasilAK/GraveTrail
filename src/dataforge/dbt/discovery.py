@@ -44,7 +44,7 @@ def discover_projects(sources, read_source, options=None, settings=None):
                 PurePosixPath(s.relative_path).name in {'manifest.json', 'catalog.json', 'run_results.json'})),
             project_settings.dialect, project_settings.target_label,
             {**project_data.get('vars', {}), **project_settings.public_vars})
-        fingerprint = stable_id('dbt-reader-2', json.dumps(sorted((s.relative_path, s.content_hash) for s in members)),
+        fingerprint = stable_id('dbt-reader-3', json.dumps(sorted((s.relative_path, s.content_hash) for s in members)),
                                 json.dumps(asdict(context), sort_keys=True))
         snapshots.append(ProjectSnapshot(stable_id('dbt-project', project_file.file_id, root), root, name,
                                          members, fingerprint, context))

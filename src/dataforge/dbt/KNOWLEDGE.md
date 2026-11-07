@@ -18,3 +18,5 @@ Offline, bounded dbt project inspection; never evaluates Jinja/Python, runs dbt 
 
 services.py publishes catalog/snapshots and ordinary graph/column facts atomically.
 CLI/MCP/UI reuse these readers; generated SQL has separate compiled_sql evidence.
+Reader 3 preserves source qualifiers and default version binding, keeps ambiguous
+compiled relations unresolved, and isolates opaque aliased macro projections.
