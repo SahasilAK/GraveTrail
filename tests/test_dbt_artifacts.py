@@ -6,6 +6,7 @@ import pytest
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
 from dataforge.store import Store
+from dataforge.transformations import trace_columns
 
 
 def manifest(compiled=True):
@@ -89,6 +90,38 @@ def test_artifact_reader_rejects_unknown_schema_and_duplicate_keys():
         read_artifact(source, json.dumps(bad))
     with pytest.raises(ValueError, match='Duplicate'):
         read_artifact(source, '{"metadata":{},"metadata":{}}')
+
+
+@pytest.mark.parametrize('catalog_errors', [False, True])
+def test_catalog_wildcard_traces_through_compiled_models(tmp_path, catalog_errors):
+    data = manifest()
+    data['nodes']['model.retail.a']['compiled_code'] = 'select * from landing.orders'
+    data['nodes']['model.retail.b']['compiled_code'] = 'select * from mart.a'
+    uid = 'source.retail.raw.orders'
+    catalog = {'metadata': {'dbt_schema_version': 'https://schemas.getdbt.com/dbt/catalog/v1.json',
+                            'project_name': 'retail'},
+               'nodes': {}, 'sources': {uid: {
+                   'metadata': {'database': 'db', 'schema': 'landing', 'name': 'orders'},
+                   'columns': {'amount': {'name': 'amount', 'type': 'DECIMAL', 'index': 2},
+                               'id': {'name': 'id', 'type': 'INTEGER', 'index': 1}}}}}
+    if catalog_errors:
+        catalog['errors'] = ['incomplete catalog']
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace('catalog wildcard')
+        entries = [('manifest.json', json.dumps(data).encode()), ('catalog.json', json.dumps(catalog).encode())]
+        Importer(store, w).files(entries, set(), source_kind='dbt',
+            dbt_options={'mode': 'artifact', 'artifact_paths': tuple(name for name, _ in entries)})
+        analyze(store, w)
+        target = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'b')
+        trace = trace_columns(store, w, target, 'amount', include_source=True)
+        if catalog_errors:
+            assert trace['state'] == 'unresolved' and not trace['derivations']
+            return
+        assert [(d['target']['table'], d['status']) for d in trace['derivations']] == [('b', 'inferred'), ('a', 'inferred')]
+        assert [(i['table'], i['column_name']) for i in trace['derivations'][-1]['inputs']] == [('raw.orders', 'amount')]
+        assert all('compiled_code' in ' '.join(d['coverage']) for d in trace['derivations'])
+        assert 'matching imported dbt catalog' in ' '.join(trace['derivations'][-1]['coverage'])
+        assert trace_columns(store, w, target, 'unlisted')['state'] == 'no_known_dependency'
 
 
 def test_matching_catalog_and_results_enrich_observations_and_reject_other_invocation(tmp_path):

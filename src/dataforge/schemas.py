@@ -84,7 +84,8 @@ def collect_query_layouts(candidates, resolver, schemas):
             for item in record["inputs"]:
                 if item["role"] == "value" and not item.get("scope"):
                     table = item["table"]
-                    tables[table] = resolver.resolve(AssetRef(table), source, parsed)[0]
+                    identity = item.get("table_identity", "")
+                    tables[table, identity] = resolver.resolve(AssetRef(table, identity=identity), source, parsed)[0]
         bindings[asset] = tables
         order.add(asset, *(dependency for dependency in tables.values() if dependency in candidates))
     try:
@@ -96,7 +97,7 @@ def collect_query_layouts(candidates, resolver, schemas):
             _, _, records = candidates[asset]
 
             def read_layout(table, identity=""):
-                source_asset = bindings[asset].get(table)
+                source_asset = bindings[asset].get((table, identity))
                 return schemas.get(source_asset, {}).get("column_identifiers") or layouts.get(source_asset, [])
 
             scoped = query_output_layouts(records, read_layout, resolver.config["case_sensitive"])
@@ -160,7 +161,7 @@ def collect_schemas(results: list[tuple[dict[str, Any], ParseResult]], workspace
                 valid = False
                 continue
             if (len(records) == 1 and record.get("query_layout") and resolver.registry[aid][4] != "unresolved"
-                    and operation.method in {"parser", "sas-rules", "sas-proc-sql"}):
+                    and operation.method in {"parser", "sas-rules", "sas-proc-sql", "dbt-parser", "dbt-python"}):
                 projections = (operation.derivations if len(operation.targets) == 1 else [
                     d for d in operation.derivations if d.get("sas_routed")
                     and normalize(d["target_table"]) == normalize(record["table"])])
@@ -175,6 +176,9 @@ def collect_schemas(results: list[tuple[dict[str, Any], ParseResult]], workspace
             "columns": records[0][2]["columns"] if valid else [], "schema_evidence": evidence,
             "column_identifiers": (records[0][2].get('column_identifiers') or
                                    [c['name'] for c in records[0][2]['columns']]) if valid else []}
+        origin = records[0][2].get("origin")
+        if valid and origin and all(record.get("origin") == origin for _, _, record in records):
+            schemas[aid]["schema_origin"] = origin
         if not valid and any(record["columns"] for _, _, record in records):
             for _, parsed, record in records:
                 message = f"Schema for {name} is conflicting, incomplete or changed; wildcard expansion disabled"

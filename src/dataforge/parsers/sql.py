@@ -269,21 +269,22 @@ def wrapped_sql(tree: exp.Expression, dialect: sqlglot.Dialect, depth: int, code
     return parsed
 
 
-def parse_sql(content: str, dialect: str | sqlglot.Dialect = "") -> ParseResult:
+def parse_sql(content: str, dialect: str | sqlglot.Dialect = "", *, query_output: AssetRef | None = None) -> ParseResult:
     """Parse SQL text into static operations, usage records, and diagnostics.
 
     Args:
         content: SQL source text.
         dialect: Optional SQLGlot dialect name or dialect instance.
+        query_output: Logical output for one standalone query, such as a dbt model.
 
     Returns:
         Static parse result. Unsupported runtime constructs remain diagnostics.
     """
-    return _parse_sql(content, dialect)
+    return _parse_sql(content, dialect, query_output=query_output)
 
 
 def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
-               restricted: bool = False) -> ParseResult:
+               restricted: bool = False, query_output: AssetRef | None = None) -> ParseResult:
     """Parse statements recursively, optionally enforcing static wrapper boundaries.
 
     Args:
@@ -297,7 +298,12 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
     """
     result = ParseResult()
     namespace = None
-    for code, start, end in statements(content):
+    parts = statements(content)
+    if query_output:
+        parts = list(parts)
+        if len(parts) != 1:
+            return ParseResult(diagnostics=[Diagnostic("Expected a single dbt model query")])
+    for code, start, end in parts:
         routine_header = None
         try:
             dialect = sqlglot.Dialect.get_or_raise(dialect or None)
@@ -312,6 +318,8 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 tree = sqlglot.parse_one(code, read=dialect or None, error_level=ErrorLevel.RAISE)
             if tree is None:
                 continue
+            if query_output and not isinstance(tree, (exp.Select, exp.SetOperation)):
+                return ParseResult(diagnostics=[Diagnostic("Expected a single dbt model query", start)])
             if (shared_sql and dialect.__class__.__name__ == "TSQL" and isinstance(tree, exp.Command)
                     and tree.name.upper() == "GO" and tree.expression is None):
                 continue
@@ -550,9 +558,12 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
             if target is not None and not targets[0].name:
                 result.diagnostics.append(Diagnostic("Dynamic SQL target cannot be resolved", start))
                 continue
+            if query_output:
+                targets = [query_output]
             if sources or targets or usages:
                 kind = "SELECT_INTO" if into is not None and target is not None else tree.key.upper() if target is not None else "SELECT"
-                derivations = extract_transformations(tree, code, dialect, scopes, target)
+                derivations = extract_transformations(tree, code, dialect, scopes,
+                    exp.Table(this=exp.to_identifier(query_output.name)) if query_output else target)
                 result.operations.append(Operation(kind, sources, targets, code, start, end, usages=usages,
                                                    derivations=derivations))
             elif not isinstance(tree, (exp.Set, exp.Use)):

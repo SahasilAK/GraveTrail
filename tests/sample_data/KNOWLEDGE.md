@@ -46,6 +46,13 @@ and the SQL transformations passed a SQLite compatibility execution check.
 Full DuckDB execution and licensed SAS execution have not been verified.
 These are fixture provenance notes, not results of a fresh application test.
 
+## dbt column acceptance (parser 23)
+
+The 21-file retail archive preserves the logical edge gold. All 29 named
+output columns trace to a raw source or seed CSV. The legacy snapshot's
+wildcard needs a source layout. Snapshot history and system columns remain
+runtime coverage boundaries.
+
 ## SQL column acceptance (parser 18)
 
 The ecommerce archive publishes 972 verified physical column derivations. All 48

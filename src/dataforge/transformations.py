@@ -267,7 +267,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 if choices and config['expand_wildcards']:
                     unknown = False
                     for choice in choices:
-                        schema = declared(choice['table'])
+                        schema = declared(choice['table'], choice.get('table_identity', ''))
                         if not schema:
                             unknown = True
                             continue
@@ -276,7 +276,8 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                         if len(matches) > 1:
                             unknown = True
                             continue
-                        dependencies = ([{'table': choice['table'], 'column': matches[0], 'role': choice['role']}]
+                        dependencies = ([{'table': choice['table'], 'column': matches[0], 'role': choice['role'],
+                                          'table_identity': choice.get('table_identity', '')}]
                                         if matches else choice['inputs'])
                         d['inputs'].extend(item for item in dependencies if item not in d['inputs'])
                         if not matches:
@@ -288,20 +289,21 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 if controls and config['expand_wildcards']:
                     unresolved = False
                     for control in controls:
-                        schema = declared(control['table'])
+                        schema = declared(control['table'], control.get('table_identity', ''))
                         names = [name for name in schema.get('column_identifiers', [])
                                  if _sql_name(name) not in control['payload_exclude']]
                         excluded = set(control['exclude'])
                         if not names or not excluded <= {_sql_name(name) for name in names}:
                             unresolved = True
                             continue
-                        d['inputs'].extend({'table': control['table'], 'column': name, 'role': control['role']}
+                        d['inputs'].extend({'table': control['table'], 'column': name, 'role': control['role'],
+                                            'table_identity': control.get('table_identity', '')}
                                            for name in names if _sql_name(name) not in excluded)
                     if not unresolved:
                         d['coverage'].remove('AUTO CDC control wildcard requires trusted source schema')
                         d['status'] = 'unresolved' if d['coverage'] else 'inferred'
                 if pivot := d.get('pivot_grouping'):
-                    schema = declared(pivot['table'])
+                    schema = declared(pivot['table'], pivot.get('table_identity', ''))
                     if schema and config['expand_wildcards']:
                         grouping = [name for name in schema['column_identifiers'] if _sql_name(name) not in pivot['exclude']]
                         if _sql_name(pivot['output']) in {_sql_name(name) for name in grouping}:
@@ -309,7 +311,8 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                             # Neither candidate is uniquely addressable in the SQL.
                             d['inputs'] = []
                         else:
-                            d['inputs'].extend({'table': pivot['table'], 'column': name, 'role': 'value_selection'}
+                            d['inputs'].extend({'table': pivot['table'], 'column': name, 'role': 'value_selection',
+                                                'table_identity': pivot.get('table_identity', '')}
                                                for name in grouping)
                             d['coverage'].remove('PIVOT grouping requires trusted input schema')
                             d['status'] = 'unresolved' if d['coverage'] else 'inferred'
@@ -365,6 +368,10 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                 derivations.append(d)
                                 continue
                             target_names = target_schema['column_identifiers']
+                        basis = ({'dbt_catalog': 'Expanded from the matching imported dbt catalog',
+                                  'seed_header': 'Expanded from the imported CSV seed header'}.get(
+                                      schema.get('schema_origin'), 'Expanded from imported DDL; runtime schema is unverified')
+                                 if schema else 'Expanded from an imported query output layout')
                         for position, source_name in enumerate(source_names):
                             expanded = copy.deepcopy(d)
                             gaps = [c for c in d.get('coverage', [])
@@ -373,8 +380,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                     and not (d.get('target_mapping_missing') and c in INSERT_MAPPING_GAPS)]
                             expanded.update(target_column=target_names[position], status='unresolved' if gaps else 'inferred',
                                             ordinal=(offset if union_layout else d.get('ordinal', 0)) + position,
-                                            coverage=[*gaps, 'Expanded from imported DDL; runtime schema is unverified'
-                                                      if schema else 'Expanded from an imported query output layout'])
+                                            coverage=[*gaps, basis])
                             for item in expanded['inputs']:
                                 if item['role'] == 'value':
                                     prefix = item['column'].removesuffix('.*') if d.get('struct_path') else ''
@@ -437,7 +443,8 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                          item.get('role', 'value'), ordinal])
                 rows['column_derivations'].append([did, workspace, target, d.get('expression', ''),
                     d.get('category', 'unknown'), status, sid, fid, oid, run_id,
-                    d.get('branch', 0), d.get('ordinal', index), json.dumps(d.get('coverage', []))])
+                    d.get('branch', 0), d.get('ordinal', index),
+                    json.dumps([*d.get('coverage', []), *d.get('evidence_notes', [])])])
                 rows['column_dependencies'].extend(dependencies)
                 if config['expand_wildcards'] and d.get('scope', '').startswith(TRANSPOSE_SCOPE):
                     transpose_templates[references[target][2]].append((d['scope'], rows['column_derivations'][-1],

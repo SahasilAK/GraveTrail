@@ -30,9 +30,12 @@ the previous graph and resource catalog.
 ## Models, columns and resources
 
 The normal Lineage, Columns and Transformations pages use logical dbt data assets. A model
-SELECT writes its logical output without creating a synthetic source statement. SQL
-projections feed the existing column engine; documented YAML columns alone do not imply
-a complete physical schema or justify unused-column claims.
+SELECT writes its logical output and uses the shared dialect-aware SQL column engine.
+Traces follow named values through `ref()`, `source()`, model versions, and ephemeral
+models. Wildcards can expand from known model projections, CSV seed headers, or matching
+catalog columns. Documented YAML columns alone provide descriptive metadata.
+
+Parser version 23 refreshes dbt column coverage. Run **Analyze all files** after upgrading.
 
 **dbt resources and macro impact** in Lineage lists models, sources, seeds, snapshots,
 macros, tests and other declared resources. Inspect upstream dependencies or downstream
@@ -42,10 +45,13 @@ relationships, separate from the production model graph. Versions resolve using 
 Resource pages expose the full inventory. Large impact tables show a bounded preview;
 CLI/MCP continuation cursors provide the complete dependency traversal.
 
-Source-only macro code is inventoried and linked to consumers, without expanding user
-macros. Unknown control flow, dynamic refs and generated query fragments retain partial
-coverage diagnostics. Python models provide literal dependency inventory, with no DataFrame
-column-derivation claim. Snapshots describe dependencies rather than proving SCD execution.
+The source analyzer substitutes a bounded arithmetic macro used as an aliased projection.
+The trace preserves the original Jinja invocation and shows the inferred SQL expression.
+Dynamic refs, control flow, and other generated SQL retain explicit coverage gaps.
+Seeds trace to the imported CSV headers. A Python model that directly returns a single
+literal `dbt.ref()` can pass through a known layout. General DataFrame transformations
+remain unresolved. Snapshots trace known business columns and report runtime history
+and system-column gaps.
 Semantic resources are metadata/dependency inventory, not a MetricFlow compiler.
 Legacy semantic YAML links simple metric measures and saved-query metrics. The newer
 embedded semantic YAML v2 format is retained as model metadata; its nested metrics are
@@ -66,7 +72,8 @@ versions are retained while committed snapshots/history reference them.
 Other artifact formats are admitted only when explicitly selected. Unsupported schemas,
 missing compiled SQL and runtime-dependent expressions do not gain a completeness guarantee.
 Qualified auxiliary readers are catalog **v1** and run-results **v6**; supplied run results
-must match the manifest invocation. Freshness and semantic artifacts are retained as source
+must match the manifest invocation. Ordered columns from an error-free catalog that matches
+the manifest's physical relation can establish a wildcard layout. Freshness and semantic artifacts are retained as source
 evidence only. Source SQL uses an explicit SQLGlot dialect; compiled fixture coverage
 qualifies PostgreSQL syntax, not every adapter-specific construct.
 The artifact metadata contract and schema numbering are documented by dbt:

@@ -8,7 +8,7 @@ the value of every output column.
 ## Trace a column
 
 1. Import sources and run **Analysis**. Existing workspaces keep their table/direct-usage
-   facts after upgrade. Run analysis with parser version 22 to refresh SAS coverage.
+   facts after upgrade. Run analysis to refresh lineage with the current parser.
 2. Choose an exact asset, including its job identity for temporary tables. Select a
    physical output column, or paste a column name or exact column ID.
 3. Choose **How it is produced** (upstream) or **What it affects** (downstream), depth
@@ -44,6 +44,7 @@ identity under workspace case rules; quoted case and escaped identifier characte
 | SAS PROC SQL | Shared SQL contract, SAS library/WORK identity, and single arithmetic UPDATE assignments with simple IN-subquery row selection |
 | SAS DATA | Inline INPUT, ordered assignments, SET passthrough and concatenation, simple IF/ELSE OUTPUT routing, bounded MERGE BY, and the documented hash and fixed-array forms |
 | SAS procedures | Simple SORT, NWAY SUMMARY/MEANS sums and means, grouped RANK, PROC APPEND FORCE with complete layouts, and conditional numbered PROC TRANSPOSE outputs |
+| dbt models | Logical project and version identities, shared SQL projections, supported macro expressions, and wildcard layouts from models, seeds, or matching catalogs |
 
 SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL, Snowflake and
 [Databricks](SQL_PARSING.md#databricks-lineage) syntax. The following gaps apply outside the tested
