@@ -751,7 +751,7 @@ def proc_derivations(operation: Operation, clean: str) -> list[dict[str, Any]]:
                     return [*projections,
                             derivation(target, '_name_', operation.code, inputs=context,
                                        category='metadata', ordinal=len(groups)),
-                            derivation(target, '*', operation.code, scope='transpose-values', category='wildcard',
+                            derivation(target, '*', operation.code, scope=f'transpose-values:{transpose[1]}', category='wildcard',
                                        inputs=[*(dependency(source, name) for name in values), *context],
                                        coverage=[f'SAS TRANSPOSE output {transpose[1]} columns depend on runtime BY-group sizes'])]
         if operation.kind == 'PROC RANK' and source.casefold() != target.casefold():

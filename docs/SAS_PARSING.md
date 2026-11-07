@@ -21,7 +21,7 @@ typed-literal text and source coordinates remain evidence.
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 21 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 22 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
 evidence remain intact.
 
@@ -45,8 +45,10 @@ evidence remain intact.
   or row-selection context for NODUPKEY. Bounded NWAY SUMMARY/MEANS sums and means and
   grouped PROC RANK expose their value and grouping inputs.
 - PROC TRANSPOSE with a plain BY list, VAR list, and PREFIX= exposes known BY columns,
-  the transposed variable name, and candidate values for the generated columns. Their
-  count depends on runtime BY-group sizes.
+  the transposed variable name, and candidate values for numbered output columns.
+  Enter a name such as `AMT_2` to trace the second observation within each BY group.
+  Downstream references also publish conditional column traces. A compatible imported
+  output schema establishes exact names. Otherwise the width depends on runtime group sizes.
 - Plain PROC APPEND with FORCE uses complete BASE and DATA layouts. Matching incoming
   columns contribute values. Incoming-only columns stay outside the BASE output.
 - PROC SQL follows named CALCULATED aliases, simple correlated predicates and derived

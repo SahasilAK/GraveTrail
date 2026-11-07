@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections import defaultdict, deque
 from typing import Any
 
@@ -19,6 +20,7 @@ from dataforge.store import Store
 
 ROW_ROLES = {'row_filter', 'join', 'row_membership', 'quality_drop', 'delete_condition', 'truncate_condition'}
 SAS_IN_PLACE = {'sas_append', 'sas_update'}
+TRANSPOSE_SCOPE = 'transpose-values:'
 CONTROL_ROLES = {'quality_warn', 'quality_fail', 'match_key', 'sequence', 'system_sequence',
                  'ignore_null_update', 'history'}
 STATUSES = {'all', 'verified', 'inferred', 'unresolved'}
@@ -28,6 +30,20 @@ INSERT_MAPPING_GAPS = {'INSERT target column mapping requires an explicit list o
 
 def _sql_name(name: str) -> str:
     return name.removeprefix('"').removesuffix('"').replace('""', '"').casefold()
+
+
+def _transpose_number(scope: str, name: str) -> int | None:
+    prefix = scope.removeprefix(TRANSPOSE_SCOPE)
+    name = _sql_name(name)
+    if len(name) <= 32 and re.fullmatch(rf'{re.escape(prefix)}[1-9][0-9]*', name, re.I):
+        return int(name[len(prefix):])
+    return None
+
+
+def _transpose_note(number: int, declared: bool = False) -> str:
+    evidence = ('Name established by the imported output schema' if declared
+                else 'Conditional output. The column exists if a BY group reaches this position')
+    return f'{evidence}. Value comes from observation {number} in each BY group, if present, selected by _NAME_.'
 
 
 def _path_effect(effect: str, roles: set[str]) -> str:
@@ -78,6 +94,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
         Row collections for column references, derivations, and dependencies."""
     rows = {'column_references': [], 'column_derivations': [], 'column_dependencies': []}
     references = {}
+    transpose_templates = defaultdict(list)
     for metadata, parsed in results:
         fid = metadata['file_id']
         for op_index, op in enumerate(parsed.operations):
@@ -131,6 +148,20 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                       and physical[0].get('projection_count') == 1)
             for original in op.derivations:
                 d = copy.deepcopy(original)
+                scope = d['scope']
+                if config['expand_wildcards'] and scope.startswith(TRANSPOSE_SCOPE):
+                    names = declared(d['target_table']).get('column_identifiers', [])
+                    numbered = {number: name for name in names if (number := _transpose_number(scope, name))}
+                    known = {d['target_column'].casefold() for d in physical}
+                    normalized = {_sql_name(name) for name in names}
+                    if (numbered and sorted(numbered) == list(range(1, len(numbered) + 1))
+                            and known <= normalized and len(normalized) == len(names)
+                            and normalized - known - {'_label_'} == {_sql_name(name) for name in numbered.values()}):
+                        derivations.extend({**d, 'target_column': name, 'scope': '', 'category': 'sas_transpose',
+                                            'status': 'inferred', 'ordinal': number,
+                                            'coverage': [_transpose_note(number, declared=True)]}
+                                           for number, name in numbered.items())
+                        continue
                 if accumulator_source := d.get('sas_accumulator'):
                     names = read_layout(accumulator_source) if config['expand_wildcards'] else []
                     if names:
@@ -408,6 +439,21 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                     d.get('category', 'unknown'), status, sid, fid, oid, run_id,
                     d.get('branch', 0), d.get('ordinal', index), json.dumps(d.get('coverage', []))])
                 rows['column_dependencies'].extend(dependencies)
+                if config['expand_wildcards'] and d.get('scope', '').startswith(TRANSPOSE_SCOPE):
+                    transpose_templates[references[target][2]].append((d['scope'], rows['column_derivations'][-1],
+                                                                      dependencies))
+    if transpose_templates:
+        # Publish only observed names. The wildcard retains the unknown width for other requests.
+        for cid, _, aid, _, name, _, scope, _ in references.values():
+            if scope or aid not in transpose_templates:
+                continue
+            for pattern, template, dependencies in transpose_templates[aid]:
+                if number := _transpose_number(pattern, name):
+                    did = stable_id(template[0], cid)
+                    rows['column_derivations'].append([did, workspace, cid, template[3], 'sas_transpose', 'inferred',
+                        *template[6:11], number, json.dumps([_transpose_note(number)])])
+                    rows['column_dependencies'].extend([stable_id(did, str(item[-1])), workspace, did, *item[3:]]
+                                                       for item in dependencies)
     rows['column_references'] = list(references.values())
     return rows
 
@@ -521,6 +567,19 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
     candidates = store.rows('''SELECT * FROM column_references WHERE workspace_id=? AND asset_id=?
         AND (column_id=? OR (column_key=? AND scope='' AND version='')) LIMIT 3''',
         [w, aid, column, column_key(column, case_sensitive)])
+    transpose_template = None
+    transpose_number = None
+    if not candidates and direction == 'upstream' and configuration.get('expand_wildcards'):
+        templates = store.rows('''SELECT * FROM column_references
+            WHERE workspace_id=? AND asset_id=? AND starts_with(scope, ?) AND column_name='*' ''',
+            [w, aid, TRANSPOSE_SCOPE])
+        matching = [(row, number) for row in templates if (number := _transpose_number(row['scope'], column))]
+        if len(matching) == 1:
+            (template, transpose_number), = matching
+            transpose_template = template['column_id']
+            key = column_key(column, case_sensitive)
+            candidates = [{**template, 'column_id': stable_id(w, aid, key, '', '', ''),
+                           'column_name': column, 'column_key': key, 'scope': ''}]
     if len(candidates) != 1:
         result['state'] = 'unresolved' if len(candidates) > 1 else 'no_known_dependency'
         boundary('ambiguous_column' if candidates else 'column_not_established')
@@ -570,8 +629,9 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             continue
         visited.add((cid, effect))
         unknown_writes = scope_boundaries(cid)
+        virtual = transpose_template if cid == root['column_id'] else None
         if direction == 'upstream':
-            clause, params = 'd.target_column_id=?', [cid]
+            clause, params = 'd.target_column_id=?', [virtual or cid]
         else:
             clause = '''EXISTS (SELECT 1 FROM column_dependencies i WHERE i.workspace_id=d.workspace_id
                 AND i.derivation_id=d.derivation_id AND i.source_column_id=?)'''
@@ -588,6 +648,10 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             ORDER BY d.statement_id,d.ordinal,d.branch,d.derivation_id LIMIT ?''', [w, run_id, *params, remaining + 1])
         if not steps:
             continue
+        if virtual:
+            for step in steps:
+                step.update(target_column_id=cid, category='sas_transpose', status='inferred',
+                            coverage=json.dumps([_transpose_note(transpose_number)]))
         if level >= depth:
             boundary('depth_limit', column_id=cid)
             result['truncated'] = True
@@ -616,8 +680,8 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                 if len(writers) > 1:
                     boundary('multiple_writers', column_id=step['target_column_id'],
                              message='Writer order is unknown; downstream chaining stops at this output')
-            target = store.rows('SELECT * FROM column_references WHERE workspace_id=? AND column_id=?',
-                                [w, step['target_column_id']])[0]
+            target = root if virtual else store.rows('SELECT * FROM column_references WHERE workspace_id=? AND column_id=?',
+                                                     [w, step['target_column_id']])[0]
             inputs = store.rows('''SELECT c.*,i.role FROM column_dependencies i JOIN column_references c
                 ON i.source_column_id=c.column_id AND i.workspace_id=c.workspace_id
                 WHERE i.workspace_id=? AND i.derivation_id=? ORDER BY i.ordinal LIMIT ?''', [w, did, limit + 1])

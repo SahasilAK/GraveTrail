@@ -144,13 +144,21 @@ proc transpose data=raw.orders out=mart.transposed prefix=AMT_;
     by customer_id;
     var amount risk_score;
 run;
+proc sql;
+    create table mart.use_transpose as select AMT_2 as amount_2 from mart.transposed;
+quit;
+proc transpose data=raw.orders out=mart.declared prefix=AMT_;
+    by customer_id;
+    var amount risk_score;
+run;
 data mart.external;
     set raw.external;
 run;"""
     store = Store(tmp_path)
     try:
         workspace = store.create_workspace('SAS procedure outputs')
-        Importer(store, workspace).files([('procedures.sas', code)], {'.sas'})
+        schema = b'create table mart.declared (customer_id int, _name_ varchar(32), AMT_1 int, AMT_2 int);'
+        Importer(store, workspace).files([('procedures.sas', code), ('schema.sql', schema)], {'.sas', '.sql'})
         analyze(store, workspace)
         assets = {a['name']: a['asset_id'] for a in store.assets(workspace)}
         for name, source in [('total', 'amount'), ('risk_avg', 'risk_score')]:
@@ -159,7 +167,21 @@ run;"""
                 (source, 'value'), ('customer_id', 'value_selection'), ('', 'rowset')}
         transposed = assets['mart.transposed']
         assert trace_columns(store, workspace, transposed, 'customer_id')['state'] == 'known'
-        assert trace_columns(store, workspace, transposed, 'AMT_1')['state'] == 'unresolved'
+        for name in ('AMT_1', 'AMT_2'):
+            numbered = trace_columns(store, workspace, transposed, name, include_source=True)
+            step = numbered['derivations'][0]
+            assert step['status'] == 'inferred' and step['target']['column_name'].upper() == name
+            assert not numbered['complete'] and 'if present' in step['coverage'][0]
+            assert {i['column_name'] for i in step['inputs'] if i['role'] == 'value'} == {'amount', 'risk_score'}
+            assert step['evidence']['code'].encode() in code
+        assert not trace_columns(store, workspace, transposed, 'AMT_0')['derivations']
+        downstream = trace_columns(store, workspace, assets['mart.use_transpose'], 'amount_2')
+        assert [d['target']['column_name'].upper() for d in downstream['derivations']][:2] == ['AMOUNT_2', 'AMT_2']
+        impact = trace_columns(store, workspace, assets['raw.orders'], 'amount', direction='downstream')
+        assert any(d['target']['column_name'] == 'amount_2' for d in impact['derivations'])
+        declared = trace_columns(store, workspace, assets['mart.declared'], 'AMT_2')
+        assert 'imported output schema' in declared['derivations'][0]['coverage'][0]
+        assert not trace_columns(store, workspace, assets['mart.declared'], 'AMT_3')['derivations']
         wildcard = next(c for c in column_catalog(store, workspace, transposed) if c['column_name'] == '*')
         result = trace_columns(store, workspace, transposed, wildcard['column_id'])
         step = result['derivations'][0]

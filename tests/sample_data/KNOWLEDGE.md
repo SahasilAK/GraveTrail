@@ -57,7 +57,7 @@ correlated membership and literal UNNEST. Unsupported UPDATE and MERGE statement
 retain explicit column coverage gaps. The archive also includes intentional dynamic
 and malformed SQL cases.
 
-## SAS column acceptance (parser 21)
+## SAS column acceptance (parser 22)
 
 The 86-file SAS archive preserves the 128 expected logical table edges. Its
 48 publication columns trace through WORK datasets to inline inputs or a
@@ -67,8 +67,10 @@ fell from 4,190 to 481 with parser 19, then to 160 after adding bounded
 match merges and conditional OUTPUT routing. Parser 21 reduces this to 50
 after tracing the sample's APPEND, UPDATE, SUMMARY, hash lookup, and fixed
 array forms. The remaining records cover 40 missing input layouts and 10
-runtime TRANSPOSE layouts with known candidate value inputs. Dynamic macro
-calls and deliberately malformed files retain parser diagnostics.
+runtime TRANSPOSE layouts with known candidate value inputs. Parser 22 traces
+`AMT_1` and `AMT_2` conditionally for all ten TRANSPOSE outputs while their
+exact widths remain unknown. Dynamic macro calls and deliberately malformed
+files retain parser diagnostics.
 
 ## Parser9 acceptance (2026-10-18)
 
