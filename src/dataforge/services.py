@@ -20,7 +20,7 @@ from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 from dataforge.store import Store
 
-PARSER_VERSION = "17"
+PARSER_VERSION = "18"
 log = logging.getLogger(__name__)
 
 
@@ -395,10 +395,10 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
     resolve = resolver.resolve
     registry, aliases = resolver.registry, resolver.aliases
 
-    schemas = collect_schemas(results, workspace, resolver)
+    schemas, query_layouts = collect_schemas(results, workspace, resolver)
     rows = {"assets": [], "statements": [], "operations": [], "operation_assets": [], "edges": [],
             "column_usages": [], "diagnostics": [], "asset_aliases": []}
-    column_rows = materialize_columns(workspace, run_id, results, resolver, schemas, config)
+    column_rows = materialize_columns(workspace, run_id, results, resolver, schemas, query_layouts, config)
     statuses = []
     for metadata, parsed in results:
         fid = metadata["file_id"]

@@ -5,6 +5,14 @@ import pytest
 from dataforge.parsers.sql import parse_sql
 
 
+def test_sql_comments_and_tsql_batch_separator_are_not_parse_failures():
+    for dialect, suffix in (("mysql", "-- misleading FROM absent"), ("tsql", "GO")):
+        parsed = parse_sql("SELECT id FROM src;\n" + suffix, dialect)
+        assert len(parsed.operations) == 1
+        assert [source.name for source in parsed.operations[0].sources] == ["src"]
+        assert not parsed.diagnostics
+
+
 def names(refs: Any) -> Any:
     """Handle names for the test scenario.
 

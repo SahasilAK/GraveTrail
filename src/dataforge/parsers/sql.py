@@ -312,6 +312,9 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 tree = sqlglot.parse_one(code, read=dialect or None, error_level=ErrorLevel.RAISE)
             if tree is None:
                 continue
+            if (shared_sql and dialect.__class__.__name__ == "TSQL" and isinstance(tree, exp.Command)
+                    and tree.name.upper() == "GO" and tree.expression is None):
+                continue
             if namespace is not None:
                 if isinstance(tree, exp.Use):
                     diagnostic = namespace.use(tree)
@@ -556,8 +559,13 @@ def _parse_sql(content: str, dialect: str | sqlglot.Dialect, depth: int = 0,
                 result.diagnostics.append(Diagnostic("No statically analyzable table references", start, severity="info"))
             declarations = declared_schema(tree, start, end, len(result.operations) - 1, databricks)
             if declarations:
+                if (shared_sql and isinstance(tree, exp.Create) and isinstance(tree.this, exp.Table)
+                        and isinstance(tree.expression, (exp.Select, exp.SetOperation))):
+                    declarations[0]["query_layout"] = True
                 result.metadata.setdefault("declared_schemas", []).extend(declarations)
         except (ParseError, TokenError, OptimizeError, ValueError, RecursionError) as exc:
+            if isinstance(exc, ParseError) and not dialect.tokenize(code):
+                continue  # Some dialects raise ParseError for a comment-only statement.
             # SQL errors may quote imported secrets; store only the type and source location.
             log.info("sql_parse_failed", extra={"line": start, "error_type": type(exc).__name__})
             result.diagnostics.append(Diagnostic(f"SQL parse failed ({type(exc).__name__}); check dialect and syntax", start, "error"))

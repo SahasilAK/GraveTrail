@@ -46,6 +46,17 @@ and the SQL transformations passed a SQLite compatibility execution check.
 Full DuckDB execution and licensed SAS execution have not been verified.
 These are fixture provenance notes, not results of a fresh application test.
 
+## SQL column acceptance (parser 18)
+
+The ecommerce archive publishes 972 verified physical column derivations. All 48
+columns across the four publication tables trace without coverage gaps. Inline
+seed values and publication timestamps terminate at their SQL expressions.
+
+The 2,114-file banking archive exercises inferred CTAS layouts, wildcard UNION ALL,
+correlated membership and literal UNNEST. Unsupported UPDATE and MERGE statements
+retain explicit column coverage gaps. The archive also includes intentional dynamic
+and malformed SQL cases.
+
 ## Parser9 acceptance (2026-10-18)
 
 Fresh isolated scripts/verify_parity.py run preserves every original/SHA256,85persistent

@@ -309,8 +309,32 @@ def test_scalar_correlated_subquery_retains_scoped_value_and_predicates(dialect)
 
 def test_exists_does_not_copy_the_nested_select_value():
     inner, outer = derivations("CREATE TABLE dst AS SELECT EXISTS (SELECT b.secret FROM b) AS present FROM a")
-    assert inputs(inner) == {("b", "secret")}
-    assert not inputs(outer) and outer["status"] == "unresolved"
+    assert not inputs(inner) and inputs(inner, "rowset") == {("b", "")}
+    assert not inputs(outer)
+    assert inputs(outer, "value_selection") == {(inner["target_table"], "")}
+    assert inner["status"] == outer["status"] == "verified"
+
+
+def test_values_seed_and_publication_timestamp_have_distinct_origins():
+    records = derivations("""CREATE TABLE dst AS SELECT CAST(seed.id AS BIGINT) AS id,
+        CURRENT_TIMESTAMP AS published_at FROM (VALUES (10), (20)) AS seed(id)""", "duckdb")
+    seed, output, timestamp = records
+    assert seed["category"] == "constant" and not inputs(seed)
+    assert seed["status"] == "verified"
+    assert inputs(output) == {(seed["target_table"], "id")}
+    assert timestamp["category"] == "runtime" and timestamp["status"] == "verified"
+    assert not inputs(timestamp)
+
+
+def test_literal_unnest_and_ordering_do_not_invent_physical_columns():
+    records = derivations("""CREATE TABLE dst AS SELECT t.id, tag FROM (SELECT id FROM src) t
+        CROSS JOIN UNNEST(['A', 'B']) AS tag ORDER BY t.id LIMIT 10""", "bigquery")
+    generated = next(r for r in records if r["category"] == "constant")
+    id_, tag = [r for r in records if not r["scope"]]
+    assert generated["category"] == "constant" and generated["status"] == "verified"
+    assert inputs(tag) == {(generated["target_table"], "tag")}
+    assert inputs(id_, "row_filter") == {("t", "id")}
+    assert tag["status"] == id_["status"] == "verified"
 
 
 def test_row_number_is_rowset_dependent_and_runtime_function_is_not_constant() -> None:

@@ -191,6 +191,8 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
     databricks = is_native_dialect(dialect)
     lateral_aliases = dialect.__class__.__name__.casefold() in {
         "snowflake", "duckdb", "redshift", "databricks", "spark", "clickhouse"}
+    if shared_sql and isinstance(tree, exp.Delete):
+        return []  # DELETE can remove rows but cannot write an output column value.
     if isinstance(tree, (exp.Update, exp.Merge, exp.Delete)):
         return [_record(target_name, "*", root_scope, code, coverage=[
             f"Unsupported {tree.key.upper()} column transformation"])]
@@ -233,6 +235,19 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
     records = []
     branch_counts = {}
     scope_by_expression = {id(scope.expression): scope for scope in scopes}
+    runtime_values = (exp.CurrentTimestamp, exp.CurrentDate, exp.CurrentTime)
+
+    def exists_query(query):
+        return (isinstance(query, exp.Select) and isinstance(query.parent, exp.Exists)
+                and not any(query.args.get(key) for key in ("group", "having", "qualify", "limit", "offset"))
+                and not any(projection.find(exp.AggFunc) for projection in query.expressions))
+
+    def literal_unnest(query):
+        return (isinstance(query, exp.Unnest) and len(query.expressions) == 1
+                and isinstance(query.expressions[0], exp.Array) and not query.args.get("offset")
+                and all(isinstance(value, (exp.Literal, exp.Null, exp.Boolean))
+                        for value in query.expressions[0].expressions))
+
     feedback = {}
     recursive_gaps = {}
     if shared_sql:
@@ -362,6 +377,9 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
 
         Returns:
             Output names in projection order."""
+        if shared_sql and (isinstance(scope.expression, exp.Values) or literal_unnest(scope.expression)):
+            alias = scope.expression.args.get("alias")
+            return [identifier(column) for column in alias.columns] if alias else []
         parent = scope.expression.parent
         if isinstance(parent, (exp.CTE, exp.Subquery)):
             alias = parent.args.get("alias")
@@ -378,8 +396,28 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
 
     for scope in scopes:
         query = scope.expression
+        if shared_sql and literal_unnest(query):
+            names = output_names(scope)
+            if len(names) == 1:
+                table, scope_key = destinations[id(scope)]
+                records.append(_record(table, names[0], scope_key, "", "constant"))
+            continue
+        if shared_sql and isinstance(query, exp.Values):
+            names = output_names(scope)
+            rows = query.expressions
+            if (names and rows and len({name_key(n) for n in names}) == len(names)
+                    and all(isinstance(row, exp.Tuple) and len(row.expressions) == len(names) for row in rows)):
+                table, scope_key = destinations[id(scope)]
+                for ordinal, name in enumerate(names):
+                    literals = all(isinstance(row.expressions[ordinal], (exp.Literal, exp.Null, exp.Boolean))
+                                   for row in rows)
+                    records.append(_record(table, name, scope_key, "", "constant" if literals else "expression",
+                                           [] if literals else ["VALUES expression is not a static literal"],
+                                           ordinal=ordinal))
+            continue
         if not isinstance(query, exp.Select):
             continue
+        membership_query = shared_sql and exists_query(query)
         table, scope_key = destinations[id(scope)]
         coverage = []
         output_scope = scope
@@ -392,8 +430,8 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if shared_sql and parent.expression.args.get("by_name"):
                 coverage.append("Set operation BY NAME layout is not resolved")
             output_scope = output_scope.parent
-        projections = layout(scope)
-        names = output_names(output_scope)
+        projections = [(query, "", None)] if membership_query else layout(scope)
+        names = [""] if membership_query else output_names(output_scope)
         if (isinstance(tree, (exp.Insert, exp.Create)) and not scope_key and isinstance(tree.this, exp.Schema)
                 and not tree.meta.get("databricks_insert_by_name")):
             columns = tree.this.expressions
@@ -412,22 +450,30 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             coverage.append("Output and projection cardinality mismatch")
         name_counts = Counter(name_key(name) for name in names if name and name != "*")
         duplicate_names = {name for name, count in name_counts.items() if count > 1}
+        deferred_union = False
         if output_scope.set_operation_scopes:
             leaves = []
+            sets = []
 
             def collect_leaves(item):
                 if item.set_operation_scopes:
+                    sets.append(item.expression)
                     for child in item.set_operation_scopes:
                         collect_leaves(child)
                 else:
                     leaves.append(item)
 
             collect_leaves(output_scope)
-            if len({len(layout(s)) for s in leaves}) != 1:
+            has_star = any((any(name == "*" and bound is None for _, name, bound in layout(s))
+                            if shared_sql else s.expression.find(exp.Star) is not None) for s in leaves)
+            deferred_union = (shared_sql and has_star and not positional_insert and not explicit_star_insert
+                              and not output_scope.outer_columns
+                              and all(isinstance(node, exp.Union) and not node.args.get("distinct")
+                                      and not node.args.get("by_name") for node in sets))
+            if not deferred_union and len({len(layout(s)) for s in leaves}) != 1:
                 coverage.append("Set operation branch cardinality mismatch" if databricks else
                                 "UNION branch cardinality mismatch")
-            if any((any(name == "*" and bound is None for _, name, bound in layout(s))
-                    if shared_sql else s.expression.find(exp.Star) is not None) for s in leaves):
+            if has_star:
                 coverage.append("Set operation wildcard positions require trusted schema expansion")
         if id(output_scope) in recursive_gaps:
             coverage.append(recursive_gaps[id(output_scope)])
@@ -550,6 +596,11 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             nonlocal active_ordinal, expectation, resolving_context
             parts = column_parts(column) if databricks else column.parts
             name = identifier(parts[-1])
+            if (shared_sql and dialect.__class__.__name__ == "Oracle" and len(parts) == 1
+                    and not parts[0].args.get("quoted") and name.upper() == "ROWNUM"):
+                for source in mapping.values():
+                    add_input(record, source, "", "rowset")
+                return
             if expectation:
                 outputs = [i for i, output_name in enumerate(names) if name_key(output_name) == name_key(name)]
                 if len(parts) != 1 or len(outputs) != 1:
@@ -655,6 +706,9 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                                 n == "*" or name_key(n) == first for n in output_names(s))]
                             if matches:
                                 if unknown or len(matches) != 1:
+                                    if candidates and not (generated or pivoted) and defer_unqualified(
+                                            record, candidates, name, role):
+                                        return
                                     record["coverage"].append(f"Unqualified correlated column is ambiguous: {column.name}")
                                     return
                                 source = matches[0]
@@ -685,6 +739,8 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                                        or any(n == "*" or name_key(n) == name_key(name) for n in output_names(s))]
                             if visible:
                                 if candidates or len(visible) != 1:
+                                    if candidates and defer_unqualified(record, candidates, name, role):
+                                        return
                                     record["coverage"].append(f"Unqualified correlated column is ambiguous: {column.name}")
                                     return
                                 source = visible[0]
@@ -703,7 +759,11 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                 resolve(record, node, role)
                 return
             if shared_sql and isinstance(node, exp.Exists):
-                record["coverage"].append("EXISTS row-membership dependencies are not resolved")
+                child = scope_by_expression.get(id(node.this))
+                if child is not None and exists_query(child.expression):
+                    add_input(record, child, "", "value_selection" if role == "value" else role)
+                else:
+                    record["coverage"].append("EXISTS row-membership dependencies are not resolved")
                 return
             if shared_sql and isinstance(node, exp.In) and node.args.get("query") is not None:
                 for child in node.iter_expressions():
@@ -723,6 +783,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if isinstance(node, exp.Anonymous):
                 record["coverage"].append(f"Unknown function semantics: {node.name}")
             if (isinstance(node, exp.Func) and not isinstance(node, exp.AggFunc)
+                    and not (shared_sql and isinstance(node, runtime_values))
                     and not isinstance(node.parent, exp.Window) and not list(node.iter_expressions())):
                 record["coverage"].append(f"Runtime function value is not a known constant: {node.key}")
             if isinstance(node, exp.If):
@@ -778,17 +839,20 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if name_key(name) in duplicate_names:
                 local_coverage.append(f"Duplicate output column name prevents unique target mapping: {name}")
                 name = ""
-            if not name:
+            if not name and not membership_query:
                 local_coverage.append("Output column name cannot be established")
-            if not expression:
+            if not expression and not membership_query:
                 local_coverage.append("Original projection expression range cannot be established; see statement evidence")
             value = projection.this if isinstance(projection, exp.Alias) else projection
             category = ("direct" if isinstance(value, exp.Column) or databricks and column_parts(value)
                         else "window" if isinstance(value, exp.Window)
                         else "case" if isinstance(value, exp.Case) else "cast" if isinstance(value, exp.Cast)
                         else "aggregate" if isinstance(value, exp.AggFunc) else "expression")
-            record = _record(table, name or "*", scope_key, expression, category, local_coverage,
+            record = _record(table, "" if membership_query else name or "*", scope_key, expression,
+                             "rowset" if membership_query else category, local_coverage,
                              branch=branch, ordinal=ordinal)
+            if deferred_union:
+                record["union_projection"] = projected_name
             original_span = _original_range(projection, ranges, code)
             if original_span is not None:
                 record['_expression_offset'] = original_span[0]
@@ -804,7 +868,10 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             if shared_sql and not scope_key and (tree.args.get("by_name") or tree.meta.get("databricks_insert_by_name")):
                 record["target_by_name"] = True
             star = star_of(value)
-            if expanded_source is not None:
+            if membership_query:
+                for source in mapping.values():
+                    add_input(record, source, "", "rowset")
+            elif expanded_source is not None:
                 record["category"] = "direct"
                 if not comparison_right:
                     relation_column(record, expanded_source, projected_name, "value")
@@ -812,7 +879,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                 record["category"] = "wildcard"
                 explicit_targets = (not scope_key and isinstance(tree, (exp.Insert, exp.Create))
                                     and isinstance(tree.this, exp.Schema))
-                record["wildcard_safe"] = (not any(star.args.values()) and not output_scope.set_operation_scopes
+                record["wildcard_safe"] = (not any(star.args.values()) and (not output_scope.set_operation_scopes or deferred_union)
                                            and (not explicit_targets or explicit_star_insert))
                 if shared_sql:
                     record["scoped_wildcard"] = True
@@ -859,7 +926,7 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                     dependencies(value, "value", record)
                 if not record["inputs"] and not record["coverage"] and not any(record.get(key) for key in (
                         "lateral_choices", "scoped_columns", "unqualified_columns")):
-                    record["category"] = "constant"
+                    record["category"] = "runtime" if shared_sql and value.find(*runtime_values) else "constant"
             if comparison:
                 for compare_ordinal, (item, projected, source) in enumerate(projections):
                     active_ordinal = compare_ordinal
@@ -884,8 +951,13 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                     record["coverage"].append("JOIN USING/NATURAL matching context is not resolved")
             if query.args.get("group") is not None:
                 dependencies(query.args["group"], "value_selection", record)
-            if query.args.get("order") is not None:
-                record["coverage"].append("Query-level ordering context is not resolved")
+            if order := query.args.get("order"):
+                if shared_sql and not any(isinstance(term.this, exp.Literal) and term.this.is_int
+                                          for term in order.expressions):
+                    dependencies(order, "row_filter" if query.args.get("limit") or query.args.get("offset")
+                                 else "order", record)
+                else:
+                    record["coverage"].append("Query-level ordering context is not resolved")
             if databricks and not scope_key:
                 for role, predicate in controls:
                     selected_control = role in {"history", "ignore_null_update"}

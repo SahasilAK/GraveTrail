@@ -14,7 +14,7 @@ dialect syntax, but tests define demonstrated coverage. Imported SQL is never ex
 Table dependencies include reachable `MERGE USING (SELECT ...)` inputs and scalar or
 `EXISTS` subqueries in `UPDATE`/`DELETE`. Unreferenced CTEs remain excluded. Following a
 subquery's table inputs does not establish an outer alias's value-column ownership;
-unsupported DML transformations remain unresolved. Parser version 17 refreshes local
+unsupported DML transformations remain unresolved. Parser version 18 refreshes local
 results on the next analysis. To correct an existing file, open **Sources → Inventory →
 Inspect a source file**, save its SQL source type, then run **Analysis**. A successful
 run replaces the previous facts even when the file bytes are unchanged. Paused AI runs created with older parser or
@@ -77,8 +77,10 @@ expressions, CTEs, and physical tables, or downstream to see where it contribute
 filters rows. The shared SQL parser keeps join and filter inputs separate from value inputs.
 `COUNT(*)` retains a rowset dependency.
 
-Plain stars expand from named CTE and derived-table outputs or a consistent imported source
-schema. A positional INSERT uses an explicit target list or consistent target DDL and requires
+Plain stars expand from named CTE and derived-table outputs, consistent imported DDL, or a
+single imported query definition with a complete output layout. Competing definitions and
+schema changes leave the layout unresolved. UNION ALL stars align after both branch widths
+are known. A positional INSERT uses an explicit target list or consistent target DDL and requires
 matching widths after expansion. For unqualified join columns, a complete set of trusted input
 layouts must identify one owner. DDL-backed mappings are inferred.
 
@@ -86,8 +88,11 @@ The shared parser follows single-output scalar subqueries with qualified correla
 `EXCEPT` and `INTERSECT` with known positions, and explicit recursive `UNION ALL` CTEs with one
 direct self-reference in the step. Set comparisons add row-membership dependencies on both
 sides, and left-side expressions supply values. Incomplete layouts or ambiguous bindings retain
-coverage gaps. Other boundaries include `EXISTS` membership, unsupported UPDATE/MERGE/DELETE
-assignments, named windows, unknown functions, and dialect-specific projection aliases, generators,
+coverage gaps. Simple `EXISTS` tracks row membership and predicates. Named literal `VALUES`
+and literal arrays expanded by `UNNEST` trace to inline data. Current date and time expressions
+are runtime-generated values. DELETE removes rows, so it contributes no column value writer.
+Other boundaries include complex `EXISTS` queries, unsupported UPDATE/MERGE assignments,
+named windows, unknown functions, and dialect-specific projection aliases, generators,
 and pivots outside the tested forms above.
 
 Only reachable CTE scopes contribute source assets/direct columns; unused CTEs are excluded.

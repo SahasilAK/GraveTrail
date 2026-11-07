@@ -8,7 +8,7 @@ the value of every output column.
 ## Trace a column
 
 1. Import sources and run **Analysis**. Existing workspaces keep their table/direct-usage
-   facts after upgrade. Run analysis with parser version 17 to refresh SQL coverage.
+   facts after upgrade. Run analysis with parser version 18 to refresh SQL coverage.
 2. Choose an exact asset, including its job identity for temporary tables. Select a
    physical output column, or paste a column name or exact column ID.
 3. Choose **How it is produced** (upstream) or **What it affects** (downstream), depth
@@ -39,15 +39,16 @@ identity under workspace case rules; quoted case and escaped identifier characte
 | UNION, EXCEPT, INTERSECT | Known branch positions remain inspectable. EXCEPT and INTERSECT distinguish left-side values from membership inputs on both sides |
 | Scalar subquery | A single projected value and qualified correlated predicates remain separate |
 | Recursive CTE | Explicit `UNION ALL` anchor and direct step trace through a bounded scope cycle |
-| Plain wildcard | Expand from named scoped outputs or a single consistent imported physical schema. Unknown layouts stay unresolved |
+| Plain wildcard | Expand from named scoped outputs, imported DDL or a single complete query definition. Unknown layouts stay unresolved |
+| Inline and generated values | Trace named literal VALUES and literal UNNEST outputs to inline data. Current date and time expressions show a runtime origin |
 | SAS PROC SQL | Shared SQL contract, with SAS library/WORK identity and original source evidence |
 | SAS DATA | Ordered explicit assignment versions, simple single SET and explicit KEEP/DROP/RENAME where ownership/output names are established |
 
 SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL, Snowflake and
 [Databricks](SQL_PARSING.md#databricks-lineage) syntax. The following gaps apply outside the tested
 Databricks forms described in the SQL guide.
-UPDATE/MERGE/DELETE value transformations, unsupported recursive shapes, named windows,
-ambiguous correlations, EXISTS membership, unknown UDF semantics, lateral projection/QUALIFY alias
+UPDATE/MERGE value transformations, unsupported recursive shapes, named windows,
+ambiguous correlations, complex EXISTS membership, unknown UDF semantics, lateral projection/QUALIFY alias
 references, base-table positional column aliases, duplicate output names, query-level ordering
 and unsupported wildcard layouts have coverage gaps.
 SAS MERGE BY, multi-SET ownership, arrays, variable lists, loops, conditional retention,

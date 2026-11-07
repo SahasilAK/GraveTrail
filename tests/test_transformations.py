@@ -249,6 +249,76 @@ def test_unsupported_recursive_self_reference_does_not_create_a_physical_table(t
         store.close()
 
 
+@pytest.mark.parametrize("invalidate", [
+    "", "ALTER TABLE base.raw ADD COLUMN extra INT;",
+    "CREATE TABLE other.raw (id INT); ALTER TABLE raw ADD COLUMN extra INT;",
+])
+def test_stars_use_unambiguous_query_output_layouts_across_files(tmp_path, invalidate):
+    from dataforge.transformations import trace_columns
+
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("SQL layouts")
+        Importer(store, w).files([
+            ("01_consumer.sql", b"CREATE TABLE report AS WITH a AS (SELECT * FROM stage) SELECT amount FROM a;"),
+            ("02_stage.sql", b"CREATE VIEW stage AS SELECT * FROM base.raw;"),
+            ("03_seed.sql", ("CREATE TABLE base.raw AS SELECT 10 AS id, 25 AS amount; " + invalidate).encode()),
+        ], {".sql"})
+        analyze(store, w)
+        trace = trace_columns(store, w, asset_id(store, w, "report"), "amount", depth=15)
+        origin = [d for d in trace["derivations"] if d["target"]["table"] == "base.raw"]
+        if invalidate:
+            assert not origin and trace["state"] == "unresolved"
+        else:
+            assert len(origin) == 1 and origin[0]["expression"] == "25 AS amount"
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("right,expected", [
+    ("SELECT 3 AS other_id, 4 AS other_amount", {("left_seed", "amount"), ("right_seed", "other_amount")}),
+    ("SELECT 3 AS other_id", set()),
+])
+def test_union_all_stars_align_complete_query_layouts_by_position(tmp_path, right, expected):
+    from dataforge.transformations import trace_columns
+
+    store, w = populate(tmp_path, f"""CREATE TABLE left_seed AS SELECT 1 AS id, 2 AS amount;
+        CREATE TABLE right_seed AS {right};
+        CREATE TABLE report AS WITH a AS (SELECT * FROM left_seed), b AS (SELECT * FROM right_seed),
+          combined AS (SELECT * FROM a UNION ALL SELECT * FROM b)
+        SELECT * FROM combined;""")
+    try:
+        trace = trace_columns(store, w, asset_id(store, w, "report"), "amount", depth=15)
+        actual = {(item["table"], item["column_name"]) for step in trace["derivations"] for item in step["inputs"]
+                  if not item["scope"] and item["role"] == "value"}
+        assert actual == expected
+        assert trace["state"] == ("known" if expected else "unresolved")
+    finally:
+        store.close()
+
+
+def test_bundled_ecommerce_columns_reach_their_origins(tmp_path):
+    from dataforge.transformations import trace_columns
+
+    archive = Path("tests/sample_data/dataforge_sql_lineage_test_project.zip")
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("SQL sample")
+        assert Importer(store, w).zip(archive.read_bytes(), {".sql"}, sql_dialect="duckdb").accepted == 86
+        assert analyze(store, w)["edges"] == 128
+        assert not store.rows("SELECT 1 FROM column_derivations WHERE status='unresolved'")
+        target = asset_id(store, w, "pub.all_kpis")
+        amount = trace_columns(store, w, target, "amount", depth=30, limit=2000)
+        source_tables = {step["target"]["table"] for step in amount["derivations"]
+                         if step["target"]["table"].startswith("src.") and not step["target"]["scope"]}
+        assert len(source_tables) == 16 and amount["complete"]
+        timestamp = trace_columns(store, w, target, "published_at")
+        assert any(step["category"] == "runtime" and step["expression"] == "CURRENT_TIMESTAMP AS published_at"
+                   for step in timestamp["derivations"])
+    finally:
+        store.close()
+
+
 def test_derivation_parser_cache_roundtrip() -> None:
     """Verify that derivation parser cache roundtrip."""
     derivation = {'target_table': 'b', 'target_column': 'id', 'expression': 'id',

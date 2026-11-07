@@ -14,6 +14,7 @@ from dataforge.asset_identity import AssetResolver
 from dataforge.configuration import ParsingSettings
 from dataforge.models import AssetRef, ParseResult, column_key, operation_ids, stable_id
 from dataforge.parsers.sql_transformations import identifier
+from dataforge.schemas import query_output_layouts
 from dataforge.store import Store
 
 ROW_ROLES = {'row_filter', 'join', 'row_membership', 'quality_drop', 'delete_condition', 'truncate_condition'}
@@ -58,7 +59,9 @@ def _struct_members(schema: dict[str, Any], path: list[str]) -> list[str]:
     return members if len({_sql_name(name) for name in members}) == len(members) else []
 
 
-def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]], resolver: AssetResolver, schemas: dict[str, Any], config: dict[str, Any]) -> dict[str, list[list[Any]]]:
+def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]],
+                        resolver: AssetResolver, schemas: dict[str, Any], query_layouts: dict[str, list[str]],
+                        config: dict[str, Any]) -> dict[str, list[list[Any]]]:
     """Build column lineage rows from parsed operations and known schemas.
 
     Args:
@@ -67,6 +70,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
         results: File metadata and parse results to materialize.
         resolver: Resolver used to map table references to assets.
         schemas: Imported schema metadata indexed by asset identifier.
+        query_layouts: Output names inferred from single imported query definitions.
         config: Parsing and identity settings used during materialization.
 
     Returns:
@@ -86,6 +90,10 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 aid, _ = resolver.resolve(AssetRef(table, identity=identity), metadata, parsed)
                 schema = schemas.get(aid, {})
                 return schema if schema.get('schema_status') == 'declared' else {}
+
+            def read_layout(table, identity=''):
+                aid, _ = resolver.resolve(AssetRef(table, identity=identity), metadata, parsed)
+                return schemas.get(aid, {}).get('column_identifiers') or query_layouts.get(aid, [])
 
             def reference(table, name, scope='', version='', output=False, identity=''):
                 if scope:
@@ -108,6 +116,14 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 return cid, inferred or resolver.registry[aid][4] == 'unresolved'
 
             derivations = []
+            scoped_layouts = (query_output_layouts(op.derivations, read_layout, config['case_sensitive'])
+                              if config['expand_wildcards'] else {})
+
+            def scoped_names(scope):
+                return scoped_layouts.get(scope) or [prior['target_column'] for prior in derivations
+                                                     if prior.get('scope') == scope]
+
+            union_offsets = defaultdict(int)
             physical = [d for d in op.derivations if not d.get('scope')]
             wildcard_insert = op.kind == 'INSERT' and any(d.get('category') == 'wildcard' for d in physical)
             single_insert_wildcard = (len(physical) == 1 and physical[0].get('target_mapping_missing')
@@ -115,6 +131,20 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
             for original in op.derivations:
                 d = copy.deepcopy(original)
                 positional_layout = d.get('positional_layout')
+                union_layout = scoped_layouts.get(d['scope']) if 'union_projection' in d else None
+                if union_layout:
+                    offset_key = d['scope'], d['branch']
+                    offset = union_offsets[offset_key]
+                    d['coverage'] = [gap for gap in d['coverage'] if gap not in {
+                        'Set operation wildcard positions require trusted schema expansion',
+                        'Output and projection cardinality mismatch', 'Output column name cannot be established',
+                    }]
+                    if d['category'] != 'wildcard':
+                        d.update(target_column=union_layout[offset], ordinal=offset,
+                                 status='unresolved' if d['coverage'] else 'inferred')
+                        union_offsets[offset_key] += 1
+                elif 'union_projection' in d:
+                    d['wildcard_safe'] = False
                 if (wildcard_insert and not (positional_layout or d.get('target_by_name'))
                         and not d.get('scope') and not single_insert_wildcard):
                     d.update(target_column='*', status='unresolved')
@@ -124,7 +154,7 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 if d.get('scoped_columns') and config['expand_wildcards']:
                     missing = False
                     for item in d['scoped_columns']:
-                        layout = [prior['target_column'] for prior in derivations if prior.get('scope') == item['scope']]
+                        layout = scoped_names(item['scope'])
                         matches = [name for name in layout if column_key(name, config['case_sensitive'])
                                    == column_key(item['column'], config['case_sensitive'])]
                         if len(matches) != 1 or '*' in layout:
@@ -142,9 +172,9 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                         matches = []
                         for source in item['sources']:
                             if scope := source.get('scope'):
-                                names = {prior['target_column'] for prior in derivations if prior.get('scope') == scope}
+                                names = scoped_names(scope)
                             else:
-                                names = declared(source['table'], source.get('table_identity', '')).get('column_identifiers', [])
+                                names = read_layout(source['table'], source.get('table_identity', ''))
                             if not names or '*' in names:
                                 break
                             for name in names:
@@ -217,9 +247,10 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                         source_names = schema.get('column_identifiers', [])
                         if schema and d.get('struct_path'):
                             source_names = _struct_members(schema, d['struct_path'])
+                        elif d.get('scoped_wildcard') and not d.get('struct_path'):
+                            source_names = read_layout(inputs[0]['table'], inputs[0].get('table_identity', ''))
                     elif len(inputs) == 1 and d.get('scoped_wildcard') and not d.get('struct_path'):
-                        source_names = [item['target_column'] for item in derivations
-                                        if item.get('scope') == inputs[0].get('scope')]
+                        source_names = scoped_names(inputs[0]['scope'])
                     excluded = set(d.get('wildcard_exclude', []))
                     keys = ({_sql_name(name) for name in source_names} if d.get('databricks_wildcard') else
                             {column_key(name, config['case_sensitive']) for name in source_names})
@@ -231,6 +262,9 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                     source_names = [name for name in source_names if _sql_name(name) not in excluded]
                     if source_names:
                         target_names = source_names
+                        if union_layout:
+                            target_names = union_layout[offset:offset + len(source_names)]
+                            union_offsets[offset_key] += len(source_names)
                         if d.get('target_mapping_missing') and not positional_layout:
                             target_schema = schemas.get(outputs.get(resolver.norm(d['target_table'])), {})
                             if (target_schema.get('schema_status') != 'declared'
@@ -244,9 +278,9 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                     if c != 'Wildcard requires trusted schema expansion'
                                     and not (d.get('target_mapping_missing') and c in INSERT_MAPPING_GAPS)]
                             expanded.update(target_column=target_names[position], status='unresolved' if gaps else 'inferred',
-                                            ordinal=d.get('ordinal', 0) + position,
+                                            ordinal=(offset if union_layout else d.get('ordinal', 0)) + position,
                                             coverage=[*gaps, 'Expanded from imported DDL; runtime schema is unverified'
-                                                      if schema else 'Expanded from a scoped query output layout'])
+                                                      if schema else 'Expanded from an imported query output layout'])
                             for item in expanded['inputs']:
                                 if item['role'] == 'value':
                                     prefix = item['column'].removesuffix('.*') if d.get('struct_path') else ''
