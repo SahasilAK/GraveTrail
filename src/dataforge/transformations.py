@@ -18,6 +18,7 @@ from dataforge.schemas import query_output_layouts, sas_stack_columns
 from dataforge.store import Store
 
 ROW_ROLES = {'row_filter', 'join', 'row_membership', 'quality_drop', 'delete_condition', 'truncate_condition'}
+SAS_IN_PLACE = {'sas_append', 'sas_update'}
 CONTROL_ROLES = {'quality_warn', 'quality_fail', 'match_key', 'sequence', 'system_sequence',
                  'ignore_null_update', 'history'}
 STATUSES = {'all', 'verified', 'inferred', 'unresolved'}
@@ -130,6 +131,35 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                       and physical[0].get('projection_count') == 1)
             for original in op.derivations:
                 d = copy.deepcopy(original)
+                if accumulator_source := d.get('sas_accumulator'):
+                    names = read_layout(accumulator_source) if config['expand_wildcards'] else []
+                    if names:
+                        match = next((name for name in names if name.casefold() == d['target_column']), None)
+                        if match:
+                            d['inputs'].append({'table': accumulator_source, 'column': match, 'role': 'value'})
+                        d['status'] = 'inferred'
+                        d['coverage'].append('SAS sum statement uses the input accumulator when supplied by SET'
+                                             if match else 'SAS sum statement carries the accumulator between rows')
+                    else:
+                        d['status'] = 'unresolved'
+                        d['coverage'].append('SAS sum statement needs the SET layout to establish the prior accumulator')
+                if d['category'] == 'sas_append' and config['expand_wildcards']:
+                    incoming = d['inputs'][0]['table']
+                    base = d['target_table']
+                    incoming_layout = read_layout(incoming)
+                    incoming_names = {name.casefold(): name for name in incoming_layout}
+                    base_names = read_layout(base)
+                    if (base_names and incoming_names and len(incoming_names) == len(incoming_layout)
+                            and len({name.casefold() for name in base_names}) == len(base_names)
+                            and all(name.isidentifier() for name in [*base_names, *incoming_layout])):
+                        for ordinal, name in enumerate(base_names):
+                            inputs = [{'table': base, 'column': name, 'role': 'value'}]
+                            if other := incoming_names.get(name.casefold()):
+                                inputs.append({'table': incoming, 'column': other, 'role': 'value'})
+                            derivations.append({**d, 'target_column': name, 'inputs': inputs,
+                                                'status': 'inferred', 'ordinal': ordinal,
+                                                'coverage': ['APPEND FORCE uses the BASE layout; runtime attributes may affect incoming values']})
+                        continue
                 if d.get('sas_stack') and config['expand_wildcards']:
                     columns = sas_stack_columns(d, read_layout)
                     if columns:
@@ -272,6 +302,11 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                             or d.get('scoped_wildcard') and len(keys) != len(source_names)
                             or '*' in source_names):
                         source_names = []
+                    if (not source_names and d.get('sas_passthrough') and len(inputs) == 1
+                            and not inputs[0].get('scope')):
+                        gap = 'SAS passthrough requires a complete input layout'
+                        d['coverage'] = [f"{gap}: {inputs[0]['table']}" if reason == gap else reason
+                                         for reason in d['coverage']]
                     if d.get('sas_routed') and source_names:
                         names = {name.casefold(): name for name in source_names}
                         for item in list(d['inputs']):
@@ -564,6 +599,9 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
         ambiguous = direction == 'upstream' and len({s['operation_id'] for s in steps}) > 1
         if ambiguous:
             boundary('multiple_writers', column_id=cid, message='Writer order is unknown; alternatives are not chained')
+        # SAS in-place writes expose independent origins without choosing writer order.
+        independent = (direction == 'upstream' and not unknown_writes
+                       and any(s['category'] in SAS_IN_PLACE and s['status'] != 'unresolved' for s in steps))
         for step in steps:
             if status != 'all' and step['status'] != status:
                 boundary('status_filter', column_id=cid)
@@ -625,10 +663,11 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             else:
                 boundary('path_limit')
                 result['truncated'] = True
-            if not multiple_writers and step['status'] != 'unresolved':
+            if (not multiple_writers or independent) and step['status'] != 'unresolved':
                 if direction == 'upstream':
                     following = [(i['column_id'], level + 1, _path_effect(effect, {i['role']}),
-                        (*ancestors, cid)) for i in inputs]
+                        (*ancestors, cid)) for i in inputs
+                        if i['column_id'] != cid or step['category'] not in SAS_IN_PLACE]
                 else:
                     following = [(target['column_id'], level + 1, next_effect, (*ancestors, cid))]
                 for item in following:

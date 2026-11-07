@@ -5,7 +5,7 @@ from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
 from dataforge.store import Store
-from dataforge.transformations import trace_columns
+from dataforge.transformations import column_catalog, trace_columns
 
 
 def test_sas_match_merge_and_conditional_outputs_publish_column_trace(tmp_path: Path) -> None:
@@ -78,6 +78,156 @@ run;"""
         unknown = trace_columns(store, workspace, assets['mart.unknown'], 'amount')
         assert unknown['state'] != 'known'
         assert set(graph.predecessors(assets['mart.unknown'])) == {assets['raw.left'], assets['raw.unknown']}
+    finally:
+        store.close()
+
+
+def test_sas_append_and_update_publish_separate_value_and_membership_paths(tmp_path: Path) -> None:
+    code = b"""data raw.base;
+    input id amount base_only; datalines;
+1 20 3
+;
+run;
+data raw.incoming;
+    input id amount risk_score; datalines;
+1 10 4
+;
+run;
+data mart.appended; set raw.base; run;
+proc append base=mart.appended data=raw.incoming force; run;
+data mart.updated; set raw.base; run;
+proc sql;
+update mart.updated set amount=amount*1.05
+ where id in (select id from raw.incoming where risk_score>3);
+update mart.unknown set amount=amount*1.05
+ where id in (select id from raw.incoming where unknown.id=incoming.id);
+update mart.unbound set amount=amount*1.05
+ where id in (select id from raw.missing);
+quit;"""
+    store = Store(tmp_path)
+    try:
+        workspace = store.create_workspace('SAS in-place writes')
+        Importer(store, workspace).files([('writes.sas', code)], {'.sas'})
+        analyze(store, workspace)
+        assets = {a['name']: a['asset_id'] for a in store.assets(workspace)}
+        graph = LineageGraph(store.assets(workspace), store.edges(workspace)).graph
+        for table, category in [('mart.appended', 'sas_append'), ('mart.updated', 'sas_update')]:
+            assert set(graph.predecessors(assets[table])) == {assets['raw.base'], assets['raw.incoming']}
+            trace = trace_columns(store, workspace, assets[table], 'amount', include_source=True)
+            write = next(d for d in trace['derivations'] if d['category'] == category)
+            assert write['evidence']['code'].encode() in code
+            assert any(d['target']['table'] == 'raw.base' for d in trace['derivations'])
+            assert any(c['reason'] == 'multiple_writers' for c in trace['coverage'])
+            assert not any(c['reason'] == 'cycle' for c in trace['coverage'])
+            assert {(i['table'], i['column_name']) for i in write['inputs'] if i['role'] == 'value'} == (
+                {(table, 'amount'), ('raw.incoming', 'amount')} if category == 'sas_append'
+                else {(table, 'amount')})
+        assert {(i['table'], i['column_name'], i['role']) for i in write['inputs'] if i['role'] != 'value'} == {
+            ('mart.updated', 'id', 'row_membership'), ('raw.incoming', 'id', 'row_membership'),
+            ('raw.incoming', 'risk_score', 'row_filter')}
+        assert trace_columns(store, workspace, assets['mart.appended'], 'risk_score')['state'] == 'no_known_dependency'
+        assert trace_columns(store, workspace, assets['mart.unknown'], 'amount')['state'] == 'unresolved'
+        unbound = trace_columns(store, workspace, assets['mart.unbound'], 'amount')
+        assert unbound['state'] == 'unresolved'
+        assert all(i['table'] != 'raw.missing' for d in unbound['derivations'] for i in d['inputs'])
+    finally:
+        store.close()
+
+
+def test_sas_procedure_trace_keeps_known_columns_and_runtime_transpose_width(tmp_path: Path) -> None:
+    code = b"""proc summary data=raw.orders nway;
+    class customer_id;
+    var amount risk_score;
+    output out=mart.summary sum(amount)=total mean(risk_score)=risk_avg;
+run;
+proc transpose data=raw.orders out=mart.transposed prefix=AMT_;
+    by customer_id;
+    var amount risk_score;
+run;
+data mart.external;
+    set raw.external;
+run;"""
+    store = Store(tmp_path)
+    try:
+        workspace = store.create_workspace('SAS procedure outputs')
+        Importer(store, workspace).files([('procedures.sas', code)], {'.sas'})
+        analyze(store, workspace)
+        assets = {a['name']: a['asset_id'] for a in store.assets(workspace)}
+        for name, source in [('total', 'amount'), ('risk_avg', 'risk_score')]:
+            result = trace_columns(store, workspace, assets['mart.summary'], name)
+            assert {(i['column_name'], i['role']) for i in result['derivations'][0]['inputs']} == {
+                (source, 'value'), ('customer_id', 'value_selection'), ('', 'rowset')}
+        transposed = assets['mart.transposed']
+        assert trace_columns(store, workspace, transposed, 'customer_id')['state'] == 'known'
+        assert trace_columns(store, workspace, transposed, 'AMT_1')['state'] == 'unresolved'
+        wildcard = next(c for c in column_catalog(store, workspace, transposed) if c['column_name'] == '*')
+        result = trace_columns(store, workspace, transposed, wildcard['column_id'])
+        step = result['derivations'][0]
+        assert step['status'] == 'unresolved' and 'AMT_' in step['coverage'][0]
+        assert {(i['column_name'], i['role']) for i in step['inputs']} == {
+            ('amount', 'value'), ('risk_score', 'value'), ('customer_id', 'value_selection')}
+        external = trace_columns(store, workspace, assets['mart.external'], 'amount')
+        assert external['state'] == 'unresolved'
+        assert any('raw.external' in detail for c in external['coverage'] for detail in c.get('details', []))
+    finally:
+        store.close()
+
+
+def test_sas_hash_and_fixed_array_steps_publish_value_origins(tmp_path: Path) -> None:
+    code = b"""data raw.base;
+    input id amount tax score; datalines;
+1 10 2 5
+;
+run;
+data raw.lookup;
+    input id score; datalines;
+1 9
+;
+run;
+data mart.enriched;
+    if _n_=1 then do;
+        declare hash lookup(dataset:"raw.lookup");
+        lookup.defineKey('id');
+        lookup.defineData('score');
+        lookup.defineDone();
+    end;
+    set raw.base;
+    rc=lookup.find();
+    if rc ne 0 then score=0;
+    drop rc;
+run;
+data mart.rolled;
+    set mart.enriched;
+    retain total 0;
+    array measures[2] amount tax;
+    do idx=1 to dim(measures);
+        measures[idx]=round(measures[idx],0.01);
+    end;
+    total+amount;
+    prior=lag(amount);
+    drop idx;
+run;"""
+    store = Store(tmp_path)
+    try:
+        workspace = store.create_workspace('SAS hash and array')
+        Importer(store, workspace).files([('legacy.sas', code)], {'.sas'})
+        analyze(store, workspace)
+        assets = {a['name']: a['asset_id'] for a in store.assets(workspace)}
+        graph = LineageGraph(store.assets(workspace), store.edges(workspace)).graph
+        assert set(graph.predecessors(assets['mart.enriched'])) == {assets['raw.base'], assets['raw.lookup']}
+        score = trace_columns(store, workspace, assets['mart.rolled'], 'score', depth=12)
+        lookup = next(d for d in score['derivations'] if d['category'] == 'sas_hash_lookup')
+        assert {(i['table'], i['column_name'], i['role']) for i in lookup['inputs']} == {
+            ('raw.lookup', 'score', 'value'), ('raw.lookup', 'id', 'value_selection'),
+            ('raw.base', 'id', 'value_selection')}
+        for column, category in [('total', 'sas_retained_sum'), ('prior', 'sas_lag')]:
+            trace = trace_columns(store, workspace, assets['mart.rolled'], column, depth=12, include_source=True)
+            assert any(d['category'] == category for d in trace['derivations'])
+            assert all(d['status'] != 'unresolved' for d in trace['derivations'])
+            assert any(d['target']['table'] == 'raw.base' and d['target']['column_name'] == 'amount'
+                       for d in trace['derivations'])
+            assert all(i['column_name'] != 'tax' for d in trace['derivations'] for i in d['inputs'])
+        assert trace_columns(store, workspace, assets['mart.rolled'], 'idx')['state'] == 'no_known_dependency'
     finally:
         store.close()
 

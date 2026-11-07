@@ -266,7 +266,7 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
                 list({s.name: s for s in sources}.values()), list({t.name: t for t in targets}.values()),
                 raw_code, start, end, "sas-rules", usages=usages)
             if block_type == "data":
-                operation.derivations, diagnostics = data_step_derivations(operation, block)
+                operation.derivations, diagnostics = data_step_derivations(operation, block, ref)
                 result.diagnostics.extend(diagnostics)
             else:
                 operation.derivations = proc_derivations(operation, clean)

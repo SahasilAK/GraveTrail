@@ -173,6 +173,68 @@ def _record(table: str, column: str, scope: str, expression: str, category: str=
             "inputs": [], "coverage": coverage, "branch": 0, "ordinal": 0, **extra}
 
 
+def _sas_update(tree: exp.Update, target: exp.Table, code: str) -> list[dict[str, Any]]:
+    """Trace a simple assignment controlled by a single-table IN subquery."""
+    if any(value for key, value in tree.args.items() if key not in {"this", "expressions", "where"}):
+        return []
+    if len(tree.expressions) != 1 or not isinstance(tree.expressions[0], exp.EQ):
+        return []
+    assignment = tree.expressions[0]
+    where = tree.args.get("where")
+    membership = where.this if where else None
+    if not isinstance(membership, exp.In) or membership.expressions:
+        return []
+    subquery = membership.args.get("query")
+    query = subquery.this if isinstance(subquery, exp.Subquery) else None
+    if (not isinstance(query, exp.Select) or len(query.expressions) != 1
+            or any(value for key, value in query.args.items() if key not in {"expressions", "from_", "where"})):
+        return []
+    source = query.args["from_"].this if query.args.get("from_") else None
+    if (not isinstance(source, exp.Table) or not isinstance(source.this, exp.Identifier)
+            or any(value for key, value in source.args.items() if key not in {"this", "db", "catalog", "alias"})
+            or source.alias_column_names or target.alias_column_names
+            or relation(source).casefold() == relation(target).casefold()):
+        return []
+
+    def local(column, table):
+        return (isinstance(column, exp.Column) and isinstance(column.this, exp.Identifier)
+                and not (column.db or column.catalog)
+                and (not column.table or column.table.casefold() == table.alias_or_name.casefold()))
+
+    if not (local(assignment.this, target) and local(membership.this, target)
+            and local(query.expressions[0], source)):
+        return []
+    arithmetic = (exp.Add, exp.Sub, exp.Mul, exp.Div, exp.Neg, exp.Paren, exp.Column, exp.Identifier, exp.Literal)
+    predicate = (*arithmetic, exp.And, exp.Or, exp.Not, exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE)
+    filter_ = query.args.get("where")
+    if (not all(isinstance(node, arithmetic) for node in assignment.expression.walk())
+            or filter_ and not all(isinstance(node, predicate) for node in filter_.this.walk())):
+        return []
+    values = list(assignment.expression.find_all(exp.Column))
+    filters = list(filter_.find_all(exp.Column)) if filter_ else []
+    if not all(local(column, target) for column in values) or not all(local(column, source) for column in filters):
+        return []
+    table, incoming = relation(target), relation(source)
+    name = identifier(assignment.this.this)
+    inputs = [(table, name, "value"), *((table, identifier(col.this), "value") for col in values),
+              (table, identifier(membership.this.this), "row_membership")]
+    record = _record(table, name, "", code, "sas_update")
+    deferred = []
+    controls = [(query.expressions[0], "row_membership"), *((col, "row_filter") for col in filters)]
+    for column, role in controls:
+        name = identifier(column.this)
+        if column.table:
+            inputs.append((incoming, name, role))
+        else:
+            # An unqualified name can fall back to the outer UPDATE target.
+            deferred.append({"column": name, "role": role, "sources": [{"table": incoming}]})
+    record["inputs"] = [{"table": t, "column": c, "role": role} for t, c, role in dict.fromkeys(inputs)]
+    if deferred:
+        record.update(unqualified_columns=deferred, status="unresolved",
+                      coverage=["Unresolved or ambiguous column ownership requires complete source schemas"])
+    return [record]
+
+
 def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, scopes: list[Scope], target: exp.Table | None=None) -> list[dict[str, Any]]:
     """Extract scope-preserving column derivations and explicit uncertainty coverage.
 
@@ -194,6 +256,9 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         "snowflake", "duckdb", "redshift", "databricks", "spark", "clickhouse"}
     if shared_sql and not sas_sql and isinstance(tree, exp.Delete):
         return []  # DELETE can remove rows but cannot write an output column value.
+    if sas_sql and isinstance(tree, exp.Update) and target is not None:
+        if records := _sas_update(tree, target, code):
+            return records
     if isinstance(tree, (exp.Update, exp.Merge, exp.Delete)):
         return [_record(target_name, "*", root_scope, code, coverage=[
             f"Unsupported {tree.key.upper()} column transformation"])]

@@ -57,17 +57,18 @@ correlated membership and literal UNNEST. Unsupported UPDATE and MERGE statement
 retain explicit column coverage gaps. The archive also includes intentional dynamic
 and malformed SQL cases.
 
-## SAS column acceptance (parser 20)
+## SAS column acceptance (parser 21)
 
 The 86-file SAS archive preserves the 128 expected logical table edges. Its
 48 publication columns trace through WORK datasets to inline inputs or a
 runtime timestamp origin. The 2,201-file banking archive also exercises
 concatenated SET, CALCULATED, and procedure outputs. Unresolved derivations
 fell from 4,190 to 481 with parser 19, then to 160 after adding bounded
-match merges and conditional OUTPUT routing. Remaining gaps include missing
-input layouts, PROC APPEND, UPDATE, complex DATA steps, and unsupported
-TRANSPOSE and SUMMARY forms. Dynamic macro calls and deliberately malformed
-files retain parser diagnostics.
+match merges and conditional OUTPUT routing. Parser 21 reduces this to 50
+after tracing the sample's APPEND, UPDATE, SUMMARY, hash lookup, and fixed
+array forms. The remaining records cover 40 missing input layouts and 10
+runtime TRANSPOSE layouts with known candidate value inputs. Dynamic macro
+calls and deliberately malformed files retain parser diagnostics.
 
 ## Parser9 acceptance (2026-10-18)
 

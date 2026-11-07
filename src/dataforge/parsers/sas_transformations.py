@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
-from dataforge.models import Diagnostic, Operation
+from dataforge.models import AssetRef, Diagnostic, Operation
 
 NAME = r'[A-Za-z_]\w*'
 STRING = r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\""
@@ -368,12 +369,87 @@ def _expression_inputs(expression: str, source: str, state: dict[str, dict[str, 
     return list({tuple(i.items()): i for i in inputs}.values()), list(dict.fromkeys(coverage))
 
 
-def data_step_derivations(operation: Operation, block: list[tuple[str, int, int, str, int, int]]) -> tuple[list[dict[str, Any]], list[Diagnostic]]:
+def hash_lookup(operation, clean, resolve_ref):
+    dataset = rf'{NAME}(?:\.{NAME})?'
+    pattern = (
+        rf'data\s+{dataset}\s*;\s*if\s+_n_\s*=\s*1\s+then\s+do\s*;'
+        rf'\s*declare\s+hash\s+(?P<obj>{NAME})\s*\(\s*dataset\s*:\s*(?P<quote>[\'"])'
+        rf'(?P<lookup>{dataset})(?P=quote)\s*\)\s*;'
+        rf'\s*(?P=obj)\.definekey\s*\(\s*(?P<kq>[\'"])(?P<key>{NAME})(?P=kq)\s*\)\s*;'
+        rf'\s*(?P=obj)\.definedata\s*\(\s*(?P<vq>[\'"])(?P<value>{NAME})(?P=vq)\s*\)\s*;'
+        rf'\s*(?P=obj)\.definedone\s*\(\s*\)\s*;\s*end\s*;\s*set\s+{dataset}\s*;'
+        rf'\s*(?P<rc>{NAME})\s*=\s*(?P=obj)\.find\s*\(\s*\)\s*;'
+        r'\s*if\s+(?P=rc)\s+(?:ne\s+|\^=\s*|~=\s*)0\s+then\s+(?P=value)\s*=\s*0\s*;'
+        r'\s*drop\s+(?P=rc)\s*;\s*run\s*;'
+    )
+    match = re.fullmatch(pattern, clean, re.I)
+    if not match:
+        return []
+    source, target = operation.sources[0], operation.targets[0]
+    lookup = resolve_ref(match['lookup'])
+    key, value, rc = (match[name].casefold() for name in ('key', 'value', 'rc'))
+    if len({key, value, rc}) != 3 or lookup.name.casefold() == target.name.casefold():
+        return []
+    if lookup.name.casefold() != source.name.casefold():
+        operation.sources.append(lookup)
+    return [
+        derivation(target.name, value, operation.code, category='sas_hash_lookup', inputs=[
+            dependency(lookup.name, value),
+            dependency(lookup.name, key) | {'role': 'value_selection'},
+            dependency(source.name, key) | {'role': 'value_selection'},
+        ]),
+        passthrough(target.name, source.name, operation.code, [], [], exclude={value, rc}, ordinal=1),
+    ]
+
+
+def fixed_array_step(operation, block, clean):
+    dataset = rf'{NAME}(?:\.{NAME})?'
+    pattern = (
+        rf'data\s+{dataset}\s*;\s*set\s+{dataset}\s*;'
+        rf'\s*retain\s+(?P<total>{NAME})\s+0\s*;'
+        rf'\s*array\s+(?P<array>{NAME})\s*\[\s*(?P<size>[1-9]\d{{0,3}})\s*\]'
+        rf'\s*(?P<variables>{NAME}(?:\s+{NAME})*)\s*;'
+        rf'\s*do\s+(?P<index>{NAME})\s*=\s*1\s+to\s+dim\s*\(\s*(?P=array)\s*\)\s*;'
+        r'\s*(?P=array)\s*\[\s*(?P=index)\s*\]\s*=\s*round\s*\('
+        r'\s*(?P=array)\s*\[\s*(?P=index)\s*\]\s*,\s*(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*\)\s*;'
+        rf'\s*end\s*;\s*(?P=total)\s*\+\s*(?P<value>{NAME})\s*;'
+        rf'\s*(?P<prior>{NAME})\s*=\s*lag\s*\(\s*(?P=value)\s*\)\s*;'
+        r'\s*drop\s+(?P=index)\s*;\s*run\s*;'
+    )
+    match = re.fullmatch(pattern, clean, re.I)
+    if not match:
+        return []
+    source, target = operation.sources[0].name, operation.targets[0].name
+    variables = match['variables'].casefold().split()
+    total, value, prior, index, array = (match[name].casefold() for name in ('total', 'value', 'prior', 'index', 'array'))
+    if (len(variables) != int(match['size']) or value not in variables
+            or len(set([*variables, total, prior, index, array])) != len(variables) + 4):
+        return []
+    steps = []
+    scope = 'array-round'
+    for column in variables:
+        step = derivation(target, column, block[5][0], scope=scope, category='expression',
+                          coverage=['Unresolved or ambiguous column ownership requires complete source schemas'])
+        step['unqualified_columns'] = [{'column': column, 'role': 'value', 'sources': [{'table': source}]}]
+        steps.append(step)
+    origins = [dependency(target, value, scope=scope), dependency(source, '') | {'role': 'rowset'}]
+    running = derivation(target, total, operation.code, inputs=list(origins), category='sas_retained_sum')
+    running['sas_accumulator'] = source
+    return [*steps,
+            *(derivation(target, column, operation.code, inputs=[dependency(target, column, scope=scope)])
+              for column in variables),
+            running, derivation(target, prior, block[8][0], inputs=origins, category='sas_lag'),
+            passthrough(target, source, operation.code, [], [], exclude={*variables, total, prior, index})]
+
+
+def data_step_derivations(operation: Operation, block: list[tuple[str, int, int, str, int, int]],
+                          resolve_ref: Callable[[str], AssetRef]) -> tuple[list[dict[str, Any]], list[Diagnostic]]:
     """Build ordered DATA-step variable versions and final columns conservatively.
 
     Args:
         operation: Parsed SAS DATA operation to describe.
         block: Buffered source statements with line and character offsets.
+        resolve_ref: Apply SAS library mappings to a literal hash dataset.
 
     Returns:
         Derivation records and diagnostics for unsupported or incomplete cases.
@@ -388,6 +464,12 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
     coverage = []
     sets = [clean for _, clean in body if re.match(r'\s*set\b', clean, re.I)]
     sources = [source.name for source in operation.sources if source.kind == 'table']
+    if (len(operation.sources) == len(operation.targets) == len(sets) == 1
+            and len(sources) == 1 and sources[0].casefold() != targets[0].casefold()
+            and not re.search(r'[&%][A-Za-z_]', operation.code)):
+        clean = '\n'.join(statement for _, statement in statements)
+        if records := hash_lookup(operation, clean, resolve_ref) or fixed_array_step(operation, block, clean):
+            return records, []
     if records := routed_outputs(operation, block, sources, targets):
         return records, []
     stack = stack_inputs(sets[0], sources, targets) if len(sets) == 1 and len(sources) > 1 and len(targets) == 1 else None
@@ -609,6 +691,12 @@ def proc_derivations(operation: Operation, clean: str) -> list[dict[str, Any]]:
     if len(operation.sources) == len(operation.targets) == 1:
         source, target = operation.sources[0].name, operation.targets[0].name
         dataset = rf'{NAME}(?:\.{NAME})?'
+        if (operation.kind == 'PROC APPEND' and source.casefold() != target.casefold()
+                and re.fullmatch(rf'\s*proc\s+append\s+base\s*=\s*{dataset}\s+data\s*=\s*{dataset}'
+                                 r'\s+force\s*;\s*run\s*;\s*', clean, re.I)):
+            return [derivation(target, '', operation.code, category='sas_append',
+                               inputs=[dependency(source, '*')],
+                               coverage=['SAS PROC APPEND requires complete BASE and DATA layouts'])]
         if operation.kind == 'PROC SORT':
             sort = re.fullmatch(
                 rf'\s*proc\s+sort\s+(?:(?:data|out)\s*=\s*{dataset}\s*|nodupkey\s*)+;'
@@ -621,25 +709,51 @@ def proc_derivations(operation: Operation, clean: str) -> list[dict[str, Any]]:
                         if name != 'descending']
                 return [passthrough(target, source, operation.code, keys, [])]
         if operation.kind in {'PROC SUMMARY', 'PROC MEANS'} and source.casefold() != target.casefold():
+            statistic = rf'(?:sum|mean)\s*\(\s*({NAME})\s*\)\s*=\s*({NAME})'
             summary = re.fullmatch(
                 rf'\s*proc\s+(?:summary|means)\s+data\s*=\s*{dataset}\s+nway\s*;'
-                rf'\s*class\s+((?:{NAME}\s*)+);\s*var\s+({NAME})\s*;'
-                rf'\s*output\s+out\s*=\s*{dataset}\s+sum\s*=\s*({NAME})\s*;\s*run\s*;?\s*',
+                rf'\s*class\s+({NAME}(?:\s+{NAME})*)\s*;\s*var\s+({NAME}(?:\s+{NAME})*)\s*;'
+                rf'\s*output\s+out\s*=\s*{dataset}\s+(?:sum\s*=\s*({NAME})|'
+                rf'((?:{statistic})(?:\s+{statistic})*))\s*;\s*run\s*;?\s*',
                 clean, re.I)
             if summary:
                 groups = summary[1].casefold().split()
-                value, output = summary[2].casefold(), summary[3].casefold()
-                names = [*groups, '_type_', '_freq_', output]
-                if len(set(names)) == len(names):
+                variables = summary[2].casefold().split()
+                pairs = ([(variables[0], summary[3].casefold())] if summary[3] and len(variables) == 1
+                         else re.findall(statistic, summary[4].casefold()) if summary[4] else [])
+                values = {output: value for value, output in pairs}
+                names = [*groups, '_type_', '_freq_', *(output for _, output in pairs)]
+                if (pairs and len(set(names)) == len(names)
+                        and set(values.values()) <= set(variables)):
                     context = [dependency(source, name) | {'role': 'value_selection'} for name in groups]
                     context.append(dependency(source, '') | {'role': 'rowset'})
                     return [
                         derivation(target, name, operation.code, ordinal=index,
                                    inputs=[*([dependency(source, name)] if name in groups else
-                                             [dependency(source, value)] if name == output else []), *context],
-                                   category='aggregate' if name in {'_freq_', output} else 'projection')
+                                             [dependency(source, values[name])] if name in values else []), *context],
+                                   category='aggregate' if name == '_freq_' or name in values else 'projection')
                         for index, name in enumerate(names)
                     ]
+        if operation.kind == 'PROC TRANSPOSE' and source.casefold() != target.casefold():
+            transpose = re.fullmatch(
+                rf'\s*proc\s+transpose\s+data\s*=\s*{dataset}\s+out\s*=\s*{dataset}\s+prefix\s*=\s*({NAME})\s*;'
+                rf'\s*by\s+({NAME}(?:\s+{NAME})*)\s*;\s*var\s+({NAME}(?:\s+{NAME})*)\s*;\s*run\s*;\s*',
+                clean, re.I)
+            if transpose:
+                groups, values = (transpose[index].casefold().split() for index in (2, 3))
+                if (len(set([*groups, *values, '_name_', '_label_'])) == len(groups) + len(values) + 2
+                        and not set(groups) & {'descending', 'notsorted'}
+                        and not any(re.fullmatch(rf'{transpose[1]}[1-9]\d*', name, re.I) for name in groups)):
+                    context = [dependency(source, name) | {'role': 'value_selection'} for name in groups]
+                    projections = [derivation(target, name, operation.code,
+                                               inputs=[dependency(source, name), *context], ordinal=index)
+                                   for index, name in enumerate(groups)]
+                    return [*projections,
+                            derivation(target, '_name_', operation.code, inputs=context,
+                                       category='metadata', ordinal=len(groups)),
+                            derivation(target, '*', operation.code, scope='transpose-values', category='wildcard',
+                                       inputs=[*(dependency(source, name) for name in values), *context],
+                                       coverage=[f'SAS TRANSPOSE output {transpose[1]} columns depend on runtime BY-group sizes'])]
         if operation.kind == 'PROC RANK' and source.casefold() != target.casefold():
             rank = re.fullmatch(
                 rf'\s*proc\s+rank\s+data\s*=\s*{dataset}\s+out\s*=\s*{dataset}\s+groups\s*=\s*[1-9]\d*\s*;'

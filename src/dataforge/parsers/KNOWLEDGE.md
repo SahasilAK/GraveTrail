@@ -41,3 +41,5 @@ Parser13: PROC SQL validates bounded adjacent SAS date/time/datetime constants a
 Parser14 retains private original expression offsets for SQL projections and SAS assignment versions so semantic validation cannot swap identical text between branches/versions. Literal wrapper rebinding drops inner-only offsets. Private coordinates never replace original full-operation evidence.
 
 Parser20 adds SAS IF/ELSE OUTPUT routing and bounded MERGE BY to DATA-step transformations. Routed outputs reuse one SET layout with per-target filters. Match merges reuse schema-backed input scopes with original RENAME bindings, BY match roles, and inferred alternatives for shared variables.
+
+Parser21 adds PROC APPEND FORCE from complete layouts and bounded PROC SQL UPDATE with an IN subquery. Upstream traces can inspect independent in-place write inputs while retaining the unknown writer order boundary. SAS DATA and procedure rules cover the sample's literal hash lookup, fixed array rounding with sum/LAG, explicit SUMMARY statistics, and known TRANSPOSE columns. Generated TRANSPOSE names retain a scoped coverage boundary.

@@ -21,7 +21,7 @@ typed-literal text and source coordinates remain evidence.
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 20 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 21 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
 evidence remain intact.
 
@@ -42,13 +42,30 @@ evidence remain intact.
   IN= and RENAME= options. BY keys are match context. Shared non-key variables show
   all possible value inputs because the supplying row depends on runtime BY-group state.
 - Simple PROC SORT copies values through to its output. BY keys supply ordering context
-  or row-selection context for NODUPKEY. Bounded NWAY SUMMARY/MEANS sums and grouped
-  PROC RANK expose their value and grouping inputs.
+  or row-selection context for NODUPKEY. Bounded NWAY SUMMARY/MEANS sums and means and
+  grouped PROC RANK expose their value and grouping inputs.
+- PROC TRANSPOSE with a plain BY list, VAR list, and PREFIX= exposes known BY columns,
+  the transposed variable name, and candidate values for the generated columns. Their
+  count depends on runtime BY-group sizes.
+- Plain PROC APPEND with FORCE uses complete BASE and DATA layouts. Matching incoming
+  columns contribute values. Incoming-only columns stay outside the BASE output.
 - PROC SQL follows named CALCULATED aliases, simple correlated predicates and derived
-  tables. It retains explicit column positions for literal INSERT VALUES.
+  tables. It retains explicit column positions for literal INSERT VALUES. A single
+  arithmetic UPDATE assignment with a simple single-table IN subquery separates
+  existing target values from subquery membership and filters. An unqualified
+  subquery column needs a complete inner layout to confirm local ownership.
+- A literal single-key hash lookup with a zero fallback traces the lookup value
+  and the keys that select it. A fixed-array rounding loop followed by an
+  unconditional sum statement and LAG traces each array member and the value
+  input shared by the stateful outputs. The retained sum uses the input layout to
+  determine whether SET supplies an accumulator.
 
-Unknown layouts, other MERGE or multi-output forms, repeated SET statements, complex
-retention, arrays, loops, and unexpanded macros remain coverage gaps. No SAS code executes.
+APPEND and UPDATE traces expose independent sources and retain the unknown writer order
+boundary for in-place writes.
+
+Unknown layouts, other MERGE or multi-output forms, repeated SET statements, general
+hash, array, and loop behavior, complex retention, and unexpanded macros remain coverage
+gaps. No SAS code executes.
 [SAS guide to combining data](https://documentation.sas.com/api/collections/pgmsascdc/v_007/docsets/lepg/content/lepg.pdf?locale=en)
 
 ## Static macro-variable expressions
