@@ -35,14 +35,22 @@ Local static analysis. No AI account required. Imported code is never executed.
 
 </div>
 
+## Watch SQL turn into lineage
+
 <figure class="gt-product" markdown>
 
-![Current GraveTrail Lineage view tracing the safe SQL fixture upstream](assets/images/gravetrail-lineage-explorer.png)
+<video controls playsinline preload="none" poster="assets/images/gravetrail-lineage-explorer.png" style="width: 100%" aria-label="GraveTrail SQL example, lineage graph and source evidence">
+  <source src="assets/images/gravetrail-sql-example.mp4" type="video/mp4">
+  <a href="assets/images/gravetrail-sql-example.mp4">Download the SQL example recording</a>
+</video>
 
-<figcaption>Follow the dependencies. Open the evidence. Decide where to investigate next.</figcaption>
+<figcaption>The bundled SQL example opens the upstream graph for <code>pub.all_kpis</code>. The recording shows how to open the original SQL behind a relationship.</figcaption>
 </figure>
 
 ## Begin with the question in front of you
+
+Start here when you inherit a pipeline or need to understand what a change could
+affect. GraveTrail traces dependencies from the project files you already have.
 
 <div class="gt-questions" markdown>
 <div markdown>
@@ -102,12 +110,14 @@ gateway can forward requests upstream. AI does not guarantee complete or correct
 [Understand analysis and disclosure](concepts/local-and-ai.md){ .md-button }
 [Configure optional AI](AI_ANALYSIS.md){ .md-button }
 
+[How confidence and coverage work](TRANSFORMATION_LINEAGE.md#how-confidence-and-coverage-work)
+
 ## Choose your project
 
 | Project | Start with | Know the boundary |
 | --- | --- | --- |
 | SQL | [SQL workflow](project-types/sql.md) | Dialect-specific syntax, dynamic SQL and unknown schema |
-| SAS | [SAS workflow](project-types/sas.md) | Bounded DATA/PROC SQL and known-value macros; no execution |
+| SAS | [SAS workflow](project-types/sas.md) | [Static macro and generated-code examples](SAS_PARSING.md#macro-and-generated-code-examples) |
 | dbt | [dbt workflow](project-types/dbt.md) | Source/enriched/artifact modes; no Jinja, package download or warehouse execution |
 
 ## A useful first run, on your machine.
@@ -117,7 +127,7 @@ postdate release v0.0.1. Use [the pinned installation](getting-started/installat
 to reproduce the examples rather than assuming an older binary has the same controls.
 
 1. [Install and launch](getting-started/installation.md).
-2. [Import a SQL sample and build static lineage](getting-started/quick-start.md).
+2. [Run the bundled SQL example or import a sample ZIP](getting-started/quick-start.md).
 3. [Inspect evidence](user-guide/evidence.md) and [review coverage](concepts/evidence-and-coverage.md).
 4. [Export and reopen findings](user-guide/exports.md).
 
