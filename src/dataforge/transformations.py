@@ -133,10 +133,15 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 if d.get('sas_stack') and config['expand_wildcards']:
                     columns = sas_stack_columns(d, read_layout)
                     if columns:
-                        derivations.extend({**d, 'target_column': name, 'inputs': dependencies,
-                                            'status': 'inferred', 'ordinal': ordinal,
-                                            'coverage': ['Expanded from SAS concatenated SET input layouts']}
-                                           for ordinal, (name, dependencies) in enumerate(columns.items()))
+                        keys = d.get('sas_merge_by', [])
+                        matching = [{**item, 'role': 'join'} for key in keys for item in columns[key]]
+                        basis = 'SAS match MERGE' if keys else 'SAS concatenated SET'
+                        for ordinal, (name, dependencies) in enumerate(columns.items()):
+                            coverage = [f'Expanded from {basis} input layouts']
+                            if keys and name not in keys and len(dependencies) > 1:
+                                coverage.append('Shared SAS MERGE variable has alternative inputs; the value source depends on runtime BY-group rows')
+                            derivations.append({**d, 'target_column': name, 'inputs': [*dependencies, *matching],
+                                                'status': 'inferred', 'ordinal': ordinal, 'coverage': coverage})
                         continue
                 positional_layout = d.get('positional_layout')
                 union_layout = scoped_layouts.get(d['scope']) if 'union_projection' in d else None
@@ -267,6 +272,15 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                             or d.get('scoped_wildcard') and len(keys) != len(source_names)
                             or '*' in source_names):
                         source_names = []
+                    if d.get('sas_routed') and source_names:
+                        names = {name.casefold(): name for name in source_names}
+                        for item in list(d['inputs']):
+                            if item['role'] == 'row_filter':
+                                if actual := names.get(item['column'].casefold()):
+                                    item['column'] = actual
+                                else:
+                                    d['inputs'].remove(item)
+                                    d['coverage'].append(f"SAS OUTPUT condition variable {item['column']} is absent from the input layout")
                     source_names = [name for name in source_names if _sql_name(name) not in excluded]
                     if source_names and d.get('sas_passthrough'):
                         sas_excluded = set(d.get('sas_exclude', ()))

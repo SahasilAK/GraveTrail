@@ -39,3 +39,5 @@ block comments and a bounded keyword regex; no ambiguous repeated prefix or sour
 Parser13: PROC SQL validates bounded adjacent SAS date/time/datetime constants and retains their exact typed tokens as Var so generated usage expressions keep suffixes; value derivations remain unresolved. SQL activates reachable MERGE USING and UPDATE/DELETE scalar scopes, excludes unused CTEs and restricts outer DML column maps to visible relations.
 
 Parser14 retains private original expression offsets for SQL projections and SAS assignment versions so semantic validation cannot swap identical text between branches/versions. Literal wrapper rebinding drops inner-only offsets. Private coordinates never replace original full-operation evidence.
+
+Parser20 adds SAS IF/ELSE OUTPUT routing and bounded MERGE BY to DATA-step transformations. Routed outputs reuse one SET layout with per-target filters. Match merges reuse schema-backed input scopes with original RENAME bindings, BY match roles, and inferred alternatives for shared variables.

@@ -8,7 +8,7 @@ the value of every output column.
 ## Trace a column
 
 1. Import sources and run **Analysis**. Existing workspaces keep their table/direct-usage
-   facts after upgrade. Run analysis with parser version 19 to refresh SAS coverage.
+   facts after upgrade. Run analysis with parser version 20 to refresh SAS coverage.
 2. Choose an exact asset, including its job identity for temporary tables. Select a
    physical output column, or paste a column name or exact column ID.
 3. Choose **How it is produced** (upstream) or **What it affects** (downstream), depth
@@ -42,7 +42,7 @@ identity under workspace case rules; quoted case and escaped identifier characte
 | Plain wildcard | Expand from named scoped outputs, imported DDL or a single complete query definition. Unknown layouts stay unresolved |
 | Inline and generated values | Trace named literal VALUES and literal UNNEST outputs to inline data. Current date and time expressions show a runtime origin |
 | SAS PROC SQL | Shared SQL contract, with SAS library/WORK identity and original source evidence |
-| SAS DATA | Inline INPUT origins, ordered assignments, simple row filters and SET passthrough or concatenation with complete layouts |
+| SAS DATA | Inline INPUT origins, ordered assignments, SET passthrough and concatenation, simple IF/ELSE OUTPUT routing, and bounded MERGE BY with complete input layouts |
 | SAS procedures | Simple SORT, NWAY SUMMARY/MEANS sums, and grouped RANK with separate value and context inputs |
 
 SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL, Snowflake and
@@ -52,7 +52,7 @@ UPDATE/MERGE value transformations, unsupported recursive shapes, named windows,
 ambiguous correlations, complex EXISTS membership, unknown UDF semantics, lateral projection/QUALIFY alias
 references, base-table positional column aliases, duplicate output names, query-level ordering
 and unsupported wildcard layouts have coverage gaps.
-SAS MERGE BY, repeated SET statements, arrays, variable lists, loops, conditional retention,
+Other SAS MERGE and multi-output forms, repeated SET statements, arrays, variable lists, loops, conditional retention,
 automatic runtime variables and runtime/macro-expanded expressions remain unresolved.
 Existing table-level extraction can still recognize a construct that has no column mapping.
 

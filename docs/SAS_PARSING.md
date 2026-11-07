@@ -21,7 +21,7 @@ typed-literal text and source coordinates remain evidence.
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 19 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 20 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
 evidence remain intact.
 
@@ -36,14 +36,19 @@ evidence remain intact.
 - Single-input SET and one concatenating SET can carry forward known columns through
   WORK datasets. Concatenation uses complete input layouts and traces each variable only
   to inputs that supply it. Simple IN= indicators track dataset membership.
+- A plain SET followed by an exhaustive IF/ELSE OUTPUT chain traces each named
+  output to the input and shows the current and preceding branch tests as row filters.
+- An initial MERGE with a plain BY list uses complete input layouts, including simple
+  IN= and RENAME= options. BY keys are match context. Shared non-key variables show
+  all possible value inputs because the supplying row depends on runtime BY-group state.
 - Simple PROC SORT copies values through to its output. BY keys supply ordering context
   or row-selection context for NODUPKEY. Bounded NWAY SUMMARY/MEANS sums and grouped
   PROC RANK expose their value and grouping inputs.
 - PROC SQL follows named CALCULATED aliases, simple correlated predicates and derived
   tables. It retains explicit column positions for literal INSERT VALUES.
 
-Unknown layouts, match merges, repeated SET statements, complex retention, arrays, loops,
-multi-output control flow, and unexpanded macros remain coverage gaps. No SAS code executes.
+Unknown layouts, other MERGE or multi-output forms, repeated SET statements, complex
+retention, arrays, loops, and unexpanded macros remain coverage gaps. No SAS code executes.
 [SAS guide to combining data](https://documentation.sas.com/api/collections/pgmsascdc/v_007/docsets/lepg/content/lepg.pdf?locale=en)
 
 ## Static macro-variable expressions

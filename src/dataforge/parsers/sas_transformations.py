@@ -181,6 +181,83 @@ def stack_inputs(statement, sources, targets):
     return flags
 
 
+def merge_inputs(body, sources, targets):
+    """Recognize an initial MERGE/BY with plain datasets and IN=/RENAME= options."""
+    if (len(body) < 2 or len(sources) < 2 or len(targets) != 1
+            or any(targets[0].casefold() == source.casefold() for source in sources)):
+        return None
+    merge = re.fullmatch(r'\s*merge\s+(.+?)\s*;', body[0][1], re.I | re.S)
+    by = re.fullmatch(r'\s*by\s+(.+?)\s*;', body[1][1], re.I | re.S)
+    if not merge or not by:
+        return None
+    dataset = rf'{NAME}(?:\.{NAME})?'
+    entry = rf'{dataset}(?:\s*\(\s*((?:(?:in\s*=\s*{NAME}|rename\s*=\s*\([^()]+\))\s*)+)\))?'
+    if not re.fullmatch(rf'{entry}(?:\s+{entry})+', merge[1], re.I):
+        return None
+    entries = re.findall(entry, merge[1], re.I)
+    if len(entries) != len(sources):
+        return None
+    flags, inputs = [], []
+    try:
+        keys = _names(by[1])
+        if len(set(keys)) != len(keys) or set(keys) & {'descending', 'groupformat', 'notsorted'}:
+            return None
+        for options, source in zip(entries, sources):
+            renames = re.findall(r'\brename\s*=\s*\(([^()]+)\)', options, re.I)
+            remaining = re.sub(r'\brename\s*=\s*\([^()]+\)', '', options, flags=re.I)
+            indicators = re.findall(rf'\bin\s*=\s*({NAME})', remaining, re.I)
+            if len(indicators) > 1 or len(renames) > 1:
+                return None
+            flags.extend((name.casefold(), source) for name in indicators)
+            item = dependency(source, '*')
+            if renames:
+                item['sas_rename'] = _renames(renames[0])
+            inputs.append(item)
+    except ValueError:
+        return None
+    if len({name for name, _ in flags}) != len(flags):
+        return None
+    return flags, inputs, keys
+
+
+def routed_outputs(operation, block, sources, targets):
+    """Describe an exhaustive IF/ELSE OUTPUT chain over one unchanged input row."""
+    dataset = rf'{NAME}(?:\.{NAME})?'
+    header = re.fullmatch(rf'\s*data\s+({dataset}(?:\s+{dataset})+)\s*;', block[0][3], re.I)
+    if (not header or len(sources) != 1 or len(block) < 5
+            or not re.fullmatch(rf'\s*set\s+{dataset}\s*;', block[1][3], re.I)
+            or not re.fullmatch(r'\s*run\s*;', block[-1][3], re.I)):
+        return []
+    declared = header[1].casefold().split()
+    if len(declared) != len(targets) or len(set(declared)) != len(targets):
+        return []
+    bindings = dict(zip(declared, targets))
+    filters, coverage, records = [], [], []
+    branches = block[2:-1]
+    for index, (raw, _, _, clean, _, end) in enumerate(branches):
+        prefix = '' if index == 0 else r'else\s+'
+        if index == len(branches) - 1:
+            match = re.fullmatch(rf'\s*else\s+output\s+(?P<target>{dataset})\s*;', clean, re.I)
+        else:
+            match = re.fullmatch(rf'\s*{prefix}if\s+(.+?)\s+then\s+output\s+(?P<target>{dataset})\s*;', clean, re.I | re.S)
+            if match:
+                inputs, gaps = _expression_inputs(match[1], sources[0], {}, {}, False, set())
+                for item in inputs:
+                    item['role'] = 'row_filter'
+                    if item not in filters:
+                        filters.append(item)
+                coverage.extend(gaps)
+                if re.search(r'[&%][A-Za-z_]', raw):
+                    coverage.append('SAS macro-expanded OUTPUT condition is unresolved')
+        if not match or (target := bindings.pop(match['target'].casefold(), None)) is None:
+            return []
+        offset = block[0][4]
+        evidence = operation.code[branches[0][4] - offset:end - offset]
+        records.append(passthrough(target, sources[0], evidence, list(filters), coverage, ordinal=index)
+                       | {'sas_routed': True})
+    return records if not bindings else []
+
+
 def _dataset(statement: str, keyword: str) -> dict[str, list[str] | dict[str, str] | None]:
     """Read one dataset and its supported KEEP, DROP, and RENAME options.
 
@@ -311,7 +388,10 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
     coverage = []
     sets = [clean for _, clean in body if re.match(r'\s*set\b', clean, re.I)]
     sources = [source.name for source in operation.sources if source.kind == 'table']
+    if records := routed_outputs(operation, block, sources, targets):
+        return records, []
     stack = stack_inputs(sets[0], sources, targets) if len(sets) == 1 and len(sources) > 1 and len(targets) == 1 else None
+    merge = merge_inputs(body, sources, targets) if not sets else None
     assigned = {match[1].casefold() for _, clean in body if (match := ASSIGNMENT.fullmatch(clean))}
     conditional = {}
     for index, (_, clean) in enumerate(body[:-1]):
@@ -321,7 +401,9 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         if match and alternative and match[2].casefold() == alternative[1].casefold():
             conditional[index] = (match[1], match[2], match[3], alternative[2])
             assigned.add(match[2].casefold())
-    if stack is None and (len(sets) > 1 or len(operation.sources) > 1):
+    if merge and assigned & {name for name, _ in merge[0]}:
+        coverage.append('SAS MERGE with assignments to IN= indicators is unresolved')
+    if stack is None and merge is None and (len(sets) > 1 or len(operation.sources) > 1):
         coverage.append('Multiple SAS input datasets/SET statements are unresolved for column transformations')
     if sets:
         before_set = body[:next(index for index, (_, clean) in enumerate(body) if clean == sets[0])]
@@ -329,6 +411,11 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             coverage.append('SAS assignment before SET may depend on retained values; column transformations unresolved')
     for index, (_, clean) in enumerate(body):
         plain = re.sub(STRING, ' ', clean)
+        if merge and index < 2:
+            continue
+        if merge and re.match(r'\s*(where|retain)\b', plain, re.I):
+            coverage.append('SAS MERGE with WHERE or explicit RETAIN is unresolved')
+            continue
         if index in conditional or index - 1 in conditional:
             continue
         if (length := LENGTH.fullmatch(clean)) and all(
@@ -369,7 +456,8 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         return ([derivation(target, '', operation.code, category='unsupported', coverage=[message])
                  for target in targets], [Diagnostic(message, operation.start)])
 
-    source = targets[0] if stack is not None else operation.sources[0].name if sets and operation.sources else ''
+    combined = stack is not None or merge is not None
+    source = targets[0] if combined else operation.sources[0].name if sets and operation.sources else ''
     source_columns = {source_options['rename'].get(n, n): n for n in source_options['keep'] or []
                       if n not in source_options['drop']}
     known_source = source_options['keep'] is not None
@@ -377,7 +465,8 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         source_columns.update({new: old for old, new in source_options['rename'].items()
                                if old not in source_options['drop']})
     dropped_input = {source_options['rename'].get(n, n) for n in source_options['drop']}
-    flags = {name for name, _ in stack or []}
+    indicators = merge[0] if merge else stack or []
+    flags = {name for name, _ in indicators}
     unavailable = dropped_input | {old for old, new in source_options['rename'].items() if old != new}
     state, versions, steps = {}, {}, []
     filters, filter_coverage = [], []
@@ -478,8 +567,8 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
                                         coverage=['SAS SET passthrough with RENAME requires an explicit KEEP']))
         if coverage:
             steps.append(derivation(target, '', operation.code, category='unsupported', coverage=coverage))
-    if stack is not None:
-        scope = 'set-input'
+    if combined:
+        scope = 'merge-input' if merge else 'set-input'
         for step in steps:
             pending = []
             for item in step['inputs']:
@@ -492,14 +581,18 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
                 step['scoped_columns'] = pending
                 step['coverage'].append('Intermediate wildcard requires a complete output layout')
                 step['status'] = 'unresolved'
-        inputs = [dependency(table, '*') for table in sources]
-        layout = derivation(source, '', sets[0], scope=scope, inputs=inputs, category='wildcard',
-                            coverage=['SAS concatenated SET requires complete input layouts'])
+        inputs = merge[1] if merge else [dependency(table, '*') for table in sources]
+        evidence = operation.code if merge else sets[0]
+        gap = ('SAS match MERGE requires complete input layouts and a common BY key on each input' if merge
+               else 'SAS concatenated SET requires complete input layouts')
+        layout = derivation(source, '', evidence, scope=scope, inputs=inputs, category='wildcard', coverage=[gap])
         layout.update(sas_stack=True, wildcard_safe=True, sas_flags=sorted(flags))
-        indicators = [derivation(source, flag, sets[0], scope=scope, category='indicator', ordinal=index + 1,
+        if merge:
+            layout['sas_merge_by'] = merge[2]
+        flag_steps = [derivation(source, flag, evidence, scope=scope, category='indicator', ordinal=index + 1,
                                  inputs=[dependency(table, '') | {'role': 'rowset'}])
-                      for index, (flag, table) in enumerate(stack)]
-        steps = [layout, *indicators, *steps]
+                      for index, (flag, table) in enumerate(indicators)]
+        steps = [layout, *flag_steps, *steps]
     return steps, [Diagnostic(message, operation.start) for message in coverage]
 
 

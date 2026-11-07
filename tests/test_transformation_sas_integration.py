@@ -1,10 +1,85 @@
 import json
 from pathlib import Path
 
+from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
 from dataforge.store import Store
 from dataforge.transformations import trace_columns
+
+
+def test_sas_match_merge_and_conditional_outputs_publish_column_trace(tmp_path: Path) -> None:
+    code = """data raw.left;
+    input id amount shared; datalines;
+1 20 3
+;
+run;
+data raw.right;
+    input id amount shared; datalines;
+1 10 4
+;
+run;
+data work.combined;
+    merge raw.left(in=in_left) raw.right(rename=(amount=other_amount));
+    by id;
+    if in_left;
+    total=sum(amount,other_amount);
+    drop other_amount;
+run;
+data mart.high mart.low mart.rest;
+    set work.combined;
+    if total > 20 then output mart.high;
+    else if amount < 5 then output mart.low;
+    else output mart.rest;
+run;
+data mart.final;
+    set mart.high;
+run;
+data mart.unknown;
+    merge raw.left raw.unknown;
+    by id;
+run;"""
+    store = Store(tmp_path)
+    try:
+        workspace = store.create_workspace('SAS match merge and routing')
+        Importer(store, workspace).files([('pipeline.sas', code.encode())], {'.sas'})
+        analyze(store, workspace)
+        assets = {a['name']: a['asset_id'] for a in store.assets(workspace)}
+        graph = LineageGraph(store.assets(workspace), store.edges(workspace)).graph
+        assert set(graph.predecessors(assets['work.combined'])) == {assets['raw.left'], assets['raw.right']}
+        for table, conditions in [('mart.high', {'total'}), ('mart.low', {'total', 'amount'}),
+                                  ('mart.rest', {'total', 'amount'})]:
+            assert set(graph.predecessors(assets[table])) == {assets['work.combined']}
+            trace = trace_columns(store, workspace, assets[table], 'total', depth=12, include_source=True)
+            assert trace['state'] == 'known'
+            assert all(d['status'] != 'unresolved' for d in trace['derivations'])
+            route = trace['derivations'][0]
+            assert {i['column_name'] for i in route['inputs'] if i['role'] == 'row_filter'} == conditions
+            assert route['expression'] in code
+            assert route['expression'].startswith('if total > 20 then output mart.high;')
+            assert route['expression'].endswith(f'output {table};')
+            assert {(i['table'], i['column_name']) for i in route['inputs'] if i['role'] == 'value'} == {
+                ('work.combined', 'total')}
+        trace = trace_columns(store, workspace, assets['mart.final'], 'total', depth=12)
+        assert trace['state'] == 'known'
+        assert all(d['status'] != 'unresolved' for d in trace['derivations'])
+        merge_amounts = [d for d in trace['derivations'] if d['target']['column_name'] in {'amount', 'other_amount'}
+                         and d['target']['scope']]
+        assert {(d['target']['column_name'], i['table'], i['column_name'])
+                for d in merge_amounts for i in d['inputs'] if i['role'] == 'value'} == {
+            ('amount', 'raw.left', 'amount'), ('other_amount', 'raw.right', 'amount')}
+        assert {(i['table'], i['column_name']) for d in merge_amounts for i in d['inputs'] if i['role'] == 'join'} == {
+            ('raw.left', 'id'), ('raw.right', 'id')}
+        shared = trace_columns(store, workspace, assets['work.combined'], 'shared')
+        assert any('runtime' in gap for d in shared['derivations'] for gap in d['coverage'])
+        assert {i['table'] for d in shared['derivations'] for i in d['inputs']
+                if i['column_name'] == 'shared' and not i['scope']} == {'raw.left', 'raw.right'}
+        assert trace_columns(store, workspace, assets['work.combined'], 'other_amount')['state'] != 'known'
+        unknown = trace_columns(store, workspace, assets['mart.unknown'], 'amount')
+        assert unknown['state'] != 'known'
+        assert set(graph.predecessors(assets['mart.unknown'])) == {assets['raw.left'], assets['raw.unknown']}
+    finally:
+        store.close()
 
 
 def test_sas_trace_preserves_ordered_variable_versions_and_original_source(tmp_path: Path) -> None:

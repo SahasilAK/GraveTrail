@@ -101,9 +101,13 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
     block_bad = False
 
     def record_layout(operation):
-        if len(operation.targets) == 1 and operation.derivations and operation.targets[0].kind == 'table':
+        routed = {d['target_table'] for d in operation.derivations if d.get('sas_routed')}
+        for target in operation.targets:
+            if target.kind != 'table' or not operation.derivations or (
+                    len(operation.targets) != 1 and target.name not in routed):
+                continue
             result.metadata.setdefault("declared_schemas", []).append({
-                "table": operation.targets[0].name, "columns": None, "query_layout": True,
+                "table": target.name, "columns": None, "query_layout": True,
                 "operation_index": len(result.operations), "start_line": operation.start, "end_line": operation.end,
             })
 

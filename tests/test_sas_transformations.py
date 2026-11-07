@@ -124,7 +124,7 @@ def test_drop_without_a_schema_keeps_unknown_passthrough_coverage_visible() -> N
     assert any(d['status'] == 'unresolved' and d['coverage'] for d in operation.derivations)
 
 
-@pytest.mark.parametrize('body', ['merge raw.a raw.b; by id; x=id;', 'set raw.a; array v[2] a b; x=a;',
+@pytest.mark.parametrize('body', ['merge raw.a raw.b; x=id;', 'set raw.a; array v[2] a b; x=a;',
                                   'set raw.a; do i=1 to 2; x=i; end;', 'set raw.a; retain x; if id then x=1;'])
 def test_procedural_constructs_have_explicit_unresolved_transformations(body: str) -> None:
     """Verify that procedural constructs have explicit unresolved transformations.

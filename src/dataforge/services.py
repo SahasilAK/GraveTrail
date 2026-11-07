@@ -20,7 +20,7 @@ from dataforge.parsers.sql import parse_sql
 from dataforge.schemas import collect_schemas
 from dataforge.store import Store
 
-PARSER_VERSION = "19"
+PARSER_VERSION = "20"
 log = logging.getLogger(__name__)
 
 

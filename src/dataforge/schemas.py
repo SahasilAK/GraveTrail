@@ -9,14 +9,21 @@ from dataforge.models import AssetRef, Diagnostic, ParseResult, column_key, oper
 
 
 def sas_stack_columns(record, read_layout):
-    """Bind each concatenated column only to datasets that supply it."""
+    """Bind combined SAS columns to the datasets that supply them."""
     columns = defaultdict(list)
+    keys = set(record.get("sas_merge_by", ()))
     for item in record["inputs"]:
         names = read_layout(item["table"], item.get("table_identity", ""))
         if not names or any(not name.isidentifier() for name in names):
             return {}
+        rename = item.get("sas_rename", {})
+        original = {name.casefold() for name in names}
+        available = {rename.get(name, name) for name in original}
+        if not rename.keys() <= original or not keys <= available or len(available) != len(names):
+            return {}
+        binding = {key: value for key, value in item.items() if key != "sas_rename"}
         for name in names:
-            columns[name.casefold()].append({**item, "column": name})
+            columns[rename.get(name.casefold(), name.casefold())].append({**binding, "column": name})
     return {} if set(record.get("sas_flags", ())) & columns.keys() else dict(columns)
 
 
@@ -69,9 +76,9 @@ def collect_query_layouts(candidates, resolver, schemas):
     layouts = {}
     order = TopologicalSorter()
     bindings = {}
-    for asset, (source, parsed, operation) in candidates.items():
+    for asset, (source, parsed, records) in candidates.items():
         tables = {}
-        for record in operation.derivations:
+        for record in records:
             if record["category"] != "wildcard" or not record.get("wildcard_safe"):
                 continue
             for item in record["inputs"]:
@@ -86,13 +93,13 @@ def collect_query_layouts(candidates, resolver, schemas):
         pass  # Acyclic definitions are still available from get_ready().
     while order.is_active():
         for asset in order.get_ready():
-            _, _, operation = candidates[asset]
+            _, _, records = candidates[asset]
 
             def read_layout(table, identity=""):
                 source_asset = bindings[asset].get(table)
                 return schemas.get(source_asset, {}).get("column_identifiers") or layouts.get(source_asset, [])
 
-            scoped = query_output_layouts(operation.derivations, read_layout, resolver.config["case_sensitive"])
+            scoped = query_output_layouts(records, read_layout, resolver.config["case_sensitive"])
             if scoped.get(""):
                 layouts[asset] = scoped[""]
             order.done(asset)
@@ -153,9 +160,12 @@ def collect_schemas(results: list[tuple[dict[str, Any], ParseResult]], workspace
                 valid = False
                 continue
             if (len(records) == 1 and record.get("query_layout") and resolver.registry[aid][4] != "unresolved"
-                    and len(operation.targets) == 1 and operation.derivations
                     and operation.method in {"parser", "sas-rules", "sas-proc-sql"}):
-                query_definitions[aid] = (source, parsed, operation)
+                projections = (operation.derivations if len(operation.targets) == 1 else [
+                    d for d in operation.derivations if d.get("sas_routed")
+                    and normalize(d["target_table"]) == normalize(record["table"])])
+                if projections:
+                    query_definitions[aid] = (source, parsed, projections)
             statement_id, _ = operation_ids(workspace, source, index, operation)
             evidence.append({"file_id": source["file_id"], "relative_path": source["relative_path"],
                 "source_hash": source["content_hash"], "start_line": record["start_line"],
