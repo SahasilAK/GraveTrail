@@ -9,6 +9,10 @@ from dataforge.models import Diagnostic, Operation
 NAME = r'[A-Za-z_]\w*'
 STRING = r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\""
 ASSIGNMENT = re.compile(rf'\s*({NAME})\s*=\s*(.+?)\s*;?$', re.S)
+ROW_FILTER = re.compile(r'\s*(if|where)\s+(.+?)\s*;?$', re.I | re.S)
+LENGTH = re.compile(rf'\s*length\s+((?:{NAME}\s+\$?\d+\s*)+);?$', re.I)
+RETAIN_LITERAL = re.compile(rf'\s*retain\s+({NAME})\s+(-?\d+(?:\.\d+)?)\s*;?$', re.I)
+IF_ASSIGNMENT = re.compile(rf'\s*if\s+(.+?)\s+then\s+({NAME})\s*=\s*(.+?)\s*;?$', re.I | re.S)
 SUPPORTED_FUNCTIONS = frozenset({
     'sum', 'mean', 'min', 'max', 'coalesce', 'coalescec', 'abs', 'round', 'floor', 'ceil', 'int',
     'mod', 'sqrt', 'log', 'log10', 'exp', 'sign', 'n', 'nmiss', 'cmiss', 'missing',
@@ -58,6 +62,47 @@ def dependency(table: str, column: str, *, scope: str = '', version: str = '') -
     return {'table': table, 'column': column, 'role': 'value', 'scope': scope, 'version': version}
 
 
+def passthrough(target, source, expression, inputs, coverage, *, exclude=(), ordinal=0):
+    record = derivation(target, '', expression, category='wildcard',
+                        inputs=[dependency(source, '*'), *inputs],
+                        coverage=['SAS passthrough requires a complete input layout', *coverage], ordinal=ordinal)
+    return record | {'wildcard_safe': True, 'scoped_wildcard': True, 'sas_passthrough': True,
+                     'sas_exclude': sorted(exclude)}
+
+
+def inline_data(operation, header, body):
+    """Bind a plain INPUT list to retained inline data."""
+    if (operation.sources or not re.fullmatch(rf'\s*data\s+{NAME}(?:\.{NAME})?\s*;?', header, re.I)
+            or not any(re.fullmatch(r'(?:datalines|cards)4?\s*;', s, re.I) for _, s in body)):
+        return []
+    inputs = [raw for raw, clean in body if re.match(r'\s*input\b', clean, re.I)]
+    if len(inputs) != 1 or not all(re.match(
+            r'\s*(?:length|format|input|infile\s+datalines\b|datalines4?|cards4?|run)\b', clean, re.I)
+            for _, clean in body):
+        return []
+    input_list = re.sub(r'^\s*input\s+', '', inputs[0], flags=re.I).strip().rstrip(';')
+    field = rf'({NAME})(?:\s+(?::\$?(?:{NAME}|\d+)\.(?:\d+)?|\$(?:\d+\.)?))?'
+    if not re.fullmatch(rf'{field}(?:\s+{field})*\s*', input_list):
+        return []
+    names = [match[1].casefold() for match in re.finditer(field, input_list)]
+    if len(set(names)) != len(names):
+        return []
+    for _, clean in body:
+        if re.match(r'\s*length\b', clean, re.I):
+            length = LENGTH.fullmatch(clean)
+            if not length or any(name.casefold() not in names for name in re.findall(NAME, length[1])):
+                return []
+        if re.match(r'\s*format\b', clean, re.I):
+            formats = re.sub(r'^\s*format\s+', '', clean, flags=re.I).strip().rstrip(';')
+            pair = rf'({NAME})\s+\$?(?:{NAME}|\d+)\.\d*'
+            if (not re.fullmatch(rf'{pair}(?:\s+{pair})*\s*', formats)
+                    or any(match[1].casefold() not in names for match in re.finditer(pair, formats))):
+                return []
+    return [derivation(target.name, name, inputs[0], category='inline_data', ordinal=position)
+            for target in operation.targets if target.kind == 'table'
+            for position, name in enumerate(names)]
+
+
 def _names(value: str) -> list[str]:
     """Parse and normalize a simple whitespace-separated SAS variable list.
 
@@ -99,6 +144,43 @@ def _renames(value: str) -> dict[str, str]:
     return mapping
 
 
+def option_end(text: str) -> int:
+    """Return the end of a balanced parenthesized SAS dataset option."""
+    depth = 0
+    for token in re.finditer(rf'{STRING}|[()]', text):
+        if token[0] == '(':
+            depth += 1
+        elif token[0] == ')':
+            depth -= 1
+            if not depth:
+                return token.end()
+    raise ValueError('Unbalanced SAS dataset options')
+
+
+def without_dataset_options(text: str) -> str:
+    """Remove balanced option clauses before discovering dataset names."""
+    parts = []
+    while (start := text.find('(')) != -1:
+        parts.append(text[:start])
+        text = text[start + option_end(text[start:]):]
+    return ' '.join([*parts, text])
+
+
+def stack_inputs(statement, sources, targets):
+    """Recognize one concatenating SET with optional IN= indicators."""
+    dataset = rf'{NAME}(?:\.{NAME})?'
+    entry = rf'{dataset}(?:\s*\(\s*in\s*=\s*({NAME})\s*\))?'
+    text = re.sub(r'^\s*set\s+', '', statement, flags=re.I).strip().rstrip(';').strip()
+    if not re.fullmatch(rf'{entry}(?:\s+{entry})+', text, re.I):
+        return None
+    entries = list(re.finditer(entry, text, re.I))
+    flags = [(match[1].casefold(), source) for match, source in zip(entries, sources) if match[1]]
+    if (len(entries) != len(sources) or len({name for name, _ in flags}) != len(flags)
+            or any(source.casefold() in {target.casefold() for target in targets} for source in sources)):
+        return None
+    return flags
+
+
 def _dataset(statement: str, keyword: str) -> dict[str, list[str] | dict[str, str] | None]:
     """Read one dataset and its supported KEEP, DROP, and RENAME options.
 
@@ -116,28 +198,36 @@ def _dataset(statement: str, keyword: str) -> dict[str, list[str] | dict[str, st
     if not match:
         raise ValueError('SAS column transformations require a single plain dataset')
     tail = match[2].strip().rstrip(';').strip()
-    options = {'keep': None, 'drop': [], 'rename': {}}
+    options = {'keep': None, 'drop': [], 'rename': {}, 'where': None}
     if not tail:
         return options
     if not (tail.startswith('(') and tail.endswith(')')):
         raise ValueError('SAS column transformations require a single dataset with simple options')
     tail = tail[1:-1].strip()
     while tail:
-        key = re.match(r'(keep|drop|rename)\s*=\s*', tail, re.I)
+        key = re.match(r'(keep|drop|rename|where)\s*=\s*', tail, re.I)
         if not key:
             raise ValueError('Unsupported SAS dataset option in column transformations')
         name = key[1].casefold()
         tail = tail[key.end():]
-        if name == 'rename':
+        if name == 'where':
+            if keyword != 'set' or not tail.startswith('(') or options['where'] is not None:
+                raise ValueError('SAS WHERE option requires one input predicate')
+            end = option_end(tail)
+            options['where'] = tail[1:end - 1]
+            tail = tail[end:].strip()
+        elif name == 'rename':
             mapping = re.match(r'\(([^()]*)\)', tail)
             if not mapping:
                 raise ValueError('SAS RENAME option requires a plain mapping')
             options[name] = _renames(mapping[1])
             tail = tail[mapping.end():].strip()
         else:
-            value = re.split(r'\b(?:keep|drop|rename)\s*=', tail, maxsplit=1, flags=re.I)[0]
+            value = re.split(r'\b(?:keep|drop|rename|where)\s*=', tail, maxsplit=1, flags=re.I)[0]
             options[name] = _names(value)
             tail = tail[len(value):].strip()
+    if options['where'] and (options['keep'] is not None or options['drop'] or options['rename']):
+        raise ValueError('SAS WHERE mixed with input KEEP/DROP/RENAME is unresolved')
     return options
 
 
@@ -157,7 +247,16 @@ def _expression_inputs(expression: str, source: str, state: dict[str, dict[str, 
     Returns:
         Dependency records and unresolved coverage messages.
     """
+    from dataforge.parsers.sas_sql import _valid_typed_literal
+
+    def strip_literal(match):
+        literal, suffix = match[1], match[2]
+        return ' ' if _valid_typed_literal(literal[1:-1], suffix.casefold()) else match[0]
+
+    expression = re.sub(rf'({STRING})(dt|d|t)\b', strip_literal, expression, flags=re.I)
     stripped = re.sub(STRING, ' ', expression)
+    # The literal YYMMN format changes representation and does not read a variable.
+    stripped = re.sub(rf'\bput\s*\(\s*({NAME})\s*,\s*yymmn[1-9]\d*\.\s*\)', r'(\1)', stripped, flags=re.I)
     # Date/time literals and hex/format notation need their own grammar; do not guess.
     if (re.search(rf'(?:{STRING})\s*[A-Za-z_]', expression) or re.search(r'[&%\[\]{}:]', stripped)
             or re.search(rf'\b{NAME}\.|\.{NAME}\b', stripped)):
@@ -207,16 +306,39 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         return [], []
     statements = [(entry[0], entry[3]) for entry in block]
     body = statements[1:]
+    if records := inline_data(operation, statements[0][1], body):
+        return records, []
     coverage = []
     sets = [clean for _, clean in body if re.match(r'\s*set\b', clean, re.I)]
-    if len(sets) > 1 or len(operation.sources) > 1:
+    sources = [source.name for source in operation.sources if source.kind == 'table']
+    stack = stack_inputs(sets[0], sources, targets) if len(sets) == 1 and len(sources) > 1 and len(targets) == 1 else None
+    assigned = {match[1].casefold() for _, clean in body if (match := ASSIGNMENT.fullmatch(clean))}
+    conditional = {}
+    for index, (_, clean) in enumerate(body[:-1]):
+        match = IF_ASSIGNMENT.fullmatch(clean)
+        following = re.match(r'\s*else\s+(.+)', body[index + 1][1], re.I | re.S)
+        alternative = ASSIGNMENT.fullmatch(following[1]) if following else None
+        if match and alternative and match[2].casefold() == alternative[1].casefold():
+            conditional[index] = (match[1], match[2], match[3], alternative[2])
+            assigned.add(match[2].casefold())
+    if stack is None and (len(sets) > 1 or len(operation.sources) > 1):
         coverage.append('Multiple SAS input datasets/SET statements are unresolved for column transformations')
     if sets:
         before_set = body[:next(index for index, (_, clean) in enumerate(body) if clean == sets[0])]
-        if any(ASSIGNMENT.fullmatch(clean) for _, clean in before_set):
+        if any(ASSIGNMENT.fullmatch(clean) or IF_ASSIGNMENT.fullmatch(clean) for _, clean in before_set):
             coverage.append('SAS assignment before SET may depend on retained values; column transformations unresolved')
-    for _, clean in body:
+    for index, (_, clean) in enumerate(body):
         plain = re.sub(STRING, ' ', clean)
+        if index in conditional or index - 1 in conditional:
+            continue
+        if (length := LENGTH.fullmatch(clean)) and all(
+                name.casefold() in assigned for name in re.findall(NAME, length[1])):
+            continue
+        if RETAIN_LITERAL.fullmatch(clean):
+            continue  # Input ownership and later writes are checked below.
+        if ROW_FILTER.fullmatch(clean) and (not re.search(r'\bthen\b', plain, re.I)
+                                            or re.search(r'\bthen\s+delete\s*;?$', plain, re.I)):
+            continue
         if re.match(r'\s*(merge|update|modify|by|array|do|end|if|else|retain|output|input|infile|'
                     r'call|where|delete|stop|link|goto|select|when|otherwise)\b', plain, re.I):
             coverage.append('SAS procedural/MERGE BY/array/loop/conditional retention transformations are unresolved')
@@ -224,7 +346,8 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             coverage.append('Unsupported SAS DATA statement in column transformations')
     try:
         output_options = _dataset(statements[0][1], 'data')
-        source_options = _dataset(sets[0], 'set') if sets else {'keep': None, 'drop': [], 'rename': {}}
+        source_options = (_dataset(sets[0], 'set') if sets and stack is None else
+                          {'keep': None, 'drop': [], 'rename': {}, 'where': None})
         if any(old in source_options['drop'] or (
                 source_options['keep'] is not None and old not in source_options['keep'])
                 for old in source_options['rename']):
@@ -234,15 +357,19 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
                            if name not in source_options['drop']]
             if len(set(input_names)) != len(input_names):
                 coverage.append('SAS input RENAME has conflicting column names')
+        retained = [m[1].casefold() for _, clean in body if (m := RETAIN_LITERAL.fullmatch(clean))]
+        if (len(retained) != len(set(retained)) or set(retained) & assigned
+                or retained and sets and (source_options['keep'] is None or set(retained) & set(input_names))):
+            coverage.append('SAS RETAIN requires literal initialization and an untouched variable')
     except ValueError as error:
         coverage.append(str(error))
-        output_options = source_options = {'keep': None, 'drop': [], 'rename': {}}
+        output_options = source_options = {'keep': None, 'drop': [], 'rename': {}, 'where': None}
     if coverage:
         message = '; '.join(dict.fromkeys(coverage))
         return ([derivation(target, '', operation.code, category='unsupported', coverage=[message])
                  for target in targets], [Diagnostic(message, operation.start)])
 
-    source = operation.sources[0].name if sets and operation.sources else ''
+    source = targets[0] if stack is not None else operation.sources[0].name if sets and operation.sources else ''
     source_columns = {source_options['rename'].get(n, n): n for n in source_options['keep'] or []
                       if n not in source_options['drop']}
     known_source = source_options['keep'] is not None
@@ -250,10 +377,30 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         source_columns.update({new: old for old, new in source_options['rename'].items()
                                if old not in source_options['drop']})
     dropped_input = {source_options['rename'].get(n, n) for n in source_options['drop']}
+    flags = {name for name, _ in stack or []}
     unavailable = dropped_input | {old for old, new in source_options['rename'].items() if old != new}
     state, versions, steps = {}, {}, []
+    filters, filter_coverage = [], []
+    if source_options['where']:
+        filters, filter_coverage = _expression_inputs(source_options['where'], source, {}, source_columns,
+                                                      known_source, unavailable)
+        for item in filters:
+            item['role'] = 'row_filter'
     keep, drop, rename = None, set(), {}
     for body_index, (raw, clean) in enumerate(body):
+        if body_index - 1 in conditional:
+            continue
+        conditional_assignment = conditional.get(body_index)
+        if not conditional_assignment and (match := ROW_FILTER.fullmatch(clean)):
+            predicate = re.sub(r'\bthen\s+delete\s*;?$', '', match[2], flags=re.I).rstrip(';')
+            current = {} if match[1].casefold() == 'where' else state
+            inputs, errors = _expression_inputs(predicate, source, current, source_columns, known_source, unavailable)
+            for item in inputs:
+                item['role'] = 'row_filter'
+                if item not in filters:
+                    filters.append(item)
+            filter_coverage.extend(errors)
+            continue
         if match := re.match(r'\s*(keep|drop|rename)\s+(.+?)\s*;?$', clean, re.I | re.S):
             try:
                 if match[1].casefold() == 'rename':
@@ -265,11 +412,26 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             except ValueError as error:
                 coverage.append(str(error))
             continue
-        assignment = ASSIGNMENT.fullmatch(clean)
-        if not assignment:
+        assignment = ASSIGNMENT.fullmatch(clean) or RETAIN_LITERAL.fullmatch(clean)
+        if conditional_assignment:
+            predicate, name, when_true, when_false = conditional_assignment
+            name = name.casefold()
+            inputs, errors = _expression_inputs(predicate, source, state, source_columns, known_source, unavailable)
+            for item in inputs:
+                item['role'] = 'value_selection'
+            for value in (when_true, when_false):
+                values, gaps = _expression_inputs(value.rstrip(';'), source, state, source_columns,
+                                                  known_source, unavailable)
+                inputs.extend(item for item in values if item not in inputs)
+                errors.extend(gaps)
+            start = block[body_index + 1][4] - block[0][4]
+            end = block[body_index + 2][5] - block[0][4]
+            raw = operation.code[start:end]
+        elif assignment:
+            name, expression = assignment[1].casefold(), assignment[2].rstrip(';')
+            inputs, errors = _expression_inputs(expression, source, state, source_columns, known_source, unavailable)
+        else:
             continue
-        name, expression = assignment[1].casefold(), assignment[2].rstrip(';')
-        inputs, errors = _expression_inputs(expression, source, state, source_columns, known_source, unavailable)
         macro_text = re.sub(r"'(?:''|[^'])*'|/\*.*?\*/", ' ', raw, flags=re.S)
         if re.search(r'[&%][A-Za-z_]', macro_text):
             errors.append('SAS macro-expanded assignment has unresolved original expression')
@@ -287,7 +449,7 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
         candidates = keep
     if output_options['keep'] is not None:
         candidates = set(output_options['keep']) if keep is None else candidates & set(output_options['keep'])
-    candidates -= drop | set(output_options['drop'])
+    candidates -= drop | set(output_options['drop']) | flags
     rename.update(output_options['rename'])
     output_names = [rename.get(name, name) for name in candidates]
     if len(set(output_names)) != len(output_names):
@@ -304,25 +466,96 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             else:
                 inputs = []
                 errors.append('SAS output variable has no established input')
-            steps.append(derivation(target, rename.get(name, name), operation.code, inputs=inputs,
-                                    coverage=errors, ordinal=len(steps)))
+            steps.append(derivation(target, rename.get(name, name), operation.code, inputs=[*inputs, *filters],
+                                    coverage=[*errors, *filter_coverage], ordinal=len(steps)))
         if source and not known_source and keep is None and output_options['keep'] is None:
-            steps.append(derivation(target, '', operation.code, category='wildcard',
-                                    coverage=['SAS SET passthrough columns require an explicit KEEP or known schema']))
+            if not (rename or source_options['rename']):
+                steps.append(passthrough(target, source, operation.code, filters, filter_coverage,
+                                         exclude=candidates | drop | set(output_options['drop']) | dropped_input | flags,
+                                         ordinal=len(steps)))
+            else:
+                steps.append(derivation(target, '', operation.code, category='wildcard',
+                                        coverage=['SAS SET passthrough with RENAME requires an explicit KEEP']))
         if coverage:
             steps.append(derivation(target, '', operation.code, category='unsupported', coverage=coverage))
+    if stack is not None:
+        scope = 'set-input'
+        for step in steps:
+            pending = []
+            for item in step['inputs']:
+                if item['table'] == source and not item['scope']:
+                    item['scope'] = scope
+                    if item['column'] not in {'*', *flags}:
+                        pending.append(item)
+            if pending:
+                step['inputs'] = [item for item in step['inputs'] if item not in pending]
+                step['scoped_columns'] = pending
+                step['coverage'].append('Intermediate wildcard requires a complete output layout')
+                step['status'] = 'unresolved'
+        inputs = [dependency(table, '*') for table in sources]
+        layout = derivation(source, '', sets[0], scope=scope, inputs=inputs, category='wildcard',
+                            coverage=['SAS concatenated SET requires complete input layouts'])
+        layout.update(sas_stack=True, wildcard_safe=True, sas_flags=sorted(flags))
+        indicators = [derivation(source, flag, sets[0], scope=scope, category='indicator', ordinal=index + 1,
+                                 inputs=[dependency(table, '') | {'role': 'rowset'}])
+                      for index, (flag, table) in enumerate(stack)]
+        steps = [layout, *indicators, *steps]
     return steps, [Diagnostic(message, operation.start) for message in coverage]
 
 
-def proc_derivations(operation: Operation) -> list[dict[str, Any]]:
+def proc_derivations(operation: Operation, clean: str) -> list[dict[str, Any]]:
     """Mark PROC output transformations unsupported for each target dataset.
 
     Args:
         operation: Parsed PROC operation.
+        clean: PROC statements without comments.
 
     Returns:
         Unresolved derivation records for the operation's targets.
     """
+    if len(operation.sources) == len(operation.targets) == 1:
+        source, target = operation.sources[0].name, operation.targets[0].name
+        dataset = rf'{NAME}(?:\.{NAME})?'
+        if operation.kind == 'PROC SORT':
+            sort = re.fullmatch(
+                rf'\s*proc\s+sort\s+(?:(?:data|out)\s*=\s*{dataset}\s*|nodupkey\s*)+;'
+                rf'\s*by\s+((?:{NAME}\s*)+);\s*run\s*;?\s*', clean, re.I)
+            if sort:
+                if source.casefold() == target.casefold():
+                    return []  # In-place sorting preserves the origin of every value.
+                role = 'row_filter' if re.search(r'\bnodupkey\b', clean, re.I) else 'order'
+                keys = [dependency(source, name) | {'role': role} for name in sort[1].casefold().split()
+                        if name != 'descending']
+                return [passthrough(target, source, operation.code, keys, [])]
+        if operation.kind in {'PROC SUMMARY', 'PROC MEANS'} and source.casefold() != target.casefold():
+            summary = re.fullmatch(
+                rf'\s*proc\s+(?:summary|means)\s+data\s*=\s*{dataset}\s+nway\s*;'
+                rf'\s*class\s+((?:{NAME}\s*)+);\s*var\s+({NAME})\s*;'
+                rf'\s*output\s+out\s*=\s*{dataset}\s+sum\s*=\s*({NAME})\s*;\s*run\s*;?\s*',
+                clean, re.I)
+            if summary:
+                groups = summary[1].casefold().split()
+                value, output = summary[2].casefold(), summary[3].casefold()
+                names = [*groups, '_type_', '_freq_', output]
+                if len(set(names)) == len(names):
+                    context = [dependency(source, name) | {'role': 'value_selection'} for name in groups]
+                    context.append(dependency(source, '') | {'role': 'rowset'})
+                    return [
+                        derivation(target, name, operation.code, ordinal=index,
+                                   inputs=[*([dependency(source, name)] if name in groups else
+                                             [dependency(source, value)] if name == output else []), *context],
+                                   category='aggregate' if name in {'_freq_', output} else 'projection')
+                        for index, name in enumerate(names)
+                    ]
+        if operation.kind == 'PROC RANK' and source.casefold() != target.casefold():
+            rank = re.fullmatch(
+                rf'\s*proc\s+rank\s+data\s*=\s*{dataset}\s+out\s*=\s*{dataset}\s+groups\s*=\s*[1-9]\d*\s*;'
+                rf'\s*var\s+({NAME})\s*;\s*ranks\s+({NAME})\s*;\s*run\s*;?\s*', clean, re.I)
+            if rank:
+                value, output = rank[1].casefold(), rank[2].casefold()
+                return [derivation(target, output, operation.code, category='rank',
+                                   inputs=[dependency(source, value), dependency(source, '') | {'role': 'rowset'}]),
+                        passthrough(target, source, operation.code, [], [], exclude=[output], ordinal=1)]
     return [derivation(target.name, '', operation.code, category='unsupported',
                        coverage=[f'{operation.kind} column transformations are unsupported'])
             for target in operation.targets]

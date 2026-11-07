@@ -187,11 +187,12 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         Column derivation records; unsupported boundaries remain unresolved."""
     target_name = relation(target) if target is not None else "__result__"
     root_scope = "" if target is not None else "result:0"
-    shared_sql = dialect.parser_class is type(dialect).parser_class
+    sas_sql = getattr(dialect.parser_class, "SAS_COLUMN_LINEAGE", False)
+    shared_sql = dialect.parser_class is type(dialect).parser_class or sas_sql
     databricks = is_native_dialect(dialect)
     lateral_aliases = dialect.__class__.__name__.casefold() in {
         "snowflake", "duckdb", "redshift", "databricks", "spark", "clickhouse"}
-    if shared_sql and isinstance(tree, exp.Delete):
+    if shared_sql and not sas_sql and isinstance(tree, exp.Delete):
         return []  # DELETE can remove rows but cannot write an output column value.
     if isinstance(tree, (exp.Update, exp.Merge, exp.Delete)):
         return [_record(target_name, "*", root_scope, code, coverage=[
@@ -204,6 +205,16 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         return [_record(target_name, "*", root_scope, code, coverage=[
             f"Unsupported {'/'.join(unsupported_sets)} set operation; value branch mapping is not resolved"])]
     if not scopes:
+        if (sas_sql and isinstance(tree, exp.Insert) and isinstance(tree.this, exp.Schema)
+                and isinstance(tree.expression, exp.Values)):
+            names = [identifier(item) for item in tree.this.expressions]
+            values = tree.expression.expressions
+            if (names and len({name.casefold() for name in names}) == len(names) and values
+                    and all(isinstance(row, exp.Tuple) and len(row.expressions) == len(names)
+                            and all(isinstance(value, (exp.Literal, exp.Null, exp.Boolean))
+                                    or value.meta.get("sas_literal") for value in row.expressions) for row in values)):
+                return [_record(target_name, name, root_scope, code, "constant", ordinal=ordinal)
+                        for ordinal, name in enumerate(names)]
         if isinstance(tree, exp.Insert):
             return [_record(target_name, "*", root_scope, code, coverage=["INSERT without SELECT is not resolved"])]
         return []
@@ -755,6 +766,21 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
             relation_column(record, source, name, role)
 
         def dependencies(node, role, record):
+            nonlocal active_ordinal, resolving_context
+            if sas_sql and node.meta.get("sas_calculated"):
+                aliases = [(position, value) for position, key, value in projection_aliases
+                           if key == node.name.casefold()]
+                if len(aliases) == 1 and (aliases[0][0] < active_ordinal or resolving_context):
+                    saved, context = active_ordinal, resolving_context
+                    active_ordinal, value = aliases[0]
+                    resolving_context = False
+                    dependencies(value, role, record)
+                    active_ordinal, resolving_context = saved, context
+                else:
+                    record["coverage"].append(f"SAS CALCULATED alias cannot be established: {node.name}")
+                return
+            if sas_sql and (node.meta.get("sas_literal") or node.meta.get("sas_runtime")):
+                return
             if isinstance(node, exp.Column) or databricks and isinstance(node, exp.Dot) and column_parts(node):
                 resolve(record, node, role)
                 return
@@ -926,7 +952,9 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
                     dependencies(value, "value", record)
                 if not record["inputs"] and not record["coverage"] and not any(record.get(key) for key in (
                         "lateral_choices", "scoped_columns", "unqualified_columns")):
-                    record["category"] = "runtime" if shared_sql and value.find(*runtime_values) else "constant"
+                    runtime_origin = shared_sql and value.find(*runtime_values) or sas_sql and any(
+                        node.meta.get("sas_runtime") for node in value.walk())
+                    record["category"] = "runtime" if runtime_origin else "constant"
             if comparison:
                 for compare_ordinal, (item, projected, source) in enumerate(projections):
                     active_ordinal = compare_ordinal

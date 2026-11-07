@@ -14,7 +14,7 @@ from dataforge.asset_identity import AssetResolver
 from dataforge.configuration import ParsingSettings
 from dataforge.models import AssetRef, ParseResult, column_key, operation_ids, stable_id
 from dataforge.parsers.sql_transformations import identifier
-from dataforge.schemas import query_output_layouts
+from dataforge.schemas import query_output_layouts, sas_stack_columns
 from dataforge.store import Store
 
 ROW_ROLES = {'row_filter', 'join', 'row_membership', 'quality_drop', 'delete_condition', 'truncate_condition'}
@@ -130,6 +130,14 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                       and physical[0].get('projection_count') == 1)
             for original in op.derivations:
                 d = copy.deepcopy(original)
+                if d.get('sas_stack') and config['expand_wildcards']:
+                    columns = sas_stack_columns(d, read_layout)
+                    if columns:
+                        derivations.extend({**d, 'target_column': name, 'inputs': dependencies,
+                                            'status': 'inferred', 'ordinal': ordinal,
+                                            'coverage': ['Expanded from SAS concatenated SET input layouts']}
+                                           for ordinal, (name, dependencies) in enumerate(columns.items()))
+                        continue
                 positional_layout = d.get('positional_layout')
                 union_layout = scoped_layouts.get(d['scope']) if 'union_projection' in d else None
                 if union_layout:
@@ -260,6 +268,11 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                             or '*' in source_names):
                         source_names = []
                     source_names = [name for name in source_names if _sql_name(name) not in excluded]
+                    if source_names and d.get('sas_passthrough'):
+                        sas_excluded = set(d.get('sas_exclude', ()))
+                        source_names = [name for name in source_names if name.casefold() not in sas_excluded]
+                        if not source_names:
+                            continue  # The entire known input layout was excluded or explicitly mapped.
                     if source_names:
                         target_names = source_names
                         if union_layout:
@@ -275,7 +288,8 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                         for position, source_name in enumerate(source_names):
                             expanded = copy.deepcopy(d)
                             gaps = [c for c in d.get('coverage', [])
-                                    if c != 'Wildcard requires trusted schema expansion'
+                                    if c not in {'Wildcard requires trusted schema expansion',
+                                                 'SAS passthrough requires a complete input layout'}
                                     and not (d.get('target_mapping_missing') and c in INSERT_MAPPING_GAPS)]
                             expanded.update(target_column=target_names[position], status='unresolved' if gaps else 'inferred',
                                             ordinal=(offset if union_layout else d.get('ordinal', 0)) + position,

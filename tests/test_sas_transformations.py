@@ -5,6 +5,69 @@ import pytest
 from dataforge.parsers.sas import parse_sas
 
 
+def test_summary_and_rank_keep_aggregate_inputs_separate_from_groups():
+    parsed = parse_sas("""proc summary data=raw.a nway;
+        class customer; var amount; output out=work.totals sum=total; run;
+        proc rank data=work.totals out=mart.ranked groups=5; var total; ranks bucket; run;""")
+    summary, rank = parsed.operations
+    total = next(record for record in summary.derivations if record["target_column"] == "total")
+    assert {(item["column"], item["role"]) for item in total["inputs"]} == {
+        ("amount", "value"), ("customer", "value_selection"), ("", "rowset"),
+    }
+    bucket = next(record for record in rank.derivations if record["target_column"] == "bucket")
+    assert {(item["column"], item["role"]) for item in bucket["inputs"]} == {
+        ("total", "value"), ("", "rowset"),
+    }
+
+
+def test_concatenated_set_maps_only_columns_each_input_can_supply(tmp_path):
+    from dataforge.ingestion import Importer
+    from dataforge.services import analyze
+    from dataforge.store import Store
+    from dataforge.transformations import trace_columns
+
+    code = b"""data raw.a; id=1; amount=10; run;
+    data raw.b; id=2; factor=5; run;
+    data mart.result; set raw.a(in=in_a) raw.b(in=in_b);
+      if in_a or in_b; amount=coalesce(amount,0); run;"""
+    store = Store(tmp_path)
+    try:
+        workspace = store.create_workspace('SET')
+        Importer(store, workspace).files([('stack.sas', code)], {'.sas'})
+        analyze(store, workspace)
+        asset = next(row['asset_id'] for row in store.assets(workspace) if row['name'] == 'mart.result')
+        trace = trace_columns(store, workspace, asset, 'amount', depth=12)
+        physical = {(item['table'], item['column_name']) for step in trace['derivations']
+                    for item in step['inputs'] if item['role'] == 'value' and not item['scope']}
+        assert physical == {('raw.a', 'amount')}
+        assert not any(gap['reason'] == 'unresolved_derivation' for gap in trace['coverage'])
+    finally:
+        store.close()
+
+
+def test_inline_seed_does_not_publish_columns_excluded_by_unhandled_output_options():
+    parsed = parse_sas("""data dst(keep=id); input id secret; datalines;
+    1 20
+;
+run;""")
+    assert not any(record['target_column'] == 'secret' for record in parsed.operations[0].derivations)
+
+
+def test_sample_format_and_calculated_having_keep_their_inputs():
+    parsed = parse_sas("""data stage; set raw.a; period=put(as_of_date,yymmn6.); run;
+      proc sql; create table report as
+      select sum(amount) as amount from stage having calculated amount > 0; quit;""")
+    period = next(record for record in parsed.operations[0].derivations
+                  if record['target_column'] == 'period' and record['scope'])
+    assert period['status'] == 'verified'
+    assert [(item['table'], item['column']) for item in period['inputs']] == [('raw.a', 'as_of_date')]
+    amount = parsed.operations[-1].derivations[0]
+    assert amount['status'] == 'verified'
+    assert {(item['column'], item['role']) for item in amount['inputs']} >= {
+        ('amount', 'value'), ('amount', 'row_filter'),
+    }
+
+
 def physical(operation: Any) -> Any:
     """Handle physical for the test scenario.
 

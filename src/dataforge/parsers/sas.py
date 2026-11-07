@@ -5,7 +5,11 @@ import re
 
 from dataforge.models import AssetRef, Diagnostic, Operation, ParseResult, Usage, file_asset, statements
 from dataforge.parsers.sas_sql import parse_proc_sql
-from dataforge.parsers.sas_transformations import data_step_derivations, proc_derivations
+from dataforge.parsers.sas_transformations import (
+    data_step_derivations,
+    proc_derivations,
+    without_dataset_options,
+)
 
 IDENT = r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?"
 
@@ -96,6 +100,13 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
     block_type = ""
     block_bad = False
 
+    def record_layout(operation):
+        if len(operation.targets) == 1 and operation.derivations and operation.targets[0].kind == 'table':
+            result.metadata.setdefault("declared_schemas", []).append({
+                "table": operation.targets[0].name, "columns": None, "query_layout": True,
+                "operation_index": len(result.operations), "start_line": operation.start, "end_line": operation.end,
+            })
+
     def ref(name: str) -> AssetRef:
         """Normalize a SAS dataset or file reference into an asset record.
 
@@ -127,7 +138,10 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
         if re.search(r"(['\"]).*?\1n\b", text, re.I | re.S):
             result.diagnostics.append(Diagnostic("SAS name literal is unresolved; dataset references were not guessed", block[0][1] if block else 1))
             return []
-        text = re.sub(r"\([^)]*\)", " ", text)
+        try:
+            text = without_dataset_options(text)
+        except ValueError:
+            return []
         text = re.split(r"\b\w+\s*=|/", text, maxsplit=1)[0]
         return [ref(n) for n in re.findall(IDENT, text) if n.casefold() != "_null_"]
 
@@ -195,7 +209,7 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
                 for d in parsed.diagnostics:
                     d.line += line - 1
                 result.diagnostics.extend(parsed.diagnostics)
-                for op in parsed.operations:
+                for index, op in enumerate(parsed.operations):
                     op.sources = [ref(r.name) for r in op.sources]
                     op.targets = [ref(r.name) for r in op.targets]
                     for u in op.usages:
@@ -203,7 +217,9 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
                     for derivation in op.derivations:
                         if not derivation.get("scope"):
                             derivation["target_table"] = ref(derivation["target_table"]).name
-                        for dependency in derivation["inputs"]:
+                        candidates = [source for item in derivation.get("unqualified_columns", [])
+                                      for source in item["sources"]]
+                        for dependency in [*derivation["inputs"], *candidates]:
                             if not dependency.get("scope"):
                                 dependency["table"] = ref(dependency["table"]).name
                         if re.search(r"[&%]", strip_comments(raw)):
@@ -211,6 +227,14 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
                             derivation["status"] = "unresolved"
                             derivation["coverage"].append("SAS macro expansion cannot replace original expression evidence")
                     op.code, op.start, op.end, op.method = raw, line, last, "sas-proc-sql"
+                    declarations = [d for d in parsed.metadata.get("declared_schemas", [])
+                                    if d["operation_index"] == index and d["columns"]]
+                    if declarations and len(op.targets) == 1:
+                        result.metadata.setdefault("declared_schemas", []).extend(
+                            {**d, "table": op.targets[0].name, "operation_index": len(result.operations),
+                             "start_line": line, "end_line": last} for d in declarations)
+                    elif op.kind in {"CREATE", "SELECT_INTO"}:
+                        record_layout(op)
                     result.operations.append(op)
             block, block_type = [], ""
             return
@@ -241,7 +265,9 @@ def parse_sas(content: str, library_mappings: dict[str, str] | None = None,
                 operation.derivations, diagnostics = data_step_derivations(operation, block)
                 result.diagnostics.extend(diagnostics)
             else:
-                operation.derivations = proc_derivations(operation)
+                operation.derivations = proc_derivations(operation, clean)
+            if operation.kind in {"DATA", "PROC SORT", "PROC SUMMARY", "PROC MEANS", "PROC RANK"}:
+                record_layout(operation)
             result.operations.append(operation)
         block, block_type, block_bad = [], "", False
 

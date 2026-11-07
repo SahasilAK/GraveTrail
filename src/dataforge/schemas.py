@@ -8,6 +8,18 @@ from dataforge.asset_identity import AssetResolver
 from dataforge.models import AssetRef, Diagnostic, ParseResult, column_key, operation_ids
 
 
+def sas_stack_columns(record, read_layout):
+    """Bind each concatenated column only to datasets that supply it."""
+    columns = defaultdict(list)
+    for item in record["inputs"]:
+        names = read_layout(item["table"], item.get("table_identity", ""))
+        if not names or any(not name.isidentifier() for name in names):
+            return {}
+        for name in names:
+            columns[name.casefold()].append({**item, "column": name})
+    return {} if set(record.get("sas_flags", ())) & columns.keys() else dict(columns)
+
+
 def query_output_layouts(records, read_layout, case_sensitive):
     """Return complete projection layouts by scope, aligning deferred UNION ALL by width."""
     branches = defaultdict(lambda: defaultdict(list))
@@ -20,12 +32,18 @@ def query_output_layouts(records, read_layout, case_sensitive):
         for branch in projections.values():
             names = []
             for record in branch:
+                if record.get("sas_stack"):
+                    columns = sas_stack_columns(record, read_layout)
+                    if not columns:
+                        break
+                    names.extend(columns)
+                    continue
                 name = record.get("union_projection", record["target_column"])
                 if name not in {"", "*"}:
                     names.append(name)
                     continue
                 inputs = [item for item in record["inputs"] if item["role"] == "value"]
-                if (name != "*" or not record.get("wildcard_safe") or len(inputs) != 1
+                if ((name != "*" and not record.get("sas_passthrough")) or not record.get("wildcard_safe") or len(inputs) != 1
                         or any(record.get(key) for key in ("struct_path", "wildcard_exclude", "wildcard_reserved"))):
                     break
                 item = inputs[0]
@@ -33,7 +51,8 @@ def query_output_layouts(records, read_layout, case_sensitive):
                             else read_layout(item["table"], item.get("table_identity", "")))
                 if not expanded:
                     break
-                names.extend(expanded)
+                excluded = set(record.get("sas_exclude", ()))
+                names.extend(name for name in expanded if name.casefold() not in excluded)
             else:
                 alternatives.append(names)
         if len(alternatives) != len(projections):
@@ -134,7 +153,8 @@ def collect_schemas(results: list[tuple[dict[str, Any], ParseResult]], workspace
                 valid = False
                 continue
             if (len(records) == 1 and record.get("query_layout") and resolver.registry[aid][4] != "unresolved"
-                    and len(operation.targets) == 1 and operation.derivations and operation.method == "parser"):
+                    and len(operation.targets) == 1 and operation.derivations
+                    and operation.method in {"parser", "sas-rules", "sas-proc-sql"}):
                 query_definitions[aid] = (source, parsed, operation)
             statement_id, _ = operation_ids(workspace, source, index, operation)
             evidence.append({"file_id": source["file_id"], "relative_path": source["relative_path"],

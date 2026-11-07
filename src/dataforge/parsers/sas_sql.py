@@ -52,6 +52,7 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
     class SASParser(dialect.parser_class):
         """Dialect parser override for SAS FORMAT, LENGTH, and CALCULATED syntax."""
 
+        SAS_COLUMN_LINEAGE = True
         FUNCTIONS = {**dialect.parser_class.FUNCTIONS,
                      'DATETIME': lambda args: exp.Anonymous(this='DATETIME', expressions=args)}
 
@@ -77,9 +78,9 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
                     raise ParseError('Unsupported or invalid SAS typed literal')
                 original = self.sql[token.start:self._next.end + 1]
                 self._advance(2)
-                # Var preserves the complete typed token in generated usage expressions;
-                # value derivations conservatively abstain instead of treating a date as a string.
-                return exp.Var(this=original)
+                node = exp.Var(this=original)
+                node.meta.update(sas_literal=True, start=token.start, end=token.start + len(original) - 1)
+                return node
             return super()._parse_primary()
 
         def _parse_projections(self: Parser) -> tuple[list[exp.Expr], list[exp.Expr] | None]:
@@ -142,6 +143,10 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
                     while self._index < self._tokens_size and self._curr.start < value.end():
                         self._advance()
 
+        def _parse_column_constraint(self):
+            self._parse_sas_attributes()
+            return super()._parse_column_constraint()
+
         def _parse_column(self: Parser) -> exp.Expr | None:
             """Parse CALCULATED aliases as derived variables in projection context.
 
@@ -157,7 +162,7 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
                 alias = self._parse_id_var(any_token=False)
                 # A calculated alias is a derived variable, never a direct base-table column.
                 variable = exp.Var(this=alias.name)
-                variable.meta.update(sas_calculated=True, sas_line=line)
+                variable.meta.update(alias.meta, sas_calculated=True, sas_line=line)
                 return variable
             return super()._parse_column()
 
@@ -174,6 +179,9 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
             for tree in trees:
                 if tree is None:
                     continue
+                for function in tree.find_all(exp.Anonymous):
+                    if function.name.upper() == 'DATETIME' and not function.expressions:
+                        function.meta['sas_runtime'] = True
                 for variable in tree.find_all(exp.Var):
                     if not variable.meta.get('sas_calculated'):
                         continue
