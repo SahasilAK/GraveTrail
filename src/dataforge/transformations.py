@@ -19,7 +19,7 @@ from dataforge.schemas import query_output_layouts, sas_stack_columns
 from dataforge.store import Store
 
 ROW_ROLES = {'row_filter', 'join', 'row_membership', 'quality_drop', 'delete_condition', 'truncate_condition'}
-SAS_IN_PLACE = {'sas_append', 'sas_update'}
+IN_PLACE = {'sas_append', 'sas_update', 'sql_update', 'sql_merge_update', 'sql_merge_insert'}
 TRANSPOSE_SCOPE = 'transpose-values:'
 CONTROL_ROLES = {'quality_warn', 'quality_fail', 'match_key', 'sequence', 'system_sequence',
                  'ignore_null_update', 'history'}
@@ -663,16 +663,21 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             boundary('depth_limit', column_id=cid)
             result['truncated'] = True
             continue
-        if len(steps) > remaining:
+        limited_steps = len(steps) > remaining
+        if limited_steps:
             boundary('item_limit')
             result['truncated'] = True
             steps = steps[:remaining]
         ambiguous = direction == 'upstream' and len({s['operation_id'] for s in steps}) > 1
+        if direction == 'upstream' and limited_steps and not ambiguous:
+            writers = store.rows('''SELECT DISTINCT operation_id FROM column_derivations
+                WHERE workspace_id=? AND run_id=? AND target_column_id=? LIMIT 2''', [w, run_id, virtual or cid])
+            ambiguous = len(writers) > 1
         if ambiguous:
             boundary('multiple_writers', column_id=cid, message='Writer order is unknown; alternatives are not chained')
-        # SAS in-place writes expose independent origins without choosing writer order.
+        # In-place writes expose independent origins without choosing writer order.
         independent = (direction == 'upstream' and not unknown_writes
-                       and any(s['category'] in SAS_IN_PLACE and s['status'] != 'unresolved' for s in steps))
+                       and any(s['category'] in IN_PLACE and s['status'] != 'unresolved' for s in steps))
         for step in steps:
             if status != 'all' and step['status'] != status:
                 boundary('status_filter', column_id=cid)
@@ -692,7 +697,8 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             inputs = store.rows('''SELECT c.*,i.role FROM column_dependencies i JOIN column_references c
                 ON i.source_column_id=c.column_id AND i.workspace_id=c.workspace_id
                 WHERE i.workspace_id=? AND i.derivation_id=? ORDER BY i.ordinal LIMIT ?''', [w, did, limit + 1])
-            if len(inputs) > limit:
+            limited_inputs = len(inputs) > limit
+            if limited_inputs:
                 inputs = inputs[:limit]
                 boundary('input_limit', derivation_id=did)
                 result['truncated'] = True
@@ -705,11 +711,13 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                 boundary('coverage_diagnostic', derivation_id=did, message=warning)
             if step['status'] == 'unresolved':
                 boundary('unresolved_derivation', derivation_id=did)
-            next_effect = effect
+            next_effects = [effect]
             if direction == 'downstream' and effect != 'row_selection':
-                roles = store.rows('''SELECT DISTINCT role FROM column_dependencies WHERE workspace_id=?
-                    AND derivation_id=? AND source_column_id=?''', [w, did, cid])
-                next_effect = _path_effect(effect, {row['role'] for row in roles})
+                roles = {i['role'] for i in inputs if i['column_id'] == cid}
+                if limited_inputs:
+                    roles = {row['role'] for row in store.rows('''SELECT DISTINCT role FROM column_dependencies
+                        WHERE workspace_id=? AND derivation_id=? AND source_column_id=?''', [w, did, cid])}
+                next_effects = sorted({_path_effect(effect, {role}) for role in roles}) or [effect]
             if did not in emitted:
                 if len(emitted) >= limit:
                     boundary('item_limit')
@@ -728,19 +736,23 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                     'inputs': [_ref(i) | {'role': i['role']} for i in inputs],
                     'evidence': evidence, 'coverage': json.loads(step['coverage'])})
                 emitted.add(did)
-            if len(result['paths']) < limit * 2:
-                result['paths'].append({'derivation_id': did, 'column_id': target['column_id'],
-                    'parent_column_id': cid, 'depth': level + 1, 'effect': next_effect})
-            else:
-                boundary('path_limit')
-                result['truncated'] = True
+            for next_effect in next_effects:
+                if len(result['paths']) < limit * 2:
+                    result['paths'].append({'derivation_id': did, 'column_id': target['column_id'],
+                        'parent_column_id': ancestors[-1] if direction == 'upstream' and ancestors else cid,
+                        'depth': level + 1, 'effect': next_effect})
+                else:
+                    boundary('path_limit')
+                    result['truncated'] = True
             if (not multiple_writers or independent) and step['status'] != 'unresolved':
                 if direction == 'upstream':
                     following = [(i['column_id'], level + 1, _path_effect(effect, {i['role']}),
                         (*ancestors, cid)) for i in inputs
-                        if i['column_id'] != cid or step['category'] not in SAS_IN_PLACE]
+                        if i['column_id'] != cid or step['category'] not in IN_PLACE]
                 else:
-                    following = [(target['column_id'], level + 1, next_effect, (*ancestors, cid))]
+                    following = [(target['column_id'], level + 1, next_effect, (*ancestors, cid))
+                                 for next_effect in next_effects
+                                 if target['column_id'] != cid or step['category'] not in IN_PLACE]
                 for item in following:
                     if len(discovered_edges) < limit * 4:
                         discovered_edges.add((cid, item[0]))

@@ -8,6 +8,7 @@ from dataforge.ingestion import Importer
 from dataforge.models import AssetRef, Operation, ParseResult
 from dataforge.services import analyze
 from dataforge.store import Store
+from dataforge.transformations import trace_columns
 
 
 def populate(tmp_path: Path, sql: str, *, dialect: str | None = None) -> tuple[Any, ...]:
@@ -39,6 +40,36 @@ def asset_id(store: Any, workspace: Any, name: str) -> Any:
         Value produced for the test scenario.
     """
     return next(a['asset_id'] for a in store.assets(workspace) if a['name'] == name)
+
+
+@pytest.mark.parametrize('dialect, statement, kinds', [
+    ('postgres', """UPDATE mart AS t SET amount = t.amount + x.amount
+        FROM (SELECT id, MAX(amount) AS amount FROM raw GROUP BY id) x WHERE t.id = x.id""", {'sql_update'}),
+    ('databricks', """MERGE INTO mart AS t
+        USING (SELECT id, MAX(amount) AS amount FROM raw GROUP BY id) x ON t.id = x.id
+        WHEN MATCHED THEN UPDATE SET amount = x.amount
+        WHEN NOT MATCHED THEN INSERT (id, amount) VALUES (x.id, x.amount)""", {'sql_merge_update', 'sql_merge_insert'}),
+])
+def test_sql_write_traces_value_and_match_keys_through_derived_source(tmp_path, dialect, statement, kinds):
+    sql = 'CREATE TABLE mart AS SELECT id, amount FROM base;\n' + statement + ';'
+    store, w = populate(tmp_path, sql, dialect=dialect)
+    try:
+        trace = trace_columns(store, w, asset_id(store, w, 'mart'), 'amount', include_source=True)
+        writes = [d for d in trace['derivations'] if d['category'] in kinds and d['target']['column_name'] == 'amount']
+        assert {d['category'] for d in writes} == kinds
+        for d in writes:
+            assert d['evidence']['code'] in sql
+            assert {i['column_name'] for i in d['inputs'] if i['role'] == 'join'} == {'id'}
+            assert {i['column_name'] for i in d['inputs'] if i['role'] == 'value'} == {'amount'}
+        value_steps = {p['derivation_id'] for p in trace['paths'] if p['effect'] == 'value'}
+        origins = {(i['table'], i['column_name']) for d in trace['derivations'] if d['derivation_id'] in value_steps
+                   for i in d['inputs']
+                   if i['role'] == 'value' and not i['scope']}
+        assert {('base', 'amount'), ('raw', 'amount')} <= origins
+        assert ('raw', 'id') not in origins
+        assert not any(c['reason'] == 'cycle' for c in trace['coverage'])
+    finally:
+        store.close()
 
 
 @pytest.mark.parametrize(("declarations", "columns"), [

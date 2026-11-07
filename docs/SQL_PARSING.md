@@ -13,8 +13,11 @@ dialect syntax, but tests define demonstrated coverage. Imported SQL is never ex
 
 Table dependencies include reachable `MERGE USING (SELECT ...)` inputs and scalar or
 `EXISTS` subqueries in `UPDATE`/`DELETE`. Unreferenced CTEs remain excluded. Following a
-subquery's table inputs does not establish an outer alias's value-column ownership;
-unsupported DML transformations remain unresolved. Parser version 18 refreshes local
+subquery's table inputs does not establish an outer alias's value-column ownership.
+Qualified UPDATE FROM assignments and MERGE with explicit matched UPDATE and unmatched
+INSERT branches can trace a single source joined by an equality key. The trace separates
+the match columns, assigned values and existing target values. Other DML forms retain
+coverage boundaries. Parser upgrades refresh local
 results on the next analysis. To correct an existing file, open **Sources → Inventory →
 Inspect a source file**, save its SQL source type, then run **Analysis**. A successful
 run replaces the previous facts even when the file bytes are unchanged. Paused AI runs created with older parser or

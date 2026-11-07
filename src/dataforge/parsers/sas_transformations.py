@@ -563,6 +563,8 @@ def data_step_derivations(operation: Operation, block: list[tuple[str, int, int,
             continue
         conditional_assignment = conditional.get(body_index)
         if not conditional_assignment and (match := ROW_FILTER.fullmatch(clean)):
+            if match[1].casefold() == 'where' and source_options['where']:
+                continue  # A single SET's WHERE= overrides the DATA-step WHERE statement.
             predicate = re.sub(r'\bthen\s+delete\s*;?$', '', match[2], flags=re.I).rstrip(';')
             current = {} if match[1].casefold() == 'where' else state
             inputs, errors = _expression_inputs(predicate, source, current, source_columns, known_source, unavailable)

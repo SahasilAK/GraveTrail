@@ -33,6 +33,7 @@ evidence remain intact.
   retained inline data. DATA-step assignments retain ordered variable versions.
 - Simple filters retain row-selection inputs. Paired IF/ELSE assignments to the same
   variable distinguish the condition from the values it selects.
+- A single SET's input WHERE= takes precedence over a DATA-step WHERE statement.
 - Single-input SET and one concatenating SET can carry forward known columns through
   WORK datasets. Concatenation uses complete input layouts and traces each variable only
   to inputs that supply it. Simple IN= indicators track dataset membership.

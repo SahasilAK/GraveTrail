@@ -8,6 +8,29 @@ from dataforge.store import Store
 from dataforge.transformations import column_catalog, trace_columns
 
 
+def test_sas_where_option_precedence_and_distinct_downstream_effects(tmp_path):
+    code = b"""data mart.out;
+    set raw.orders(where=(amount > 0));
+    where ignored = 1;
+    net=amount * 2;
+    keep net;
+    run;"""
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace('SAS filtering')
+        Importer(store, w).files([('filters.sas', code)], {'.sas'})
+        analyze(store, w)
+        assets = {a['name']: a['asset_id'] for a in store.assets(w)}
+        upstream = trace_columns(store, w, assets['mart.out'], 'net')
+        assert all(i['column_name'] != 'ignored' for d in upstream['derivations'] for i in d['inputs'])
+        assert any(p['depth'] == 2 and p['parent_column_id'] != p['column_id'] for p in upstream['paths'])
+        impact = trace_columns(store, w, assets['raw.orders'], 'amount', direction='downstream')
+        target_id = upstream['derivations'][0]['target']['column_id']
+        assert {p['effect'] for p in impact['paths'] if p['column_id'] == target_id} == {'value', 'row_selection'}
+    finally:
+        store.close()
+
+
 def test_sas_match_merge_and_conditional_outputs_publish_column_trace(tmp_path: Path) -> None:
     code = """data raw.left;
     input id amount shared; datalines;

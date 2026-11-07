@@ -6,7 +6,7 @@ from functools import cache
 from typing import Any
 
 from sqlglot import Dialect, exp
-from sqlglot.optimizer.scope import Scope
+from sqlglot.optimizer.scope import Scope, traverse_scope
 
 from dataforge.parsers.sql_databricks import column_parts, is_native_dialect, qualified_source
 from dataforge.parsers.sql_databricks_relations import generator_bindings, pivot_bindings, pivot_group_names
@@ -235,6 +235,100 @@ def _sas_update(tree: exp.Update, target: exp.Table, code: str) -> list[dict[str
     return [record]
 
 
+def _sql_write(tree, target, code, dialect):
+    """Bind a single qualified write source and explicit assignment branches."""
+    if not isinstance(target, exp.Table) or not isinstance(target.this, exp.Identifier):
+        return []
+    if target.alias_column_names:
+        return []
+    if isinstance(tree, exp.Update):
+        if any(v for k, v in tree.args.items() if k not in {'this', 'expressions', 'from_', 'where'}):
+            return []
+        from_, where = tree.args.get('from_'), tree.args.get('where')
+        source, condition = (from_.this if from_ else None), (where.this if where else None)
+        actions = [('sql_update', tree)]
+    else:
+        if any(v for k, v in tree.args.items() if k not in {'this', 'using', 'on', 'whens'}):
+            return []
+        source, condition = tree.args.get('using'), tree.args.get('on')
+        actions = []
+        whens = tree.args.get('whens')
+        for branch in whens.expressions if whens else []:
+            action = branch.args.get('then')
+            if branch.args.get('condition') or branch.args.get('source'):
+                return []
+            if branch.args.get('matched') and isinstance(action, exp.Update) and not action.args.get('where'):
+                actions.append(('sql_merge_update', action))
+            elif not branch.args.get('matched') and isinstance(action, exp.Insert):
+                actions.append(('sql_merge_insert', action))
+            else:
+                return []
+        if len(actions) != len({kind for kind, _ in actions}):
+            return []
+    if (not isinstance(source, (exp.Table, exp.Subquery)) or not source.alias_or_name
+            or isinstance(source, exp.Table) and not isinstance(source.this, exp.Identifier)
+            or source.args.get('joins') or not isinstance(condition, exp.EQ)):
+        return []
+    aliases = {target.alias_or_name.casefold(), source.alias_or_name.casefold()}
+
+    def local(column):
+        return (isinstance(column, exp.Column) and isinstance(column.this, exp.Identifier)
+                and not (column.db or column.catalog) and column.table.casefold() in aliases)
+
+    if (len(aliases) != 2 or not all(local(c) for c in (condition.this, condition.expression))
+            or condition.this.table.casefold() == condition.expression.table.casefold()):
+        return []
+    records = []
+    for branch, (kind, action) in enumerate(actions):
+        insert = isinstance(action, exp.Insert)
+        if insert:
+            if (not isinstance(action.this, exp.Tuple) or not isinstance(action.expression, exp.Tuple)
+                    or any(v for k, v in action.args.items() if k not in {'this', 'expression'})):
+                return []
+            columns, values = action.this.expressions, action.expression.expressions
+        else:
+            if not all(isinstance(item, exp.EQ) for item in action.expressions):
+                return []
+            columns = [item.this for item in action.expressions]
+            values = [item.expression for item in action.expressions]
+        if not columns or len(columns) != len(values) or not all(
+            isinstance(c, exp.Column) and isinstance(c.this, exp.Identifier)
+            and not (c.db or c.catalog) and (not c.table or c.table.casefold() == target.alias_or_name.casefold())
+            for c in columns
+        ):
+            return []
+        if (len({c.name.casefold() for c in columns}) != len(columns)
+                or any(v.find(exp.Query, exp.Placeholder, exp.Parameter)
+                       or not all(local(c) and (not insert or c.table.casefold() == source.alias_or_name.casefold())
+                                  for c in v.find_all(exp.Column)) for v in values)):
+            return []
+        projections = [exp.Alias(this=v.copy(), alias=c.this.copy()) for c, v in zip(columns, values)]
+        query = exp.Select(expressions=projections).from_(target.copy()).join(source.copy(), on=condition.copy())
+        for d in extract_transformations(query, query.sql(dialect=dialect), dialect, list(traverse_scope(query)), target):
+            d['expression'] = code
+            d.pop('_expression_offset', None)
+            gap = 'Original projection expression range cannot be established; see statement evidence'
+            if gap in d['coverage']:
+                d['coverage'].remove(gap)
+                d['status'] = 'unresolved' if d['coverage'] else 'verified'
+            deferred = [item for pending in d.get('unqualified_columns', []) for item in pending['sources']]
+            choices = [item for choice in d.get('lateral_choices', []) for item in choice['inputs']]
+            for item in [d, *d['inputs'], *d.get('scoped_columns', []), *deferred, *choices]:
+                if item.get('scope'):
+                    item['scope'] = f"write:{branch}:{item['scope']}"
+            if not d['scope']:
+                d.update(category=kind, branch=branch)
+                if not insert:
+                    previous = {'table': relation(target), 'column': d['target_column'], 'role': 'value'}
+                    if not any(all(item.get(k) == v for k, v in previous.items()) for item in d['inputs']):
+                        d['inputs'].append(previous)
+                d['evidence_notes'] = [
+                    'INSERT branch applies to source rows without a target match' if insert else
+                    'Assignment applies to matching rows. Other rows retain their previous value']
+            records.append(d)
+    return records
+
+
 def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, scopes: list[Scope], target: exp.Table | None=None) -> list[dict[str, Any]]:
     """Extract scope-preserving column derivations and explicit uncertainty coverage.
 
@@ -258,6 +352,9 @@ def extract_transformations(tree: exp.Expression, code: str, dialect: Dialect, s
         return []  # DELETE can remove rows but cannot write an output column value.
     if sas_sql and isinstance(tree, exp.Update) and target is not None:
         if records := _sas_update(tree, target, code):
+            return records
+    if shared_sql and not sas_sql and isinstance(tree, (exp.Update, exp.Merge)):
+        if records := _sql_write(tree, target, code, dialect):
             return records
     if isinstance(tree, (exp.Update, exp.Merge, exp.Delete)):
         return [_record(target_name, "*", root_scope, code, coverage=[
