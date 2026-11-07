@@ -26,7 +26,18 @@ absolute path outside the checkout.
 For pip, Docker and executable alternatives, use the
 [installation reference](../SETUP_AND_DEPLOYMENT.md).
 
-## 2. Import one sample project
+## 2. Run the SQL example
+
+On **Overview**, choose **Run SQL example** in an empty workspace. GraveTrail
+imports the bundled SQL archive, analyzes it locally, and opens **Lineage** focused
+on `pub.all_kpis`. Select a relationship to inspect the original SQL. If your
+current workspace already has files, create a new one in the sidebar first.
+
+The example opens the full seven-layer upstream trace. Continue to
+[inspect and export](#4-inspect-and-export), or use the manual import steps below
+to try SAS or practice with an upload.
+
+## 3. Try a manual ZIP import
 
 Create a workspace in the sidebar, then open **Sources**. Choose a ZIP from
 the checkout's
@@ -34,15 +45,13 @@ the checkout's
 
 | Archive | Select only |
 | --- | --- |
-| `dataforge_sql_lineage_test_project.zip` | `.sql` |
-| `dataforge_sas_lineage_test_project.zip` | `.sas` |
+| [Download the SQL sample](https://github.com/SahasilAK/GraveTrail/raw/refs/heads/main/tests/sample_data/dataforge_sql_lineage_test_project.zip) | `.sql` |
+| [Download the SAS sample](https://github.com/SahasilAK/GraveTrail/raw/refs/heads/main/tests/sample_data/dataforge_sas_lineage_test_project.zip) | `.sas` |
 
 Import the selected files and inspect the inventory. The archives include expected
 lineage manifests and other supporting files; selecting only the script extension
 keeps those reference files out of the analysis. Each project contains 85 persistent
 tables across seven ETL layers. The SAS project also has 16 temporary WORK datasets.
-
-## 3. Generate and explore lineage
 
 1. Open **Analysis → Run**, leave **Use AI for analysis** unchecked, then choose **Analyze all files** and review the reported diagnostics.
 2. Open **Lineage**, search for `pub.all_kpis`, and select that exact asset.
@@ -70,7 +79,7 @@ Source exports can contain private code, so review them before sharing.
 
 ## Try the dbt sample
 
-Use a separate workspace for `tests/sample_data/gravetrail_dbt_lineage_test_project.zip`.
+Use a separate workspace for the [dbt sample ZIP](https://github.com/SahasilAK/GraveTrail/raw/refs/heads/main/tests/sample_data/gravetrail_dbt_lineage_test_project.zip).
 In **Sources**, choose **Project type → dbt project**, keep **dbt analysis mode → source**,
 and import the ZIP. Keep **Use AI for analysis** unchecked and analyze all files.
 

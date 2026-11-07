@@ -8,6 +8,7 @@ COPY src/ ./src/
 COPY ui/ ./ui/
 COPY prompts/ ./prompts/
 COPY app.py ./
+COPY tests/sample_data/dataforge_sql_lineage_test_project.zip ./tests/sample_data/
 COPY scripts/build/hatch_assets.py ./scripts/build/hatch_assets.py
 COPY .streamlit/config.toml ./.streamlit/config.toml
 RUN uv sync --locked --no-dev --no-editable --no-cache

@@ -56,6 +56,30 @@ Other SAS MERGE and multi-output forms, repeated SET statements, general arrays,
 automatic runtime variables and runtime/macro-expanded expressions remain unresolved.
 Existing table-level extraction can still recognize a construct that has no column mapping.
 
+## How confidence and coverage work
+
+In the Lineage tree, **Minimum evidence confidence** is the lowest stored
+confidence among the records supporting the displayed relationship. The score
+reflects how the evidence was established. It has no statistical calibration.
+
+| Table relationship evidence | Stored confidence |
+| --- | --- |
+| Direct parser evidence with resolved identities | Uses the parser operation's value, which defaults to 1.00. |
+| Inferred source or target identity | Capped at 0.85. |
+| Accepted AI evidence | Capped at 0.80 and labeled inferred. |
+
+Transformation lineage reports a trace state and counts coverage boundaries.
+A trace is complete for the requested scope when analysis has established coverage,
+there are no unresolved boundaries, and traversal finishes without truncation.
+Unknown dependencies have no known denominator, so the view reports the reasons
+for each gap alongside the known steps.
+
+For example, consider a query that selects `o.id AS order_id` and `amount AS total`
+from `orders o JOIN adjustments a ON o.id = a.id`. If both tables declare `amount`,
+the parser can trace `order_id` to `orders.id`, but the trace for `total` keeps an
+unresolved ownership boundary. Both table relationships can still have direct parser
+evidence. Open **Coverage details** to see why the value trace could go no further.
+
 ## Read the boundaries
 
 The view distinguishes a known constant, a known derivation, no known dependency, an

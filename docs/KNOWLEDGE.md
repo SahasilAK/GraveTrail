@@ -5,8 +5,8 @@ Human and agent operating guides. ARCHITECTURE and DATA_MODEL explain boundaries
 The public landing page and site description include dbt; the User guide navigation exposes
 DBT_SUPPORT.md. Getting started has a separate dbt retail sample walkthrough and explicit parser-only limits.
 
-`TRANSFORMATION_LINEAGE.md` — dedicated page workflow, tested SQL/SAS subset, dependency
-roles, bounded exports/queries and parser11/migration5 upgrade/recovery boundaries. Published
+`TRANSFORMATION_LINEAGE.md` — dedicated page workflow, evidence confidence and coverage methodology,
+tested SQL/SAS subset, dependency roles, bounded exports/queries and parser11/migration5 upgrade/recovery boundaries. Published
 through mkdocs.yml; PERFORMANCE records the synthetic traversal measurements. CLI/MCP
 references now enumerate107 executable routes and87 tools; UI has eleven destinations.
 
@@ -24,7 +24,7 @@ references now enumerate107 executable routes and87 tools; UI has eleven destina
 
 ## Files
 - `DBT_SUPPORT.md` — Modes, resource/column/evidence boundaries, qualified schemas, settings, AI exclusion, recovery and 1,000-model measurements.
-- `index.md` — Branded MkDocs landing page with “Nothing stays buried.” / “Every dependency leaves a trail.” hero; section indexes organize canonical references without duplication. Only mkdocs.yml nav and named assets are published; REVIEW/prompts/plans/knowledge stay excluded.
+- `index.md` — MkDocs landing page with product comparison, SQL example recording, analysis choices and SAS coverage links. Only mkdocs.yml nav and named assets are published.
 - `BUILD_AND_RELEASE.md` — Launcher/build options, Windows per-user installer lifecycle and signing setup/limitations, exact-or-bumped dynamic release versions, branch validation vs default-branch publication, integrity/source/trust gates, Docker behavior and dated platform evidence.
 - `SETUP_AND_DEPLOYMENT.md` — Main 17-part installation/operations reference: source/wheel, Docker, host bundles, builds, runtime credentials, CLI/MCP, storage/backup/restore, guarded cleanup, upgrades and limits.
 - `DATA_MANAGEMENT.md` — Cleanup dependency matrix, confirmation/dry-run flow, guarded backup/restore and recoverable history/staging boundaries.
@@ -42,7 +42,7 @@ references now enumerate107 executable routes and87 tools; UI has eleven destina
 - `PERFORMANCE.md` — Performance. Maintained documentation; consult implementation status for verification boundaries.
 - `PROMPT_ENGINEERING.md` — Prompt engineering. Maintained documentation; consult implementation status for verification boundaries.
 - `REVIEW.md` — Implementation review, 2026-10-15. Maintained documentation; consult implementation status for verification boundaries.
-- `SAS_PARSING.md` — SAS static rules, PROC SQL modifiers/calculated aliases and parser9 quote-aware %LET expressions/stale-binding invalidation; exact evidence and runtime boundaries.
+- `SAS_PARSING.md` — SAS static rules, PROC SQL modifiers/calculated aliases, and examples of static `%LET` resolution and unresolved runtime macro mutation or generated code.
 - `SECURITY.md` — Security and privacy. Maintained documentation; consult implementation status for verification boundaries.
 - `SQL_PARSING.md` — AST lineage/direct usage and parser9 bounded PostgreSQL SQL procedure/Snowflake literal bodies, original enclosing evidence and explicit runtime/DDL-schema exclusions.
 - `TESTING.md` — Tracked current acceptance matrix distinguishing source, dated Windows/Docker/OmniRoute passes and still-open native/hosted/offline-browser gates; commands and historical counts remain separate.

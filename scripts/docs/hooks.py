@@ -75,7 +75,7 @@ def public_files(root: Path, names: set[str]) -> set[str]:
         path = PurePosixPath(name)
         if (
             path.is_absolute() or ".." in path.parts or "\\" in name or ":" in name
-            or path.suffix not in {".md", ".svg", ".png", ".jpg", ".webp", ".css", ".js"}
+            or path.suffix not in {".md", ".svg", ".png", ".jpg", ".webp", ".mp4", ".css", ".js"}
             or any(part.startswith(".") for part in path.parts)
             or path.name == "KNOWLEDGE.md"
             or any(part in {"prompts", "plans"} for part in path.parts)

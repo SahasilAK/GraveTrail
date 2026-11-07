@@ -1,6 +1,9 @@
 import streamlit as st
 
-from ui.common import context, load_graph, title
+from dataforge.ingestion import Importer, Limits
+from dataforge.services import analyze
+from ui.common import ROOT, context, load_graph, title
+from ui.lineage_navigation import focus_asset
 from ui.presentation import empty_state
 
 title("Overview", "A clear view of your sources, their dependencies and the evidence between them.")
@@ -9,9 +12,38 @@ files, assets, edges = store.files(w), store.assets(w), store.edges(w)
 pending = sum(f["parsing_status"] == "pending" for f in files)
 if not files:
     empty_state("Every dependency has a story. Start with your sources.",
-                "Import your SQL, SAS or CSV project. Trace what feeds each table, follow its impact and keep the original proof.")
+                "Try a sample project or import your own SQL, SAS, CSV or dbt sources.")
+    st.caption("The SQL example adds a synthetic project to this empty workspace, runs local analysis, and opens its lineage graph.")
+    if st.button("Run SQL example", icon=":material/play_arrow:", type="primary"):
+        try:
+            with st.spinner("Importing and analyzing the SQL example…", show_time=True):
+                archive = ROOT / "tests/sample_data/dataforge_sql_lineage_test_project.zip"
+                limits = Limits(max_file_bytes=int(store.setting(w, "max_file_mb", 20)) * 1024 * 1024,
+                                max_files=int(store.setting(w, "max_files", 10000)))
+                with store.lock:
+                    if store.files(w):
+                        st.rerun()
+                    report = Importer(store, w, limits=limits).zip(archive.read_bytes(), {".sql"}, sql_dialect="")
+                    if report.diagnostics or not report.accepted:
+                        raise ValueError("The example import was incomplete. Review the workspace import limits.")
+                    sample_ids = [source["file_id"] for source in store.files(w)]
+                analyze(store, w, sample_ids)
+                asset = next((a for a in store.assets(w) if a["name"] == "pub.all_kpis"), None)
+                if asset is None:
+                    raise ValueError("Analysis did not find pub.all_kpis. Review the analysis diagnostics.")
+        except Exception as exc:
+            st.error(f"Could not open the SQL example: {exc}")
+            if store.files(w):
+                st.page_link("ui/pages/analysis.py", label="Continue in Analysis", icon=":material/play_circle:")
+        else:
+            focus_asset(st.session_state, w, asset["asset_id"], asset["name"])
+            st.session_state[f"graph_direction_{w}"] = "upstream"
+            st.session_state[f"graph_depth_{w}"] = 30
+            st.switch_page("ui/pages/explorer.py")
     st.page_link("ui/pages/builder.py", label="Import sources", icon=":material/upload_file:")
-    st.caption("01 Import sources   /   02 Run analysis   /   03 Follow the evidence")
+    with st.expander("Why GraveTrail?"):
+        st.write("Use GraveTrail when the evidence you have is a folder of scripts. It builds lineage across files and links each relationship to its original statement. Local analysis needs no warehouse connection or AI provider.")
+        st.write("Unity Catalog captures lineage from supported Databricks workloads. SQL parsers such as SQLGlot provide building blocks for code analysis. GraveTrail uses SQLGlot and adds a project workspace for tracing and reviewing the evidence.")
 else:
     with st.container(border=True, key="overview_next"):
         if pending:

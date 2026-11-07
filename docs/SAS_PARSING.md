@@ -85,6 +85,37 @@ conservatively; a later explicit `%LET` can establish a fresh value. Configured 
 inject additional semicolon-delimited statements. Expansion is bounded to 1 MiB per statement.
 This adds static variable expressions, not macro-definition invocation or a SAS interpreter.
 
+### Macro and generated-code examples
+
+```sas
+%let lib=raw;
+%let source=&lib..orders;
+data mart.orders;
+  set &source.;
+run;
+```
+
+This establishes `raw.orders` → `mart.orders` at the table level. The evidence
+keeps the original `set &source.;` text. Column passthrough also needs a known
+input layout. A resolved table name alone gives no list of columns.
+
+```sas
+%let source=raw.orders;
+data _null_;
+  call symputx('source', 'raw.other');
+run;
+data mart.orders;
+  set &source.;
+run;
+```
+
+Here `CALL SYMPUTX` invalidates the static `source` value. The parser flags the
+subsequent macro reference and leaves the input edge unresolved. `CALL EXECUTE`
+also stays unresolved, including when the string contains `PROC SQL` text.
+Standalone SQL has a separate rule for [supported literal dynamic SQL](SQL_PARSING.md#literal-procedure-and-dynamic-sql-bodies).
+For example, the Snowflake dialect can read a single literal `EXECUTE IMMEDIATE`
+statement. SQL assembled at runtime from variables or concatenation remains unresolved.
+
 Library mappings rewrite namespaces, not filesystem permissions. LIBNAME paths are not read.
 One-level SAS datasets use WORK; WORK objects are temporary but remain in internal lineage.
 

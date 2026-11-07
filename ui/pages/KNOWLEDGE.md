@@ -10,7 +10,7 @@ Eleven focused direct scripts registered by app.py using native st.Page/st.navig
 Existing /builder, /explorer, /columns, /tools and /settings routes remain supported.
 
 ## Files
-- `dashboard.py` — Overview: contextual next action, real inventory/evidence counts, hotspots, health and recent work; no automatic analysis.
+- `dashboard.py` — Overview: empty-workspace SQL example imports the bundled archive on request, analyzes locally and opens the full upstream trace for `pub.all_kpis`. Populated workspaces show next actions, counts, hotspots, health and recent work.
 - `builder.py` — Sources Import handles ZIP/folder/allowed host inputs and optional SQL dialect. Inventory shows the effective dialect and supports correcting it before reanalysis, plus exports and lazy source inspection.
 - `analysis.py` — Run / Diagnostics / History; explicit analyze selected/all, force rebuild and evidence validation, scoped completion notice and next actions. Delegates lazy sections to analysis_sections.py.
 - `explorer.py` — Lineage: exact asset/All, graph focus and Back/Forward history; direction-aware graph/tree evidence. Asset-specific paths export JSON/CSV and shared XLSX with reviewable scope, temporary/evidence/excerpt controls, explicit preparation and download without rerun.

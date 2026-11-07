@@ -6,6 +6,7 @@
 - `gravetrail-workspace-dashboard.png` — Actual redesigned Overview, isolated SQL fixture home: 86 scripts, 92 registered assets, 128 dependencies, no diagnostics.
 - `gravetrail-lineage-explorer.png` — Actual redesigned Lineage/Graph with pub.all_kpis and traversal depth30; focused ancestor graph, not the whole workspace inventory.
 - `gravetrail-source-evidence.png` — Actual original analyzed SQL selector, version metadata and numbered statement, with the new grouped navigation.
+- `gravetrail-sql-example.mp4` — Silent Ink Dark recording of the bundled SQL example, its upstream graph and the original evidence for `rpt.finance` → `pub.all_kpis`.
 
 The three workspace screenshots are actual browser captures. Preserve fixture provenance and avoid
 private home data. README/user-guide references and mkdocs.yml public asset allowlist stay

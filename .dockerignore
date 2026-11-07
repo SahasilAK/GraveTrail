@@ -1,4 +1,4 @@
-# Allowlist: runtime data, host environments, tests and credentials never enter context.
+# Allowlist: include the sample ZIP used by the app and exclude the rest of the test tree.
 **
 !Dockerfile
 !.dockerignore
@@ -7,6 +7,9 @@
 !README.md
 !dependency-overrides.txt
 !app.py
+!tests/
+!tests/sample_data/
+!tests/sample_data/dataforge_sql_lineage_test_project.zip
 !scripts/
 !scripts/build/
 !scripts/build/hatch_assets.py

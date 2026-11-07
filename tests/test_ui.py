@@ -23,6 +23,28 @@ def test_empty_dashboard_and_builder(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert any("Import" in b.label for b in app.button)
 
 
+def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ui.common import get_store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=30).run()
+    workspace = app.session_state["workspace"]
+    next(button for button in app.button if button.label == "Run SQL example").click().run()
+
+    assert not app.exception
+    assert app.title[0].value == "Lineage"
+    assert app.text_input(key="asset_search_lineage").value == "pub.all_kpis"
+    assert any("upstream · depth 30" in caption.value for caption in app.caption)
+    assert not app.warning
+    store = get_store(str(tmp_path))
+    assert len(store.files(workspace)) == 86
+    target = next(asset for asset in store.assets(workspace) if asset["name"] == "pub.all_kpis")
+    assert app.session_state[f"asset_choice_lineage_{workspace}"] == target["asset_id"]
+    assert len(store.edges(workspace)) == 128
+    app.switch_page("ui/pages/dashboard.py").run()
+    assert all(button.label != "Run SQL example" for button in app.button)
+
+
 def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that theme picker saves native palette without changing workspace.
 

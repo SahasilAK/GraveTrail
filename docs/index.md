@@ -21,6 +21,28 @@ Local storage. No LLM required. Imported code is never executed.
 
 </div>
 
+## Why GraveTrail?
+
+Start with the scripts you already have. GraveTrail builds a local graph across
+SQL, SAS, and dbt files and links relationships to their original statements.
+Use it to investigate a change or map a legacy pipeline before migration.
+
+| Tool | Where it fits |
+| --- | --- |
+| GraveTrail | Inspect dependencies and source evidence across an imported project without running its code. |
+| Databricks Unity Catalog | Browse governed assets and runtime lineage captured from supported workloads. [Databricks lineage documentation](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage) |
+| SQLGlot | Embed SQL parsing, transpilation, or lineage functions in your own tools. GraveTrail uses SQLGlot for SQL parsing. [SQLGlot documentation](https://sqlglot.com/) |
+
+## Watch SQL turn into lineage
+
+The recording runs the bundled SQL example, opens `pub.all_kpis`, and inspects
+the SQL behind a relationship. Follow the same steps in the [quick start](getting-started/quick-start.md).
+
+<video controls playsinline preload="none" poster="assets/images/gravetrail-lineage-explorer.png" style="width: 100%" aria-label="GraveTrail SQL example, lineage graph, and source evidence">
+  <source src="assets/images/gravetrail-sql-example.mp4" type="video/mp4">
+  <a href="assets/images/gravetrail-sql-example.mp4">Download the SQL example recording</a>
+</video>
+
 ## dbt projects, models and macro impact
 
 Import multiple models, property YAML, sources, seeds, snapshots and supplied package
@@ -59,6 +81,14 @@ complete or universally correct lineage. Review evidence, omissions and unresolv
 coverage before relying on the results.
 
 [Compare the analysis options](AI_ANALYSIS.md){ .md-button }
+
+[How confidence and coverage work](TRANSFORMATION_LINEAGE.md#how-confidence-and-coverage-work)
+
+## Trace legacy SAS before a migration
+
+Follow DATA steps, PROC SQL, and supported procedures across files and WORK
+datasets. Static `%LET` values can resolve dataset names. Runtime-generated code
+and unknown input layouts surface as coverage gaps. [See SAS macro and generated-code examples](SAS_PARSING.md#macro-and-generated-code-examples).
 
 ## Begin with the question in front of you
 
@@ -103,7 +133,7 @@ metadata and bounded responses. Optional AI stays behind your privacy controls.
 ## A useful first run, on your machine.
 
 Install from source with Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Try an included SQL or SAS project, then trace `pub.all_kpis` through seven dependency layers.
+Choose **Run SQL example** on the empty **Overview** page to open `pub.all_kpis` in Lineage.
 
 [Follow the walkthrough](getting-started/quick-start.md)
 

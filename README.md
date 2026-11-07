@@ -133,17 +133,13 @@ variables, and data homes remain supported; see
 
 ## Try a real project
 
-1. Open **Sources** and upload either project ZIP from [`tests/sample_data/`](tests/sample_data/).
-2. Select **only `.sql`** for the SQL ZIP or **only `.sas`** for the SAS ZIP, then import.
-3. Open **Analysis → Run** and select **Analyze all files**. No provider configuration is needed.
-4. In **Lineage**, search `pub.all_kpis`, select the exact asset, and explore
-   upstream with **Traversal options → Traversal depth** set to **30**. Trace seven ETL layers back to all **16 source tables**.
-5. Select a graph edge to inspect source evidence. Explore **Columns** or download
-   a CSV/JSON report, original source bundle, or offline interactive HTML graph.
+Open **Overview** in an empty workspace and choose **Run SQL example**. GraveTrail
+imports the bundled SQL project, analyzes it locally, and opens `pub.all_kpis` in
+**Lineage**. Select a graph edge to inspect the original SQL or follow the upstream
+trace through seven layers to its 16 source tables.
 
-The fixture expectations are 85 persistent tables and 128 logical lineage edges; SAS
-also includes 16 temporary WORK datasets. See the [walkthrough](docs/getting-started/quick-start.md)
-and [fixture verification limits](docs/TESTING.md).
+To import a sample manually, use the SQL, SAS, or dbt ZIPs in
+[`tests/sample_data/`](tests/sample_data/). Follow the [quick start](docs/getting-started/quick-start.md).
 
 ## Find your guide
 

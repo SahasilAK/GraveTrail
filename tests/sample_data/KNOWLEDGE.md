@@ -7,7 +7,7 @@ Use these sample project archives for future application import and lineage test
 
 ## Files
 
-- `dataforge_sql_lineage_test_project.zip` — SQL sample project ZIP.
+- `dataforge_sql_lineage_test_project.zip` — SQL sample project ZIP and the source for Overview's **Run SQL example**. Wheel, Docker and native builds reuse this archive.
 - `dataforge_sas_lineage_test_project.zip` — SAS sample project ZIP.
 
 ## Expected structure (user-provided)

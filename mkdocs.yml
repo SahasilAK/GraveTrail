@@ -43,6 +43,7 @@ extra:
     - assets/images/gravetrail-workspace-dashboard.png
     - assets/images/gravetrail-lineage-explorer.png
     - assets/images/gravetrail-source-evidence.png
+    - assets/images/gravetrail-sql-example.mp4
 markdown_extensions:
   - admonition
   - attr_list

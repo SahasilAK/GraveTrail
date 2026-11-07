@@ -65,7 +65,8 @@ state_messages = {
 }
 with st.container(horizontal=True):
     st.metric("Transformation steps", len(steps), border=True)
-    st.metric("Coverage boundaries", len(coverage), border=True)
+    st.metric("Coverage boundaries", len(coverage), border=True,
+              help="Counts reasons a static trace stops or stays uncertain. Check Coverage details for each reason.")
     st.metric("Trace state", trace["state"].replace("_", " ").capitalize(), border=True)
 if trace["state"] in state_messages:
     st.info(state_messages[trace["state"]])
