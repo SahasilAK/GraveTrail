@@ -125,7 +125,7 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> N
     assert len(inferred) == 1 and inferred[0]["status"] == "inferred"
     assert inferred[0]["confidence"] <= .8
     store.execute("UPDATE llm_records SET created_at=current_timestamp - INTERVAL '31 days' WHERE record_id=?", [result["record_id"]])
-    assist(store, w, focused_profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
+    review = assist(store, w, focused_profile(provider="Ollama", base_url="http://localhost:11434", model="manual"), fid, 1, 1, transport=transport)
     analyze(store, w)
     assert len([e for e in store.edges(w) if e["method"] == "llm"]) == 1
     set_source_dialect(store, w, fid, 'databricks')
