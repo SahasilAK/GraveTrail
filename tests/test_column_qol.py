@@ -29,6 +29,7 @@ def test_column_lists_and_comma_filter_use_complete_direct_report(tmp_path: Path
     app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
     app.switch_page("ui/pages/columns.py").run()
     next(s for s in app.selectbox if s.label == "Choose an exact asset").set_value(asset).run()
+    next(s for s in app.segmented_control if s.label == "Columns view").set_value("Direct references").run()
     assert not app.exception
     assert any("Distinct used columns" in s.value for s in app.subheader)
     assert any(p.label == "Unused columns (1)" for p in app.expander)

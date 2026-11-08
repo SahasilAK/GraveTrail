@@ -74,6 +74,6 @@ Explicit slider changes become run-only output overrides, respecting real model 
 
 `analysis_reasoning.py` — 500ms scoped reasoning fragment, exact absence caption and native browser details/300px CCv2 scroll body; textContent only, per-attempt browser expansion/scroll memory and Jump to latest. `analysis_ai` distinguishes durable validated/reused parts from received/handled responses and exposes explicit Start fresh (new run). Inspection remains lazy and shows per-request outcomes.
 
-- `column_graph.py` — Pannable SVG scope cards with column rows, dependency links, and scene-keyed selections.
-- `column_lineage.py` — Shared trace controls, graph, logic/file inspector and exports.
+- `column_graph.py` — Draggable SVG scope cards, row links, batched text measurements, and in-place selection updates for the same trace.
+- `column_lineage.py` — Shared trace controls, cached graph scenes, and lazy evidence, tables, and exports.
 - `column_references.py` — Direct usage and coverage summaries used by Columns.

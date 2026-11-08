@@ -189,6 +189,7 @@ def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp
     app.text_input(key="asset_search_columns").set_value("raw.a").run()
     choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     choice.select(choice.options[0]).run()
+    next(s for s in app.segmented_control if s.label == "Columns view").set_value("Direct references").run()
     assert not app.exception
     assert app.metric[0].value == "2"
     usages = app.dataframe[0].value

@@ -59,7 +59,7 @@ GRAPH_CSS = """
 .df-graph :is(button,input):focus-visible{outline:2px solid var(--st-primary-color,#2869c7);outline-offset:3px}
 .df-graph svg{display:block;width:100%;height:clamp(420px,60vh,560px);border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;user-select:none;cursor:grab;background:var(--st-secondary-background-color,#f5f7fa)}
 .df-graph svg.panning,.df-graph svg.panning *{cursor:grabbing}
-.df-graph .node{cursor:pointer}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
+.df-graph .node{cursor:grab}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
 .df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;stroke-linecap:round;fill:none}
 .df-graph .chosen{stroke:#d67d0d!important;stroke-width:4!important}
 .df-graph .edge.chosen{stroke-width:var(--df-selected-edge-width,4)!important}
@@ -95,7 +95,7 @@ GRAPH_CSS = """
 
 
 SVG_PAN_JS = r"""
-function bindSvgPan(svg, stage, getBox, setBox) {
+function bindSvgPan(svg, stage, getBox, setBox, startMove) {
  const listeners=new AbortController(), options={signal:listeners.signal};
  let drag=null, frame=null, suppressClick=false;
  const resetPreview=()=>{
@@ -108,7 +108,8 @@ function bindSvgPan(svg, stage, getBox, setBox) {
    const matrix=svg.getScreenCTM()?.inverse();
    if(!matrix)return;
    suppressClick=false;
-   drag={id:e.pointerId,x:e.clientX,y:e.clientY,matrix,moved:false,dx:0,dy:0};
+   const move=e.altKey?null:startMove?.(e.target);
+   drag={id:e.pointerId,x:e.clientX,y:e.clientY,matrix,move,moved:false,dx:0,dy:0};
    // Keep a simple click on its original element, even with pointer capture.
    e.target.setPointerCapture(e.pointerId);
  },options);
@@ -125,16 +126,20 @@ function bindSvgPan(svg, stage, getBox, setBox) {
    // Move the scene without invalidating the SVG viewport on every pointer event.
    if(frame===null)frame=requestAnimationFrame(()=>{
      frame=null;
-     stage.style.transform=`translate(${drag.dx}px,${drag.dy}px)`;
+     if(drag.move)drag.move(drag.dx,drag.dy);
+     else stage.style.transform=`translate(${drag.dx}px,${drag.dy}px)`;
    });
  },options);
  const finish=e=>{
    if(e.pointerId!==drag?.id)return;
    suppressClick=drag.moved;
    if(drag.moved){
-     const [x,y,width,height]=getBox();
      resetPreview();
-     setBox([x-drag.dx,y-drag.dy,width,height]);
+     if(drag.move)drag.move(e.type==='pointercancel'?0:drag.dx,e.type==='pointercancel'?0:drag.dy);
+     else{
+       const [x,y,width,height]=getBox();
+       setBox([x-drag.dx,y-drag.dy,width,height]);
+     }
    }
    drag=null;
  };
@@ -143,6 +148,25 @@ function bindSvgPan(svg, stage, getBox, setBox) {
    if(suppressClick&&e.detail){e.preventDefault();e.stopImmediatePropagation()}
  },{...options,capture:true});
  return ()=>{listeners.abort();if(drag?.moved)resetPreview();drag=null};
+}
+
+function movedCardLink(a,b,y1,y2,offset=0) {
+ const direction=a.x+a.width<=b.x?1:b.x+b.width<=a.x?-1:0;
+ const x1=direction<0?a.x:a.x+a.width, x2=direction>0?b.x:b.x+b.width;
+ const middle=direction?(x1+x2)/2:Math.max(x1,x2)+46+offset;
+ const end=!direction&&x1===x2&&y1===y2?y2+5:y2;
+ const lift=direction?offset:0;
+ return `M ${x1} ${y1} C ${middle} ${y1-lift} ${middle} ${end-lift} ${x2} ${end}`;
+}
+
+function fitMovedCards(bounds, cards) {
+ let [left,top,width,height]=bounds;
+ let right=left+width,bottom=top+height;
+ for(const card of cards){
+   left=Math.min(left,card.x-40);top=Math.min(top,card.y-40);
+   right=Math.max(right,card.x+card.width+100);bottom=Math.max(bottom,card.y+card.height+40);
+ }
+ return [left,top,right-left,bottom-top];
 }
 """
 
@@ -172,49 +196,52 @@ function mountGraph(root, data, notify, navigate) {
  stage.replaceChildren();
  const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
  const nodeLabel=n=>n.job_id&&n.job_id!=='workspace'?n.name+' [job: '+n.job_id+']':n.name;
- const fitted=[...data.bounds];
- let box=[...fitted];
- const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
- const expanded=root._expandedColumns??=new Set(), frames=new Map(), edgePaths=[];
+ let box=root._graphBox||[...data.bounds];
+ const view=()=>{root._graphBox=box;svg.setAttribute('viewBox',box.join(' '))};view();
+ const expanded=root._expandedColumns??=new Set(), moves=root._cardMoves??=new Map();
+ const frames=new Map(), edgePaths=[], incident=new Map(), columnPaths=new Map();
  const highlighted=root._graphHighlight??={nodes:new Set(),edges:new Set()};
  let columnLayer, activeLinks=[];
+ const place=(id,frame)=>{
+   [frame.x,frame.y]=moves.get(id)||[frame.baseX,frame.baseY];
+   frame.element.setAttribute('transform',`translate(${frame.x},${frame.y})`);
+ };
+ const reroute=i=>{
+   const edge=data.edges[i], a=frames.get(edge.source), b=frames.get(edge.target);
+   const p=edgePaths[i], y1=a.y+24, y2=b.y+24;
+   const moved=moves.has(edge.source)||moves.has(edge.target);
+   if(a===b)p.setAttribute('transform',`translate(${a.x-a.baseX},${a.y-nodes.get(edge.source).y})`);
+   else if(moved)p.setAttribute('d',movedCardLink(a,b,y1,y2));
+   else{
+     const x1=a.x+a.width,x2=b.x;
+     p.setAttribute('d',`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`);
+   }
+   for(const {link,path} of columnPaths.get(i)||[]){
+     path.setAttribute('d',movedCardLink(a,b,a.y+a.rows.get(link.source),b.y+b.rows.get(link.target)));
+   }
+ };
  const reflow=()=>{
-   const offsets=new Map(), positions=new Map();
-   let bottom=data.bounds[3];
+   const offsets=new Map();
    for(const n of data.nodes){
      const frame=frames.get(n.asset_id), offset=offsets.get(n.x)||0;
-     const y=n.y+offset;
-     frame.element.setAttribute('transform',`translate(${n.x},${y})`);
-     positions.set(n.asset_id,y);
+     frame.baseY=n.y+offset;
+     frame.height=48+frame.extra;
+     place(n.asset_id,frame);
      offsets.set(n.x,offset+frame.extra);
-     bottom=Math.max(bottom,y+180+frame.extra);
    }
-   fitted[3]=bottom;
-   data.edges.forEach((edge,i)=>{
-     const a=nodes.get(edge.source),b=nodes.get(edge.target),p=edgePaths[i];
-     const y1=positions.get(edge.source)+24,y2=positions.get(edge.target)+24;
-     if(a.asset_id===b.asset_id){
-       p.setAttribute('transform',`translate(0,${y1-a.y-24})`);
-     }else{
-       const x1=a.x+a.width,x2=b.x;
-       p.setAttribute('d',`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`);
-     }
-   });
    if(columnLayer){
      columnLayer.replaceChildren();
+     columnPaths.clear();
      for(const {edge, link, index} of activeLinks){
        const a=nodes.get(edge.source), b=nodes.get(edge.target);
-       const y1=positions.get(edge.source)+frames.get(edge.source).rows.get(link.source);
-       const y2=positions.get(edge.target)+frames.get(edge.target).rows.get(link.target);
-       const x1=a.x+a.width, x2=b.x>a.x?b.x:b.x+b.width;
-       const bend=x2>x1?(x1+x2)/2:Math.max(x1,x2)+46;
-       const end=y1===y2&&x1===x2?y2+5:y2;
-       const path=make('path',{d:`M ${x1} ${y1} C ${bend} ${y1} ${bend} ${end} ${x2} ${end}`,
-                              class:'column-link','data-column-edge':index,'marker-end':'url(#df-column-arrow)'},columnLayer);
+       const path=make('path',{class:'column-link','data-column-edge':index,'marker-end':'url(#df-column-arrow)'},columnLayer);
+       if(!columnPaths.has(index))columnPaths.set(index,[]);
+       columnPaths.get(index).push({link,path});
        if(highlighted.edges.has(index))path.classList.add('chosen');
        make('title',{},path).textContent=`${a.name}.${link.source} → ${b.name}.${link.target}`;
      }
    }
+   data.edges.forEach((_,i)=>reroute(i));
  };
  const refreshColumns=()=>{
    const required=new Map();
@@ -259,6 +286,10 @@ function mountGraph(root, data, notify, navigate) {
    const d=edge.path;
    const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':nodeLabel(a)+' to '+nodeLabel(b)},stage);
    edgePaths.push(p);
+   for(const asset of [edge.source,edge.target]){
+     if(!incident.has(asset))incident.set(asset,new Set());
+     incident.get(asset).add(i);
+   }
    p.style.strokeWidth=edgeWidth;
    const show=()=>{highlight(new Set([edge.source,edge.target]),[i]);details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
    p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show()}};
@@ -266,10 +297,10 @@ function mountGraph(root, data, notify, navigate) {
  if(data.column_links)columnLayer=make('g',{class:'column-links'},stage);
  data.nodes.forEach(n=>{
    const element=make('g',{transform:`translate(${n.x},${n.y})`},stage);
-   const frame={element,extra:0};
+   const frame={element,extra:0,baseX:n.x,baseY:n.y,x:n.x,y:n.y,width:n.width,height:48};
    frames.set(n.asset_id,frame);
    const columns=data.columns?.[n.asset_id], controlWidth=columns?82:52;
-   const g=make('g',{'class':'node',tabindex:0,role:'button','aria-label':nodeLabel(n)},element);
+   const g=make('g',{'class':'node','data-card-handle':n.asset_id,tabindex:0,role:'button','aria-label':nodeLabel(n)},element);
    const role=theme&&(n.kind==='unresolved'?theme.selected:n.source?theme.source:n.target?theme.target:theme.intermediate);
    const semantic=theme&&appearance.graph_palette!=='neutral';
    const color=theme?(semantic?`color-mix(in srgb, ${role} 25%, ${theme.graph})`:theme.surface):appearance.graph_palette==='neutral'?'var(--node-neutral)':n.kind==='unresolved'?'var(--node-unresolved)':n.temporary?'var(--node-temporary)':n.source?'var(--node-source)':'var(--node-table)';
@@ -337,7 +368,7 @@ function mountGraph(root, data, notify, navigate) {
      toggle.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle.onclick()}};
    }
  });
- if(expanded.size){refreshColumns();box=[...fitted];view()}
+ if(expanded.size||moves.size)refreshColumns();
  if(highlighted.nodes.size||highlighted.edges.size)applyHighlight();
  const fullscreen=root.querySelector('.fullscreen');
  const doc=container.ownerDocument;
@@ -347,18 +378,28 @@ function mountGraph(root, data, notify, navigate) {
    catch(_){status.textContent='Fullscreen is unavailable in this browser.'}
  };
  if(doc){doc.addEventListener('fullscreenchange',syncFullscreen);syncFullscreen()}
- root.querySelector('.fit').onclick=()=>{box=[...fitted];view()};
+ root.querySelector('.fit').onclick=()=>{box=fitMovedCards(data.bounds,frames.values());view()};
  const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
  root.querySelector('.plus').onclick=()=>zoom(.8);root.querySelector('.minus').onclick=()=>zoom(1.25);
  svg.onwheel=e=>{e.preventDefault();zoom(e.deltaY>0?1.1:.9)};
- const stopPan=bindSvgPan(svg,stage,()=>box,next=>{box=next;view()});
+ const stopPan=bindSvgPan(svg,stage,()=>box,next=>{box=next;view()},target=>{
+   const id=target.closest('[data-card-handle]')?.dataset.cardHandle;
+   if(!id)return;
+   const frame=frames.get(id), {x,y}=frame;
+   return (dx,dy)=>{
+     if(x+dx===frame.baseX&&y+dy===frame.baseY)moves.delete(id);
+     else moves.set(id,[x+dx,y+dy]);
+     place(id,frame);
+     incident.get(id)?.forEach(reroute);
+   };
+ });
  root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
  root._graphCleanup=()=>{stopPan();clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
  return root._graphCleanup;
 }
 """
 
-GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag the graph to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs>
+GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Drag a header to move a card. Drag the background or Alt-drag to pan. Click for evidence or double-click (Alt+Enter) to focus.</span></div><svg role="group" aria-label="Directed lineage graph"><defs>
 <marker id="df-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M 3 2 L 9.5 6 L 3 10" stroke-width="1.6"/></marker>
 <marker id="df-column-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M 2 1.5 L 6.5 4 L 2 6.5" stroke-width="1.25"/></marker>
 </defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
