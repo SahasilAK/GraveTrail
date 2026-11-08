@@ -18,6 +18,9 @@ def test_empty_dashboard_and_builder(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert not app.exception
     assert app.title[0].value == "Overview"
     assert any("GraveTrail" in header.value for header in app.sidebar.header)
+    assert {"Open Lineage Builder", "Import sources"} <= {link.value for link in app.page_link}
+    assert any(button.label == "Run SQL example" for button in app.button)
+    assert next(link for link in app.link_button if link.value == "View on GitHub").proto.url == "https://github.com/SahasilAK/GraveTrail"
     app.switch_page("ui/pages/builder.py").run()
     assert not app.exception
     assert any("Import" in b.label for b in app.button)
@@ -43,6 +46,10 @@ def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatc
     assert len(store.edges(workspace)) == 128
     app.switch_page("ui/pages/dashboard.py").run()
     assert all(button.label != "Run SQL example" for button in app.button)
+    assert any(header.value == "Explore your workspace lineage" for header in app.subheader)
+    assert {"Explore lineage", "Open Lineage Builder", "Import sources", "Open Columns"} <= {
+        link.value for link in app.page_link}
+    assert {metric.label: metric.value for metric in app.metric}["Dependencies"] == "128"
 
 
 def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -24,14 +24,33 @@
 .st-key-app_workspace :is(button,a,input,textarea,[role="combobox"]):focus-visible,
 .st-key-sidebar_navigation a:focus-visible { outline: 2px solid var(--gt-accent); outline-offset: 3px; }
 .st-key-empty_state { padding: 1.5rem; background: color-mix(in srgb, var(--gt-surface) 55%, var(--gt-bg)); }
-.st-key-overview_next { background: color-mix(in srgb, var(--gt-accent) 7%, var(--gt-bg)); }
-.st-key-overview_next h3 { font-size: 1.45rem; }
+.st-key-overview_hero {
+  padding: 1.35rem; border-radius: 1.15rem;
+  background: radial-gradient(ellipse at 85% 35%, color-mix(in srgb, var(--gt-accent, #ed6265) 14%, transparent), transparent 62%),
+    var(--gt-surface, color-mix(in srgb, currentColor 3%, transparent));
+}
+.st-key-overview_hero h3 { font-size: clamp(1.6rem, 3vw, 2.5rem); line-height: 1.15; letter-spacing: -.04em; }
+.st-key-overview_actions [data-testid="stColumn"] {
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--gt-surface, currentColor) 4%, transparent);
+}
+.st-key-overview_actions [data-testid="stPageLink"] a,
+.st-key-overview_hero [data-testid="stPageLink"] a {
+  padding-inline: .7rem; border-radius: .55rem;
+  background: color-mix(in srgb, var(--gt-accent, #ed6265) 12%, transparent);
+}
+.st-key-overview_actions [data-testid="stPageLink"] a:hover,
+.st-key-overview_hero [data-testid="stPageLink"] a:hover {
+  background: color-mix(in srgb, var(--gt-accent, #ed6265) 21%, transparent);
+}
+.st-key-overview_footer { margin-top: .5rem; border-top: 1px solid var(--gt-border, color-mix(in srgb, currentColor 18%, transparent)); padding-top: .55rem; }
 .st-key-analysis_run, .st-key-source_import, .st-key-preferences_body { max-width: 64rem; }
-.st-key-analysis_run, .st-key-source_import, .st-key-overview_next { padding: .5rem; }
+.st-key-analysis_run, .st-key-source_import { padding: .5rem; }
 .st-key-graph_surface { border: 1px solid var(--gt-border); border-radius: .85rem; overflow: hidden; }
 @media (max-width: 48rem) {
   .st-key-page_heading h1 { font-size: 2rem; }
   .st-key-empty_state { padding: .65rem; }
+  .st-key-overview_hero { padding: .85rem; }
   [class*="st-key-asset_query_"], [class*="st-key-asset_select_"] { width: 100% !important; }
 }
 @media (prefers-reduced-motion: reduce) {

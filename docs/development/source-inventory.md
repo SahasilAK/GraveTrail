@@ -218,7 +218,7 @@ python scripts/docs/inventory.py --check
 | [`ui/pages/builder.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/builder.py) | No module docstring; inspect the linked source. | `SQL_SOURCE_TYPES` |
 | [`ui/pages/columns.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/columns.py) | Direct references and interactive column lineage. | — |
 | [`ui/pages/connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/connections.py) | No module docstring; inspect the linked source. | — |
-| [`ui/pages/dashboard.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/dashboard.py) | No module docstring; inspect the linked source. | — |
+| [`ui/pages/dashboard.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/dashboard.py) | Workspace launch cards and an overview of current lineage evidence. | — |
 | [`ui/pages/explorer.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/explorer.py) | No module docstring; inspect the linked source. | — |
 | `ui/pages/lineage_builder.py` **new** | Create schema catalogs and author column-level lineage. | `commit`, `table_form` |
 | [`ui/pages/management.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/management.py) | No module docstring; inspect the linked source. | — |
