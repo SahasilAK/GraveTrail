@@ -8,6 +8,43 @@ from dataforge.ingestion import Importer
 from dataforge.services import analyze
 
 
+def test_table_graph_lists_only_final_columns(tmp_path):
+    from dataforge.graph import LineageGraph
+    from dataforge.store import Store
+    from dataforge.transformations import final_column_names, table_column_links
+
+    store = Store(tmp_path)
+    try:
+        w = store.create_workspace("Final columns")
+        Importer(store, w).files([("schema.sql", b"""
+            CREATE TABLE src (a INT, unused INT, id INT);
+            CREATE TABLE mart AS WITH prep AS (SELECT a AS staged FROM src WHERE id > 0)
+                SELECT staged + 1 AS result FROM prep;
+            CREATE TEMP TABLE stage AS SELECT result AS value FROM mart;
+            CREATE TABLE report AS SELECT value AS total FROM stage;
+            CREATE VIEW probe AS SELECT x FROM outside;
+        """)], {".sql"})
+        analyze(store, w)
+        assets = {a["asset_id"]: a for a in store.assets(w)}
+        by_id = final_column_names(store, w, assets)
+        by_name = {a["name"]: by_id[aid] for aid, a in assets.items()}
+        assert by_name["src"] == {"names": ["a", "unused", "id"], "declared": True}
+        assert by_name["mart"] == {"names": ["result"], "declared": False}
+        assert by_name["outside"] == {"names": [], "declared": False}
+        graph = LineageGraph(list(assets.values()), store.edges(w)).simplified()
+        columns = final_column_names(store, w, graph.nodes)
+        links = {(assets[s]["name"], assets[t]["name"]): pairs
+                 for (s, t), pairs in zip(graph.graph.edges, table_column_links(store, w, graph, columns))}
+        assert links["src", "mart"] == [
+            {"source": "a", "target": "result", "value": True},
+            {"source": "id", "target": "result", "value": False},
+        ]
+        assert links["mart", "report"] == [{"source": "result", "target": "total", "value": True}]
+        assert ("src", "report") not in links
+    finally:
+        store.close()
+
+
 def test_selection_rejects_stale_and_unknown_ids():
     from ui.column_graph import resolve_selection
     scene = {"trace_key": "new", "nodes": [{"id": "derivation:d", "kind": "transformation"}],

@@ -21,7 +21,7 @@ def resolve_selection(scene: dict[str, Any], event: dict[str, Any] | None) -> di
 _HTML = '''<div class="graph"><div class="toolbar"><button class="fit">Fit graph</button>
 <button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button>
 <input class="find" aria-label="Find a column" placeholder="Find a column"><span>Drag the graph to pan</span></div>
-<svg aria-label="Column lineage graph" role="group"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/></marker></defs><g class="stage"></g></svg>
+<svg aria-label="Column lineage graph" role="group"><defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M 2 1.5 L 6.5 4 L 2 6.5" stroke-width="1.25"/></marker></defs><g class="stage"></g></svg>
 <div class="legend">Solid lines carry values. Dashed lines show context such as filters, joins, or ordering. Select a card header, column, or link for logic.</div></div>'''
 _CSS = '''
 .graph{font:14px sans-serif;color:var(--st-text-color);background:var(--st-background-color);border:1px solid var(--st-border-color);border-radius:8px}
@@ -29,13 +29,15 @@ _CSS = '''
 button,input{font:inherit;color:inherit;background:var(--st-secondary-background-color);border:1px solid var(--st-border-color);border-radius:5px;padding:6px}
 svg{display:block;width:100%;height:clamp(480px,60vh,620px);touch-action:none;user-select:none;cursor:grab}
 svg.panning,svg.panning *{cursor:grabbing}
-.edge{stroke:var(--st-text-color);stroke-width:1.5;fill:none;opacity:.65;cursor:pointer}
+.edge{stroke:var(--st-text-color);stroke-width:1.25;stroke-linecap:round;fill:none;opacity:.65;cursor:pointer}
+marker path{fill:none;stroke:var(--st-text-color);stroke:context-stroke;stroke-linecap:round;stroke-linejoin:round}
 .card-outline{fill:var(--st-background-color);stroke:var(--st-border-color)}
 .item{cursor:pointer}
 .header rect{fill:var(--st-secondary-background-color);stroke:var(--st-border-color)}
 .row rect{fill:transparent;stroke:var(--st-border-color)}
 .item:focus{outline:none}
-.item:is(:focus,.chosen,.match,:hover) rect,.edge:is(:focus,.chosen,:hover){stroke:var(--st-primary-color);stroke-width:2;opacity:1}
+.item:is(:focus,.chosen,.match,:hover) rect{stroke:var(--st-primary-color);stroke-width:2}
+.edge:is(:focus,.chosen,:hover){stroke:var(--st-primary-color);stroke-width:1.85;opacity:1}
 text{fill:var(--st-text-color);font-size:13px}
 .header .name{font-weight:650}.scope{font-size:11px;opacity:.75}
 .legend{padding:10px}
@@ -52,7 +54,7 @@ _JS = SVG_PAN_JS + r'''export default function(c){
  for(const e of d.links){
    const label=rowLabels.get(e.source)+' → '+rowLabels.get(e.target)+' · '+e.roles.join(', ')+(e.context_only?' (context only)':'');
    const p=make('path',{d:e.path,class:'edge','marker-end':'url(#arrow)',tabindex:0,role:'button','aria-label':label},stage);
-   if(e.context_only||!e.roles.includes('value'))p.setAttribute('stroke-dasharray','6 4');
+   if(e.context_only||!e.roles.includes('value'))p.setAttribute('stroke-dasharray','4 5');
    bind(p,'edge',e.id);make('title',{},p).textContent=label;
    if(c.data.selection?.id===e.id)p.classList.add('chosen');
  }

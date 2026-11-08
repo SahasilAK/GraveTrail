@@ -54,7 +54,7 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 
 ## Reports, rendering and maintenance
 - `graph.py` — LineageGraph traversal, missing-endpoint evidence, temporary contraction and bounded source-to-target paths with explicit incomplete coverage.
-- `exports.py`, `lineage_tree.py` — Escaped live and offline graphs, shared SVG panning, lazy trees, and exact historical evidence.
+- `exports.py`, `lineage_tree.py` — Live and offline graphs, SVG panning, expandable final table columns with links to neighboring rows, lazy trees, and exact historical evidence.
 - `excel_exports.py` — Streaming literal-text XLSX paths/evidence with bounded time/text/bytes and cleanup on failure.
 - `graph_images.py`, `image_worker.py`, `graph_image_service.py` — Inert SVG, bounded resvg workers and committed filtered graph snapshots with revision/coverage/safe filenames.
 - `artifacts.py` — Selection/format allowlists, original-version artifacts and checked scoped base64 reads; source permission rechecked at retrieval.

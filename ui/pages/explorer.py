@@ -7,6 +7,7 @@ from dataforge.excel_exports import XLSX_MIME
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
 from dataforge.graph_images import png_available
 from dataforge.services import export_graph_image, export_lineage_excel
+from dataforge.transformations import final_column_names, table_column_links
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
 from ui.dbt_sections import render_resources
 from ui.lineage_navigation import ALL_ASSETS, focus_asset, move_history, remember_view
@@ -90,10 +91,13 @@ if asset:
                 focus_asset(st.session_state, w, node, graph.nodes[node]["name"])
 
         with st.container(key="graph_surface"):
-            result = graph_view(focused, graph_key, appearance, on_navigate=navigate_graph)
+            columns = final_column_names(store, w, focused.nodes)
+            result = graph_view(focused, graph_key, appearance, on_navigate=navigate_graph,
+                                columns=columns, column_links=table_column_links(store, w, focused, columns))
         selection = result.selection
         scope = "All assets" if all_assets else f"{direction} · depth {depth}"
         st.caption(f"{len(focused.nodes):,} assets in view · {len(focused.graph.edges):,} relationships · {scope}")
+        st.caption("Expand a table to see dashed links for column value flow.")
     rows = focused.lineage_rows()
     source_scope = "All assets" if all_assets else evidence_direction.capitalize() + " dependencies"
     tree_focus = focused if all_assets else view_graph.focus(asset, evidence_direction, depth, limit)

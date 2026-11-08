@@ -134,10 +134,11 @@ def test_graph_double_click_cancels_selection_and_copy_keeps_full_name() -> None
   container.requestFullscreen=async()=>{active=true};
   mountGraph(root,{nodes:[{asset_id:'a',name:'catalog.schema.a_very_long_table_name',x:20,y:20,width:215,kind:'table'}],edges:[],bounds:[-80,-80,780,360]},
     v=>selected.push(v),v=>navigated.push(v));
-  const node=elements['.stage'].children.find(e=>e.attrs.class==='node');
+  const frame=elements['.stage'].children[0];
+  const node=frame.children.find(e=>e.attrs.class==='node');
   node.onclick({detail:1});
   node.ondblclick({preventDefault(){}});
-  const copy=elements['.stage'].children.find(e=>e.attrs.class==='copy-node');
+  const copy=frame.children.find(e=>e.attrs.class==='copy-node');
   await copy.onclick({stopPropagation(){}});
   await elements['.fullscreen'].onclick();
   if(elements['.fullscreen'].textContent!=='Exit fullscreen')throw Error('Fullscreen label did not update in a shadow root');

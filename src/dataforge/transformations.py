@@ -504,6 +504,102 @@ def column_catalog(store: Store, workspace: str, asset_id: str, limit: int=500) 
             ORDER BY scope,column_key,version,column_id LIMIT ?''', [workspace, asset_id, limit])
 
 
+def final_column_names(store: Store, workspace: str, assets) -> dict[str, dict[str, Any]]:
+    """List declared schemas or known physical outputs for the visible lineage assets."""
+    columns, inferred = {}, []
+    for asset_id, asset in assets.items():
+        metadata = json.loads(asset.get('metadata') or '{}')
+        declared = metadata.get('schema_status') == 'declared'
+        columns[asset_id] = {'names': [column['name'] for column in metadata['columns']] if declared else [],
+                             'declared': declared}
+        if not declared:
+            inferred.append(asset_id)
+    if inferred:
+        rows = store.rows("""SELECT DISTINCT r.asset_id, r.column_name
+            FROM column_references r JOIN column_derivations d
+              ON d.workspace_id=r.workspace_id AND d.target_column_id=r.column_id
+            WHERE r.workspace_id=? AND r.asset_id IN (SELECT unnest(?))
+              AND r.scope='' AND r.version='' AND r.column_name NOT IN ('', '*')
+            ORDER BY r.asset_id, lower(r.column_name), r.column_name""", [workspace, inferred])
+        for row in rows:
+            columns[row['asset_id']]['names'].append(row['column_name'])
+    return columns
+
+
+def table_column_links(store: Store, workspace: str, graph, columns) -> list[list[dict[str, Any]]]:
+    """Project published dependencies onto visible table edges, folding scoped steps."""
+    edges = list(graph.graph.edges(data=True))
+    operation_ids = {e['operation_id'] for _, _, edge in edges for e in edge['evidence']}
+    if not operation_ids:
+        return [[] for _ in edges]
+    rows = store.rows("""SELECT d.operation_id, t.column_id AS target_id, t.asset_id AS target_asset,
+            t.column_name AS target_name, t.column_key AS target_key, t.scope<>'' OR t.version<>'' AS target_scoped,
+            s.column_id AS source_id, s.asset_id AS source_asset, s.column_name AS source_name, s.column_key AS source_key,
+            s.scope<>'' OR s.version<>'' AS source_scoped, i.role
+        FROM column_derivations d JOIN column_dependencies i USING (workspace_id, derivation_id)
+        JOIN column_references t ON t.workspace_id=d.workspace_id AND t.column_id=d.target_column_id
+        JOIN column_references s ON s.workspace_id=i.workspace_id AND s.column_id=i.source_column_id
+        WHERE d.workspace_id=? AND d.status<>'unresolved' AND d.operation_id IN (SELECT unnest(?))""",
+        [workspace, sorted(operation_ids)])
+    incoming, outputs = defaultdict(list), defaultdict(set)
+    refs = {}
+    for row in rows:
+        target = row['target_id']
+        incoming[target].append(row)
+        for side in ('source', 'target'):
+            refs[row[side + '_id']] = tuple(row[f'{side}_{field}'] for field in ('asset', 'name', 'key', 'scoped'))
+        if not row['target_scoped'] and row['target_name'] not in {'', '*'}:
+            outputs[row['target_asset']].add(target)
+    case_sensitive = store.setting(workspace, 'case_sensitive', False)
+    declared = {}
+    for asset, item in columns.items():
+        if item['declared']:
+            metadata = json.loads(graph.nodes[asset].get('metadata') or '{}')
+            identifiers = metadata.get('column_identifiers') or item['names']
+            declared[asset] = {column_key(identifier, case_sensitive): name
+                               for identifier, name in zip(identifiers, item['names'])}
+    hidden = {e['target_id'] for _, _, edge in edges for e in edge['evidence'] if e['target_id'] not in graph.nodes}
+    ambiguous = {row['target_column_id'] for row in store.rows("""SELECT d.target_column_id
+        FROM column_derivations d JOIN column_references r
+          ON r.workspace_id=d.workspace_id AND r.column_id=d.target_column_id
+        WHERE d.workspace_id=? AND r.asset_id IN (SELECT unnest(?)) AND r.scope='' AND r.version=''
+        GROUP BY d.target_column_id HAVING count(DISTINCT d.operation_id)>1""", [workspace, sorted(hidden)])} if hidden else set()
+    links = []
+    for source, target, edge in edges:
+        support = defaultdict(set)
+        for e in edge['evidence']:
+            support[e['target_id']].add(e['operation_id'])
+        pairs = {}
+        for output in sorted(outputs[target]):
+            _, target_name, key, _ = refs[output]
+            if target in declared:
+                target_name = declared[target].get(key)
+                if target_name is None:
+                    continue
+            pending, visited = [(output, '', True)], set()
+            while pending:
+                current, operation, value = item = pending.pop()
+                if item in visited:
+                    continue
+                visited.add(item)
+                asset, name, key, scoped = refs[current]
+                if operation and not scoped:
+                    if asset in declared:
+                        name = declared[asset].get(key, '')
+                    if asset == source and name not in {'', '*'}:
+                        pairs[name, target_name] = pairs.get((name, target_name), False) or value
+                    if asset in graph.nodes or current in ambiguous:
+                        continue
+                for row in incoming[current]:
+                    writer = row['operation_id']
+                    accepted = writer == operation if scoped else writer in support[asset]
+                    if accepted:
+                        pending.append((row['source_id'], writer, value and row['role'] == 'value'))
+        links.append([{'source': s, 'target': t, 'value': value}
+                      for (s, t), value in sorted(pairs.items())])
+    return links
+
+
 def _ref(row: dict[str, Any]) -> dict[str, Any]:
     """Convert a database column row into a public reference object."""
     return {k: row[k] for k in ('column_id', 'asset_id', 'column_name', 'scope', 'version')} | {'table': row['table_name']}

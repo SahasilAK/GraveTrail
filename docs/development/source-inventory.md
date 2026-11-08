@@ -116,7 +116,7 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/graph_images.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/graph_images.py) | Inert, fitted graph images from the browser's scene. No source text or resources. | `SVG_NS`, `RENDER_SLOTS`, `ImageOptions`, `png_available`, `safe_image_filename`, `render_graph_image` |
 | [`src/dataforge/image_worker.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/image_worker.py) | Private disposable raster worker. Input is constructed internally, never uploaded SVG. | `main` |
 | [`src/dataforge/reporting.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/reporting.py) | Shared stored-fact inventory, history, dictionary, schema and health reports. | `READS`, `data_dictionary`, `workspace_health`, `validate_lineage_evidence`, `code_matches`, `ReportOperations` |
-| [`src/dataforge/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/transformations.py) | Scoped static column derivations and bounded traversal, shared by every interface. | `ROW_ROLES`, `IN_PLACE`, `TRANSPOSE_SCOPE`, `CONTROL_ROLES`, `STATUSES`, `INSERT_MAPPING_GAPS`, `materialize_columns`, `column_catalog`, `trace_columns` |
+| [`src/dataforge/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/transformations.py) | Scoped static column derivations and bounded traversal, shared by every interface. | `ROW_ROLES`, `IN_PLACE`, `TRANSPOSE_SCOPE`, `CONTROL_ROLES`, `STATUSES`, `INSERT_MAPPING_GAPS`, `materialize_columns`, `column_catalog`, `final_column_names`, `table_column_links`, `trace_columns` |
 
 ## AI and provider services
 
@@ -507,7 +507,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_cleanup.py) | No module docstring; inspect the linked source. | 13 test functions; helpers/constants: `populated` |
 | `tests/test_column_evidence.py` **new** | Exact historical evidence resolution for the local column inspector. | 11 test functions; helpers/constants: `analyzed`, `load` |
 | `tests/test_column_graph.py` **new** | Column scenes preserve trace facts while bounding only their display. | 15 test functions; helpers/constants: `ref`, `step`, `trace`, `scene`, `assert_closed` |
-| `tests/test_column_graph_ui.py` **new** | Selection and navigation regressions for the column graph. | 2 test functions |
+| `tests/test_column_graph_ui.py` **new** | Selection and navigation regressions for the column graph. | 3 test functions |
 | `tests/test_column_parser_followup.py` **new** | Nested query repairs and deliberately bounded PostgreSQL writes. | 20 test functions; helpers/constants: `records` |
 | [`tests/test_column_qol.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_column_qol.py) | Copyable summaries must not confuse filtered-out columns with unused columns. | 5 test functions |
 | [`tests/test_connections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_connections.py) | No module docstring; inspect the linked source. | 14 test functions |
