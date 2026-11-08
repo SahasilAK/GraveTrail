@@ -216,13 +216,16 @@ def test_transformation_ui_native_flow_and_workspace_context(tmp_path: Path, mon
     next(t for t in view.text_input if t.label == "Column name or exact ID").set_value("total").run()
     assert not view.exception
     assert any(s.label == "Transformation depth" for s in view.slider)
+    assert not any("Output" in frame.value.columns for frame in view.dataframe)
+    view.session_state[f"column_lineage_steps_{w}_{asset}"] = True
+    view.run()
+    assert not view.exception
     assert any("Output" in frame.value.columns for frame in view.dataframe)
     assert view.get("popover")
     assert {d.proto.label for d in view.get("download_button")} >= {"Download JSON", "Download CSV"}
     assert not view.code  # Original source is loaded only inside the evidence inspector.
     next(s for s in view.selectbox if s.label == "Transformation step").select_index(1).run()
     view.session_state["transformation_inspector_" + w + "_" + asset] = True
-    view.session_state["transformation_step_" + w + "_" + asset] = 999
     from dataforge.transformations import column_catalog
 
     def changed_column_ids(*args: Any, **kwargs: Any) -> Any:

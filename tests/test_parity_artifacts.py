@@ -35,18 +35,23 @@ def test_original_binary_artifact_roundtrip_authorization_and_paths(tmp_path: Pa
         result = asyncio.run(server.call_tool('export_original_source', {'workspace_id': w, 'file_id': fid}))
         assert not result.isError, result
         artifact = result.structuredContent
-        chunks, offset = [], 0
-        while offset < artifact['bytes']:
-            part = service.call('artifact_read', w, artifact_id=artifact['artifact_id'], offset=offset, length=7)
-            chunks.append(base64.b64decode(part['data']))
-            offset = part['next_offset']
-        assert b''.join(chunks) == original
-        assert hashlib.sha256(b''.join(chunks)).hexdigest() == artifact['sha256']
+        def read_artifact(metadata, length=16384):
+            chunks, offset = [], 0
+            while offset < metadata['bytes']:
+                part = service.call('artifact_read', w, artifact_id=metadata['artifact_id'],
+                                    offset=offset, length=length)
+                assert part['next_offset'] > offset
+                chunks.append(base64.b64decode(part['data']))
+                offset = part['next_offset']
+            data = b''.join(chunks)
+            assert hashlib.sha256(data).hexdigest() == metadata['sha256']
+            return data
+
+        assert read_artifact(artifact, length=7) == original
         with pytest.raises(AgentError):
             service.call('artifact_read', w, artifact_id=artifact['artifact_id'], offset=-1)
         bundle = service.call('artifact_create', w, kind='source-bundle', format='zip', selection={'file_ids': [fid]})
-        data = service.call('artifact_read', w, artifact_id=bundle['artifact_id'])
-        with zipfile.ZipFile(io.BytesIO(base64.b64decode(data['data']))) as archive:
+        with zipfile.ZipFile(io.BytesIO(read_artifact(bundle))) as archive:
             assert archive.read('folder/q.sql') == original
         paths = service.call('paths', w, asset='mart.x')
         assert paths['items'][0]['boundary'] == 'root'
@@ -56,8 +61,8 @@ def test_original_binary_artifact_roundtrip_authorization_and_paths(tmp_path: Pa
         tree = service.call('graph_view', w, asset='mart.x', direction='combined', view='tree')
         assert len(tree['items']) == 2
         html = service.call('artifact_create', w, kind='graph', format='html', selection={'asset': 'mart.x'})
-        html_bytes = base64.b64decode(service.call('artifact_read', w, artifact_id=html['artifact_id'])['data'])
-        assert b'mountGraph' in html_bytes and b'<script src=' not in html_bytes
+        html_bytes = read_artifact(html)
+        assert b'mountGraph(document.body,' in html_bytes and b'<script src=' not in html_bytes
         other = store.create_workspace('other')
         with pytest.raises(AgentError):
             service.call('artifact_read', other, artifact_id=artifact['artifact_id'])

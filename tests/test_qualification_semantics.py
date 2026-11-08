@@ -59,11 +59,24 @@ def test_merge_derived_using_activates_only_reachable_sources():
     assert report.rejected
 
 
-def test_merge_derived_using_does_not_guess_outer_column_ownership():
-    parsed = parse_sql('MERGE INTO mart.b b USING (SELECT id, x FROM raw.a) incoming '
-                       'ON b.id=incoming.id WHEN MATCHED THEN UPDATE SET total=incoming.x;')
-    assert not any(u.table == 'raw.a' and u.context == 'MERGE' for u in parsed.operations[0].usages)
-    assert not any(d['status'] == 'verified' for d in parsed.operations[0].derivations)
+@pytest.mark.parametrize('query, origin', [
+    ('SELECT id, x FROM raw.a', 'raw.a'),
+    ('SELECT a.id, x FROM raw.a a JOIN raw.c c ON a.id=c.id', None),
+])
+def test_merge_derived_using_does_not_guess_outer_column_ownership(query, origin):
+    operation, = parse_sql(f'MERGE INTO mart.b b USING ({query}) incoming '
+                           'ON b.id=incoming.id WHEN MATCHED THEN UPDATE SET total=incoming.x;').operations
+    assert not any(u.table in {'raw.a', 'raw.c'} and u.context == 'MERGE' for u in operation.usages)
+    write, = (d for d in operation.derivations if d['category'] == 'sql_merge_update')
+    assert write['target_column'] == 'total'
+    assert {(i['table'], i['column']) for i in write['inputs'] if i['role'] == 'value'} == {
+        ('incoming', 'x'), ('mart.b', 'total')}
+    incoming, = (i for i in write['inputs'] if i['table'] == 'incoming' and i['role'] == 'value')
+    assert incoming['scope']
+    projection, = (d for d in operation.derivations
+                   if d['scope'] == incoming['scope'] and d['target_column'] == incoming['column'])
+    assert projection['status'] == ('verified' if origin else 'unresolved')
+    assert {i['table'] for i in projection['inputs'] if i['role'] == 'value'} == ({origin} if origin else set())
 
 
 @pytest.mark.parametrize('sql,expression,usage_context', [
