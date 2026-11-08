@@ -147,7 +147,8 @@ def export_lineage_excel(store: Store, workspace: str, asset: str, *, direction:
 
 
 def analyze(store: Store, workspace: str, file_ids: list[str] | None = None, force: bool = False,
-            progress: Callable[[float, str], None] | None=None, cancelled: Callable[[], bool] | None=None) -> dict[str, Any]:
+            progress: Callable[[float, str], None] | None=None, cancelled: Callable[[], bool] | None=None,
+            *, stage: Callable[[float, str], None] | None = None) -> dict[str, Any]:
     """Analyze selected or pending workspace files under the exclusive analysis lock.
 
     Raises:
@@ -156,10 +157,11 @@ def analyze(store: Store, workspace: str, file_ids: list[str] | None = None, for
     with store.analysis_lock:
         if active_project_runs(store, workspace):
             raise ValueError('An active AI analysis blocks parser publication')
-        return _analyze(store, workspace, file_ids, force, progress, cancelled)
+        return _analyze(store, workspace, file_ids, force, progress, cancelled, stage)
 
 
-def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bool, progress: Callable[[float, str], None] | None, cancelled: Callable[[], bool] | None) -> dict[str, Any]:
+def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bool, progress: Callable[[float, str], None] | None,
+             cancelled: Callable[[], bool] | None, stage: Callable[[float, str], None] | None) -> dict[str, Any]:
     """Rebuild derived facts atomically while reusing compatible cached parse results.
 
     A selection reparses selected files and reuses compatible cached analysis for others.
@@ -173,6 +175,7 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
         force: Whether selected files bypass otherwise reusable cached results.
         progress: Optional callback receiving fractional progress and the current path.
         cancelled: Optional callback checked between completed parse jobs.
+        stage: Optional callback receiving completed stage fraction and current activity.
 
     Returns:
         Run ID, parsed/cache counts, duration, and resulting asset and edge counts.
@@ -193,6 +196,8 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
         from dataforge.dbt.service import is_dbt, prepare_dbt_analysis
         dbt_projects, dbt_counts = prepare_dbt_analysis(store, workspace, file_ids, force, cancelled)
         results.extend(pair for project in dbt_projects for pair in project.file_results)
+        if stage:
+            stage(1 / 6, "Parsing source files and reusing cached results")
         workers = min(8, max(1, int(store.setting(workspace, "parse_workers", 1))))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             jobs = []
@@ -223,7 +228,7 @@ def _analyze(store: Store, workspace: str, file_ids: list[str] | None, force: bo
                         != {m['file_id']: m['content_hash'] for m in files if is_dbt(m)}
                         or store.setting(workspace, 'dbt', {}) != dbt_settings_snapshot))):
                 raise ValueError('Inventory changed during analysis or parsing settings changed; previous lineage retained')
-            snapshot = _materialize(store, workspace, run_id, results, config, dbt_projects=dbt_projects)
+            snapshot = _materialize(store, workspace, run_id, results, config, dbt_projects=dbt_projects, stage=stage)
             duration = time.perf_counter() - start
             store.execute("UPDATE analysis_runs SET status='completed',analyzed=?,cached=?,duration=?,snapshot=? WHERE run_id=?",
                           [analyzed, cached, duration, json.dumps(snapshot), run_id])
@@ -426,12 +431,15 @@ def _collect_jobs(store: Store, jobs: list[tuple[dict[str, Any], str, ParseResul
             progress((i + 1) / max(len(jobs), 1), metadata["relative_path"])
 
 
-def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]], config: dict[str, Any], *, dbt_projects=None) -> dict[str, Any]:
+def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]],
+                 config: dict[str, Any], *, dbt_projects=None, stage: Callable[[float, str], None] | None = None) -> dict[str, Any]:
     """Resolve parsed facts and replace a workspace's derived records transactionally.
 
     Raises:
         ValueError: If the supplied value violates the operation constraints."""
     from dataforge.transformations import materialize_columns
+    if stage:
+        stage(2 / 6, "Resolving source names and reading schemas")
     resolver = AssetResolver(workspace, results, config)
     resolve = resolver.resolve
     registry, aliases = resolver.registry, resolver.aliases
@@ -439,7 +447,11 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
     schemas, query_layouts = collect_schemas(results, workspace, resolver)
     rows = {"assets": [], "statements": [], "operations": [], "operation_assets": [], "edges": [],
             "column_usages": [], "diagnostics": [], "asset_aliases": []}
+    if stage:
+        stage(3 / 6, "Tracing column inputs and transformations")
     column_rows = materialize_columns(workspace, run_id, results, resolver, schemas, query_layouts, config)
+    if stage:
+        stage(4 / 6, "Linking tables and attaching source evidence")
     statuses = []
     static_assets, manual_assets = set(), set()
     for metadata, parsed in results:
@@ -502,6 +514,8 @@ def _materialize(store: Store, workspace: str, run_id: str, results: list[tuple[
     rows["asset_aliases"] = list(aliases)
     rows.update(column_rows)
     rows['column_analysis'] = [[workspace, run_id, PARSER_VERSION]]
+    if stage:
+        stage(5 / 6, "Saving lineage and diagnostics to the workspace")
     for table, values in rows.items():
         store.execute(f"DELETE FROM {table} WHERE workspace_id=?", [workspace])
         if values:

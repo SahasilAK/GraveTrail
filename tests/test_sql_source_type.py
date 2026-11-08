@@ -153,6 +153,7 @@ def test_builder_sql_selector_and_inventory_correction(tmp_path, monkeypatch):
     inputs.mkdir()
     (inputs / 'orders.sql').write_bytes(DATABRICKS)
     (inputs / 'rows.csv').write_text('id\n1\n', encoding='utf-8')
+    (inputs / 'notes.txt').write_text('Not a source file', encoding='utf-8')
     home = tmp_path / 'home'
     monkeypatch.setenv('DATAFORGE_HOME', str(home))
     monkeypatch.setenv('DATAFORGE_ALLOWED_ROOTS', str(inputs))
@@ -170,7 +171,13 @@ def test_builder_sql_selector_and_inventory_correction(tmp_path, monkeypatch):
     next(el for el in view.segmented_control if el.label == 'Input source').set_value('Host directory').run()
     next(el for el in view.text_input if el.label == 'Directory on application host').set_value(str(inputs))
     next(el for el in view.button if el.label == 'Import into inventory').click().run()
-    assert any('Imported 2 files' in el.value for el in view.success)
+    assert any(s.label == 'Import complete. 2 files ready for Analysis.' and s.state == 'complete'
+               for s in view.status)
+    assert any(p.label.startswith('Skipped files (1)') for p in view.expander)
+    assert any('notes.txt: Unsupported file type' in el.value for el in view.text)
+    next(el for el in view.button if el.label == 'Continue to Analysis').click().run()
+    assert any(el.label == 'Analyze all files' for el in view.button)
+    view.switch_page('ui/pages/builder.py').run()
     next(el for el in view.segmented_control if el.label == 'Source workspace').set_value('Inventory').run()
     inventory = view.dataframe[0].value.set_index('relative_path')
     assert inventory.loc['orders.sql', 'sql_source_type'] == 'Databricks'

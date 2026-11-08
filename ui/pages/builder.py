@@ -8,14 +8,13 @@ from dataforge.dbt.service import is_dbt
 from dataforge.ingestion import Importer, ImportReport, Limits
 from dataforge.services import explicit_source_dialect, set_source_dialect, source_dialect
 from ui.common import allowed_roots, context, downloads, source_viewer, title
-from ui.presentation import empty_state, section
+from ui.presentation import empty_state, section, sync_context
 from ui.workspace_settings import SQL_DIALECTS, dialect_label
 
 SQL_SOURCE_TYPES = {'Use workspace settings': None, **{dialect_label(d): d for d in SQL_DIALECTS}}
 
 title("Sources", "Bring your project into focus. Import source files, then inspect the inventory.")
 store, w = context()
-files = store.files(w)
 mode = section("Source workspace", ["Import", "Inventory"], "sources_section_" + w)
 if mode == "Import":
     with st.container(border=True, key="source_import"):
@@ -50,19 +49,22 @@ if mode == "Import":
             directory = st.text_input("Directory on application host", value=str(roots[0] / "scenario") if roots else "")
         st.caption("Source files are analyzed as text and never executed. Unsupported files are skipped and reported.")
         if st.button("Import into inventory", type="primary", disabled=not extensions and source_kind != 'dbt'):
+            status = st.status("Importing source files…", expanded=True)
+            bar = status.progress(0., text="Discovering files and checking import limits")
+            counts = status.empty()
             try:
                 limits = Limits(max_file_bytes=int(store.setting(w, "max_file_mb", 20)) * 1024 * 1024,
                                 max_files=int(store.setting(w, "max_files", 10000)))
                 importer = Importer(store, w, allowed_roots(), limits)
-                options = dict(source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect)
-                status = st.empty()
+                options = dict(source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect,
+                               stage=lambda fraction, activity: bar.progress(fraction, text=activity))
                 def progress(r: ImportReport) -> None:
                     """Show current file discovery and import totals.
 
                     Args:
                         r: Latest import report snapshot.
                     """
-                    status.caption(f"Discovered {r.discovered}; accepted {r.accepted}; skipped {r.skipped}")
+                    counts.caption(f"{r.discovered:,} discovered · {r.accepted:,} accepted · {r.skipped:,} skipped")
                 if mode == "ZIP archive" and archive:
                     report = importer.zip(archive.getvalue(), extensions, progress, **options)
                 elif mode == "Folder upload" and entries:
@@ -72,18 +74,29 @@ if mode == "Import":
                 else:
                     raise ValueError("Choose source files first")
                 progress(report)
+                sync_context(store, w)
                 st.session_state["import_report_" + w] = asdict(report)
-                st.success(f"Imported {report.accepted} files. Open Analysis when you are ready to trace dependencies.")
+                bar.progress(1., text="Inventory saved")
+                message = (f"Import complete. {report.accepted:,} files ready for Analysis." if report.accepted
+                           else "Import complete. No files were added.")
+                status.update(label=message, state="complete")
             except Exception as exc:
-                st.error(f"Import failed: {exc}")
+                bar.empty()
+                status.update(label="Import failed", state="error")
+                counts.error(str(exc))
         if "import_report_" + w in st.session_state:
             report = st.session_state["import_report_" + w]
             st.caption(f"Last import · {report['accepted']} accepted · {report['skipped']} skipped · {report['discovered']} discovered")
-            st.page_link("ui/pages/analysis.py", label="Continue to Analysis", icon=":material/arrow_forward:")
-            if report["diagnostics"]:
-                with st.expander("Import diagnostics"):
-                    st.text("\n".join(report["diagnostics"]))
+            if st.button("Continue to Analysis", type="primary", icon=":material/arrow_forward:"):
+                st.switch_page("ui/pages/analysis.py")
+            notes = dict.fromkeys([*report.get("skip_reasons", []), *report["diagnostics"]])
+            if notes:
+                label = f"Skipped files ({report['skipped']:,}) and import notes" if report["skipped"] else "Import notes"
+                with st.expander(label):
+                    st.text("\n".join(notes))
 else:
+    with st.spinner("Loading source inventory…", show_time=True):
+        files = store.files(w)
     if not files:
         empty_state("Your source library starts here", "Choose Import to add a ZIP archive, a folder or an allowed host directory.")
     else:

@@ -49,6 +49,7 @@ class ImportReport:
     skipped: int = 0
     duplicates: int = 0
     diagnostics: list[str] = field(default_factory=list)
+    skip_reasons: list[str] = field(default_factory=list)
 
 
 def safe_relative(name: str) -> str:
@@ -116,7 +117,7 @@ class Importer:
 
     def zip(self, data: bytes, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
             cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,
-            sql_dialect: str | None = None) -> ImportReport:
+            sql_dialect: str | None = None, stage: Callable[[float, str], None] | None = None) -> ImportReport:
         """Import supported files from a ZIP upload.
 
         Args:
@@ -124,6 +125,7 @@ class Importer:
             extensions: Lowercase extensions allowed for import.
             progress: Optional callback invoked after each processed entry.
             cancelled: Optional predicate checked between entries.
+            stage: Optional callback for import phase changes.
 
         Returns:
             Report of discovered, accepted, skipped, and duplicate files.
@@ -161,11 +163,11 @@ class Importer:
 
             return self._import(((e.filename, lambda e=e: read(e)) for e in entries), extensions,
                                 "ZIP upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options,
-                                sql_dialect=sql_dialect)
+                                sql_dialect=sql_dialect, stage=stage)
 
     def directory(self, directory: str | Path, extensions: set[str], progress: Callable[[ImportReport], Any] | None = None,
                   cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,
-                  sql_dialect: str | None = None) -> ImportReport:
+                  sql_dialect: str | None = None, stage: Callable[[float, str], None] | None = None) -> ImportReport:
         """Import supported files beneath an authorized directory.
 
         Args:
@@ -173,6 +175,7 @@ class Importer:
             extensions: Lowercase extensions allowed for import.
             progress: Optional callback invoked after each processed file.
             cancelled: Optional predicate checked between files.
+            stage: Optional callback for import phase changes.
 
         Returns:
             Import report for the traversed directory.
@@ -224,12 +227,12 @@ class Importer:
                     yield p.relative_to(path).as_posix(), read
 
         return self._import(discover(), extensions, str(path), progress, cancelled,
-                            source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect)
+                            source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect, stage=stage)
 
     def files(self, entries: Iterable[tuple[str, bytes]], extensions: set[str],
               progress: Callable[[ImportReport], Any] | None = None,
               cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,
-              sql_dialect: str | None = None) -> ImportReport:
+              sql_dialect: str | None = None, stage: Callable[[float, str], None] | None = None) -> ImportReport:
         """Import files supplied as browser upload entries.
 
         Args:
@@ -237,17 +240,19 @@ class Importer:
             extensions: Lowercase extensions allowed for import.
             progress: Optional callback invoked after each processed file.
             cancelled: Optional predicate checked between files.
+            stage: Optional callback for import phase changes.
 
         Returns:
             Import report for the upload.
         """
         return self._import(((name, lambda data=data: data) for name, data in entries), extensions,
                             "Browser upload", progress, cancelled, source_kind=source_kind, dbt_options=dbt_options,
-                            sql_dialect=sql_dialect)
+                            sql_dialect=sql_dialect, stage=stage)
 
     def _import(self, entries: Iterable[tuple[str, Callable[[], bytes]]], extensions: set[str], source: str,
                 progress: Callable[[ImportReport], Any] | None, cancelled: Callable[[], bool] | None,
-                *, source_kind: str = 'files', dbt_options=None, sql_dialect: str | None = None) -> ImportReport:
+                *, source_kind: str = 'files', dbt_options=None, sql_dialect: str | None = None,
+                stage: Callable[[float, str], None] | None = None) -> ImportReport:
         """Validate entries and record accepted source files transactionally.
 
         Args:
@@ -256,6 +261,7 @@ class Importer:
             source: Human-readable source label recorded in the inventory.
             progress: Optional callback invoked after each processed entry.
             cancelled: Optional predicate checked between entries.
+            stage: Optional callback receiving completed stage fraction and current activity.
 
         Returns:
             Counts and diagnostics from the completed import.
@@ -299,6 +305,8 @@ class Importer:
         known = {f["content_hash"] for f in self.store.files(self.workspace)}
         paths = set()
         records = []
+        if stage:
+            stage(1 / 3, "Checking file types and reading source text")
         with self.store.transaction():
             for name, reader in entries:
                 if total >= self.limits.max_total_bytes:
@@ -319,41 +327,52 @@ class Importer:
                     ext = PurePosixPath(relative).suffix.lower()
                     if (admission is not None and relative not in admission.paths) or (admission is None and ext not in extensions):
                         report.skipped += 1
-                        continue
-                    if relative in paths:
-                        raise ValueError("Duplicate path in import; first entry retained")
-                    paths.add(relative)
-                    data = buffered[relative] if relative in buffered else reader()
-                    if len(data) > self.limits.max_file_bytes:
-                        raise ValueError("File exceeds size limit")
-                    total += len(data)
-                    if total > self.limits.max_total_bytes:
-                        raise ValueError("Import exceeds total byte budget")
-                    text, encoding, warning = decode(data)
-                    digest = hashlib.sha256(data).hexdigest()
-                    report.duplicates += digest in known
-                    known.add(digest)
-                    blob = self.store.home / "blobs" / digest
-                    if not blob.exists():
-                        blob.write_bytes(data)
-                    fid = stable_id(self.workspace, relative)
-                    if admission is not None:
-                        metadata = admission.paths[relative]
+                        if admission is not None:
+                            reason = "Excluded by the dbt project paths or import options"
+                        elif ext in {".sql", ".sas", ".csv"}:
+                            reason = "File type was not selected"
+                        else:
+                            reason = "Unsupported file type"
+                        report.skip_reasons.append(f"{relative}: {reason}")
                     else:
-                        metadata = {'sql_dialect': sql_dialect} if ext == '.sql' and sql_dialect is not None else {}
-                    records.append([fid, self.workspace, ingestion, PurePosixPath(relative).name, ext, relative,
-                         source + "/" + relative, "blobs/" + digest, text, digest, len(data), encoding,
-                         len(text.splitlines()), "pending", warning, json.dumps(metadata)])
-                    report.accepted += 1
-                    if warning:
-                        report.diagnostics.append(f"{relative}: {warning}")
+                        if relative in paths:
+                            raise ValueError("Duplicate path in import; first entry retained")
+                        paths.add(relative)
+                        data = buffered[relative] if relative in buffered else reader()
+                        if len(data) > self.limits.max_file_bytes:
+                            raise ValueError("File exceeds size limit")
+                        total += len(data)
+                        if total > self.limits.max_total_bytes:
+                            raise ValueError("Import exceeds total byte budget")
+                        text, encoding, warning = decode(data)
+                        digest = hashlib.sha256(data).hexdigest()
+                        report.duplicates += digest in known
+                        known.add(digest)
+                        blob = self.store.home / "blobs" / digest
+                        if not blob.exists():
+                            blob.write_bytes(data)
+                        fid = stable_id(self.workspace, relative)
+                        if admission is not None:
+                            metadata = admission.paths[relative]
+                        else:
+                            metadata = {'sql_dialect': sql_dialect} if ext == '.sql' and sql_dialect is not None else {}
+                        records.append([fid, self.workspace, ingestion, PurePosixPath(relative).name, ext, relative,
+                             source + "/" + relative, "blobs/" + digest, text, digest, len(data), encoding,
+                             len(text.splitlines()), "pending", warning, json.dumps(metadata)])
+                        report.accepted += 1
+                        if warning:
+                            report.diagnostics.append(f"{relative}: {warning}")
                 except (ValueError, OSError, RuntimeError, zipfile.BadZipFile) as exc:
                     if admission is not None:
                         raise ValueError(f'dbt import failed at {name}: {exc}; inventory rolled back') from exc
                     report.skipped += 1
-                    report.diagnostics.append(f"{name}: {exc}")
+                    reason = f"{name}: {exc}"
+                    report.skip_reasons.append(reason)
+                    report.diagnostics.append(reason)
                 if progress:
                     progress(report)
+            if stage:
+                stage(2 / 3, "Saving accepted files to the workspace inventory")
             if records:
                 self.store.db.executemany(UPSERT_SOURCE, records)
             self.store.execute("INSERT INTO ingestion_runs(ingestion_id,workspace_id,source,report) VALUES (?,?,?,?)",

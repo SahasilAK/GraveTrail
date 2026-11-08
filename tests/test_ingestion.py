@@ -47,11 +47,16 @@ def test_zip_inventory_preserves_bytes_and_reports_duplicates(setup: Any) -> Non
     """
     store, w, importer = setup
     original = b"select * from raw.x;\r\n"
+    stages = []
     report = importer.zip(archive([("nested/a.sql", original), ("b.sql", original),
-                                   ("skip.txt", b"ignore")]), {".sql"})
+                                   ("skip.txt", b"ignore"), ("unselected.sas", b"data out; run;")]), {".sql"},
+                          stage=lambda fraction, activity: stages.append((fraction, activity)))
     assert report.accepted == 2
     assert report.duplicates == 1
-    assert report.skipped == 1
+    assert report.skipped == 2
+    assert report.skip_reasons == ["skip.txt: Unsupported file type", "unselected.sas: File type was not selected"]
+    assert stages == [(1 / 3, "Checking file types and reading source text"),
+                      (2 / 3, "Saving accepted files to the workspace inventory")]
     files = store.files(w)
     assert len(files) == 2
     assert store.original(files[0]["file_id"]) == original
