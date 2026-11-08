@@ -17,12 +17,12 @@ These focused guides help you repeat one part on your own project.
 
 | Task | Guide |
 | --- | --- |
-| Add files or refresh sources | [Import and manage sources](sources.md) |
+| Add files, choose a SQL source type or refresh sources | [Import and manage sources](sources.md) |
 | Build static lineage and interpret diagnostics | [Run analysis](analysis.md) |
 | Design schemas and author an editable lineage diagram | [Lineage builder and canvas](lineage-builder.md) |
-| Trace inputs or change impact | [Explore lineage](explore.md) |
+| Trace inputs or change impact, and expand table cards | [Explore lineage](explore.md) |
 | Read the original statement | [Inspect source evidence](evidence.md) |
-| Find references and output expressions | [Columns and transformations](columns.md) |
+| Trace column transformations and find references | [Columns and transformations](columns.md) |
 | Save reports, images or snapshots | [Exports and sharing](exports.md) |
 | Recover data or history | [Data management](../DATA_MANAGEMENT.md) |
 | Use optional AI | [AI analysis](../AI_ANALYSIS.md) · [controls and recovery](ai-analysis-controls-and-recovery.md) |

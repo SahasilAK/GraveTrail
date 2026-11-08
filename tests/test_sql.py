@@ -64,6 +64,14 @@ def test_anonymous_query_sources_keep_conservative_usage(code, dialect, expected
     assert {(u.table, u.column) for op in result.operations for u in op.usages} == expected
 
 
+def test_sql_comments_and_tsql_batch_separator_are_not_parse_failures():
+    for dialect, suffix in (("mysql", "-- misleading FROM absent"), ("tsql", "GO")):
+        parsed = parse_sql("SELECT id FROM src;\n" + suffix, dialect)
+        assert len(parsed.operations) == 1
+        assert [source.name for source in parsed.operations[0].sources] == ["src"]
+        assert not parsed.diagnostics
+
+
 def names(refs: Any) -> Any:
     """Handle names for the test scenario.
 

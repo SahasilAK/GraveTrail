@@ -53,6 +53,43 @@ def test_expression_arrows_follow_data_for_both_directions(direction):
     assert_closed(result)
 
 
+def test_upstream_graph_separates_prewrite_value_and_matching_context():
+    target = ref('target', name='amount')
+    record = step('update', target, [target | {'role': 'value'}, ref('key') | {'role': 'join'}],
+                  category='sql_update')
+    result = scene(trace([record]), target)
+    previous = next(n for n in result['nodes'] if 'previous value' in n['label'])
+    assert previous['column_id'] == target['column_id'] and not previous['is_root']
+    assert all(not e['cycle'] for e in result['edges'])
+    key = next(e for e in result['edges'] if e['source'] == 'column:key')
+    assert key['effects'] == ['row_selection']
+    assert any(row['id'] == previous['id'] for card in result['cards'] for row in card['rows'])
+    assert_closed(result)
+
+
+def test_cards_group_traced_rows_and_keep_statement_scopes_and_link_evidence():
+    amount = ref('amount', table='raw', name='amount')
+    first = ref('first', table='query', name='gross', scope='query:0')
+    second = ref('second', table='query', name='net', scope='query:0')
+    net = ref('net', table='out', name='net')
+    result = scene(trace([
+        step('one', first, [amount], evidence={'statement_id': 'one'}),
+        step('two', second, [first | {'role': 'value'}], evidence={'statement_id': 'two'}),
+        step('three', net, [second, amount, ref('key', table='out', name='key') | {'role': 'join'}]),
+    ]), net)
+    assert sorted((c['label'], tuple(r['row_label'] for r in c['rows'])) for c in result['cards']) == [
+        ('out', ('key', 'net')), ('query', ('gross',)), ('query', ('net',)), ('raw', ('amount',))]
+    links = {(e['source'], e['target']): e for e in result['links']}
+    assert set(links) == {('column:amount', 'column:first'), ('column:first', 'column:second'),
+                          ('column:second', 'column:net'), ('column:key', 'column:net'),
+                          ('column:amount', 'column:net')}
+    assert ' C ' in links['column:amount', 'column:first']['path']
+    assert ' V ' in links['column:amount', 'column:net']['path']
+    join = links['column:key', 'column:net']
+    assert (join['derivation_id'], join['roles'], join['effects']) == ('three', ['join'], ['row_selection'])
+    assert join['id'] in {edge['id'] for edge in result['edges']}
+
+
 def test_constant_has_no_fabricated_input_and_rowset_is_labeled():
     constant = scene(trace([step('constant', ref('target'), category='constant')]), ref('target'))
     assert len(constant['nodes']) == 2 and len(constant['edges']) == 1

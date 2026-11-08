@@ -18,9 +18,45 @@ def test_empty_dashboard_and_builder(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert not app.exception
     assert app.title[0].value == "Overview"
     assert any("GraveTrail" in header.value for header in app.sidebar.header)
-    app.switch_page("ui/pages/builder.py").run()
+    buttons = {button.label: button for button in app.button}
+    assert all(buttons[label].proto.type == "primary" for label in
+               ("Open Lineage Builder", "Import sources", "Run SQL example"))
+    links = {link.value: link.proto for link in app.link_button}
+    assert links["View on GitHub"].url == "https://github.com/SahasilAK/GraveTrail"
+    assert links["Documentation"].url == "https://sahasilak.github.io/GraveTrail/"
+    assert all(link.type == "primary" for link in links.values())
+    buttons["Open Lineage Builder"].click().run()
+    assert app.title[0].value.casefold() == "lineage builder"
+    app.switch_page("ui/pages/dashboard.py").run()
+    next(button for button in app.button if button.label == "Import sources").click().run()
     assert not app.exception
     assert any("Import" in b.label for b in app.button)
+
+
+def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ui.common import get_store
+
+    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
+    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=30).run()
+    workspace = app.session_state["workspace"]
+    next(button for button in app.button if button.label == "Run SQL example").click().run()
+
+    assert not app.exception
+    assert app.title[0].value == "Lineage"
+    assert app.text_input(key="asset_search_lineage").value == "pub.all_kpis"
+    assert any("upstream · depth 30" in caption.value for caption in app.caption)
+    assert not app.warning
+    store = get_store(str(tmp_path))
+    assert len(store.files(workspace)) == 86
+    target = next(asset for asset in store.assets(workspace) if asset["name"] == "pub.all_kpis")
+    assert app.session_state[f"asset_choice_lineage_{workspace}"] == target["asset_id"]
+    assert len(store.edges(workspace)) == 128
+    app.switch_page("ui/pages/dashboard.py").run()
+    assert all(button.label != "Run SQL example" for button in app.button)
+    assert any(header.value == "Explore your workspace lineage" for header in app.subheader)
+    assert {"Explore lineage", "Open Lineage Builder", "Import sources", "Open Columns"} <= {
+        button.label for button in app.button if button.proto.type == "primary"}
+    assert {metric.label: metric.value for metric in app.metric}["Dependencies"] == "128"
 
 
 def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,6 +203,7 @@ def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp
     app.text_input(key="asset_search_columns").set_value("raw.a").run()
     choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
     choice.select(choice.options[0]).run()
+    next(s for s in app.segmented_control if s.label == "Columns view").set_value("Direct references").run()
     assert not app.exception
     assert app.metric[0].value == "2"
     usages = app.dataframe[0].value

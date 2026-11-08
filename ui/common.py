@@ -261,7 +261,9 @@ _GRAPH = st.components.v2.component("dataforge_graph", html=GRAPH_BODY, css=GRAP
     js=GRAPH_JS + "\nexport default function(c){return mountGraph(c.parentElement,c.data,v=>c.setStateValue('selection',v),v=>c.setTriggerValue('navigate',v));}\n")
 
 
-def graph_view(graph: LineageGraph, key: str="graph", appearance: VisualizationSettings | None=None, on_navigate: Callable[[], None] | None=None) -> Any:
+def graph_view(graph: LineageGraph, key: str="graph", appearance: VisualizationSettings | None=None,
+               on_navigate: Callable[[], None] | None=None, *, columns: dict[str, Any] | None=None,
+               column_links: list | None=None) -> Any:
     """Render the interactive lineage graph with the selected appearance.
 
     Args:
@@ -269,10 +271,16 @@ def graph_view(graph: LineageGraph, key: str="graph", appearance: VisualizationS
         key: Unique key for the graph component.
         appearance: Optional saved visualization settings.
         on_navigate: Callback invoked when graph navigation requests a new asset.
+        columns: Optional final column names for the graph's expandable cards.
+        column_links: Optional column dependencies grouped by graph relationship.
 
     Returns:
         The value returned by Streamlit's graph component."""
     from ui.themes import _loaded_preset
 
-    return _GRAPH(data=graph_data(graph, appearance, theme=_loaded_preset()), key=key, default={"selection": None},
+    data = graph_data(graph, appearance, theme=_loaded_preset())
+    if columns is not None:
+        data["columns"] = columns
+        data["column_links"] = column_links
+    return _GRAPH(data=data, key=key, default={"selection": None},
                   on_selection_change=lambda: None, on_navigate_change=on_navigate or (lambda: None), height="content")

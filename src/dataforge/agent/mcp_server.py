@@ -113,10 +113,14 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
 
     @server.tool(annotations=write)
     async def ingest_sources(workspace_id: str, path: str, extensions: list[Literal["sql", "sas", "csv"]],
-                             source_kind: Literal['files', 'dbt'] = 'files', dbt_options: dict | None = None) -> CallToolResult:
-        """Start bounded directory/ZIP import from allowed roots; returns job_id."""
+                             source_kind: Literal['files', 'dbt'] = 'files', dbt_options: dict | None = None,
+                             sql_dialect: str | None = None) -> CallToolResult:
+        """Start a directory/ZIP import and return its job_id.
+
+        sql_dialect is an optional SQLGlot key for SQL files. An empty string selects Generic SQL.
+        """
         return await call("ingest", workspace_id, path=path, extensions=extensions,
-                          source_kind=source_kind, dbt_options=dbt_options)
+                          source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect)
 
     @server.tool(annotations=read)
     async def list_dbt_projects(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:

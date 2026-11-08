@@ -2,7 +2,7 @@
 
 Public learning paths plus retained technical references. Homepage hero: “Nothing stays buried.” as H1, then “Every dependency leaves a trail.” as a smaller prominent subtitle. Product explanation follows directly beneath it. mkdocs.yml navigation and named public assets define publication; context maps, private plans/prompts/reviews, runtime data and arbitrary HTML stay excluded. Developer links pin application baseline1864dc8; numerical historical measurements are not current accuracy claims. IMPLEMENTATION_GUIDE names shared theme_configuration as the eleven-preset owner; development/internal-api defines historical compatibility and publication-version freshness.
 
-`TRANSFORMATION_LINEAGE.md` and `USER_GUIDE.md` retain column graph inspection, exact historical source and bounded mutation coverage alongside current independent AI guidance. Parser 21 documents dialect-aware aliases and intermediate identities.
+`TRANSFORMATION_LINEAGE.md` and `USER_GUIDE.md` describe the current column graph, exact historical source and bounded mutation coverage alongside independent AI guidance. The coverage reference identifies parser 25 and retains older heading links.
 
 `index.md` groups hero actions in `.gt-hero-actions`: first lineage, live example and Visit repository, with a smaller Leave a star link beneath the middle action. Both repository links open SahasilAK/GraveTrail on GitHub; starring is confirmed there.
 
@@ -21,7 +21,7 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `overrides/` — shared registry theme injection without app dependencies; [map](overrides/KNOWLEDGE.md).
 - `prompts/`, `superpowers/` — ignored local app-building context and requirements, including their knowledge maps; excluded from public output.
 
-The authored Lineage builder guide is in user-guide/lineage-builder.md, linked from the site homepage, user-guide index, export/recovery references and MkDocs navigation. Its source pin a803b6e is newer than the introductory tutorial baseline.
+The homepage leads with a walkthrough of table and column lineage using the bundled SQL example. The installation guide pins the application checkout used for the workflow captures.
 
 ## Root references
 - `index.md` — public homepage and learning-path entry; eight full-card navigation links include task descriptions, including developer code walkthroughs and CLI/MCP tools.

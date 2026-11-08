@@ -57,11 +57,13 @@ GRAPH_CSS = """
 .df-graph button,.df-graph input{font:inherit;min-height:36px;padding:6px 12px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:7px;background:transparent;color:inherit;box-sizing:border-box;max-width:100%}
 .df-graph button{cursor:pointer;touch-action:manipulation}.df-graph button:active{transform:scale(.97)}
 .df-graph :is(button,input):focus-visible{outline:2px solid var(--st-primary-color,#2869c7);outline-offset:3px}
-.df-graph svg{display:block;width:100%;height:420px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;background:var(--st-secondary-background-color,#f5f7fa)}
-.df-graph .node{cursor:pointer}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
-.df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;fill:none}
+.df-graph svg{display:block;width:100%;height:clamp(420px,60vh,560px);border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;user-select:none;cursor:grab;background:var(--st-secondary-background-color,#f5f7fa)}
+.df-graph svg.panning,.df-graph svg.panning *{cursor:grabbing}
+.df-graph .node{cursor:grab}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
+.df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;stroke-linecap:round;fill:none}
 .df-graph .chosen{stroke:#d67d0d!important;stroke-width:4!important}
 .df-graph .edge.chosen{stroke-width:var(--df-selected-edge-width,4)!important}
+.df-graph .column-link.chosen{stroke-width:1.85!important}
 .df-graph .detail{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;font:13px/1.7 ui-monospace,Consolas,monospace;padding:12px;border-radius:8px;background:var(--st-secondary-background-color,#f5f7fa)}
 .df-graph .hint{font-size:12px;color:inherit;opacity:.8}
 .df-graph .status{font-size:12px;min-height:18px}
@@ -69,13 +71,20 @@ GRAPH_CSS = """
 .df-graph[data-themed] svg{background:var(--graph-bg);border-color:var(--graph-border)}
 .df-graph[data-themed] :is(button,input,.detail){background:var(--graph-surface);border-color:var(--graph-border)}
 .df-graph[data-themed] .edge{stroke:var(--graph-edge)}
-.df-graph[data-themed] .edge.chosen{stroke:var(--graph-path)!important}
+.df-graph[data-themed] :is(.edge,.column-link).chosen{stroke:var(--graph-path)!important}
 .df-graph[data-themed] rect.chosen,.df-graph[data-themed] .node:focus rect{stroke:var(--graph-selected)!important;stroke-width:3!important}
 .df-graph[data-themed] .edge:focus{stroke:var(--graph-path)}
 .df-graph[data-themed] :is(button,input):focus-visible{outline-color:var(--graph-path)}
 .df-graph[data-light] :is(rect.chosen,.node:focus rect,.edge.chosen,.edge:focus){filter:drop-shadow(1px 0 0 var(--node-text)) drop-shadow(-1px 0 0 var(--node-text)) drop-shadow(0 1px 0 var(--node-text)) drop-shadow(0 -1px 0 var(--node-text))}
 .df-graph[data-light] :is(button,input):focus-visible{outline-color:var(--node-text)}
 .df-graph .copy-node{cursor:pointer}.df-graph .copy-node:focus{outline:2px solid var(--st-primary-color,#2869c7)}
+.df-graph .expand-node{cursor:pointer}.df-graph .expand-node:focus{outline:2px solid var(--st-primary-color,#2869c7)}
+.df-graph .node-columns rect{fill:var(--graph-surface,var(--node-neutral));stroke:var(--graph-border,var(--node-border))}
+.df-graph .node-columns line{stroke:var(--graph-border,var(--node-border))}
+.df-graph .node-columns text{fill:var(--node-text);font-size:13px}
+.df-graph .node-columns .column-note{font-size:11px;opacity:.75}
+.df-graph .column-link{fill:none;stroke:var(--graph-edge,#829ab1);stroke-width:1.25;stroke-dasharray:4 5;stroke-linecap:round}
+.df-graph marker path{fill:none;stroke:var(--graph-edge,#829ab1);stroke:context-stroke;stroke-linecap:round;stroke-linejoin:round}
 .df-graph:fullscreen{width:100vw;height:100dvh;display:flex;flex-direction:column;overflow:auto}
 .df-graph:fullscreen svg{flex:1;min-height:200px;height:auto}
 .df-graph:fullscreen .detail{max-height:20vh;flex-shrink:0}
@@ -85,7 +94,84 @@ GRAPH_CSS = """
 """
 
 
-GRAPH_JS = COPY_JS + r"""
+SVG_PAN_JS = r"""
+function bindSvgPan(svg, stage, getBox, setBox, startMove) {
+ const listeners=new AbortController(), options={signal:listeners.signal};
+ let drag=null, frame=null, suppressClick=false;
+ const resetPreview=()=>{
+   if(frame!==null){cancelAnimationFrame(frame);frame=null}
+   stage.style.transform='';
+   svg.classList.remove('panning');
+ };
+ svg.addEventListener('pointerdown',e=>{
+   if(!e.isPrimary||e.button!==0)return;
+   const matrix=svg.getScreenCTM()?.inverse();
+   if(!matrix)return;
+   suppressClick=false;
+   const move=e.altKey?null:startMove?.(e.target);
+   drag={id:e.pointerId,x:e.clientX,y:e.clientY,matrix,move,moved:false,dx:0,dy:0};
+   // Keep a simple click on its original element, even with pointer capture.
+   e.target.setPointerCapture(e.pointerId);
+ },options);
+ svg.addEventListener('pointermove',e=>{
+   if(e.pointerId!==drag?.id)return;
+   const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+   if(!drag.moved){
+     if(Math.hypot(dx,dy)<4)return;
+     drag.moved=true;
+     svg.classList.add('panning');
+   }
+   const {a,b,c,d}=drag.matrix;
+   drag.dx=a*dx+c*dy;drag.dy=b*dx+d*dy;
+   // Move the scene without invalidating the SVG viewport on every pointer event.
+   if(frame===null)frame=requestAnimationFrame(()=>{
+     frame=null;
+     if(drag.move)drag.move(drag.dx,drag.dy);
+     else stage.style.transform=`translate(${drag.dx}px,${drag.dy}px)`;
+   });
+ },options);
+ const finish=e=>{
+   if(e.pointerId!==drag?.id)return;
+   suppressClick=drag.moved;
+   if(drag.moved){
+     resetPreview();
+     if(drag.move)drag.move(e.type==='pointercancel'?0:drag.dx,e.type==='pointercancel'?0:drag.dy);
+     else{
+       const [x,y,width,height]=getBox();
+       setBox([x-drag.dx,y-drag.dy,width,height]);
+     }
+   }
+   drag=null;
+ };
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])svg.addEventListener(event,finish,options);
+ for(const event of ['click','dblclick'])svg.addEventListener(event,e=>{
+   if(suppressClick&&e.detail){e.preventDefault();e.stopImmediatePropagation()}
+ },{...options,capture:true});
+ return ()=>{listeners.abort();if(drag?.moved)resetPreview();drag=null};
+}
+
+function movedCardLink(a,b,y1,y2,offset=0) {
+ const direction=a.x+a.width<=b.x?1:b.x+b.width<=a.x?-1:0;
+ const x1=direction<0?a.x:a.x+a.width, x2=direction>0?b.x:b.x+b.width;
+ const middle=direction?(x1+x2)/2:Math.max(x1,x2)+46+offset;
+ const end=!direction&&x1===x2&&y1===y2?y2+5:y2;
+ const lift=direction?offset:0;
+ return `M ${x1} ${y1} C ${middle} ${y1-lift} ${middle} ${end-lift} ${x2} ${end}`;
+}
+
+function fitMovedCards(bounds, cards) {
+ let [left,top,width,height]=bounds;
+ let right=left+width,bottom=top+height;
+ for(const card of cards){
+   left=Math.min(left,card.x-40);top=Math.min(top,card.y-40);
+   right=Math.max(right,card.x+card.width+100);bottom=Math.max(bottom,card.y+card.height+40);
+ }
+ return [left,top,right-left,bottom-top];
+}
+"""
+
+
+GRAPH_JS = COPY_JS + SVG_PAN_JS + r"""
 function mountGraph(root, data, notify, navigate) {
  if(root._graphCleanup)root._graphCleanup();
  const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
@@ -101,7 +187,6 @@ function mountGraph(root, data, notify, navigate) {
  }else{
    ['node-text','graph-bg','graph-mode','graph-border','graph-surface','graph-edge','graph-path','graph-selected'].forEach(key=>container.style.removeProperty('--'+key));
  }
- root.querySelector('#df-arrow path').setAttribute('fill',theme?theme.edge:'#829ab1');
  let clickTimer=null;
  const appearance=data.appearance||{},labels=appearance.graph_labels||'compact';
  const edgeWidth=appearance.graph_edge_width||2;
@@ -111,14 +196,88 @@ function mountGraph(root, data, notify, navigate) {
  stage.replaceChildren();
  const nodes=new Map(data.nodes.map(n=>[n.asset_id,n]));
  const nodeLabel=n=>n.job_id&&n.job_id!=='workspace'?n.name+' [job: '+n.job_id+']':n.name;
- const fitted=data.bounds;
- let box=[...fitted];
- const view=()=>svg.setAttribute('viewBox',box.join(' '));view();
- const highlight=(ids)=>{stage.querySelectorAll('.chosen').forEach(e=>e.classList.remove('chosen'));ids.forEach(id=>{stage.querySelectorAll('[data-node]').forEach(e=>{if(e.dataset.node===id)e.classList.add('chosen')})});};
+ let box=root._graphBox||[...data.bounds];
+ const view=()=>{root._graphBox=box;svg.setAttribute('viewBox',box.join(' '))};view();
+ const expanded=root._expandedColumns??=new Set(), moves=root._cardMoves??=new Map();
+ const frames=new Map(), edgePaths=[], incident=new Map(), columnPaths=new Map();
+ const highlighted=root._graphHighlight??={nodes:new Set(),edges:new Set()};
+ let columnLayer, activeLinks=[];
+ const place=(id,frame)=>{
+   [frame.x,frame.y]=moves.get(id)||[frame.baseX,frame.baseY];
+   frame.element.setAttribute('transform',`translate(${frame.x},${frame.y})`);
+ };
+ const reroute=i=>{
+   const edge=data.edges[i], a=frames.get(edge.source), b=frames.get(edge.target);
+   const p=edgePaths[i], y1=a.y+24, y2=b.y+24;
+   const moved=moves.has(edge.source)||moves.has(edge.target);
+   if(a===b)p.setAttribute('transform',`translate(${a.x-a.baseX},${a.y-nodes.get(edge.source).y})`);
+   else if(moved)p.setAttribute('d',movedCardLink(a,b,y1,y2));
+   else{
+     const x1=a.x+a.width,x2=b.x;
+     p.setAttribute('d',`M ${x1} ${y1} C ${x1+70} ${y1} ${x2-70} ${y2} ${x2} ${y2}`);
+   }
+   for(const {link,path} of columnPaths.get(i)||[]){
+     path.setAttribute('d',movedCardLink(a,b,a.y+a.rows.get(link.source),b.y+b.rows.get(link.target)));
+   }
+ };
+ const reflow=()=>{
+   const offsets=new Map();
+   for(const n of data.nodes){
+     const frame=frames.get(n.asset_id), offset=offsets.get(n.x)||0;
+     frame.baseY=n.y+offset;
+     frame.height=48+frame.extra;
+     place(n.asset_id,frame);
+     offsets.set(n.x,offset+frame.extra);
+   }
+   if(columnLayer){
+     columnLayer.replaceChildren();
+     columnPaths.clear();
+     for(const {edge, link, index} of activeLinks){
+       const a=nodes.get(edge.source), b=nodes.get(edge.target);
+       const path=make('path',{class:'column-link','data-column-edge':index,'marker-end':'url(#df-column-arrow)'},columnLayer);
+       if(!columnPaths.has(index))columnPaths.set(index,[]);
+       columnPaths.get(index).push({link,path});
+       if(highlighted.edges.has(index))path.classList.add('chosen');
+       make('title',{},path).textContent=`${a.name}.${link.source} → ${b.name}.${link.target}`;
+     }
+   }
+   data.edges.forEach((_,i)=>reroute(i));
+ };
+ const refreshColumns=()=>{
+   const required=new Map();
+   const requireRow=(asset,name)=>{
+     if(!required.has(asset))required.set(asset,new Set());
+     required.get(asset).add(name);
+   };
+   activeLinks=[];
+   data.edges.forEach((edge,i)=>{
+     if(!expanded.has(edge.source)&&!expanded.has(edge.target))return;
+     for(const link of data.column_links?.[i]||[]){
+       if(!link.value)continue;
+       activeLinks.push({edge,link,index:i});
+       requireRow(edge.source,link.source);
+       requireRow(edge.target,link.target);
+     }
+   });
+   for(const [asset,frame] of frames)frame.drawColumns?.(required.get(asset));
+   reflow();
+ };
+ const applyHighlight=()=>{
+   stage.querySelectorAll('[data-node]').forEach(e=>e.classList.toggle('chosen',highlighted.nodes.has(e.dataset.node)));
+   edgePaths.forEach((path,i)=>path.classList.toggle('chosen',highlighted.edges.has(i)));
+   columnLayer?.querySelectorAll('[data-column-edge]').forEach(path=>{
+     path.classList.toggle('chosen',highlighted.edges.has(Number(path.dataset.columnEdge)));
+   });
+ };
+ const highlight=(ids, edges=[])=>{
+   highlighted.nodes=ids;
+   highlighted.edges=new Set(edges);
+   applyHighlight();
+ };
  const inspectNode=(n,emit=true)=>{
    let related=new Set([n.asset_id]),pending=[n.asset_id];
    while(pending.length){let id=pending.pop();data.edges.forEach(e=>{if(e.target===id&&!related.has(e.source)){related.add(e.source);pending.push(e.source)}})}
-   highlight(related);stage.querySelectorAll('[data-edge]').forEach(p=>{let e=data.edges[Number(p.dataset.edge)];if(related.has(e.source)&&related.has(e.target))p.classList.add('chosen')});
+   highlight(related,data.edges.flatMap((edge,i)=>related.has(edge.source)&&related.has(edge.target)?[i]:[]));
    details.textContent=nodeLabel(n)+'\n'+(n.temporary?'Temporary asset':'Persistent or external asset')+'\n'+data.edges.filter(e=>e.source===n.asset_id||e.target===n.asset_id).map(e=>nodeLabel(nodes.get(e.source))+' → '+nodeLabel(nodes.get(e.target))+'\n'+e.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+(v.kind||'')+' ['+(v.status||'')+']').join('\n')).join('\n\n')+(data.boundaries||[]).filter(e=>e.source_id===n.asset_id||e.target_id===n.asset_id).map(e=>'\nUnresolved evidence: '+(e.relative_path||'')+':'+(e.start_line||'')+' ['+(e.edge_id||'')+']\n'+(e.code||'')).join('\n');
    if(emit&&notify)notify({node:n.asset_id});
  };
@@ -126,12 +285,22 @@ function mountGraph(root, data, notify, navigate) {
    const a=nodes.get(edge.source),b=nodes.get(edge.target);
    const d=edge.path;
    const p=make('path',{d,'class':'edge','marker-end':'url(#df-arrow)','data-edge':i,tabindex:0,role:'button','aria-label':nodeLabel(a)+' to '+nodeLabel(b)},stage);
+   edgePaths.push(p);
+   for(const asset of [edge.source,edge.target]){
+     if(!incident.has(asset))incident.set(asset,new Set());
+     incident.get(asset).add(i);
+   }
    p.style.strokeWidth=edgeWidth;
-   const show=()=>{highlight(new Set([edge.source,edge.target]));p.classList.add('chosen');details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
+   const show=()=>{highlight(new Set([edge.source,edge.target]),[i]);details.textContent=nodeLabel(a)+' → '+nodeLabel(b)+'\n'+(edge.intermediates.length?'Via '+edge.intermediates.join(', ')+'\n':'')+edge.evidence.map(v=>(v.relative_path||'')+':'+v.start_line+'–'+v.end_line+' '+v.kind+'\n'+v.code).join('\n\n');if(notify)notify({edge:i})};
    p.onclick=show;p.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show()}};
  });
+ if(data.column_links)columnLayer=make('g',{class:'column-links'},stage);
  data.nodes.forEach(n=>{
-   const g=make('g',{'class':'node',transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':nodeLabel(n)},stage);
+   const element=make('g',{transform:`translate(${n.x},${n.y})`},stage);
+   const frame={element,extra:0,baseX:n.x,baseY:n.y,x:n.x,y:n.y,width:n.width,height:48};
+   frames.set(n.asset_id,frame);
+   const columns=data.columns?.[n.asset_id], controlWidth=columns?82:52;
+   const g=make('g',{'class':'node','data-card-handle':n.asset_id,tabindex:0,role:'button','aria-label':nodeLabel(n)},element);
    const role=theme&&(n.kind==='unresolved'?theme.selected:n.source?theme.source:n.target?theme.target:theme.intermediate);
    const semantic=theme&&appearance.graph_palette!=='neutral';
    const color=theme?(semantic?`color-mix(in srgb, ${role} 25%, ${theme.graph})`:theme.surface):appearance.graph_palette==='neutral'?'var(--node-neutral)':n.kind==='unresolved'?'var(--node-unresolved)':n.temporary?'var(--node-temporary)':n.source?'var(--node-source)':'var(--node-table)';
@@ -139,20 +308,68 @@ function mountGraph(root, data, notify, navigate) {
    if(labels!=='hidden'){
      const text=make('text',{x:12,y:29,fill:'var(--node-text)','font-size':13},g);
      const label=nodeLabel(n);text.textContent=labels==='compact'&&label.length>22?label.slice(0,21)+'…':label;
-     if(text.getComputedTextLength()>n.width-52){text.setAttribute('textLength',n.width-52);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
+     if(text.getComputedTextLength()>n.width-controlWidth){text.setAttribute('textLength',n.width-controlWidth);text.setAttribute('lengthAdjust','spacingAndGlyphs')}
    }
    make('title',{},g).textContent=nodeLabel(n);
    g.onclick=()=>{clearTimeout(clickTimer);inspectNode(n,false);clickTimer=setTimeout(()=>{if(notify)notify({node:n.asset_id})},350)};
    g.ondblclick=e=>{e.preventDefault();clearTimeout(clickTimer);if(navigate)navigate(n.asset_id);else inspectNode(n)};
    g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(e.key==='Enter'&&e.altKey&&navigate)navigate(n.asset_id);else inspectNode(n)}};
-   const copy=make('g',{'class':'copy-node',transform:`translate(${n.x+n.width-32},${n.y+10})`,tabindex:0,role:'button','aria-label':'Copy '+n.name},stage);
+   const copy=make('g',{'class':'copy-node',transform:`translate(${n.width-(columns?62:32)},10)`,tabindex:0,role:'button','aria-label':'Copy '+n.name},element);
    make('rect',{width:26,height:28,rx:5,fill:color},copy);
    make('text',{x:5,y:20,fill:'var(--node-text)','font-size':19,'pointer-events':'none'},copy).textContent='⧉';
    make('title',{},copy).textContent='Copy '+n.name;
    copy.onclick=async e=>{e.stopPropagation();clearTimeout(clickTimer);status.textContent=await copyText(n.name,container)?'Copied '+n.name:'Copy failed. Select the name in the details and copy manually.'};
    copy.ondblclick=e=>{e.stopPropagation();e.preventDefault()};
    copy.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();copy.onclick(e)}};
+   if(columns){
+     const toggle=make('g',{class:'expand-node',transform:`translate(${n.width-32},10)`,tabindex:0,role:'button'},element);
+     make('rect',{width:26,height:28,rx:5,fill:color},toggle);
+     const icon=make('text',{x:13,y:20,fill:'var(--node-text)','font-size':18,'text-anchor':'middle','pointer-events':'none'},toggle);
+     const title=make('title',{},toggle);
+     let panel=null, previous='';
+     frame.drawColumns=(required=[])=>{
+       const open=expanded.has(n.asset_id);
+       const names=open?[...new Set([...columns.names,...required])]:[...required];
+       const signature=JSON.stringify([open,names]);
+       if(signature===previous)return;
+       previous=signature;
+       title.textContent=(open?'Hide':'Show')+' final columns for '+n.name;
+       toggle.setAttribute('aria-label',title.textContent);
+       toggle.setAttribute('aria-expanded',open);
+       icon.textContent=open?'−':'+';
+       panel?.remove();panel=null;frame.extra=0;frame.rows=new Map();
+       if(!open&&!names.length)return;
+       const rowHeight=26;
+       frame.extra=(names.length+1)*rowHeight;
+       panel=make('g',{class:'node-columns',transform:'translate(0,48)',role:'group',
+                       'aria-label':'Final columns for '+n.name},element);
+       make('rect',{width:n.width,height:frame.extra,rx:5},panel);
+       const note=!open?'Linked columns':names.length?(columns.declared?'Declared columns':'Known columns'):'No final columns known';
+       make('text',{x:10,y:17,class:'column-note'},panel).textContent=note;
+       if(!names.length)return;
+       const list=make('g',{role:'list','aria-label':note},panel);
+       const labels=names.map((name,i)=>{
+         const row=make('g',{role:'listitem','aria-label':name},list);
+         const y=(i+1)*rowHeight;
+         frame.rows.set(name,48+y+rowHeight/2);
+         make('line',{x1:0,y1:y,x2:n.width,y2:y},row);
+         make('title',{},row).textContent=name;
+         const text=make('text',{x:10,y:y+17},row);
+         text.textContent=name.length>35?name.slice(0,34)+'…':name;
+         return text;
+       });
+       for(const text of labels.filter(text=>text.getComputedTextLength()>n.width-20)){
+         text.setAttribute('textLength',n.width-20);
+         text.setAttribute('lengthAdjust','spacingAndGlyphs');
+       }
+     };
+     frame.drawColumns();
+     toggle.onclick=()=>{expanded.has(n.asset_id)?expanded.delete(n.asset_id):expanded.add(n.asset_id);refreshColumns()};
+     toggle.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle.onclick()}};
+   }
  });
+ if(expanded.size||moves.size)refreshColumns();
+ if(highlighted.nodes.size||highlighted.edges.size)applyHighlight();
  const fullscreen=root.querySelector('.fullscreen');
  const doc=container.ownerDocument;
  const syncFullscreen=()=>{fullscreen.textContent=container.matches(':fullscreen')?'Exit fullscreen':'Fullscreen'};
@@ -161,21 +378,31 @@ function mountGraph(root, data, notify, navigate) {
    catch(_){status.textContent='Fullscreen is unavailable in this browser.'}
  };
  if(doc){doc.addEventListener('fullscreenchange',syncFullscreen);syncFullscreen()}
- root.querySelector('.fit').onclick=()=>{box=[...fitted];view()};
+ root.querySelector('.fit').onclick=()=>{box=fitMovedCards(data.bounds,frames.values());view()};
  const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
  root.querySelector('.plus').onclick=()=>zoom(.8);root.querySelector('.minus').onclick=()=>zoom(1.25);
  svg.onwheel=e=>{e.preventDefault();zoom(e.deltaY>0?1.1:.9)};
- let drag=null;
- svg.onpointerdown=e=>{if(e.target===svg){drag=[e.clientX,e.clientY,...box];svg.setPointerCapture(e.pointerId)}};
- svg.onpointermove=e=>{if(drag){box=[drag[2]-(e.clientX-drag[0])*drag[4]/svg.clientWidth,drag[3]-(e.clientY-drag[1])*drag[5]/svg.clientHeight,drag[4],drag[5]];view()}};
- svg.onpointerup=()=>drag=null;svg.onpointercancel=()=>drag=null;
+ const stopPan=bindSvgPan(svg,stage,()=>box,next=>{box=next;view()},target=>{
+   const id=target.closest('[data-card-handle]')?.dataset.cardHandle;
+   if(!id)return;
+   const frame=frames.get(id), {x,y}=frame;
+   return (dx,dy)=>{
+     if(x+dx===frame.baseX&&y+dy===frame.baseY)moves.delete(id);
+     else moves.set(id,[x+dx,y+dy]);
+     place(id,frame);
+     incident.get(id)?.forEach(reroute);
+   };
+ });
  root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
- root._graphCleanup=()=>{clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
+ root._graphCleanup=()=>{stopPan();clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
  return root._graphCleanup;
 }
 """
 
-GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
+GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Drag a header to move a card. Drag the background or Alt-drag to pan. Click for evidence or double-click (Alt+Enter) to focus.</span></div><svg role="group" aria-label="Directed lineage graph"><defs>
+<marker id="df-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M 3 2 L 9.5 6 L 3 10" stroke-width="1.6"/></marker>
+<marker id="df-column-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M 2 1.5 L 6.5 4 L 2 6.5" stroke-width="1.25"/></marker>
+</defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
 
 
 def graph_data(
@@ -189,12 +416,13 @@ def graph_data(
     condensed = nx.condensation(graph.graph)
     groups = list(nx.topological_generations(condensed))
     width = min(700, max([215] + [len(n["name"]) * 7 + 24 for n in graph.nodes.values()])) if appearance.graph_labels == "full" else 215
+    layer_gap, row_gap = 200, 76
     nodes = []
     for level, components in enumerate(groups):
         ids = sorted(n for c in components for n in condensed.nodes[c]["members"])
         for row, node in enumerate(ids):
             attrs = dict(graph.nodes[node])
-            attrs.update(x=20 + level * (width + 85), y=20 + row * 85, width=width,
+            attrs.update(x=20 + level * (width + layer_gap), y=20 + row * (48 + row_gap), width=width,
                          source=graph.graph.in_degree(node) == 0,
                          target=graph.graph.out_degree(node) == 0, job_id=asset_job(attrs))
             nodes.append(attrs)

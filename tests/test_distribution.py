@@ -154,8 +154,10 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path: Path) -> Non
     root = Path(__file__).resolve().parents[1]
     for name in ("pyproject.toml", "README.md", "app.py", "dependency-overrides.txt"):
         shutil.copyfile(root / name, tmp_path / name)
-    for folder in ("src/dataforge", "ui", "prompts", ".streamlit"):
+    for folder in ("src/dataforge", "ui", "prompts", ".streamlit", "tests/sample_data"):
         (tmp_path / folder).mkdir(parents=True, exist_ok=True)
+    sample = "tests/sample_data/dataforge_sql_lineage_test_project.zip"
+    shutil.copyfile(root / sample, tmp_path / sample)
     (tmp_path / "scripts/build").mkdir(parents=True)
     shutil.copyfile(root / "scripts/build/hatch_assets.py", tmp_path / "scripts/build/hatch_assets.py")
     for name in ('frozen_entry.py', 'build_executable.py', 'smoke.py', 'smoke_docker.py',
@@ -175,6 +177,7 @@ def test_wheel_assets_exclude_secret_and_runtime_canaries(tmp_path: Path) -> Non
         assert "dataforge/_app/app.py" in names
         assert "dataforge/_app/.streamlit/config.toml" in names
         assert wheel.read("dataforge/_app/ui/style.css") == (root / "ui/style.css").read_bytes()
+        assert wheel.read(f"dataforge/_app/{sample}") == (root / sample).read_bytes()
         assert "dataforge/prompts/prompt.md" in names
         assert wheel.read('dataforge/dependency-overrides.txt') == (root / 'dependency-overrides.txt').read_bytes()
         assert not any(b"DUMMY_PACKAGING_SECRET_CANARY" in wheel.read(name) for name in names)
@@ -196,10 +199,11 @@ def test_source_distribution_includes_release_toolkit_and_compose(tmp_path: Path
         names = archive.getnames()
         for name in names:
             relative = Path(name).parts[1:]
-            assert not any(part in {"plans", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
+            assert not any(part in {"plans", "superpowers", ".codex", "AGENTS.md", "KNOWLEDGE.md", ".kbignore"}
                            for part in relative), name
         for expected in ('ui/streamlit.toml', 'dependency-overrides.txt', 'compose.yaml', 'scripts/build/frozen_entry.py', 'scripts/build/smoke.py',
                          'scripts/build/smoke_docker.py', 'scripts/build/build_executable.py',
                          'scripts/build/windows.iss', 'scripts/build/windows_installer.ps1',
-                         'scripts/build/sign_windows.ps1', 'scripts/build/smoke_installer.py'):
+                         'scripts/build/sign_windows.ps1', 'scripts/build/smoke_installer.py',
+                         'tests/sample_data/dataforge_sql_lineage_test_project.zip'):
             assert any(name.endswith('/' + expected) for name in names), expected

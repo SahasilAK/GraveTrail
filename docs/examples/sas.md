@@ -9,7 +9,8 @@ selected. Run **Analyze all files** with AI unchecked.
 3. Turn collapsing on. Expected logical graph: 85 persistent tables, 128 relationships,
    seven layers and 16 source tables. There are also 16 temporary WORK datasets and
    144 physical evidence edges before collapsing.
-4. Inspect a reference in **Columns**, then supported expressions in **Transformation lineage**.
+4. Open **Columns → Lineage graph** for supported transformations, then choose
+   **Direct references** to find uses of a column.
 5. Export/reopen HTML, recording whether temporary steps were collapsed. Reopen the
    workspace’s data home for live queries.
 

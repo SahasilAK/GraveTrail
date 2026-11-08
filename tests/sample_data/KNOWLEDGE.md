@@ -7,7 +7,7 @@ Use these sample project archives for future application import and lineage test
 
 ## Files
 
-- `dataforge_sql_lineage_test_project.zip` — SQL sample project ZIP.
+- `dataforge_sql_lineage_test_project.zip` — SQL sample project ZIP and the source for Overview's **Run SQL example**. Wheel, Docker and native builds reuse this archive.
 - `dataforge_sas_lineage_test_project.zip` — SAS sample project ZIP.
 
 ## Expected structure (user-provided)
@@ -45,6 +45,39 @@ The user reports both archives passed structural and lineage-manifest checks,
 and the SQL transformations passed a SQLite compatibility execution check.
 Full DuckDB execution and licensed SAS execution have not been verified.
 These are fixture provenance notes, not results of a fresh application test.
+
+## dbt column acceptance (parser 23)
+
+The 21-file retail archive preserves the logical edge gold. All 29 named
+output columns trace to a raw source or seed CSV. The legacy snapshot's
+wildcard needs a source layout. Snapshot history and system columns remain
+runtime coverage boundaries.
+
+## SQL column acceptance (parser 18)
+
+The ecommerce archive publishes 972 verified physical column derivations. All 48
+columns across the four publication tables trace without coverage gaps. Inline
+seed values and publication timestamps terminate at their SQL expressions.
+
+The 2,114-file banking archive exercises inferred CTAS layouts, wildcard UNION ALL,
+correlated membership and literal UNNEST. Unsupported UPDATE and MERGE statements
+retain explicit column coverage gaps. The archive also includes intentional dynamic
+and malformed SQL cases.
+
+## SAS column acceptance (parser 22)
+
+The 86-file SAS archive preserves the 128 expected logical table edges. Its
+48 publication columns trace through WORK datasets to inline inputs or a
+runtime timestamp origin. The 2,201-file banking archive also exercises
+concatenated SET, CALCULATED, and procedure outputs. Unresolved derivations
+fell from 4,190 to 481 with parser 19, then to 160 after adding bounded
+match merges and conditional OUTPUT routing. Parser 21 reduces this to 50
+after tracing the sample's APPEND, UPDATE, SUMMARY, hash lookup, and fixed
+array forms. The remaining records cover 40 missing input layouts and 10
+runtime TRANSPOSE layouts with known candidate value inputs. Parser 22 traces
+`AMT_1` and `AMT_2` conditionally for all ten TRANSPOSE outputs while their
+exact widths remain unknown. Dynamic macro calls and deliberately malformed
+files retain parser diagnostics.
 
 ## Parser9 acceptance (2026-10-18)
 

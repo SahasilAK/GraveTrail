@@ -3,13 +3,16 @@
 Open **Analysis → Run** after import. Leave **Use AI for analysis** unchecked for local
 static analysis. No AI account, connection or API key is needed.
 
-Choose **Analyze all files** initially. Compatible unchanged static parses can be reused;
-**Rebuild** forces parsing. Selecting a dbt member includes its project closure because
+Choose **Analyze all files** initially. Compatible unchanged static parses can be reused.
+**Rebuild all lineage** forces parsing. Selecting a dbt member includes its project closure because
 macros, configuration and YAML can affect models together.
 
-![Static Analysis controls and sample result with AI unchecked](../assets/images/gravetrail-analysis-results.png)
+The progress card separates file processing from publication. It shows when the
+app resolves names and schemas, traces column transformations, connects table
+dependencies, and saves lineage and diagnostics. **Analysis complete** appears
+after publication succeeds.
 
-*Saved results and diagnostics are separate from provider setup.*
+![Static Analysis controls and sample result with AI unchecked](../assets/images/gravetrail-analysis-results.png)
 
 Choose **Explore lineage** or **Review diagnostics** after success. Warnings can identify
 unsupported constructs, ambiguous names or partial coverage even when some edges were

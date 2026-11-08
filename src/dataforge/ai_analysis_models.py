@@ -75,6 +75,7 @@ class AnalysisUnit(StrictModel):
     path: str = Field(max_length=4000)
     extension: Literal['.sql', '.sas', '.py', '.json']
     source_kind: Literal['sql', 'sas', 'dbt'] = 'sql'
+    dialect: str | None = None
     job_id: str = Field(default='', max_length=500)
     first: int = Field(ge=1)
     last: int = Field(ge=1)

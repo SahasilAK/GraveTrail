@@ -63,12 +63,15 @@ def save_run(store, workspace, run_id, *, mode, status='planning', manifest=None
     previous = old[0] if old else {}
     accepted = None
     if accepted_results is not None:
+        from dataforge.services import PARSER_VERSION, source_dialect
+
         accepted = '[]'
         config = configuration or json.loads(previous.get('configuration', '{}'))
         store.execute('DELETE FROM ai_analysis_snapshots WHERE workspace_id=? AND run_id=?', [workspace, run_id])
         for metadata, parsed in accepted_results:
             header = {'metadata': {k: metadata[k] for k in
                 ('file_id', 'content_hash', 'relative_path', 'extension', 'encoding')},
+                'dialect': source_dialect(metadata, config), 'parser_version': PARSER_VERSION,
                 'job_id': source_job(metadata, config), 'result': parsed.to_dict()}
             operations = header['result'].pop('operations')
             _save_snapshot_part(store, workspace, run_id, metadata, 0, header)
@@ -221,11 +224,14 @@ def save_claim_decisions(store, workspace, run_id, claims, *, supports=()):
 
 def load_accepted_file_results(store, workspace, config=None):
     """Latest committed representation per file; stale evidence is never rehydrated."""
+    from dataforge.services import PARSER_VERSION, source_dialect
+
     inventory = {m['file_id']: m for m in store.files(workspace)}
     accepted, seen = {}, set()
     for run in store.rows("SELECT * FROM ai_analysis_runs WHERE workspace_id=? AND status='committed' ORDER BY created_at DESC,run_id DESC", [workspace]):
         configuration = json.loads(run['configuration'])
         parsing_configuration = {k: v for k, v in configuration.items() if k != 'dbt'}
+        current_config = parsing_configuration if config is None else config
         manifest = json.loads(run['manifest'])
         # The immutable context catalog can cite another file's declarations. Revalidate
         # its evidence as well as the direct source before permitting offline reuse.
@@ -237,6 +243,10 @@ def load_accepted_file_results(store, workspace, config=None):
                     or current['relative_path'] != entry.get('path', current['relative_path'])):
                 context_current = False
                 break
+            if source_dialect(current, current_config) != entry.get('dialect',
+                    source_dialect({**current, 'metadata': '{}'}, configuration)):
+                context_current = False
+                break
         for item in _accepted_items(store, workspace, run, hydrate=False):
             saved = item['metadata']
             fid = saved['file_id']
@@ -246,7 +256,14 @@ def load_accepted_file_results(store, workspace, config=None):
             current = inventory.get(fid)
             if (not current or not context_current or (config is not None and parsing_configuration != config)
                     or any(current[k] != saved[k] for k in ('content_hash', 'relative_path', 'extension'))
-                    or item['job_id'] != source_job(current, config or configuration)):
+                    or item['job_id'] != source_job(current, current_config)):
+                continue
+            dialect = source_dialect(current, current_config)
+            if dialect != item.get('dialect', source_dialect(saved, configuration)):
+                continue
+            # Pre-versioned Databricks snapshots predate its dedicated parser route.
+            prior_version = item.get('parser_version')
+            if prior_version != PARSER_VERSION and (prior_version is not None or dialect == 'databricks'):
                 continue
             # Verify immutable source bytes still exist and match before reusing evidence.
             store.snapshot_content(current)

@@ -2,8 +2,8 @@
 
 GraveTrail reads dbt source files and supplied artifacts to build evidence-backed lineage.
 It does not need a warehouse connection, run `dbt`, evaluate imported Jinja/Python or fetch
-packages. This workflow describes source checkout **`1864dc8`**; dbt support is newer than
-the published **v0.0.1** release. See [installation](../SETUP_AND_DEPLOYMENT.md#4-python-installation).
+packages. See [installation](../getting-started/installation.md) for the source checkout
+used in the walkthrough.
 
 Use the [retail example](../examples/dbt.md) to try this with synthetic files. The
 [dbt support reference](../DBT_SUPPORT.md) defines exact coverage and artifact contracts.
@@ -68,9 +68,10 @@ Then inspect the result from several views:
 3. Read the selected resource's metadata and evidence. Source facts use original source
    slices. Artifact facts show origin and JSON Pointer; compiled expressions retain
    `compiled_sql` origin rather than claiming original Jinja text.
-4. In **Columns** and **Transformations**, inspect parseable model projections and expression
-   evidence. YAML descriptions are documentation, not a complete physical schema. Python
-   models provide literal dependencies without DataFrame column derivations.
+4. In **Columns → Lineage graph**, inspect projections and expressions from supported
+   source or compiled SQL. Choose **Direct references** to see usage. YAML descriptions
+   alone cannot establish a complete physical schema. Simple Python models can yield
+   literal dependencies, while DataFrame column expressions remain unresolved.
 
 Use exact IDs when several roots/packages or versions share a name. `ref('orders')` can
 resolve to YAML `latest_version`; `ref('orders', v=1)` pins a version. Inspect resource

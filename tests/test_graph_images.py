@@ -37,6 +37,9 @@ def test_standalone_svg_uses_shared_scene_and_inert_full_titles() -> None:
     paths = root.findall('.//s:path[@data-edge]', NS)
     assert [p.get('d') for p in paths] == [e['path'] for e in scene['edges']]
     assert all(p.get('marker-end') == 'url(#df-arrow)' for p in paths)
+    marker = root.find('.//s:marker', NS)
+    assert marker.get('markerUnits') == 'userSpaceOnUse'
+    assert marker.find('s:path', NS).get('fill') == 'none'
     assert 'PRIVATE SOURCE' not in data.decode()
     assert '<script' not in data.decode()
     assert g.nodes['0']['name'] in ''.join(root.itertext())

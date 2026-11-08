@@ -88,6 +88,8 @@ def collect_resources(snapshot, read_source):
                               **({'source_args': source_args} if source_args else {})})
 
     for source in snapshot.sources:
+        if source.relative_path == config_path:
+            continue
         if any(within(source.relative_path, str(PurePosixPath(c.relative_path).parent)) for c in package_configs):
             continue
         text, suffix = read_source(source), PurePosixPath(source.relative_path).suffix.lower()
@@ -122,7 +124,8 @@ def collect_resources(snapshot, read_source):
         elif suffix == '.csv' and role == 'seed':
             header = next(csv.reader(io.StringIO(text)), [])
             add('seed', PurePosixPath(relative).stem, source, text,
-                metadata={'columns': [{'name': name} for name in header], 'schema_origin': 'seed_header'})
+                metadata={'columns': [{'name': name} for name in header], 'seed_header': header,
+                          'schema_origin': 'seed_header'})
         elif suffix == '.md':
             for definition in scan_template(text).definitions:
                 add('doc', definition.name, source, text, start=definition.start, end=definition.end)

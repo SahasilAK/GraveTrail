@@ -29,18 +29,19 @@ workspace** to open a creation dialog. Changing pages never starts an analysis o
 
 | Group | Destination | What belongs here |
 | --- | --- | --- |
-| Workspace | Overview | Health, recent runs and the next useful action |
+| Workspace | Overview | Builder, import and SQL example starting cards. Active workspaces show next actions, health and recent runs |
 | Workspace | Sources | ZIP/folder/host import; Inventory, original file details and exports |
 | Workspace | Analysis | Run selected/all files, rebuild, validation; Diagnostics and optional AI review; History and run comparison |
 | Workspace | Lineage builder | Reusable schemas, canvas catalog/diagram, column links and joins, trace colors, saved designs and editable handoff |
 | Explore | Lineage | Graph or full-width Tree; source evidence, paths and graph/source exports |
-| Explore | Columns | Direct usage, grouping, declared schema evidence and reports |
-| Explore | Transformation lineage | Output/value transformations, distinct dependency roles, coverage and original source evidence |
+| Explore | Columns | Lineage graph by default, transformation logic and original evidence. Direct references is the second view |
 | Explore | Engineering tools | Code search, data dictionary and downstream impact |
 | Administration | Workspace settings | Parsing, Resources and Appearance, including all eleven themes |
 | Administration | Connections & AI | Provider profiles, session credentials, routing and Privacy |
 | Administration | Data management | Storage & transfers, Backups & integrity, Cleanup & recovery, History & staging |
 | Administration | Automation & access | Agent permissions, response budgets, client configuration and local connection test |
+
+![Active Overview with the next action and counts for source files, assets, dependencies and diagnostics](assets/images/gravetrail-workspace-dashboard.png)
 
 Selections persist between related exploration views when valid. Workspace and
 source revision changes discard stale source previews and cleanup plans. Unsaved
@@ -62,9 +63,16 @@ encoding, size, lines, hashes and parsing status. Duplicate content at different
 traceable. Reimporting an existing path replaces the active inventory entry without losing
 original bytes needed by prior evidence. Imports are additive; omitted files are not deleted.
 
+When SQL is selected, choose its **SQL source type**. The default inherits workspace rules.
+An explicit choice, including **Generic SQL**, applies only to SQL files in the batch. To
+correct a file, open **Inventory → Inspect a source file**, save the new choice, and reanalyze.
+See [SQL parsing coverage](SQL_PARSING.md#databricks-lineage).
+
 Open **Analysis → Run**, then choose **Analyze all files** or select paths. Normal analysis reuses unchanged parses; Rebuild
 forces parsing. Diagnostics explain ambiguous/dynamic constructs. A failed run preserves
 the previous committed facts. A newer file imported during a run remains pending.
+See [source import](user-guide/sources.md) for skipped-file details and
+[analysis](user-guide/analysis.md) for publication stages.
 
 **Review unresolved code:** Open **Unresolved review queue** in Analysis → Diagnostics after analysis. It
 lists up to 100 current SQL/SAS warnings and errors, with errors first. CSV, informational
@@ -382,12 +390,12 @@ items after partial publication. See [AI flow](user-guide/ai-analysis-flow.md) a
 
 ## Column lineage graph
 
-In **Columns**, choose an asset and switch between **Direct references** and
-**Lineage graph**. Choose a column and direction. Arrows point from inputs through
-transformation boxes to outputs. Solid edges carry values; dashed edges show
-selection, filter, join, rowset, partition and order context. Select a graph box or
-edge, or use the keyboard-accessible **Transformation step** selector, to inspect
-logic. Multiple writers remain separate choices.
+In **Columns**, choose an asset and use the default **Lineage graph** or switch to
+**Direct references**. Cards group traced rows by table, file, or intermediate scope.
+Solid edges carry values. Dashed edges show selection, filter, join, rowset, partition,
+and order context. Drag a header to move its card and arrows. Drag the background
+or Alt-drag to pan. Select a graph card, row, or edge to inspect logic. Multiple
+writers remain separate choices in the **Transformation step** picker.
 
 **Transformation logic** shows expression, statement preview, roles, effects and
 coverage. **Analyzed source file** opens the exact historical file used by Analysis,
@@ -399,3 +407,6 @@ The display fits at most 600 nodes and 1,200 edges, retaining whole transformati
 units. Omission counts do not change trace completeness. The **Steps and paths**
 table and exports retain the full bounded trace of up to 200 derivations.
 The previous Transformation lineage route still opens the same renderer.
+
+For table-level exploration, [expand a card in Lineage](user-guide/explore.md#expand-a-table-in-the-graph)
+to see the value links between its columns and the linked rows on neighboring tables.

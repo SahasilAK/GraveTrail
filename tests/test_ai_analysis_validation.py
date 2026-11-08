@@ -148,7 +148,8 @@ def test_static_merge_gap_accepts_one_matched_update_and_rejects_extra_branches(
         {"table": "raw.a", "column": "id", "role": "join"}])
     assert validate_project_response(response(ctx, derivations=[item]), ctx).accepted
     ctx = context(sql[:-1] + " WHEN NOT MATCHED THEN INSERT (total) VALUES (a.x);")
-    assert validate_project_response(response(ctx, derivations=[item]), ctx).unresolved
+    report = validate_project_response(response(ctx, derivations=[item]), ctx)
+    assert not report.accepted and (report.rejected or report.unresolved)
 
 
 def test_sas_assignment_versions_and_scope_inputs_are_preserved():

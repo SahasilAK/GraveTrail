@@ -10,6 +10,7 @@ from dataforge.ingestion import Importer
 from dataforge.models import Diagnostic, ParseResult
 from dataforge.services import analyze
 from dataforge.store import Store
+from dataforge.transformations import trace_columns
 
 
 def test_sas_project_reaches_all_sources_with_exact_logical_edges_and_evidence(tmp_path: Path) -> None:
@@ -45,6 +46,13 @@ def test_sas_project_reaches_all_sources_with_exact_logical_edges_and_evidence(t
             assert edge['code'] in '\n'.join(original.splitlines()[edge['start_line'] - 1:edge['end_line']])
             assert edge['method'] in {'sas-rules', 'sas-proc-sql'}
         assert not any(d['severity'] == 'error' for d in store.diagnostics(w))
+        assert not store.rows("SELECT 1 FROM column_derivations WHERE status='unresolved'")
+        target = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'pub.all_kpis')
+        amount = trace_columns(store, w, target, 'amount', depth=30, limit=2000)
+        assert len({step['target']['table'] for step in amount['derivations']
+                    if step['category'] == 'inline_data'}) == 16
+        timestamp = trace_columns(store, w, target, 'published_at')
+        assert any(step['category'] == 'runtime' for step in timestamp['derivations'])
         assert cold['analyzed'] == 86 and analyze(store, w)['cached'] == 86
     finally:
         service.close()

@@ -115,9 +115,9 @@ CSS = """
 .lb-tables button{touch-action:none}.lb-catalog-ghost{position:fixed;z-index:10;pointer-events:none;background:var(--lb-card);border:1px solid var(--lb-accent);border-radius:5px;padding:8px;max-width:220px;overflow-wrap:anywhere}
 .lb-board{min-width:0;overflow:hidden;background:var(--lb-bg)}.lb-svg{display:block;width:100%;height:620px;touch-action:none;background-image:radial-gradient(var(--lb-border) .6px,transparent .6px);background-size:20px 20px}
 .lb-svg .lb-card{fill:var(--lb-card);stroke:var(--lb-border)}.lb-svg text{fill:var(--st-text-color,#243449);user-select:none}.lb-svg .lb-port{fill:var(--lb-bg);stroke:var(--lb-accent);stroke-width:2;cursor:crosshair}
-.lb-svg .lb-port:hover,.lb-svg .lb-port.pending{fill:var(--lb-accent);stroke-width:4}.lb-svg .lb-edge{fill:none;stroke:var(--lb-accent);stroke-width:2;cursor:pointer;pointer-events:stroke}.lb-svg .lb-hit{stroke:transparent;stroke-width:16;fill:none;cursor:pointer;pointer-events:stroke}
+.lb-svg .lb-port:hover,.lb-svg .lb-port.pending{fill:var(--lb-accent);stroke-width:4}.lb-svg .lb-edge{fill:none;stroke:var(--lb-accent);stroke-width:1.5;stroke-linecap:round;cursor:pointer;pointer-events:stroke}.lb-svg .lb-hit{stroke:transparent;stroke-width:16;fill:none;cursor:pointer;pointer-events:stroke}
 .lb-svg .lb-edge.lb-join{stroke:#d89e3a;stroke-dasharray:6 4}
-.lb-svg .lb-edge.selected{stroke-width:4}.lb-svg .lb-header{cursor:grab}.lb-svg .lb-header:active{cursor:grabbing}.lb-svg .lb-card.selected{stroke:var(--lb-accent);stroke-width:3}.lb-svg .lb-rule{stroke:var(--lb-rule,var(--lb-border));stroke-width:1;opacity:.75}
+.lb-svg .lb-header{cursor:grab}.lb-svg .lb-header:active{cursor:grabbing}.lb-svg .lb-card.selected{stroke:var(--lb-accent);stroke-width:3}.lb-svg .lb-rule{stroke:var(--lb-rule,var(--lb-border));stroke-width:1;opacity:.75}
 .lb-svg .lb-resize{fill:transparent;pointer-events:all}.lb-svg .lb-expand{cursor:pointer}.lb-svg .lb-expand:hover rect{fill:#ffffff20}
 .lb-svg .lb-marquee{fill:var(--lb-accent);fill-opacity:.12;stroke:var(--lb-accent);stroke-dasharray:5 3;pointer-events:none}
 .lb-alt-pan .lb-svg,.lb-alt-pan .lb-svg *{cursor:grab!important}.lb-alt-pan.lb-pan-dragging .lb-svg,.lb-alt-pan.lb-pan-dragging .lb-svg *{cursor:grabbing!important}
@@ -247,8 +247,8 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
   const [x1,y1,x2,y2]=coordinates;for(const [key,value]of Object.entries({x1,y1,x2:x1===x2&&y1===y2?x2+1:x2,y2}))entry.gradient.setAttribute(key,value);return entry.value;
  }
  function arrow(color){
-  if(arrows.has(color))return arrows.get(color);const id='lb-arrow-'+arrows.size,marker=node('marker',{id,viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto-start-reverse'},null,svg.querySelector('defs'));
-  node('path',{d:'M0 0L10 5L0 10z',fill:color},null,marker);const value=`url(#${id})`;arrows.set(color,value);return value;
+  if(arrows.has(color))return arrows.get(color);const id='lb-arrow-'+arrows.size,marker=node('marker',{id,viewBox:'0 0 8 8',refX:editable?13:7,refY:4,markerWidth:8,markerHeight:8,markerUnits:'userSpaceOnUse',orient:'auto'},null,svg.querySelector('defs'));
+  node('path',{d:'M 2 1.5 L 6.5 4 L 2 6.5',fill:'none',stroke:color,'stroke-width':1.25,'stroke-linecap':'round','stroke-linejoin':'round'},null,marker);const value=`url(#${id})`;arrows.set(color,value);return value;
  }
  function tint(color){
   const fills=Object.values(data.node_colors||{}).map(c=>c.fill).filter(c=>/^#[\da-f]{6}$/i.test(c));
@@ -309,7 +309,7 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
    node('path',{d,class:'lb-hit','data-edge':e.id},null,group);
    const attrs={d,class:'lb-edge'+(join?' lb-join':'')+(s.selected?.id===e.id?' selected':''),'data-edge':e.id,tabindex:0,role:'button','aria-label':`${table(e.source_table).name}.${table(e.source_table).columns.find(c=>c.id===e.source_column).name} ${join?'join':'to'} ${table(e.target_table).name}.${table(e.target_table).columns.find(c=>c.id===e.target_column).name}: ${join?e.join_type:e.label||'relationship'}`};
    const colors=colorList(traces.edgeColors,e.id),stroke=paint(colors,[a.x,a.y,b.x,b.y],'edge:'+e.id)||(join?'#d89e3a':'var(--lb-accent)'),traced=traces.selected.links.has(e.id),opacity=traces.active&&!traced ? .16 : 1;
-   attrs['data-traced']=traced;if(!join)attrs['marker-end']=arrow(colors.length?colors[colors.length-1]:stroke);const line=node('path',attrs,null,group);line.style.stroke=stroke;line.style.opacity=opacity;line.style.strokeWidth=s.selected?.id===e.id?4:traces.active&&traced?3.5:2;
+   attrs['data-traced']=traced;if(!join)attrs['marker-end']=arrow(colors.length?colors[colors.length-1]:stroke);const line=node('path',attrs,null,group);line.style.stroke=stroke;line.style.opacity=opacity;line.style.strokeWidth=s.selected?.id===e.id?2.5:traces.active&&traced?2.25:1.5;
    const text=join?(e.join_type||'Join')+(e.label?' · '+e.label:''):e.label;
    if(text){const label=node('text',{x:join?Math.max(a.x,b.x)+90:(a.x+b.x)/2,y:(a.y+b.y)/2-10,'text-anchor':join?'start':'middle','font-size':12,'data-edge':e.id},short(text,40),group);label.style.opacity=opacity;node('title',{},text,label);}
   }
@@ -503,8 +503,10 @@ function mountBuilder(parent, data, changed, createTable=null, workAction=null) 
   const originalShapes=svg.querySelectorAll('.lb-card,.lb-edge');clone.querySelectorAll('.lb-card,.lb-edge').forEach((n,i)=>{const stroke=getComputedStyle(originalShapes[i]).stroke;if(!stroke.includes('url('))n.style.stroke=stroke;});
   const style=getComputedStyle(root),color=style.color,bg=style.getPropertyValue('--lb-bg').trim()||'#fff',accent=style.getPropertyValue('--lb-accent').trim()||'#176db1',border=style.getPropertyValue('--lb-border').trim()||'#a3afbd',card=style.getPropertyValue('--lb-card').trim()||'#f2f5f9';
   clone.querySelectorAll('.lb-port,.lb-hit,.lb-ghost,.lb-resize,.lb-expand,.lb-marquee').forEach(n=>n.remove());
-  const css=node('style',{},`.lb-card{fill:${card};stroke:${border}}text{fill:${color};font-family:Arial,sans-serif}.lb-edge{fill:none;stroke:${accent};stroke-width:2}.lb-edge.lb-join{stroke:#d89e3a;stroke-dasharray:6 4}.lb-rule{stroke:${border};opacity:.4}`,null);clone.prepend(css);
+  const css=node('style',{},`.lb-card{fill:${card};stroke:${border}}text{fill:${color};font-family:Arial,sans-serif}.lb-edge{fill:none;stroke:${accent};stroke-width:1.5;stroke-linecap:round}.lb-edge.lb-join{stroke:#d89e3a;stroke-dasharray:6 4}.lb-rule{stroke:${border};opacity:.4}`,null);clone.prepend(css);
   clone.querySelectorAll('[fill="var(--lb-accent)"]').forEach(n=>n.setAttribute('fill',accent));
+  clone.querySelectorAll('[stroke="var(--lb-accent)"]').forEach(n=>n.setAttribute('stroke',accent));
+  clone.querySelectorAll('marker').forEach(n=>n.setAttribute('refX',7));
   clone.prepend(node('rect',{x,y,width:w,height:h,fill:bg}));
   const xml=new XMLSerializer().serializeToString(clone),blob=new Blob([xml],{type:'image/svg+xml;charset=utf-8'});
   if(format==='svg'){download(blob,'lineage-builder.svg');message('SVG exported.');return;}

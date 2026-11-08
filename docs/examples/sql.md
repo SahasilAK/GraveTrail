@@ -10,6 +10,8 @@ include setup/schema objects, so total assets is not the persistent-table count.
 
 Select a relationship, open its original statement, and identify inputs/outputs.
 Switch downstream from a source to identify consumers needing investigation if it changes.
+Expand a table with **+** to see its output columns and their direct links.
+Open **Columns → Lineage graph** to follow an expression through query steps.
 Review diagnostics and export completeness rather than relying only on appearance.
 
 Download interactive HTML and reopen it in your browser. Compare with [the smaller

@@ -27,6 +27,12 @@ class ParsingSettings(BaseModel):
     default_job: str = "workspace"
     job_by_folder: dict[str, str] = Field(default_factory=dict)
 
+    @classmethod
+    def from_store(cls, store: "Store", workspace: str) -> "ParsingSettings":
+        """Load and validate the workspace's parsing settings."""
+        return cls.model_validate({key: store.setting(workspace, key, default)
+                                   for key, default in ParsingSettings().model_dump().items()})
+
     @field_validator("default_job")
     @classmethod
     def job_identifier(cls, value: str) -> str:

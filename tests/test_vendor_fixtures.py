@@ -1,5 +1,6 @@
 """Labeled vendor examples prove these inputs, not universal dialect compatibility."""
 import json
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from dataforge.graph import LineageGraph
 from dataforge.ingestion import Importer
 from dataforge.services import analyze, column_report
 from dataforge.store import Store
+from dataforge.transformations import trace_columns
 
 FIXTURES = Path(__file__).parent / "fixtures" / "vendors"
 EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
@@ -52,3 +54,47 @@ def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tm
         assert store.original(store.files(w)[0]["file_id"]) == original
     finally:
         store.close()
+
+
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["LF", "CRLF"])
+def test_databricks_stream_cte_and_positional_insert_publication(tmp_path, newline):
+    path = FIXTURES / "databricks" / "stream_insert.sql"
+    original = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
+    with closing(Store(tmp_path)) as store:
+        workspace = store.create_workspace("Databricks")
+        Importer(store, workspace).files([(path.name, original)], {".sql"}, sql_dialect="databricks")
+        analyze(store, workspace)
+        assets = store.assets(workspace)
+        graph = LineageGraph(assets, store.edges(workspace))
+        assert {(graph.nodes[s]["name"], graph.nodes[t]["name"]) for s, t in graph.graph.edges} == {
+            ("main.lake.samples", "main.lake.target"),
+        }
+        target = next(a["asset_id"] for a in assets if a["name"] == "main.lake.target")
+        for column, physical in [("sample_id", "id"), ("soil_ph", "soil.ph")]:
+            trace = trace_columns(store, workspace, target, column, include_source=True)
+            assert {(item["table"], item["column_name"]) for d in trace["derivations"]
+                    for item in d["inputs"] if item["role"] == "value" and not item["scope"]} == {
+                ("main.lake.samples", physical),
+            }
+            assert all(d["evidence"]["code"] in original.decode() for d in trace["derivations"])
+        assert analyze(store, workspace)["cached"] == 1
+
+
+def test_databricks_expectation_and_cdc_publication(tmp_path):
+    path = FIXTURES / "databricks" / "pipeline.sql"
+    with closing(Store(tmp_path)) as store:
+        workspace = store.create_workspace("Pipeline")
+        Importer(store, workspace).files([(path.name, path.read_bytes())], {".sql"}, sql_dialect="databricks")
+        analyze(store, workspace)
+        assets = store.assets(workspace)
+        graph = LineageGraph(assets, store.edges(workspace))
+        assert {(graph.nodes[s]["name"], graph.nodes[t]["name"]) for s, t in graph.graph.edges} == {
+            ("main.lake.events", "main.lake.clean"), ("main.lake.clean", "main.lake.current_events"),
+        }
+        target = next(a["asset_id"] for a in assets if a["name"] == "main.lake.current_events")
+        trace = trace_columns(store, workspace, target, "amount", include_source=True)
+        inputs = {(item["table"], item["column_name"], item["role"]) for d in trace["derivations"] for item in d["inputs"]}
+        assert ("main.lake.clean", "change_time", "sequence") in inputs
+        assert ("main.lake.clean", "change_time", "value") not in inputs
+        assert ("main.lake.events", "raw_amount", "quality_drop") in inputs
+        assert not store.rows("SELECT column_id FROM column_references WHERE column_name='positive'")

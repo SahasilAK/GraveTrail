@@ -51,6 +51,8 @@ def pack_request(pending_parts, profile, context):
         detail = context.get('work_inputs', {}).get(part.part_id)
         candidate = {'part': part.model_dump(), 'path': source.path, 'source': code if part.work_kind != 'consolidation' else '',
                      'saved_details': detail}
+        if (dialect := getattr(source, 'dialect', None)) is not None:
+            candidate['dialect'] = dialect
         feedback = context.get('recovery_feedback', {}).get(part.part_id)
         if feedback:
             candidate['validation_feedback'] = feedback

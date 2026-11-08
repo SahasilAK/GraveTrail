@@ -19,7 +19,7 @@ def test_offline_default_never_loads_provider_and_reports_insufficient_live_evid
     report = evaluate()
     assert report["source"] == "parser_baseline" and report["requests"] == 0
     assert report["languages"]["sql"]["table_edges"]["tp"] > 0
-    assert report["languages"]["sql"]["value_dependencies"]["fn"] > 0  # UPDATE/MERGE parser gaps
+    assert report["languages"]["sql"]["value_dependencies"]["fn"] == 0
     assert all(language["release_gate"]["status"] == "insufficient_evidence"
                for language in report["languages"].values())
     assert report["unit_coverage"]["processed"] == report["unit_coverage"]["total"]

@@ -33,22 +33,20 @@ GraveTrail turns SQL, SAS and supported dbt project artifacts into explorable
 lineage, dependencies and source evidence. Follow where data comes from, what
 depends on it, and which code to investigate before making a change.
 
-Use the [Lineage builder](docs/user-guide/lineage-builder.md) to design table and
-column relationships from scratch and share editable diagrams with other users.
-
-Built for data engineers, analysts, analytics engineers and architects untangling
-unfamiliar pipelines, reviewing changes or planning migrations.
-
 <a name="from-scattered-scripts-to-source-evidence"></a>
 
-![Illustrative lineage: two source tables flow through staging to a reporting table, with source evidence attached](docs/assets/diagrams/lineage.svg)
+![GraveTrail Overview with actions to open Lineage Builder, import sources, or run the SQL example](docs/assets/images/gravetrail-overview-start.png)
 
-*A workflow illustration, not an application screenshot. Actual results come from your imported files.*
+| From Overview | What you can do |
+| --- | --- |
+| **Open Lineage Builder** | [Design an editable diagram](docs/user-guide/lineage-builder.md) from table schemas and column relationships. |
+| **Import sources** | [Import SQL, SAS or dbt files](docs/user-guide/sources.md), select a SQL source type where applicable, and [analyze the inventory](docs/user-guide/analysis.md). |
+| **Run SQL example** | [Trace a bundled pipeline](docs/getting-started/quick-start.md#2-run-the-sql-example) in an empty workspace. |
 
 <details>
 <summary><strong>See GraveTrail with the included SQL project</strong></summary>
 
-![Current GraveTrail Lineage view tracing the supplied SQL sample upstream](docs/assets/images/gravetrail-lineage-explorer.png)
+![GraveTrail Lineage view showing an expanded table and column links to its neighbors](docs/assets/images/gravetrail-lineage-explorer.png)
 
 *Real application, disposable workspace, repository sample data. Try the
 [interactive lineage example](docs/examples/interactive-lineage.md).*
@@ -57,10 +55,10 @@ unfamiliar pipelines, reviewing changes or planning migrations.
 
 ## Follow the questions
 
-- **Where does this table come from?** Explore upstream inputs and temporary steps.
+- **Where does this table come from?** Explore upstream inputs and temporary steps. Expand a table to see its output columns and links to neighboring tables.
 - **What could this change affect?** Follow downstream consumers before investigating them.
 - **Where is the proof?** Inspect the original statement, source version and line range.
-- **How is this column used?** Explore direct references and supported transformations.
+- **How is this column used?** Trace its transformations in the default column graph or open Direct references for occurrences in source files.
 - **What connects this dbt project?** Inspect models, versions, resources and macro impact.
 - **How do I share my findings?** Export reports, graph images or interactive HTML.
 
@@ -79,9 +77,8 @@ Clearing saves a backup and empties the current diagram/catalog while preserving
 workspace schemas. Export SVG/PNG, offline interactive HTML, schema reports, or
 editable JSON so another user can continue the work.
 
-The [lineage builder guide](docs/user-guide/lineage-builder.md) covers the full
-workflow, shortcuts, safe clearing, and sharing. It includes source-version setup;
-the older checkout pinned in the introductory tutorials does not include this feature.
+The [lineage builder guide](docs/user-guide/lineage-builder.md) covers the workflow,
+shortcuts, safe clearing and sharing.
 
 <a name="know-the-boundaries"></a>
 
@@ -107,27 +104,23 @@ static-analysis, HTML-export and documentation-site offline boundaries.
 
 ## Start with the documented version
 
-This documentation describes development commit **1864dc8**, including dbt and the
-current independent AI workflow. These features are **not all in release v0.0.1**.
-Use the pinned source checkout to reproduce the walkthroughs.
+Use development commit **313587e** to reproduce the walkthroughs and screenshots.
 
 Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
-git checkout 1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414
+git checkout 313587e3217104dddc9e094a7a78cb79bf1ed64b
 uv sync --locked --extra dev
 uv run gravetrail-ui --home ./.dataforge
 ```
 
 <a name="try-a-real-project"></a>
 
-Open [the local application](http://127.0.0.1:8501). In **Sources**, import
-[`dataforge_sql_lineage_test_project.zip`](tests/sample_data/dataforge_sql_lineage_test_project.zip)
-with only `sql` selected. In **Analysis → Run**, leave **Use AI for analysis** unchecked
-and choose **Analyze all files**. In **Lineage**, search `pub.all_kpis`, select the exact
-asset and set **Traversal options → Traversal depth** to **30**.
+Open [the local application](http://127.0.0.1:8501), then select **Run SQL example**
+from **Overview**. The app imports the sample, analyzes it and opens the upstream
+graph for `pub.all_kpis`. To practice importing, [upload a sample ZIP](docs/getting-started/quick-start.md#3-try-a-manual-zip-import).
 
 Follow the [first-lineage tutorial](docs/getting-started/quick-start.md) for evidence,
 coverage and export steps, or the [dbt tutorial](docs/examples/dbt.md). Use the same

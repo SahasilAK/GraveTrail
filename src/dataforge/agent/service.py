@@ -1287,14 +1287,14 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             limits = Limits(max_files=min(100000, max(1, int(self.store.setting(w, "max_files", 10000)))),
                             max_file_bytes=min(100, int(self.store.setting(w, "max_file_mb", 20))) * 1024 * 1024)
             importer = Importer(self.store, w, self.policy.import_roots, limits)
+            options = dict(source_kind=arguments.get('source_kind', 'files'), dbt_options=arguments.get('dbt_options'),
+                           sql_dialect=arguments.get('sql_dialect'))
             report_progress = (lambda report: progress(min(.99, report.discovered / limits.max_files), "Importing")) if progress else None
             with self.store.analysis_lock:
                 if path.is_dir():
-                    report = importer.directory(path, extensions, progress=report_progress,
-                        source_kind=arguments.get('source_kind', 'files'), dbt_options=arguments.get('dbt_options'))
+                    report = importer.directory(path, extensions, progress=report_progress, **options)
                 elif path.suffix.lower() == ".zip" and path.stat().st_size <= limits.max_archive_bytes:
-                    report = importer.zip(path.read_bytes(), extensions, progress=report_progress,
-                        source_kind=arguments.get('source_kind', 'files'), dbt_options=arguments.get('dbt_options'))
+                    report = importer.zip(path.read_bytes(), extensions, progress=report_progress, **options)
                 else:
                     raise AgentError("invalid_path", "Import an allowed directory or bounded ZIP archive")
             result = asdict(report)
@@ -1303,7 +1303,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         self.audit(w, operation, "completed")
         return result
 
-    def _ingest(self, w: str, opts: QueryOptions, path: str, extensions: list[str], source_kind: str='files', dbt_options: dict | None=None) -> dict[str, Any]:
+    def _ingest(self, w: str, opts: QueryOptions, path: str, extensions: list[str], source_kind: str='files',
+                dbt_options: dict | None=None, sql_dialect: str | None=None) -> dict[str, Any]:
         """Validate import inputs and enqueue a background ingestion job.
 
         Args:
@@ -1322,8 +1323,13 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             raise AgentError('invalid_argument', 'Select files or dbt source kind')
         if source_kind == 'files' and (not extensions or not {e.lstrip(".").lower() for e in extensions} <= {"sql", "sas", "csv"}):
             raise AgentError("invalid_argument", "Select sql, sas and/or csv extensions")
+        if sql_dialect is not None:
+            from dataforge.configuration import ParsingSettings
+
+            ParsingSettings(dialect=sql_dialect)
         return self.jobs.start(w, "ingest", lambda p: self.run_operation(w, "ingest", {
-            "path": path, "extensions": extensions, 'source_kind': source_kind, 'dbt_options': dbt_options}, p), AgentSettings.from_store(self.store, w).model_dump())
+            "path": path, "extensions": extensions, 'source_kind': source_kind, 'dbt_options': dbt_options,
+            'sql_dialect': sql_dialect}, p), AgentSettings.from_store(self.store, w).model_dump())
 
     def _analyze(self, w: str, opts: QueryOptions, file_ids: list[str] | None=None, force: bool=False, mode: str='parser', **arguments: Any) -> dict[str, Any]:
         """Enqueue a background analysis job for selected or all workspace files.

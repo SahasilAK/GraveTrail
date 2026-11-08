@@ -19,8 +19,9 @@ if mode == "Run":
     if job_id and analysis_jobs(str(store.home)).read(job_id, w)['status'] not in TERMINAL:
         # Keep Cancel available while the worker reads sources or prepares batches.
         st.stop()
-files = store.files(w)
-render_projects(store, w)
+with st.spinner("Loading Analysis…", show_time=True):
+    files = store.files(w)
+    render_projects(store, w)
 if not files:
     empty_state("Ready when your sources are", "Add SQL, SAS or CSV files to build your first evidence-backed analysis.", ":material/play_circle:")
     st.page_link("ui/pages/builder.py", label="Import sources", icon=":material/upload_file:")
@@ -50,6 +51,7 @@ elif mode == "Run":
         ai_request, ready = controls(store, w, selected or None)
         label = 'Analyze with AI' if ai_request else ('Analyze selected' if selected else 'Analyze all files')
         run = st.button(label, type="primary", icon=":material/play_arrow:", disabled=not ready)
+        run_status = st.empty()
         rebuild, validate = False, False
         with st.expander("Rebuild & validation"):
             st.caption("Rebuild reparses every file. Validation checks the evidence already stored; neither executes source code.")
@@ -57,19 +59,26 @@ elif mode == "Run":
                 rebuild = st.button("Rebuild all lineage", icon=":material/refresh:")
                 validate = st.button("Validate stored lineage", icon=":material/verified:")
         if run or rebuild:
+            use_ai = run and ai_request
+            status = run_status.status("Starting AI analysis…" if use_ai else "Analyzing sources and publishing lineage…",
+                                       expanded=True)
             try:
-                if run and ai_request:
+                if use_ai:
                     start(store, w, ai_request)
                     st.rerun()
-                bar = st.progress(0, text="Reading inventory")
+                bar = status.progress(0., text="Reading inventory and preparing project metadata")
+                files_processed = status.empty()
                 result = analyze(store, w, (selected or None) if not rebuild else None,
                                  force=rebuild or store.setting(w, "reanalysis_mode", "changed") == "all",
-                                 progress=lambda p, text: bar.progress(p, text=text))
+                                 progress=lambda p, path: files_processed.caption(f"File processing: {p:.0%} · {path}"),
+                                 stage=lambda fraction, activity: bar.progress(fraction, text=activity))
+                bar.progress(1., text="Lineage saved")
                 st.session_state["last_analysis"] = result
                 st.session_state["analysis_notice_" + w] = result
                 st.rerun()
             except Exception as exc:
-                st.error(f"Analysis failed ({type(exc).__name__}). Previous committed lineage was retained.")
+                status.update(label="Analysis failed", state="error")
+                status.error(f"Analysis failed ({type(exc).__name__}). Previous committed lineage was retained.")
         if validate:
             from dataforge.reporting import validate_lineage_evidence
             invalid = validate_lineage_evidence(store, w)["invalid"]

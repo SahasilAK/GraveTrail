@@ -1,14 +1,14 @@
 # Column transformation lineage
 
-Choose **Transformation lineage**, directly below **Columns** in Explore, to follow a
-column's value through analyzed SQL or SAS. **Columns** retains the existing direct
-usage report. A join/filter reference can influence which rows appear without supplying
+Choose **Columns → Lineage graph** to follow a column's value through analyzed
+SQL, SAS, or dbt. **Direct references** lists column usage separately. A join or
+filter reference can influence which rows appear without supplying
 the value of every output column.
 
 ## Trace a column
 
 1. Import sources and run **Analysis**. Existing workspaces keep their table/direct-usage
-   facts after upgrade; transformation coverage appears after analysis with parser 11.
+   facts after upgrade. Run analysis to refresh lineage with the current parser.
 2. Choose an exact asset, including its job identity for temporary tables. Select a
    physical output column, or paste a column name or exact column ID.
 3. Choose **How it is produced** (upstream) or **What it affects** (downstream), depth
@@ -24,9 +24,17 @@ and unit_price. `WHERE o.status = 'COMPLETE'` is `row_filter` context; join keys
 the `join` role. CASE/IF tests use `value_selection`; windows preserve `partition` and
 `order`. Aggregates/windows retain relation `rowset` context. `COUNT(*)` does not depend
 on every column. A literal-only output is a constant with zero value inputs; row context
-can still apply. Downstream paths label value effects separately from row-selection effects.
+can still apply. Downstream paths distinguish values, row selection and pipeline controls.
 Display input limits do not change those labels. Equivalent quoted and unquoted column names share an
 identity under workspace case rules; quoted case and escaped identifier characters are retained.
+
+The graph groups traced columns by their table, file, or intermediate scope. Arrows
+connect column rows and distinguish value flow from dependencies such as matching
+and row filters. A write can show its previous value as a separate row. Select a
+card header, row, or link to open its transformation logic. When several steps
+apply, the picker starts with a step that produces a selected column if available.
+Drag a card header to move it, drag the background or Alt-drag to pan, or type
+a column name to highlight matching rows.
 
 ## Tested static coverage
 
@@ -34,15 +42,20 @@ identity under workspace case rules; quoted case and escaped identifier characte
 | --- | --- |
 | SQL projection, alias, expression, literal, CAST, CASE/IF | Named output derivations and distinct dependency roles |
 | Aggregation/window | Argument columns, rowsets and partition/order roles |
-| CTE/derived table | Statement-local intermediate columns; each expression remains inspectable |
-| INSERT SELECT | Explicit target lists map by position; consistent imported target DDL can infer a mapping after a single plain wildcard expands. Unknown or mismatched target schemas and mixed wildcard layouts stay unresolved |
-| UNION | Branch-specific derivations map by position; incompatible cardinality stays unresolved |
-| Plain wildcard | Single-source consistent imported DDL may expand as inferred; modifiers, scoped/branch schemas and ambiguous layouts stay unresolved |
-| SAS PROC SQL | Shared SQL contract, with SAS library/WORK identity and original source evidence |
-| SAS DATA | Ordered explicit assignment versions, simple single SET and explicit KEEP/DROP/RENAME where ownership/output names are established |
+| CTE/derived table | Statement-local intermediate columns, including chains of named projections and plain stars |
+| INSERT SELECT | Explicit target lists or consistent imported target DDL map by position. Widths must agree after wildcard expansion |
+| UNION, EXCEPT, INTERSECT | Known branch positions remain inspectable. EXCEPT and INTERSECT distinguish left-side values from membership inputs on both sides |
+| Scalar subquery | A single projected value and qualified correlated predicates remain separate |
+| Recursive CTE | Explicit `UNION ALL` anchor and direct step trace through a bounded scope cycle |
+| Plain wildcard | Expand from named scoped outputs, imported DDL or a single complete query definition. Unknown layouts stay unresolved |
+| Inline and generated values | Trace named literal VALUES and literal UNNEST outputs to inline data. Current date and time expressions show a runtime origin |
+| SAS PROC SQL | Shared SQL contract, SAS library/WORK identity, and single arithmetic UPDATE assignments with simple IN-subquery row selection |
+| SAS DATA | Inline INPUT, ordered assignments, SET passthrough and concatenation, simple IF/ELSE OUTPUT routing, bounded MERGE BY, and the documented hash and fixed-array forms |
+| SAS procedures | Simple SORT, NWAY SUMMARY/MEANS sums and means, grouped RANK, PROC APPEND FORCE with complete layouts, and conditional numbered PROC TRANSPOSE outputs |
+| dbt models | Logical project and version identities, shared SQL projections, supported macro expressions, and wildcard layouts from models, seeds, or matching catalogs |
 
-SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL and Snowflake
-syntax cases; supported syntax is bounded by the fixtures, not by SQLGlot's full dialect list.
+SQL fixtures cover generic SQL plus explicitly selected PostgreSQL, T-SQL, Snowflake and
+[Databricks](SQL_PARSING.md#databricks-lineage) syntax.
 Positional GROUP BY dependencies resolve for generic SQL, PostgreSQL, DuckDB, Snowflake
 and BigQuery. Other dialects and invalid positions retain explicit coverage gaps.
 Parentheses around positions are preserved; normalized unary-plus grouping syntax
@@ -51,15 +64,39 @@ DISTINCT records duplicate-selection inputs. DISTINCT ON records selectors and a
 row-choice boundary. Duplicate-eliminating UNION, LIMIT/OFFSET and table sampling retain
 explicit boundaries; UNION ALL retains separate value branches. dbt uses the same reachable
 SQL scopes, excluding unused CTEs from column facts.
-UPDATE/MERGE/DELETE value transformations, recursive SQL, EXCEPT/INTERSECT, named windows,
-scalar/correlated value subqueries, unknown UDF semantics, lateral projection/QUALIFY alias
+Unsupported DML variants, recursive shapes, named windows,
+ambiguous correlations, complex EXISTS membership, unknown UDF semantics, lateral projection/QUALIFY alias
 references, base-table positional column aliases, duplicate output names, query-level ordering
 and unsupported wildcard layouts have coverage gaps.
-SAS MERGE BY, multi-SET ownership, arrays, variable lists, loops, conditional retention,
+Other SAS MERGE and multi-output forms, repeated SET statements, general arrays, variable lists, loops, conditional retention,
 automatic runtime variables and runtime/macro-expanded expressions remain unresolved.
 SAS applies statement KEEP/DROP, statement RENAME, then output KEEP=/DROP= and RENAME=
 options. Repeated selection statements or dataset options remain explicitly unresolved.
 Existing table-level extraction can still recognize a construct that has no column mapping.
+
+## How confidence and coverage work
+
+In the Lineage tree, **Minimum evidence confidence** is the lowest stored
+confidence among the records supporting the displayed relationship. The score
+reflects how the evidence was established. It has no statistical calibration.
+
+| Table relationship evidence | Stored confidence |
+| --- | --- |
+| Direct parser evidence with resolved identities | Uses the parser operation's value, which defaults to 1.00. |
+| Inferred source or target identity | Capped at 0.85. |
+| Accepted AI evidence | Capped at 0.80 and labeled inferred. |
+
+Transformation lineage reports a trace state and counts coverage boundaries.
+A trace is complete for the requested scope when analysis has established coverage,
+there are no unresolved boundaries, and traversal finishes without truncation.
+Unknown dependencies have no known denominator, so the view reports the reasons
+for each gap alongside the known steps.
+
+For example, consider a query that selects `o.id AS order_id` and `amount AS total`
+from `orders o JOIN adjustments a ON o.id = a.id`. If both tables declare `amount`,
+the parser can trace `order_id` to `orders.id`, but the trace for `total` keeps an
+unresolved ownership boundary. Both table relationships can still have direct parser
+evidence. Open **Coverage details** to see why the value trace could go no further.
 
 ## Read the boundaries
 
@@ -126,13 +163,15 @@ dynamic Jinja and unsupported compiled-to-original mappings remain partial. Curr
 protocol 5 qualification uses independent nonempty mock fixtures; live accuracy remains
 separate evidence.
 
-## Column graph and parser 21 follow-up
+<span id="column-graph-and-parser-21-follow-up"></span>
 
-Columns offers Direct references and Lineage graph views. Graph boxes retain
-column/derivation identity, UNION branches, scopes and SAS versions. Display caps
+## Column graph and parser updates
+
+Columns opens in Lineage graph by default. Graph selections retain
+column and derivation identity, UNION branches, scopes and SAS versions. Display caps
 are separate from trace coverage. Source files load lazily from exact analyzed
 hashes; the graph component receives no expression or source text. Re-run Analysis
-after this parser upgrade.
+after upgrading to the current parser (version 25).
 
 Table aliases and intermediate output columns follow the selected SQL dialect's
 quoted and unquoted identifier rules. Equivalent intermediate references retain

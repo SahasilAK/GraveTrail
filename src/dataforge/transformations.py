@@ -3,23 +3,82 @@ from __future__ import annotations
 
 import copy
 import json
-from collections import deque
+import re
+from collections import defaultdict, deque
 from typing import Any
 
 from networkx import DiGraph, strongly_connected_components
+from sqlglot import exp
+from sqlglot.errors import ParseError, TokenError
 
 from dataforge.asset_identity import AssetResolver
 from dataforge.configuration import ParsingSettings
 from dataforge.models import AssetRef, ParseResult, column_key, operation_ids, stable_id
+from dataforge.parsers.sql_transformations import identifier
+from dataforge.schemas import query_output_layouts, sas_stack_columns
 from dataforge.store import Store
 
-ROW_ROLES = {'row_filter', 'join'}
+ROW_ROLES = {'row_filter', 'join', 'row_membership', 'quality_drop', 'delete_condition', 'truncate_condition'}
+IN_PLACE = {'sas_append', 'sas_update', 'sql_update', 'sql_merge_update', 'sql_merge_insert'}
+TRANSPOSE_SCOPE = 'transpose-values:'
+CONTROL_ROLES = {'quality_warn', 'quality_fail', 'match_key', 'sequence', 'system_sequence',
+                 'ignore_null_update', 'history'}
 STATUSES = {'all', 'verified', 'inferred', 'unresolved'}
 INSERT_MAPPING_GAPS = {'INSERT target column mapping requires an explicit list or trusted schema',
                        'Output and projection cardinality mismatch', 'Output column name cannot be established'}
 
 
-def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]], resolver: AssetResolver, schemas: dict[str, Any], config: dict[str, Any]) -> dict[str, list[list[Any]]]:
+def _sql_name(name: str) -> str:
+    return name.removeprefix('"').removesuffix('"').replace('""', '"').casefold()
+
+
+def _transpose_number(scope: str, name: str) -> int | None:
+    prefix = scope.removeprefix(TRANSPOSE_SCOPE)
+    name = _sql_name(name)
+    if len(name) <= 32 and re.fullmatch(rf'{re.escape(prefix)}[1-9][0-9]*', name, re.I):
+        return int(name[len(prefix):])
+    return None
+
+
+def _transpose_note(number: int, declared: bool = False) -> str:
+    evidence = ('Name established by the imported output schema' if declared
+                else 'Conditional output. The column exists if a BY group reaches this position')
+    return f'{evidence}. Value comes from observation {number} in each BY group, if present, selected by _NAME_.'
+
+
+def _path_effect(effect: str, roles: set[str]) -> str:
+    if effect == 'row_selection' or roles & ROW_ROLES:
+        return 'row_selection'
+    if effect == 'control' or roles & CONTROL_ROLES:
+        return 'control'
+    return effect
+
+
+def _struct_members(schema: dict[str, Any], path: list[str]) -> list[str]:
+    columns = [c for c in schema['columns'] if c['name'].casefold() == path[0].casefold()]
+    if len(columns) != 1:
+        return []
+    try:
+        datatype = exp.DataType.build(columns[0]['type'])
+    except (ParseError, TokenError, ValueError):
+        return []
+    for field in path[1:]:
+        if not datatype.is_type(exp.DType.STRUCT):
+            return []
+        members = [c for c in datatype.expressions if isinstance(c, exp.ColumnDef)
+                   and c.name.casefold() == field.casefold()]
+        if len(members) != 1 or not isinstance(members[0].kind, exp.DataType):
+            return []
+        datatype = members[0].kind
+    if not datatype.is_type(exp.DType.STRUCT) or not all(isinstance(c, exp.ColumnDef) for c in datatype.expressions):
+        return []
+    members = [identifier(c.this) for c in datatype.expressions]
+    return members if len({_sql_name(name) for name in members}) == len(members) else []
+
+
+def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[str, Any], ParseResult]],
+                        resolver: AssetResolver, schemas: dict[str, Any], query_layouts: dict[str, list[str]],
+                        config: dict[str, Any]) -> dict[str, list[list[Any]]]:
     """Build column lineage rows from parsed operations and known schemas.
 
     Args:
@@ -28,12 +87,14 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
         results: File metadata and parse results to materialize.
         resolver: Resolver used to map table references to assets.
         schemas: Imported schema metadata indexed by asset identifier.
+        query_layouts: Output names inferred from single imported query definitions.
         config: Parsing and identity settings used during materialization.
 
     Returns:
         Row collections for column references, derivations, and dependencies."""
     rows = {'column_references': [], 'column_derivations': [], 'column_dependencies': []}
     references = {}
+    transpose_templates = defaultdict(list)
     for metadata, parsed in results:
         fid = metadata['file_id']
         for op_index, op in enumerate(parsed.operations):
@@ -44,6 +105,15 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                        for t in op.targets}
             unresolved_identities = {r.identity for r in [*op.sources, *op.targets, *parsed.assets]
                                      if r.kind == 'unresolved'}
+
+            def declared(table, identity=''):
+                aid, _ = resolver.resolve(AssetRef(table, identity=identity), metadata, parsed)
+                schema = schemas.get(aid, {})
+                return schema if schema.get('schema_status') == 'declared' else {}
+
+            def read_layout(table, identity=''):
+                aid, _ = resolver.resolve(AssetRef(table, identity=identity), metadata, parsed)
+                return schemas.get(aid, {}).get('column_identifiers') or query_layouts.get(aid, [])
 
             def reference(table, name, scope='', version='', output=False, identity=''):
                 if scope and not identity:
@@ -71,48 +141,261 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                 return cid, inferred or resolver.registry[aid][4] == 'unresolved'
 
             derivations = []
+            scoped_layouts = (query_output_layouts(op.derivations, read_layout, config['case_sensitive'])
+                              if config['expand_wildcards'] else {})
+
+            def scoped_names(scope):
+                return scoped_layouts.get(scope) or [prior['target_column'] for prior in derivations
+                                                     if prior.get('scope') == scope]
+
+            union_offsets = defaultdict(int)
             physical = [d for d in op.derivations if not d.get('scope')]
             wildcard_insert = op.kind == 'INSERT' and any(d.get('category') == 'wildcard' for d in physical)
             single_insert_wildcard = (len(physical) == 1 and physical[0].get('target_mapping_missing')
                                       and physical[0].get('projection_count') == 1)
             for original in op.derivations:
                 d = copy.deepcopy(original)
-                if wildcard_insert and not d.get('scope') and not single_insert_wildcard:
+                scope = d['scope']
+                if config['expand_wildcards'] and scope.startswith(TRANSPOSE_SCOPE):
+                    names = declared(d['target_table']).get('column_identifiers', [])
+                    numbered = {number: name for name in names if (number := _transpose_number(scope, name))}
+                    known = {d['target_column'].casefold() for d in physical}
+                    normalized = {_sql_name(name) for name in names}
+                    if (numbered and sorted(numbered) == list(range(1, len(numbered) + 1))
+                            and known <= normalized and len(normalized) == len(names)
+                            and normalized - known - {'_label_'} == {_sql_name(name) for name in numbered.values()}):
+                        derivations.extend({**d, 'target_column': name, 'scope': '', 'category': 'sas_transpose',
+                                            'status': 'inferred', 'ordinal': number,
+                                            'coverage': [_transpose_note(number, declared=True)]}
+                                           for number, name in numbered.items())
+                        continue
+                if accumulator_source := d.get('sas_accumulator'):
+                    names = read_layout(accumulator_source) if config['expand_wildcards'] else []
+                    if names:
+                        match = next((name for name in names if name.casefold() == d['target_column']), None)
+                        if match:
+                            d['inputs'].append({'table': accumulator_source, 'column': match, 'role': 'value'})
+                        d['status'] = 'inferred'
+                        d['coverage'].append('SAS sum statement uses the input accumulator when supplied by SET'
+                                             if match else 'SAS sum statement carries the accumulator between rows')
+                    else:
+                        d['status'] = 'unresolved'
+                        d['coverage'].append('SAS sum statement needs the SET layout to establish the prior accumulator')
+                if d['category'] == 'sas_append' and config['expand_wildcards']:
+                    incoming = d['inputs'][0]['table']
+                    base = d['target_table']
+                    incoming_layout = read_layout(incoming)
+                    incoming_names = {name.casefold(): name for name in incoming_layout}
+                    base_names = read_layout(base)
+                    if (base_names and incoming_names and len(incoming_names) == len(incoming_layout)
+                            and len({name.casefold() for name in base_names}) == len(base_names)
+                            and all(name.isidentifier() for name in [*base_names, *incoming_layout])):
+                        for ordinal, name in enumerate(base_names):
+                            inputs = [{'table': base, 'column': name, 'role': 'value'}]
+                            if other := incoming_names.get(name.casefold()):
+                                inputs.append({'table': incoming, 'column': other, 'role': 'value'})
+                            derivations.append({**d, 'target_column': name, 'inputs': inputs,
+                                                'status': 'inferred', 'ordinal': ordinal,
+                                                'coverage': ['APPEND FORCE uses the BASE layout; runtime attributes may affect incoming values']})
+                        continue
+                if d.get('sas_stack') and config['expand_wildcards']:
+                    columns = sas_stack_columns(d, read_layout)
+                    if columns:
+                        keys = d.get('sas_merge_by', [])
+                        matching = [{**item, 'role': 'join'} for key in keys for item in columns[key]]
+                        basis = 'SAS match MERGE' if keys else 'SAS concatenated SET'
+                        for ordinal, (name, dependencies) in enumerate(columns.items()):
+                            coverage = [f'Expanded from {basis} input layouts']
+                            if keys and name not in keys and len(dependencies) > 1:
+                                coverage.append('Shared SAS MERGE variable has alternative inputs; the value source depends on runtime BY-group rows')
+                            derivations.append({**d, 'target_column': name, 'inputs': [*dependencies, *matching],
+                                                'status': 'inferred', 'ordinal': ordinal, 'coverage': coverage})
+                        continue
+                positional_layout = d.get('positional_layout')
+                union_layout = scoped_layouts.get(d['scope']) if 'union_projection' in d else None
+                if union_layout:
+                    offset_key = d['scope'], d['branch']
+                    offset = union_offsets[offset_key]
+                    d['coverage'] = [gap for gap in d['coverage'] if gap not in {
+                        'Set operation wildcard positions require trusted schema expansion',
+                        'Output and projection cardinality mismatch', 'Output column name cannot be established',
+                    }]
+                    if d['category'] != 'wildcard':
+                        d.update(target_column=union_layout[offset], ordinal=offset,
+                                 status='unresolved' if d['coverage'] else 'inferred')
+                        union_offsets[offset_key] += 1
+                elif 'union_projection' in d:
+                    d['wildcard_safe'] = False
+                if (wildcard_insert and not (positional_layout or d.get('target_by_name'))
+                        and not d.get('scope') and not single_insert_wildcard):
                     d.update(target_column='*', status='unresolved')
                     d['coverage'].append('INSERT wildcard target layout is unresolved')
                     derivations.append(d)
                     continue
-                # Only a single plain wildcard with consistent imported DDL has a stable order.
+                if d.get('scoped_columns') and config['expand_wildcards']:
+                    missing = False
+                    for item in d['scoped_columns']:
+                        layout = scoped_names(item['scope'])
+                        matches = [name for name in layout if column_key(name, config['case_sensitive'])
+                                   == column_key(item['column'], config['case_sensitive'])]
+                        if len(matches) != 1 or '*' in layout:
+                            missing = True
+                        else:
+                            dependency = {**item, 'column': matches[0]}
+                            if dependency not in d['inputs']:
+                                d['inputs'].append(dependency)
+                    if not missing:
+                        d['coverage'].remove('Intermediate wildcard requires a complete output layout')
+                        d['status'] = 'unresolved' if d['coverage'] else 'inferred'
+                if d.get('unqualified_columns') and config['expand_wildcards']:
+                    missing = False
+                    for item in d['unqualified_columns']:
+                        matches = []
+                        for source in item['sources']:
+                            if scope := source.get('scope'):
+                                names = scoped_names(scope)
+                            else:
+                                names = read_layout(source['table'], source.get('table_identity', ''))
+                            if not names or '*' in names:
+                                break
+                            for name in names:
+                                if column_key(name, config['case_sensitive']) == column_key(item['column'], config['case_sensitive']):
+                                    matches.append({**source, 'column': name, 'role': item['role']})
+                        else:
+                            if len(matches) == 1:
+                                if matches[0] not in d['inputs']:
+                                    d['inputs'].append(matches[0])
+                                continue
+                        missing = True
+                    if not missing:
+                        d['coverage'].remove('Unresolved or ambiguous column ownership requires complete source schemas')
+                        d['status'] = 'unresolved' if d['coverage'] else 'inferred'
+                choices = d.get('lateral_choices', [])
+                if choices and config['expand_wildcards']:
+                    unknown = False
+                    for choice in choices:
+                        schema = declared(choice['table'], choice.get('table_identity', ''))
+                        if not schema:
+                            unknown = True
+                            continue
+                        matches = [name for name in schema['column_identifiers']
+                                   if _sql_name(name) == _sql_name(choice['column'])]
+                        if len(matches) > 1:
+                            unknown = True
+                            continue
+                        dependencies = ([{'table': choice['table'], 'column': matches[0], 'role': choice['role'],
+                                          'table_identity': choice.get('table_identity', '')}]
+                                        if matches else choice['inputs'])
+                        d['inputs'].extend(item for item in dependencies if item not in d['inputs'])
+                        if not matches:
+                            d['coverage'].extend(choice['coverage'])
+                    if not unknown:
+                        d['coverage'].remove('Lateral column alias precedence requires trusted source schema')
+                        d['status'] = 'unresolved' if d['coverage'] else 'inferred'
+                controls = d.get('schema_controls', [])
+                if controls and config['expand_wildcards']:
+                    unresolved = False
+                    for control in controls:
+                        schema = declared(control['table'], control.get('table_identity', ''))
+                        names = [name for name in schema.get('column_identifiers', [])
+                                 if _sql_name(name) not in control['payload_exclude']]
+                        excluded = set(control['exclude'])
+                        if not names or not excluded <= {_sql_name(name) for name in names}:
+                            unresolved = True
+                            continue
+                        d['inputs'].extend({'table': control['table'], 'column': name, 'role': control['role'],
+                                            'table_identity': control.get('table_identity', '')}
+                                           for name in names if _sql_name(name) not in excluded)
+                    if not unresolved:
+                        d['coverage'].remove('AUTO CDC control wildcard requires trusted source schema')
+                        d['status'] = 'unresolved' if d['coverage'] else 'inferred'
+                if pivot := d.get('pivot_grouping'):
+                    schema = declared(pivot['table'], pivot.get('table_identity', ''))
+                    if schema and config['expand_wildcards']:
+                        grouping = [name for name in schema['column_identifiers'] if _sql_name(name) not in pivot['exclude']]
+                        if _sql_name(pivot['output']) in {_sql_name(name) for name in grouping}:
+                            d['coverage'].append('PIVOT generated name conflicts with an input grouping column')
+                            # Neither candidate is uniquely addressable in the SQL.
+                            d['inputs'] = []
+                        else:
+                            d['inputs'].extend({'table': pivot['table'], 'column': name, 'role': 'value_selection',
+                                                'table_identity': pivot.get('table_identity', '')}
+                                               for name in grouping)
+                            d['coverage'].remove('PIVOT grouping requires trusted input schema')
+                            d['status'] = 'unresolved' if d['coverage'] else 'inferred'
                 if d.get('category') == 'wildcard' and d.get('wildcard_safe') and config['expand_wildcards']:
                     inputs = [i for i in d['inputs'] if i['role'] == 'value']
-                    schema = None
+                    schema, source_names = {}, []
                     if len(inputs) == 1 and not inputs[0].get('scope'):
-                        aid, _ = resolver.resolve(AssetRef(inputs[0]['table'], identity=inputs[0].get('table_identity', '')), metadata, parsed)
-                        schema = schemas.get(aid)
-                    if schema and schema.get('schema_status') == 'declared':
-                        target_names = schema['column_identifiers']
-                        if d.get('target_mapping_missing'):
+                        schema = declared(inputs[0]['table'], inputs[0].get('table_identity', ''))
+                        source_names = schema.get('column_identifiers', [])
+                        if schema and d.get('struct_path'):
+                            source_names = _struct_members(schema, d['struct_path'])
+                        elif d.get('scoped_wildcard') and not d.get('struct_path'):
+                            source_names = read_layout(inputs[0]['table'], inputs[0].get('table_identity', ''))
+                    elif len(inputs) == 1 and d.get('scoped_wildcard') and not d.get('struct_path'):
+                        source_names = scoped_names(inputs[0]['scope'])
+                    excluded = set(d.get('wildcard_exclude', []))
+                    keys = ({_sql_name(name) for name in source_names} if d.get('databricks_wildcard') else
+                            {column_key(name, config['case_sensitive']) for name in source_names})
+                    if (d.get('wildcard_require_exclusions') and not excluded <= keys
+                            or set(d.get('wildcard_reserved', [])) & (keys - excluded)
+                            or d.get('scoped_wildcard') and len(keys) != len(source_names)
+                            or '*' in source_names):
+                        source_names = []
+                    if (not source_names and d.get('sas_passthrough') and len(inputs) == 1
+                            and not inputs[0].get('scope')):
+                        gap = 'SAS passthrough requires a complete input layout'
+                        d['coverage'] = [f"{gap}: {inputs[0]['table']}" if reason == gap else reason
+                                         for reason in d['coverage']]
+                    if d.get('sas_routed') and source_names:
+                        names = {name.casefold(): name for name in source_names}
+                        for item in list(d['inputs']):
+                            if item['role'] == 'row_filter':
+                                if actual := names.get(item['column'].casefold()):
+                                    item['column'] = actual
+                                else:
+                                    d['inputs'].remove(item)
+                                    d['coverage'].append(f"SAS OUTPUT condition variable {item['column']} is absent from the input layout")
+                    source_names = [name for name in source_names if _sql_name(name) not in excluded]
+                    if source_names and d.get('sas_passthrough'):
+                        sas_excluded = set(d.get('sas_exclude', ()))
+                        source_names = [name for name in source_names if name.casefold() not in sas_excluded]
+                        if not source_names:
+                            continue  # The entire known input layout was excluded or explicitly mapped.
+                    if source_names:
+                        target_names = source_names
+                        if union_layout:
+                            target_names = union_layout[offset:offset + len(source_names)]
+                            union_offsets[offset_key] += len(source_names)
+                        if d.get('target_mapping_missing') and not positional_layout:
                             target_schema = schemas.get(outputs.get(resolver.norm(d['target_table'])), {})
                             if (target_schema.get('schema_status') != 'declared'
                                     or len(target_schema['columns']) != len(schema['columns'])):
                                 derivations.append(d)
                                 continue
                             target_names = target_schema['column_identifiers']
-                        for position, source_name in enumerate(schema['column_identifiers']):
+                        basis = ({'dbt_catalog': 'Expanded from the matching imported dbt catalog',
+                                  'seed_header': 'Expanded from the imported CSV seed header'}.get(
+                                      schema.get('schema_origin'), 'Expanded from imported DDL; runtime schema is unverified')
+                                 if schema else 'Expanded from an imported query output layout')
+                        for position, source_name in enumerate(source_names):
                             expanded = copy.deepcopy(d)
                             gaps = [c for c in d.get('coverage', [])
-                                    if c != 'Wildcard requires trusted schema expansion'
+                                    if c not in {'Wildcard requires trusted schema expansion',
+                                                 'SAS passthrough requires a complete input layout'}
                                     and not (d.get('target_mapping_missing') and c in INSERT_MAPPING_GAPS)]
                             expanded.update(target_column=target_names[position], status='unresolved' if gaps else 'inferred',
-                                            ordinal=d.get('ordinal', 0) + position,
-                                            coverage=[*gaps, 'Expanded from imported DDL; runtime schema is unverified'])
+                                            ordinal=(offset if union_layout else d.get('ordinal', 0)) + position,
+                                            coverage=[*gaps, basis])
                             for item in expanded['inputs']:
                                 if item['role'] == 'value':
-                                    item['column'] = source_name
+                                    prefix = item['column'].removesuffix('.*') if d.get('struct_path') else ''
+                                    item['column'] = f'{prefix}.{source_name}' if prefix else source_name
                             derivations.append(expanded)
                         continue
                 # Explicit INSERT target DDL is an inferred positional mapping.
-                if d.get('target_mapping_missing') and config['expand_wildcards']:
+                if d.get('target_mapping_missing') and not positional_layout and config['expand_wildcards']:
                     aid = outputs.get(resolver.norm(d['target_table']))
                     schema = schemas.get(aid, {})
                     columns = schema.get('columns', [])
@@ -121,6 +404,35 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                         d.update(target_column=schema['column_identifiers'][d['ordinal']], status='unresolved' if gaps else 'inferred',
                                  coverage=[*gaps, 'INSERT target mapped from imported DDL; runtime schema is unverified'])
                 derivations.append(d)
+            positional = defaultdict(list)
+            for d in derivations:
+                if d.get('positional_layout'):
+                    positional[d.get('branch', 0)].append(d)
+                if d.get('target_by_name'):
+                    schema = schemas.get(outputs.get(resolver.norm(d['target_table'])), {})
+                    names = {_sql_name(name) for name in schema.get('column_identifiers', [])}
+                    if names and d['target_column'] != '*' and _sql_name(d['target_column']) not in names:
+                        d.update(target_column='*', status='unresolved')
+                        d['coverage'].append('Named output is absent from the declared target schema')
+            for branch in positional.values():
+                schema = schemas.get(outputs.get(resolver.norm(branch[0]['target_table'])), {})
+                names = branch[0].get('insert_target_names', schema.get('column_identifiers', []))
+                layout_unknown = any(gap in {
+                    'Wildcard requires trusted schema expansion', 'Set operation branch cardinality mismatch',
+                    'UNION branch cardinality mismatch', 'Set operation wildcard positions require trusted schema expansion',
+                    'Set operation BY NAME layout is not resolved', 'INSERT partition layout is not resolved',
+                } for d in branch for gap in d['coverage'])
+                layout_gap = ('INSERT source column order or count cannot be established' if layout_unknown else
+                              'INSERT target schema is unavailable or ambiguous' if not names else
+                              'INSERT source and target column counts differ' if len(names) != len(branch) else '')
+                for ordinal, d in enumerate(branch):
+                    if layout_gap or not config['expand_wildcards']:
+                        d.update(target_column='*', status='unresolved')
+                        d['coverage'].append(layout_gap or 'Trusted schema expansion is disabled')
+                    else:
+                        gaps = [c for c in d['coverage'] if c not in INSERT_MAPPING_GAPS and not c.startswith('Expanded from')]
+                        d.update(target_column=names[ordinal], status='unresolved' if gaps else 'inferred',
+                                 ordinal=ordinal, coverage=[*gaps, 'INSERT target mapped from imported DDL; runtime schema is unverified'])
             for index, d in enumerate(derivations):
                 target, inferred = reference(d['target_table'], d['target_column'], d.get('scope', ''),
                                              d.get('target_version', ''), output=True, identity=d.get('target_identity', ''))
@@ -138,8 +450,24 @@ def materialize_columns(workspace: str, run_id: str, results: list[tuple[dict[st
                                          item.get('role', 'value'), ordinal])
                 rows['column_derivations'].append([did, workspace, target, d.get('expression', ''),
                     d.get('category', 'unknown'), status, sid, fid, oid, run_id,
-                    d.get('branch', 0), d.get('ordinal', index), json.dumps(d.get('coverage', []))])
+                    d.get('branch', 0), d.get('ordinal', index),
+                    json.dumps([*d.get('coverage', []), *d.get('evidence_notes', [])])])
                 rows['column_dependencies'].extend(dependencies)
+                if config['expand_wildcards'] and d.get('scope', '').startswith(TRANSPOSE_SCOPE):
+                    transpose_templates[references[target][2]].append((d['scope'], rows['column_derivations'][-1],
+                                                                      dependencies))
+    if transpose_templates:
+        # Publish only observed names. The wildcard retains the unknown width for other requests.
+        for cid, _, aid, _, name, _, scope, _ in references.values():
+            if scope or aid not in transpose_templates:
+                continue
+            for pattern, template, dependencies in transpose_templates[aid]:
+                if number := _transpose_number(pattern, name):
+                    did = stable_id(template[0], cid)
+                    rows['column_derivations'].append([did, workspace, cid, template[3], 'sas_transpose', 'inferred',
+                        *template[6:11], number, json.dumps([_transpose_note(number)])])
+                    rows['column_dependencies'].extend([stable_id(did, str(item[-1])), workspace, did, *item[3:]]
+                                                       for item in dependencies)
     rows['column_references'] = list(references.values())
     return rows
 
@@ -174,6 +502,102 @@ def column_catalog(store: Store, workspace: str, asset_id: str, limit: int=500) 
         return store.rows('''SELECT column_id,asset_id,table_name AS "table",column_name,scope,version
             FROM column_references WHERE workspace_id=? AND asset_id=?
             ORDER BY scope,column_key,version,column_id LIMIT ?''', [workspace, asset_id, limit])
+
+
+def final_column_names(store: Store, workspace: str, assets) -> dict[str, dict[str, Any]]:
+    """List declared schemas or known physical outputs for the visible lineage assets."""
+    columns, inferred = {}, []
+    for asset_id, asset in assets.items():
+        metadata = json.loads(asset.get('metadata') or '{}')
+        declared = metadata.get('schema_status') == 'declared'
+        columns[asset_id] = {'names': [column['name'] for column in metadata['columns']] if declared else [],
+                             'declared': declared}
+        if not declared:
+            inferred.append(asset_id)
+    if inferred:
+        rows = store.rows("""SELECT DISTINCT r.asset_id, r.column_name
+            FROM column_references r JOIN column_derivations d
+              ON d.workspace_id=r.workspace_id AND d.target_column_id=r.column_id
+            WHERE r.workspace_id=? AND r.asset_id IN (SELECT unnest(?))
+              AND r.scope='' AND r.version='' AND r.column_name NOT IN ('', '*')
+            ORDER BY r.asset_id, lower(r.column_name), r.column_name""", [workspace, inferred])
+        for row in rows:
+            columns[row['asset_id']]['names'].append(row['column_name'])
+    return columns
+
+
+def table_column_links(store: Store, workspace: str, graph, columns) -> list[list[dict[str, Any]]]:
+    """Project published dependencies onto visible table edges, folding scoped steps."""
+    edges = list(graph.graph.edges(data=True))
+    operation_ids = {e['operation_id'] for _, _, edge in edges for e in edge['evidence']}
+    if not operation_ids:
+        return [[] for _ in edges]
+    rows = store.rows("""SELECT d.operation_id, t.column_id AS target_id, t.asset_id AS target_asset,
+            t.column_name AS target_name, t.column_key AS target_key, t.scope<>'' OR t.version<>'' AS target_scoped,
+            s.column_id AS source_id, s.asset_id AS source_asset, s.column_name AS source_name, s.column_key AS source_key,
+            s.scope<>'' OR s.version<>'' AS source_scoped, i.role
+        FROM column_derivations d JOIN column_dependencies i USING (workspace_id, derivation_id)
+        JOIN column_references t ON t.workspace_id=d.workspace_id AND t.column_id=d.target_column_id
+        JOIN column_references s ON s.workspace_id=i.workspace_id AND s.column_id=i.source_column_id
+        WHERE d.workspace_id=? AND d.status<>'unresolved' AND d.operation_id IN (SELECT unnest(?))""",
+        [workspace, sorted(operation_ids)])
+    incoming, outputs = defaultdict(list), defaultdict(set)
+    refs = {}
+    for row in rows:
+        target = row['target_id']
+        incoming[target].append(row)
+        for side in ('source', 'target'):
+            refs[row[side + '_id']] = tuple(row[f'{side}_{field}'] for field in ('asset', 'name', 'key', 'scoped'))
+        if not row['target_scoped'] and row['target_name'] not in {'', '*'}:
+            outputs[row['target_asset']].add(target)
+    case_sensitive = store.setting(workspace, 'case_sensitive', False)
+    declared = {}
+    for asset, item in columns.items():
+        if item['declared']:
+            metadata = json.loads(graph.nodes[asset].get('metadata') or '{}')
+            identifiers = metadata.get('column_identifiers') or item['names']
+            declared[asset] = {column_key(identifier, case_sensitive): name
+                               for identifier, name in zip(identifiers, item['names'])}
+    hidden = {e['target_id'] for _, _, edge in edges for e in edge['evidence'] if e['target_id'] not in graph.nodes}
+    ambiguous = {row['target_column_id'] for row in store.rows("""SELECT d.target_column_id
+        FROM column_derivations d JOIN column_references r
+          ON r.workspace_id=d.workspace_id AND r.column_id=d.target_column_id
+        WHERE d.workspace_id=? AND r.asset_id IN (SELECT unnest(?)) AND r.scope='' AND r.version=''
+        GROUP BY d.target_column_id HAVING count(DISTINCT d.operation_id)>1""", [workspace, sorted(hidden)])} if hidden else set()
+    links = []
+    for source, target, edge in edges:
+        support = defaultdict(set)
+        for e in edge['evidence']:
+            support[e['target_id']].add(e['operation_id'])
+        pairs = {}
+        for output in sorted(outputs[target]):
+            _, target_name, key, _ = refs[output]
+            if target in declared:
+                target_name = declared[target].get(key)
+                if target_name is None:
+                    continue
+            pending, visited = [(output, '', True)], set()
+            while pending:
+                current, operation, value = item = pending.pop()
+                if item in visited:
+                    continue
+                visited.add(item)
+                asset, name, key, scoped = refs[current]
+                if operation and not scoped:
+                    if asset in declared:
+                        name = declared[asset].get(key, '')
+                    if asset == source and name not in {'', '*'}:
+                        pairs[name, target_name] = pairs.get((name, target_name), False) or value
+                    if asset in graph.nodes or current in ambiguous:
+                        continue
+                for row in incoming[current]:
+                    writer = row['operation_id']
+                    accepted = writer == operation if scoped else writer in support[asset]
+                    if accepted:
+                        pending.append((row['source_id'], writer, value and row['role'] == 'value'))
+        links.append([{'source': s, 'target': t, 'value': value}
+                      for (s, t), value in sorted(pairs.items())])
+    return links
 
 
 def _ref(row: dict[str, Any]) -> dict[str, Any]:
@@ -253,6 +677,19 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
     candidates = store.rows('''SELECT * FROM column_references WHERE workspace_id=? AND asset_id=?
         AND (column_id=? OR (column_key=? AND scope='' AND version='')) LIMIT 3''',
         [w, aid, column, column_key(column, case_sensitive)])
+    transpose_template = None
+    transpose_number = None
+    if not candidates and direction == 'upstream' and configuration.get('expand_wildcards'):
+        templates = store.rows('''SELECT * FROM column_references
+            WHERE workspace_id=? AND asset_id=? AND starts_with(scope, ?) AND column_name='*' ''',
+            [w, aid, TRANSPOSE_SCOPE])
+        matching = [(row, number) for row in templates if (number := _transpose_number(row['scope'], column))]
+        if len(matching) == 1:
+            (template, transpose_number), = matching
+            transpose_template = template['column_id']
+            key = column_key(column, case_sensitive)
+            candidates = [{**template, 'column_id': stable_id(w, aid, key, '', '', ''),
+                           'column_name': column, 'column_key': key, 'scope': ''}]
     if len(candidates) != 1:
         result['state'] = 'unresolved' if len(candidates) > 1 else 'no_known_dependency'
         boundary('ambiguous_column' if candidates else 'column_not_established')
@@ -269,6 +706,7 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             boundary('item_limit')
         return result
     root = candidates[0]
+    result['root'] = _ref(root)
     queue = deque([(root['column_id'], 0, 'value', ())])
     scheduled = {(root['column_id'], 'value')}
     discovered_edges = set()
@@ -301,8 +739,9 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             continue
         visited.add((cid, effect))
         unknown_writes = scope_boundaries(cid)
+        virtual = transpose_template if cid == root['column_id'] else None
         if direction == 'upstream':
-            clause, params = 'd.target_column_id=?', [cid]
+            clause, params = 'd.target_column_id=?', [virtual or cid]
         else:
             clause = '''EXISTS (SELECT 1 FROM column_dependencies i WHERE i.workspace_id=d.workspace_id
                 AND i.derivation_id=d.derivation_id AND i.source_column_id=?)'''
@@ -318,17 +757,29 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
             ORDER BY d.statement_id,d.ordinal,d.branch,d.derivation_id LIMIT ?''', [w, run_id, *params, limit + 1])
         if not steps:
             continue
+        if virtual:
+            for step in steps:
+                step.update(target_column_id=cid, category='sas_transpose', status='inferred',
+                            coverage=json.dumps([_transpose_note(transpose_number)]))
         if level >= depth:
             boundary('depth_limit', column_id=cid)
             result['truncated'] = True
             continue
-        if len(steps) > limit:
+        limited_steps = len(steps) > limit
+        if limited_steps:
             boundary('item_limit')
             result['truncated'] = True
             steps = steps[:limit]
         ambiguous = direction == 'upstream' and len({s['operation_id'] for s in steps}) > 1
+        if direction == 'upstream' and limited_steps and not ambiguous:
+            writers = store.rows('''SELECT DISTINCT operation_id FROM column_derivations
+                WHERE workspace_id=? AND run_id=? AND target_column_id=? LIMIT 2''', [w, run_id, virtual or cid])
+            ambiguous = len(writers) > 1
         if ambiguous:
             boundary('multiple_writers', column_id=cid, message='Writer order is unknown; alternatives are not chained')
+        # In-place writes expose independent origins without choosing writer order.
+        independent = (direction == 'upstream' and not unknown_writes
+                       and any(s['category'] in IN_PLACE and s['status'] != 'unresolved' for s in steps))
         for step in steps:
             if status != 'all' and step['status'] != status:
                 boundary('status_filter', column_id=cid)
@@ -343,12 +794,13 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                 if len(writers) > 1:
                     boundary('multiple_writers', column_id=step['target_column_id'],
                              message='Writer order is unknown; downstream chaining stops at this output')
-            target = store.rows('SELECT * FROM column_references WHERE workspace_id=? AND column_id=?',
-                                [w, step['target_column_id']])[0]
+            target = root if virtual else store.rows('SELECT * FROM column_references WHERE workspace_id=? AND column_id=?',
+                                                     [w, step['target_column_id']])[0]
             inputs = store.rows('''SELECT c.*,i.role FROM column_dependencies i JOIN column_references c
                 ON i.source_column_id=c.column_id AND i.workspace_id=c.workspace_id
                 WHERE i.workspace_id=? AND i.derivation_id=? ORDER BY i.ordinal LIMIT ?''', [w, did, limit + 1])
-            if len(inputs) > limit:
+            limited_inputs = len(inputs) > limit
+            if limited_inputs:
                 inputs = inputs[:limit]
                 boundary('input_limit', derivation_id=did)
                 result['truncated'] = True
@@ -361,11 +813,13 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                 boundary('coverage_diagnostic', derivation_id=did, message=warning)
             if step['status'] == 'unresolved':
                 boundary('unresolved_derivation', derivation_id=did)
-            effects = {effect}
+            next_effects = [effect]
             if direction == 'downstream' and effect != 'row_selection':
-                roles = store.rows('''SELECT DISTINCT role FROM column_dependencies WHERE workspace_id=?
-                    AND derivation_id=? AND source_column_id=?''', [w, did, cid])
-                effects = {'row_selection' if item['role'] in ROW_ROLES else 'value' for item in roles}
+                roles = {i['role'] for i in inputs if i['column_id'] == cid}
+                if limited_inputs:
+                    roles = {row['role'] for row in store.rows('''SELECT DISTINCT role FROM column_dependencies
+                        WHERE workspace_id=? AND derivation_id=? AND source_column_id=?''', [w, did, cid])}
+                next_effects = sorted({_path_effect(effect, {role}) for role in roles}) or [effect]
             if did not in emitted:
                 if len(emitted) >= limit:
                     boundary('item_limit')
@@ -384,24 +838,23 @@ def _trace(store: Store, w: str, aid: str, column: str, direction: str, depth: i
                     'inputs': [_ref(i) | {'role': i['role']} for i in inputs],
                     'evidence': evidence, 'coverage': json.loads(step['coverage'])})
                 emitted.add(did)
-            for next_effect in sorted(effects):
-                path = {'derivation_id': did, 'column_id': target['column_id'],
-                        'parent_column_id': cid, 'depth': level + 1, 'effect': next_effect}
-                if path in result['paths']:
-                    continue
+            for next_effect in next_effects:
                 if len(result['paths']) < limit * 2:
-                    result['paths'].append(path)
+                    result['paths'].append({'derivation_id': did, 'column_id': target['column_id'],
+                        'parent_column_id': ancestors[-1] if direction == 'upstream' and ancestors else cid,
+                        'depth': level + 1, 'effect': next_effect})
                 else:
                     boundary('path_limit')
                     result['truncated'] = True
-            if not multiple_writers and step['status'] != 'unresolved':
+            if (not multiple_writers or independent) and step['status'] != 'unresolved':
                 if direction == 'upstream':
-                    following = [(i['column_id'], level + 1,
-                        'row_selection' if effect == 'row_selection' or i['role'] in ROW_ROLES else 'value',
-                        (*ancestors, cid)) for i in inputs]
+                    following = [(i['column_id'], level + 1, _path_effect(effect, {i['role']}),
+                        (*ancestors, cid)) for i in inputs
+                        if i['column_id'] != cid or step['category'] not in IN_PLACE]
                 else:
                     following = [(target['column_id'], level + 1, next_effect, (*ancestors, cid))
-                                 for next_effect in sorted(effects)]
+                                 for next_effect in next_effects
+                                 if target['column_id'] != cid or step['category'] not in IN_PLACE]
                 for item in following:
                     if len(discovered_edges) < limit * 4:
                         discovered_edges.add((cid, item[0]))

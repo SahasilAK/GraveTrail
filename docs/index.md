@@ -35,14 +35,22 @@ Local static analysis. No AI account required. Imported code is never executed.
 
 </div>
 
+## Watch SQL turn into lineage
+
 <figure class="gt-product" markdown>
 
-![Current GraveTrail Lineage view tracing the safe SQL fixture upstream](assets/images/gravetrail-lineage-explorer.png)
+<video controls playsinline preload="none" poster="assets/images/gravetrail-lineage-explorer.png" style="width: 100%" aria-label="GraveTrail SQL example showing table lineage, column lineage and transformation logic">
+  <source src="assets/images/gravetrail-sql-example.mp4" type="video/mp4">
+  <a href="assets/images/gravetrail-sql-example.mp4">Download the SQL example recording</a>
+</video>
 
-<figcaption>Follow the dependencies. Open the evidence. Decide where to investigate next.</figcaption>
+<figcaption>Run the bundled SQL example and follow the upstream tables for <code>pub.all_kpis</code>. Expand <code>stg.orders_clean</code> to see its incoming column links, then trace <code>amount</code> in Columns and open the SQL expression that casts it.</figcaption>
 </figure>
 
 ## Begin with the question in front of you
+
+Start here when you inherit a pipeline or need to understand what a change could
+affect. GraveTrail traces dependencies from the project files you already have.
 
 <div class="gt-questions" markdown>
 <div markdown>
@@ -51,6 +59,7 @@ Local static analysis. No AI account required. Imported code is never executed.
 
 Explore inputs across persistent tables and supported temporary steps. Open the
 original statement and line range to understand the relationship.
+Expand a table to see its output columns and the direct column links to its neighbors.
 
 [Explore lineage and evidence](user-guide/explore.md)
 
@@ -59,8 +68,8 @@ original statement and line range to understand the relationship.
 
 ### What depends on this change?
 
-Follow consumers, direct column usage and supported transformations. Use findings
-to plan a migration or review a change, then verify against runtime behavior.
+Follow consumers and trace a column through its transformations. The graph links
+column rows across steps. Select a card or link to inspect the relevant logic.
 
 [Investigate columns and impact](user-guide/columns.md)
 
@@ -86,9 +95,6 @@ Clearing a canvas preserves workspace schemas.
 
 [Use the lineage builder and canvas](user-guide/lineage-builder.md){ .md-button }
 
-The builder guide includes the source version needed for this development feature;
-the older introductory tutorial checkout does not include it.
-
 ## Local analysis first. AI when you choose.
 
 Static analysis runs locally after installation without an API key, AI account
@@ -102,22 +108,23 @@ gateway can forward requests upstream. AI does not guarantee complete or correct
 [Understand analysis and disclosure](concepts/local-and-ai.md){ .md-button }
 [Configure optional AI](AI_ANALYSIS.md){ .md-button }
 
+[How confidence and coverage work](TRANSFORMATION_LINEAGE.md#how-confidence-and-coverage-work)
+
 ## Choose your project
 
 | Project | Start with | Know the boundary |
 | --- | --- | --- |
 | SQL | [SQL workflow](project-types/sql.md) | Dialect-specific syntax, dynamic SQL and unknown schema |
-| SAS | [SAS workflow](project-types/sas.md) | Bounded DATA/PROC SQL and known-value macros; no execution |
+| SAS | [SAS workflow](project-types/sas.md) | [Static macro and generated-code examples](SAS_PARSING.md#macro-and-generated-code-examples) |
 | dbt | [dbt workflow](project-types/dbt.md) | Source/enriched/artifact modes; no Jinja, package download or warehouse execution |
 
 ## A useful first run, on your machine.
 
-These guides describe development commit **1864dc8**. dbt and the current AI pipeline
-postdate release v0.0.1. Use [the pinned installation](getting-started/installation.md)
-to reproduce the examples rather than assuming an older binary has the same controls.
+Use [the pinned installation](getting-started/installation.md) to reproduce the
+controls and examples shown here.
 
 1. [Install and launch](getting-started/installation.md).
-2. [Import a SQL sample and build static lineage](getting-started/quick-start.md).
+2. [Run the bundled SQL example or import a sample ZIP](getting-started/quick-start.md).
 3. [Inspect evidence](user-guide/evidence.md) and [review coverage](concepts/evidence-and-coverage.md).
 4. [Export and reopen findings](user-guide/exports.md).
 

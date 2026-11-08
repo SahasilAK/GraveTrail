@@ -20,7 +20,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 - `__init__.py` — Package marker; no business behavior.
 - `assistance.py` — Explicit source-range/task AI action with hash-pinned preview and durable result ID; delegates validated/quarantined response presentation and inferred merge.
 - `assistance_result.py` — Reads AI record by workspace/ID, displays quarantine/validated result/usage and separately merges inferred claims with refresh; no source/response copies in session state.
-- `common.py` — Shared context/store/graph caches with missing-asset lineage warnings, workspace-scoped asset widget identities avoid stale equal labels; source choices reset when IDs leave current options; styled graph v2 component, downloads and original-version viewer with lazy complete source and workspace line-number preferences.
+- `common.py` — Shared context/store/graph caches, workspace-scoped asset selection, and the graph component with expandable final column lists. Also provides downloads and a lazy original-version source viewer.
 - `lineage_tree.py` — Full-width compact indented lineage rows with inline file paths, level labels, scoped theme-aware tree guides, Expand all/Collapse all and optional relationship details. Native branches stay lazy, depth/entry-bounded and cycle-safe; imported labels are Markdown-escaped. Stores controls only.
 - `lineage_navigation.py` — ALL_ASSETS sentinel, exact graph focus and workspace-scoped Back/Forward history of asset/query/direction/depth/collapse/view/Tree-tab controls; new asset navigation clears the forward branch.
 - `copy_names.py` — Theme-aware v2 comma-separated name lists with individual/list clipboard controls; textContent preserves imported names safely and COPY_JS supplies offline fallback.
@@ -43,7 +43,7 @@ GraveTrail presentation: app page/sidebar title and agent examples use the new n
 
 - `presentation.py` — apply_style/eyebrow/empty_state/section and sync_context: theme-derived chrome, cached supplied icon/two-color wordmark, readable action labels, session-persistent local selectors, workspace/source revision invalidation of transient evidence and cleanup plans.
 - `style.css` — App-owned key classes and semantic controls; responsive type/spacing, immediate focus/press feedback, reduced motion/transparency and contrast alternatives. Packaged with icon.png by hatch_assets.py. Legacy chrome remains unchanged; new palettes add muted/card roles.
-- `workspace_settings.py` — Extracted render_parsing/render_resources/render_appearance/render_privacy/render_storage forms; validators and service behavior unchanged. Forms include workspace identity; advanced mappings stay secondary.
+- `workspace_settings.py` — Workspace parsing/resources/appearance/privacy/storage forms. Shares friendly SQLGlot dialect labels with Sources.
 - `analysis_sections.py` — Lazy diagnostics with pending-source gates and exact version pinning, optional preview/request/merge panels, recent runs/comparison.
 - `analysis_ai.py` — AI opt-in, hybrid default, offline preview and background build/report. Preparation renders an immediate expandable native status, actual throttled file/task activity and show_time spinner; terminal duration freezes and failures/blockers expand. Automatic budgets reuse one preview; custom limits recheck. Refreshes the whole report once on terminal worker completion.
 
@@ -74,6 +74,6 @@ Explicit slider changes become run-only output overrides, respecting real model 
 
 `analysis_reasoning.py` — 500ms scoped reasoning fragment, exact absence caption and native browser details/300px CCv2 scroll body; textContent only, per-attempt browser expansion/scroll memory and Jump to latest. `analysis_ai` distinguishes durable validated/reused parts from received/handled responses and exposes explicit Start fresh (new run). Inspection remains lazy and shows per-request outcomes.
 
-- `column_graph.py` — Selectable local SVG component and validated scene-keyed selections.
-- `column_lineage.py` — Shared trace controls, graph, logic/file inspector and exports.
+- `column_graph.py` — Draggable SVG scope cards, row links, batched text measurements, and in-place selection updates for the same trace.
+- `column_lineage.py` — Shared trace controls, cached graph scenes, and lazy evidence, tables, and exports.
 - `column_references.py` — Direct usage and coverage summaries used by Columns.

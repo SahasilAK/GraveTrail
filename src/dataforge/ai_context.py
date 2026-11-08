@@ -23,6 +23,7 @@ class SourceSnapshot:
     code: str
     source_kind: str = ''
     context_json: str = '{}'
+    dialect: str | None = None
 
 
 def plan_file_parts(source, context, limits):
@@ -105,6 +106,7 @@ class PreparedAnalysis:
 def prepare_analysis(store, workspace, request, *, progress=None):
     """Pin inventory, settings, original bytes and previous publication under one read lock."""
     request = AnalysisRequest.model_validate(request)
+    from dataforge.services import explicit_source_dialect, source_dialect
     with store.lock:
         inventory = store.files(workspace)
         selected = set(request.file_ids) if request.file_ids is not None else {f['file_id'] for f in inventory}
@@ -113,8 +115,7 @@ def prepare_analysis(store, workspace, request, *, progress=None):
         from dataforge.dbt.ai_context import prepare_dbt_context
         dbt_contexts, closure = prepare_dbt_context(store, workspace, inventory, selected)
         selected |= closure
-        settings = ParsingSettings.model_validate({k:store.setting(workspace,k,v)
-            for k,v in ParsingSettings().model_dump().items()}).model_dump()
+        settings = ParsingSettings.from_store(store, workspace).model_dump()
         revisions = store.rows("SELECT run_id FROM analysis_runs WHERE workspace_id=? AND status='completed' ORDER BY created_at DESC LIMIT 1",[workspace])
         sources = []
         if progress:
@@ -124,7 +125,8 @@ def prepare_analysis(store, workspace, request, *, progress=None):
                 sources.append(SourceSnapshot(f['file_id'],f['content_hash'],f['relative_path'],f['extension'],
                                dbt_contexts.get(f['file_id'], {}).get('project_id', source_job(f,settings)),store.snapshot_content(f),
                                'dbt' if f['file_id'] in dbt_contexts else f['extension'].lstrip('.'),
-                               json.dumps(dbt_contexts.get(f['file_id'], {}), sort_keys=True)))
+                               json.dumps(dbt_contexts.get(f['file_id'], {}), sort_keys=True),
+                               source_dialect(f, settings) if f['extension'] == '.sql' and f['file_id'] not in dbt_contexts else None))
                 if progress:
                     progress('Reading selected files', len(sources), len(selected))
         sources = tuple(sources)
@@ -132,7 +134,9 @@ def prepare_analysis(store, workspace, request, *, progress=None):
         if len(families) > 1:
             raise ValueError('Select one analysis family per build: SQL, SAS, or dbt')
         manifest = [{'file_id':f['file_id'],'content_hash':f['content_hash'],'path':f['relative_path'],
-                     'extension':f['extension'],'job_id':source_job(f,settings)} for f in inventory]
+                     'extension':f['extension'],'job_id':source_job(f,settings),
+                     'dialect': source_dialect(f, settings),
+                     'sql_dialect_override': explicit_source_dialect(f)} for f in inventory]
         if dbt_contexts:
             settings['dbt'] = store.setting(workspace, 'dbt', {})
     settings_json = json.dumps(settings,sort_keys=True)
@@ -185,3 +189,53 @@ def _unit_spans(code, extension):
         yield start,end
     if block_start is not None:
         yield block_start,len(code.rstrip())
+
+
+class AIExecutionContext:
+    """Memory-only authorization, conservative attempt ledger and cooperative deadline."""
+    def __init__(self, request, *, connections=None, authorize=None, cancelled=None, transport=None,
+                 clock=None, catalog=None, settings=None, review_candidates=None, source_hashes=None):
+        import time
+        validated = AnalysisRequest.model_validate(request)
+        self.request = validated.model_copy(update={k: getattr(validated, k) or v for k, v in
+            {'max_provider_attempts': 200, 'max_output_tokens_total': 200000, 'max_seconds': 1800}.items()})
+        self.connections = connections
+        self.authorize = authorize
+        self.cancelled = cancelled
+        self.transport = transport
+        self.clock = clock or time.monotonic
+        self.started = self.clock()
+        self.attempts = 0
+        self.reserved_output_tokens = 0
+        self.catalog = catalog or []
+        self.settings = settings or {}
+        self.review_candidates = review_candidates or []
+        self.source_hashes = source_hashes or {}
+        self.attempt_log = []
+
+    def check(self):
+        if self.cancelled and self.cancelled():
+            raise InterruptedError('AI analysis cancelled')
+        if self.clock() - self.started >= self.request.max_seconds:
+            raise TimeoutError('deadline_exceeded')
+
+    @property
+    def remaining_seconds(self):
+        self.check()
+        return self.request.max_seconds - (self.clock()-self.started)
+
+    def before_attempt(self, profile):
+        self.check()
+        if self.authorize:
+            self.authorize(profile)
+        if self.attempts >= self.request.max_provider_attempts:
+            raise ValueError('AI provider attempt budget exhausted')
+        if self.reserved_output_tokens + profile.max_tokens > self.request.max_output_tokens_total:
+            raise ValueError('AI output token reservation budget exhausted')
+        self.attempts += 1
+        self.reserved_output_tokens += profile.max_tokens
+        self.attempt_log.append({'attempt':self.attempts,'model':profile.model,'provider':profile.provider,
+                                 'reserved_output_tokens':profile.max_tokens,'outcome':'unknown'})
+        if getattr(self, 'journal_attempt', None):
+            self.journal_attempt()
+        return min(profile.timeout,self.remaining_seconds)

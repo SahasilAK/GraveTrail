@@ -1,6 +1,7 @@
 # Design lineage on a canvas
 
-Open **Workspace → Lineage builder** in the sidebar to design tables and
+Choose **Open Lineage Builder** on **Overview** or **Workspace → Lineage builder**
+in the sidebar to design tables and
 column relationships, organize a diagram, and hand an editable design to another
 GraveTrail user. The builder works locally without an analysis run or AI account.
 Its relationships represent your authored design; source analysis continues in
@@ -8,19 +9,8 @@ Its relationships represent your authored design; source analysis continues in
 
 ## Use a version with the builder
 
-This guide covers the development feature available from source commit
-`a803b6e`. The older `1864dc8` checkout used by the introductory tutorials and
-release v0.0.1 do not contain the builder. To reproduce this feature from source:
-
-```sh
-git clone https://github.com/SahasilAK/GraveTrail.git
-cd GraveTrail
-git checkout a803b6e
-uv sync --locked --extra dev
-uv run gravetrail-ui --home ./.dataforge
-```
-
-Open the local app, choose a workspace, then select **Lineage builder**.
+Use the [documented source checkout](../getting-started/installation.md) to
+reproduce this walkthrough. Open the local app and choose a workspace.
 
 | Section | Use it to |
 | --- | --- |

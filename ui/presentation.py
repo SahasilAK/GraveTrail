@@ -51,7 +51,7 @@ def apply_style() -> None:
         .st-key-app_workspace [data-testid="stCaptionContainer"],
         [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {color:var(--gt-muted);opacity:1}
         .gt-eyebrow {color:var(--gt-muted);opacity:1}
-        .st-key-empty_state,.st-key-overview_next {background:var(--gt-surface)}
+        .st-key-empty_state {background:var(--gt-surface)}
         """
     st.html("<style>:root{" + tokens + "}" + Path(__file__).with_name("style.css").read_text() + extra + "</style>")
 

@@ -1,11 +1,12 @@
 """Shared lineage controls and selection-driven graph inspection."""
 import json
+from collections import defaultdict
 
 import streamlit as st
 
 from dataforge.column_evidence import load_column_evidence
 from dataforge.column_graph import build_column_scene
-from dataforge.configuration import ParsingSettings, VisualizationSettings
+from dataforge.configuration import ParsingSettings
 from dataforge.exports import report_csv
 from dataforge.services import analysis_is_current
 from dataforge.transformations import column_catalog, trace_columns
@@ -15,7 +16,8 @@ from ui.column_graph import column_graph_view, resolve_selection
 @st.fragment
 def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
     w = workspace
-    if not analysis_is_current(store, w):
+    freshness = analysis_is_current(store, w)
+    if not freshness:
         st.warning("Analysis is out of date. These are the last stored transformations; run Analysis to refresh coverage.")
 
     catalog = column_catalog(store, w, asset, limit=500)
@@ -48,9 +50,10 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
                              key="transformation_status_" + scope_key)
 
     revision = store.rows("SELECT * FROM column_analysis WHERE workspace_id=?", [w])
-    freshness = analysis_is_current(store, w)
+    settings = store.rows("SELECT key,value FROM settings WHERE workspace_id=? AND key IN (SELECT unnest(?)) ORDER BY key",
+                          [w, list(ParsingSettings.model_fields)])
     cache_key = json.dumps([str(store.home), w, asset, column, direction, depth, status, revision, freshness,
-                            {name: store.setting(w, name, value) for name, value in ParsingSettings().model_dump().items()}], default=str)
+                            settings], default=str)
     try:
         cached = st.session_state.get(key + "_trace")
         if not cached or cached[0] != cache_key:
@@ -81,32 +84,31 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
     elif not trace["complete"]:
         st.warning("Coverage is incomplete. Known steps are shown alongside their unresolved boundaries.")
     if coverage:
-        with st.expander("Coverage details", expanded=not steps):
-            st.dataframe(coverage, hide_index=True, alt="Transformation coverage boundaries")
+        coverage_panel = st.expander("Coverage details", expanded=not steps, on_change="rerun",
+                                     key=key + "_coverage_" + scope_key)
+        if coverage_panel.open:
+            with coverage_panel:
+                st.dataframe(coverage, hide_index=True, alt="Transformation coverage boundaries")
     st.caption("Value inputs supply an output. Selection, matching, rowset and ordering roles describe other effects. Static coverage does not verify runtime behavior.")
 
+    root = trace.get("root") or choices.get(column)
+    if root is None:
+        root = next((ref for step in steps for ref in [step["target"], *step["inputs"]]
+                     if ref["column_id"] == column or (ref["asset_id"] == asset and ref["column_name"] == column)), None)
+    if steps or root is not None:
+        saved_scene = st.session_state.get(key + "_scene")
+        if not saved_scene or saved_scene[0] != cache_key:
+            saved_scene = (cache_key, build_column_scene(trace, root, status=status))
+            st.session_state[key + "_scene"] = saved_scene
+        scene = saved_scene[1]
+
     if steps:
-        display = []
-        for index, step in enumerate(steps, 1):
-            evidence = step.get("evidence") or {}
-            target = step["target"]
-            display.append({"Step": index, "Output": f'{target.get("table", "")}.{target["column_name"]}',
-                "Transformation": step["category"], "Status": step["status"],
-                "Inputs and roles": "; ".join(f'{i.get("table", "")}.{i.get("column_name") or "[rowset]"} ({i["role"]})' for i in step["inputs"]),
-                "Branch": step.get("branch"), "Source file": evidence.get("relative_path"),
-                "Lines": f'{evidence.get("start_line", "")}–{evidence.get("end_line", "")}'})
-        root = choices.get(column)
-        if root is None:
-            root = next((ref for step in steps for ref in [step["target"], *step["inputs"]]
-                         if ref["column_id"] == column or (ref["asset_id"] == asset and ref["column_name"] == column)), None)
-        scene = build_column_scene(trace, root, status=status)
         scene_key = scene["trace_key"]
         if scene.get("display_truncated"):
             st.warning(f"Reduced graph display: {scene['omitted_derivations']} transformations, "
                        f"{scene['omitted_nodes']} nodes and {scene['omitted_edges']} edges omitted. Table and exports retain the bounded trace.")
         selection = resolve_selection(scene, st.session_state.get(key + "_selection"))
-        component = column_graph_view(scene, key=key + "_graph", selection=selection,
-                                      appearance=VisualizationSettings.from_store(store, w))
+        component = column_graph_view(scene, key=key + "_graph", selection=selection)
         event = resolve_selection(scene, component.selection)
         new_event = event is not None and event != selection
         if event is not None:
@@ -120,17 +122,25 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
                 edge = next(e for e in scene["edges"] if e["id"] == selection["id"])
                 related = [d for d in steps if d["derivation_id"] == edge["derivation_id"]]
             else:
-                cid = selection["id"].removeprefix("column:")
-                refs = [r for d in steps for r in [d["target"], *d["inputs"]] if r["column_id"] == cid]
-                if refs:
-                    st.caption("Selected column: " + refs[0]["table"] + "." + (refs[0]["column_name"] or "[rowset]"))
-                related = [d for d in steps if d["target"]["column_id"] == cid or any(i["column_id"] == cid for i in d["inputs"])]
+                if selection["kind"] == "card":
+                    card = next(c for c in scene["cards"] if c["id"] == selection["id"])
+                    st.caption("Selected scope: " + card["label"] + (" · " + card["scope"] if card["scope"] else ""))
+                    column_ids = {row["column_id"] for row in card["rows"]}
+                else:
+                    node = next(n for n in scene["nodes"] if n["id"] == selection["id"])
+                    st.caption("Selected column: " + node["label"])
+                    column_ids = {node["column_id"]}
+                related = [d for d in steps if d["target"]["column_id"] in column_ids
+                           or any(i["column_id"] in column_ids for i in d["inputs"])]
+                root_id = root["column_id"] if root else None
+                related.sort(key=lambda d: (d["target"]["column_id"] not in column_ids,
+                                            d["target"]["column_id"] != root_id))
         if not related:
-            st.info("No returned transformation is associated with this column.")
+            st.info("No returned transformation is associated with this selection.")
         else:
             candidates = {d["derivation_id"]: d for d in related}
             selected_id = st.selectbox("Transformation step", [None, *candidates],
-                index=1 if selection and len(candidates) == 1 else 0,
+                index=1 if selection else 0,
                 format_func=lambda did: "Choose a transformation" if did is None else
                     candidates[did]["target"]["table"] + "." + candidates[did]["target"]["column_name"] + " · " + candidates[did]["category"],
                 key=key + "_step_" + scene_key + (selection["id"] if selection else ""))
@@ -153,8 +163,7 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
             step = candidates.get(selected_id)
             if step:
                 did = step["derivation_id"]
-                evidence = load_column_evidence(store, w, trace["run_id"], did)
-                meta = evidence["evidence"]
+                meta = step.get("evidence") or {}
                 st.caption(f"{meta.get('relative_path', 'Unknown source')} · lines {meta.get('start_line', '?')}–{meta.get('end_line', '?')} · {meta.get('source_hash', '')}")
                 file_panel = st.expander("Analyzed source file", on_change="rerun", key=key + "_file_" + scene_key)
                 if file_panel.open:
@@ -187,27 +196,38 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
                             st.download_button("Download analyzed file", lambda: store.original(meta["file_id"], meta["source_hash"]),
                                 source["file_name"], key=file_key + "_download", on_click="ignore")
 
-        with st.expander("Steps and paths"):
-            st.dataframe(display, hide_index=True, alt="Ordered column transformations and dependency roles")
+        steps_panel = st.expander("Steps and paths", on_change="rerun", key=key + "_steps_" + scope_key)
+        if steps_panel.open:
+            display = []
+            for index, step in enumerate(steps, 1):
+                evidence = step.get("evidence") or {}
+                target = step["target"]
+                display.append({"Step": index, "Output": f'{target.get("table", "")}.{target["column_name"]}',
+                    "Transformation": step["category"], "Status": step["status"],
+                    "Inputs and roles": "; ".join(f'{i.get("table", "")}.{i.get("column_name") or "[rowset]"} ({i["role"]})' for i in step["inputs"]),
+                    "Branch": step.get("branch"), "Source file": evidence.get("relative_path"),
+                    "Lines": f'{evidence.get("start_line", "")}–{evidence.get("end_line", "")}'})
+            with steps_panel:
+                st.dataframe(display, hide_index=True, alt="Ordered column transformations and dependency roles")
 
     else:
-        root = choices.get(column)
         if root is not None:
-            scene = build_column_scene(trace, root, status=status)
-            column_graph_view(scene, key=key + "_graph", selection=None,
-                              appearance=VisualizationSettings.from_store(store, w))
+            column_graph_view(scene, key=key + "_graph", selection=None)
         st.caption("No returned transformations to inspect. Coverage above explains any unresolved boundary.")
 
-    markers = {k: trace[k] for k in ("workspace_id", "asset_id", "column", "direction", "depth", "state", "truncated", "complete", "run_id")}
-    export_rows = [{**markers, "coverage": json.dumps(coverage, default=str),
-                    "paths": json.dumps([p for p in trace["paths"] if p["derivation_id"] == step["derivation_id"]], default=str),
-                    **{key: json.dumps(value, default=str) if isinstance(value, (dict, list)) else value
-                       for key, value in step.items()}} for step in steps]
-    if not export_rows:
-        export_rows = [{**markers, "coverage": json.dumps(coverage, default=str)}]
+    def export_csv():
+        markers = {k: trace[k] for k in ("workspace_id", "asset_id", "column", "direction", "depth",
+                                         "state", "truncated", "complete", "run_id")}
+        markers["coverage"] = json.dumps(coverage, default=str)
+        paths = defaultdict(list)
+        for path in trace["paths"]:
+            paths[path["derivation_id"]].append(path)
+        return report_csv([{**markers, "paths": json.dumps(paths[step["derivation_id"]], default=str),
+                            **{k: json.dumps(v, default=str) if isinstance(v, (dict, list)) else v
+                               for k, v in step.items()}} for step in steps] or [markers])
     with st.popover("Export trace", icon=":material/download:"):
         st.caption("Exports contain this bounded trace, original expressions, evidence references and coverage markers.")
         st.download_button("Download JSON", lambda: json.dumps(trace, indent=2, default=str),
                            "column_transformations.json", "application/json", on_click="ignore")
-        st.download_button("Download CSV", lambda: report_csv(export_rows),
+        st.download_button("Download CSV", export_csv,
                            "column_transformations.csv", "text/csv", on_click="ignore")

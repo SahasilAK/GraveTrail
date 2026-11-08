@@ -219,11 +219,11 @@ def proc_sql_spans(code):
 
 
 def unit_dialect(unit, settings):
-    dialect = settings.get("dialect_by_extension", {}).get(unit.extension, settings.get("dialect", ""))
-    for prefix, value in sorted(settings.get("dialect_by_folder", {}).items(), key=lambda item: len(item[0])):
-        if unit.path.startswith(prefix):
-            dialect = value
-    return dialect
+    from dataforge.services import source_dialect
+
+    if unit.dialect is not None:
+        return unit.dialect
+    return source_dialect({"extension": unit.extension, "relative_path": unit.path}, settings)
 
 
 def split_proc_sql_unit(unit):

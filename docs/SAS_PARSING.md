@@ -11,32 +11,65 @@ PROC SQL SELECT expressions accept literal `FORMAT=` display modifiers (named, n
 character and custom formats ending in a period or decimal precision), before or after aliases,
 and positive literal `LENGTH=` modifiers. `CALCULATED` references use uniquely defined SELECT
 aliases without inventing base-table columns; missing or ambiguous aliases produce diagnostics.
-SAS `DATETIME()` is recognized as an expression. Malformed modifiers remain parse errors.
+SAS `DATETIME()` traces to a runtime clock value. Malformed modifiers remain parse errors.
 PROC SQL also recognizes adjacent literal date (`'01JAN2025'd`), time
 (`'12:30:01't`) and datetime (`'01JAN2025:12:30:01'dt`) constants. These remain
 literal syntax for dependency analysis; their SAS numeric values are not evaluated.
 Invalid calendar/time values, unknown suffixes and two-digit-year leap-day constants
 remain unsupported. This does not implement session `YEARCUTOFF` behavior. Original
 typed-literal text and source coordinates remain evidence.
-Transformations involving these typed constants remain unresolved until their value
-semantics are supported; table dependencies and exact direct-usage evidence remain available.
 These rules customize only the configured PROC SQL dialect instance; ordinary SQL is unchanged.
 See the [SAS column modifier reference](https://support.sas.com/documentation/cdl/en/sqlproc/63043/HTML/default/n09x2o5dobk74an1mupf5f3y8emt.htm).
 
-Parser cache version 13 invalidates earlier results on the next analysis. Run **Analyze all files**
+Parser cache version 22 invalidates earlier results on the next analysis. Run **Analyze all files**
 in Analysis for previously analyzed workspaces; source bytes and original statement/line
-evidence remain intact. Existing packaged executables/images need rebuilding for version 13.
+evidence remain intact.
 
 ## Column transformation subset
 
-[Transformation lineage](TRANSFORMATION_LINEAGE.md) reuses SQL derivations for PROC SQL
-and adds a bounded DATA-step subset: explicit assignments with ordered variable versions,
-single SET propagation and explicit KEEP/DROP/RENAME when statically established. Original
-assignment and PROC SQL expression text remains cited. Unknown passthrough schemas remain
-visible; a partial list is not promoted to a complete schema. MERGE BY, multiple SETs,
-arrays, loops, conditional retention, automatic variables and runtime/macro-expanded
-expressions are unresolved. Existing table-level MERGE recognition does not imply SQL join
-semantics or a compiled SAS variable analysis. No SAS code executes.
+[Transformation lineage](TRANSFORMATION_LINEAGE.md) traces these static forms.
+
+- A plain INPUT list with inline DATALINES or CARDS traces to the input statement and
+  retained inline data. DATA-step assignments retain ordered variable versions.
+- Simple filters retain row-selection inputs. Paired IF/ELSE assignments to the same
+  variable distinguish the condition from the values it selects.
+- A single SET's input WHERE= takes precedence over a DATA-step WHERE statement.
+- Single-input SET and one concatenating SET can carry forward known columns through
+  WORK datasets. Concatenation uses complete input layouts and traces each variable only
+  to inputs that supply it. Simple IN= indicators track dataset membership.
+- A plain SET followed by an exhaustive IF/ELSE OUTPUT chain traces each named
+  output to the input and shows the current and preceding branch tests as row filters.
+- An initial MERGE with a plain BY list uses complete input layouts, including simple
+  IN= and RENAME= options. BY keys are match context. Shared non-key variables show
+  all possible value inputs because the supplying row depends on runtime BY-group state.
+- Simple PROC SORT copies values through to its output. BY keys supply ordering context
+  or row-selection context for NODUPKEY. Bounded NWAY SUMMARY/MEANS sums and means and
+  grouped PROC RANK expose their value and grouping inputs.
+- PROC TRANSPOSE with a plain BY list, VAR list, and PREFIX= exposes known BY columns,
+  the transposed variable name, and candidate values for numbered output columns.
+  Enter a name such as `AMT_2` to trace the second observation within each BY group.
+  Downstream references also publish conditional column traces. A compatible imported
+  output schema establishes exact names. Otherwise the width depends on runtime group sizes.
+- Plain PROC APPEND with FORCE uses complete BASE and DATA layouts. Matching incoming
+  columns contribute values. Incoming-only columns stay outside the BASE output.
+- PROC SQL follows named CALCULATED aliases, simple correlated predicates and derived
+  tables. It retains explicit column positions for literal INSERT VALUES. A single
+  arithmetic UPDATE assignment with a simple single-table IN subquery separates
+  existing target values from subquery membership and filters. An unqualified
+  subquery column needs a complete inner layout to confirm local ownership.
+- A literal single-key hash lookup with a zero fallback traces the lookup value
+  and the keys that select it. A fixed-array rounding loop followed by an
+  unconditional sum statement and LAG traces each array member and the value
+  input shared by the stateful outputs. The retained sum uses the input layout to
+  determine whether SET supplies an accumulator.
+
+APPEND and UPDATE traces expose independent sources and retain the unknown writer order
+boundary for in-place writes.
+
+Unknown layouts, other MERGE or multi-output forms, repeated SET statements, general
+hash, array, and loop behavior, complex retention, and unexpanded macros remain coverage
+gaps. No SAS code executes.
+[SAS guide to combining data](https://documentation.sas.com/api/collections/pgmsascdc/v_007/docsets/lepg/content/lepg.pdf?locale=en)
 
 ## Static macro-variable expressions
 
@@ -52,6 +85,37 @@ conditional macro flow and CALL SYMPUT/SYMPUTX/EXECUTE invalidate known variable
 conservatively; a later explicit `%LET` can establish a fresh value. Configured values cannot
 inject additional semicolon-delimited statements. Expansion is bounded to 1 MiB per statement.
 This adds static variable expressions, not macro-definition invocation or a SAS interpreter.
+
+### Macro and generated-code examples
+
+```sas
+%let lib=raw;
+%let source=&lib..orders;
+data mart.orders;
+  set &source.;
+run;
+```
+
+This establishes `raw.orders` → `mart.orders` at the table level. The evidence
+keeps the original `set &source.;` text. Column passthrough also needs a known
+input layout. A resolved table name alone gives no list of columns.
+
+```sas
+%let source=raw.orders;
+data _null_;
+  call symputx('source', 'raw.other');
+run;
+data mart.orders;
+  set &source.;
+run;
+```
+
+Here `CALL SYMPUTX` invalidates the static `source` value. The parser flags the
+subsequent macro reference and leaves the input edge unresolved. `CALL EXECUTE`
+also stays unresolved, including when the string contains `PROC SQL` text.
+Standalone SQL has a separate rule for [supported literal dynamic SQL](SQL_PARSING.md#literal-procedure-and-dynamic-sql-bodies).
+For example, the Snowflake dialect can read a single literal `EXECUTE IMMEDIATE`
+statement. SQL assembled at runtime from variables or concatenation remains unresolved.
 
 Library mappings rewrite namespaces, not filesystem permissions. LIBNAME paths are not read.
 One-level SAS datasets use WORK; WORK objects are temporary but remain in internal lineage.

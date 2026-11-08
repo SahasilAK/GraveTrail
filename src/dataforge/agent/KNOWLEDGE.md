@@ -9,6 +9,7 @@ existing detail/source permissions and response limits.
 `cli_dbt.py` registers project/resource/detail/dependency commands over DbtOperations.
 Capability DBT01, four MCP dbt reads and explicit ingestion options share existing
 workspace/source/write/root permissions and cursor budgets.
+CLI `ingest --sql-dialect` and MCP `ingest_sources.sql_dialect` share the optional SQL override.
 
 Shared authorized automation layer. CLI and MCP delegate to the existing services,
 Store, Importer, LineageGraph, exports and explicit opt-in grounded AI; imported source is never executed.

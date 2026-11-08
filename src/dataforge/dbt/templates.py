@@ -1,7 +1,64 @@
 """Inspect Jinja expressions and dbt blocks without rendering imported templates."""
+import re
 from dataclasses import dataclass, field
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
+
+
+def expression_macros(resources):
+    """Substitute bounded arithmetic expression macros from this package's source."""
+    environment = Environment()
+    definitions = {}
+    for resource in resources:
+        if resource.resource_type != 'macro' or not resource.enabled:
+            continue
+        try:
+            body = environment.parse(resource.definition.excerpt).body
+        except (TemplateSyntaxError, RecursionError):
+            continue
+        if len(body) == 1 and isinstance(body[0], nodes.Macro) and not body[0].defaults:
+            definitions[resource.package_name, body[0].name] = body[0]
+
+    def render(node, package, bindings, depth, budget):
+        budget[0] -= 1
+        if budget[0] < 0:
+            raise ValueError('Macro expression budget exceeded')
+        if isinstance(node, nodes.Name) and node.name in bindings:
+            return bindings[node.name]
+        if isinstance(node, nodes.Const) and type(node.value) in {str, int, float}:
+            value = str(node.value)
+            if re.fullmatch(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|[0-9]+(?:\.[0-9]+)?', value):
+                return value
+        if isinstance(node, nodes.TemplateData) and re.fullmatch(r'[\s0-9.+*/()-]*', node.data):
+            if '--' not in node.data and '/*' not in node.data:
+                return node.data
+        if (isinstance(node, nodes.Call) and isinstance(node.node, nodes.Name)
+                and not (node.kwargs or node.dyn_args or node.dyn_kwargs) and depth < 8):
+            macro = definitions.get((package, node.node.name))
+            if macro and len(macro.args) == len(node.args) and all(isinstance(part, nodes.Output) for part in macro.body):
+                args = {arg.name: render(value, package, bindings, depth + 1, budget)
+                        for arg, value in zip(macro.args, node.args)}
+                parts, size = [], 0
+                for output in macro.body:
+                    for part in output.nodes:
+                        value = render(part, package, args, depth + 1, budget)
+                        size += len(value)
+                        if size > 8192:
+                            raise ValueError('Macro expression budget exceeded')
+                        parts.append(value)
+                return ''.join(parts)
+        raise ValueError('Unsupported dbt expression macro')
+
+    def expand(body, package):
+        try:
+            expression = environment.parse('{{ ' + body + ' }}').body[0].nodes[0]
+            if isinstance(expression, nodes.Call):
+                return render(expression, package, {}, 0, [256])
+        except (TemplateSyntaxError, ValueError, RecursionError):
+            pass
+        return None
+
+    return expand
 
 
 @dataclass(frozen=True)
@@ -153,6 +210,8 @@ def scan_template(text, source=None, limits=None, variables=None):
                 raise ValueError('Template call budget exceeded')
             for node in calls:
                 try:
+                    if node.dyn_args is not None or node.dyn_kwargs is not None:
+                        raise ValueError('Dynamic Jinja arguments')
                     args = tuple(constant(n, variables) for n in node.args)
                     kwargs = {p.key: constant(p.value, variables) for p in node.kwargs}
                 except ValueError:

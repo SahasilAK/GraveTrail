@@ -135,13 +135,14 @@ def render_graph_image(
     for i, line in enumerate(lines):
         add(root, 'text', {'x': 20, 'y': 24 + i * 20, 'fill': text}, line)
     defs = add(root, 'defs')
-    marker = add(defs, 'marker', {'id': 'df-arrow', 'viewBox': '0 0 10 10', 'refX': 9, 'refY': 5,
-        'markerWidth': 7, 'markerHeight': 7, 'orient': 'auto-start-reverse'})
-    add(marker, 'path', {'d': 'M 0 0 L 10 5 L 0 10 z', 'fill': edge})
+    marker = add(defs, 'marker', {'id': 'df-arrow', 'viewBox': '0 0 12 12', 'refX': 10, 'refY': 6,
+        'markerWidth': 12, 'markerHeight': 12, 'markerUnits': 'userSpaceOnUse', 'orient': 'auto'})
+    add(marker, 'path', {'d': 'M 3 2 L 9.5 6 L 3 10', 'fill': 'none', 'stroke': edge,
+        'stroke-width': 1.6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'})
     stage = add(root, 'g', {'transform': f'translate({-x},{header-y})'})
     for i, e in enumerate(scene['edges']):
         add(stage, 'path', {'d': e['path'], 'data-edge': i, 'fill': 'none', 'stroke': edge,
-            'stroke-width': appearance.graph_edge_width, 'marker-end': 'url(#df-arrow)'})
+            'stroke-width': appearance.graph_edge_width, 'stroke-linecap': 'round', 'marker-end': 'url(#df-arrow)'})
     for n in scene['nodes']:
         label = n['name'] + (f" [job: {n['job_id']}]" if n.get('job_id') and n['job_id'] != 'workspace' else '')
         group = add(stage, 'g', {'data-node': n['asset_id'], 'transform': f"translate({n['x']},{n['y']})"})

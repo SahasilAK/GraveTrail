@@ -16,13 +16,13 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 - `schema_imports.py` — Schema-only SQL DDL, explicit SAS LENGTH/PROC SQL, dbt YAML/manifest/catalog JSON, generic JSON, Informatica XML and CSV/TSV imports. Preserves system metadata; clears graph folder references and trace colors. Upload limits, inert content, DTD/alias rejection and partial-format warnings.
 
 ## Core analysis and storage
-- `column_graph.py` — Bounded source-free column scenes, whole-derivation display caps and cycle-aware layout.
+- `column_graph.py` — Bounded source-free scenes with scope cards, row links, and whole-derivation display caps.
 - `column_evidence.py` — Workspace/run-validated lazy expression and exact analyzed-source lookup.
 - `services.column_usage_coverage` — Source-free freshness/diagnostic/wildcard coverage; unused names require complete direct usage.
 - `models.py` — AssetRef, Usage, Operation, ParseResult, diagnostics, stable IDs, quote-aware column keys and safe statement splitting.
 - `store.py` — Store owns serialized DuckDB access, additive migrations 1–10, workspaces/settings, original versions and transactions. One owning process per home.
-- `ingestion.py` — Importer and path/ZIP limits; lexical authorization precedes resolved containment. Originals are immutable SHA-256 blobs; imported code never executes.
-- `services.py` — analyze prepares static caches and publishes atomically; analysis_is_current checks inputs/settings and recorded publication version/run. Missing/old versions are stale for static and AI runs. column_report/column_names/compare_runs and export_lineage_excel serve committed facts.
+- `ingestion.py` — Bounded imports with discovery and save stages and per-file skip reasons. Lexical authorization precedes resolved containment. Originals are immutable SHA-256 blobs.
+- `services.py` — Static caches and atomic lineage publication with optional stage reporting. analysis_is_current checks inputs, settings, and publication version. Reporting helpers read committed facts.
 - `asset_identity.py`, `schemas.py` — AssetResolver, job/name identities and typed DDL reconciliation; temporary/job scopes and immutable evidence survive. Ambiguous/changed schemas disable guessed expansion.
 - `transformations.py` — materialize_columns, column_catalog and trace_columns; indexed scope/version/role identities, positional wildcards, bounded paths, unknown writers, cycles and reanalysis markers.
 - `configuration.py`, `settings_service.py` — Typed settings, portability, section schemas/revisions and atomic patches; agents cannot escalate privileges.
@@ -54,7 +54,7 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 
 ## Reports, rendering and maintenance
 - `graph.py` — LineageGraph traversal, missing-endpoint evidence, temporary contraction and bounded source-to-target paths with explicit incomplete coverage.
-- `exports.py`, `lineage_tree.py` — Shared escaped live/offline graph and lazy tree presentation; exact original-version evidence.
+- `exports.py`, `lineage_tree.py` — Live and offline graphs, SVG panning, expandable final table columns with links to neighboring rows, lazy trees, and exact historical evidence.
 - `excel_exports.py` — Streaming literal-text XLSX paths/evidence with bounded time/text/bytes and cleanup on failure.
 - `graph_images.py`, `image_worker.py`, `graph_image_service.py` — Inert SVG, bounded resvg workers and committed filtered graph snapshots with revision/coverage/safe filenames.
 - `artifacts.py` — Selection/format allowlists, original-version artifacts and checked scoped base64 reads; source permission rechecked at retrieval.

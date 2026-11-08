@@ -1,16 +1,15 @@
 # Analyze a SQL project
 
-Import a ZIP/folder in **Sources**, choose ordinary files and select `sql`.
-Run **Analysis → Run → Analyze all files** with AI unchecked.
+In **Sources**, select SQL for a file, ZIP or folder import. Choose **SQL source
+type** to select Databricks, SQL Server, another supported dialect, or **Generic SQL**.
+Choose **Use workspace settings** to inherit the workspace dialect rules. Select
+**Continue to Analysis**, then run **Analyze all files** with AI unchecked.
 
-Set the appropriate SQL dialect in workspace settings before analyzing dialect-specific
-syntax. SQLGlot and bounded wrapper handling extract supported reads/writes, direct
-usage and transformations. No database connection or SQL execution occurs.
-
-Use **Lineage** for table dependencies, **Columns** for references and **Transformation
-lineage** for output expressions. Select relationships to inspect exact statements.
-Imported CREATE TABLE declarations support bounded wildcard expansion; absent schema,
-ambiguous aliases and dynamic names retain diagnostics.
+Use **Lineage** for table dependencies and **Columns → Lineage graph** to trace
+output expressions. Switch to **Direct references** to find usage in the original
+code. The selected SQL source type applies to table and column analysis. A known
+schema can resolve wildcard expansion and positional INSERT mappings. Check
+diagnostics for missing schemas, ambiguous references and dynamic names.
 
 Some literal procedure/dynamic-SQL wrappers are supported, but arbitrary runtime
 generation remains unresolved. See [SQL coverage](../SQL_PARSING.md) and
