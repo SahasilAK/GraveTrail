@@ -18,10 +18,17 @@ def test_empty_dashboard_and_builder(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert not app.exception
     assert app.title[0].value == "Overview"
     assert any("GraveTrail" in header.value for header in app.sidebar.header)
-    assert {"Open Lineage Builder", "Import sources"} <= {link.value for link in app.page_link}
-    assert any(button.label == "Run SQL example" for button in app.button)
-    assert next(link for link in app.link_button if link.value == "View on GitHub").proto.url == "https://github.com/SahasilAK/GraveTrail"
-    app.switch_page("ui/pages/builder.py").run()
+    buttons = {button.label: button for button in app.button}
+    assert all(buttons[label].proto.type == "primary" for label in
+               ("Open Lineage Builder", "Import sources", "Run SQL example"))
+    links = {link.value: link.proto for link in app.link_button}
+    assert links["View on GitHub"].url == "https://github.com/SahasilAK/GraveTrail"
+    assert links["Documentation"].url == "https://sahasilak.github.io/GraveTrail/"
+    assert all(link.type == "primary" for link in links.values())
+    buttons["Open Lineage Builder"].click().run()
+    assert app.title[0].value.casefold() == "lineage builder"
+    app.switch_page("ui/pages/dashboard.py").run()
+    next(button for button in app.button if button.label == "Import sources").click().run()
     assert not app.exception
     assert any("Import" in b.label for b in app.button)
 
@@ -48,7 +55,7 @@ def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatc
     assert all(button.label != "Run SQL example" for button in app.button)
     assert any(header.value == "Explore your workspace lineage" for header in app.subheader)
     assert {"Explore lineage", "Open Lineage Builder", "Import sources", "Open Columns"} <= {
-        link.value for link in app.page_link}
+        button.label for button in app.button if button.proto.type == "primary"}
     assert {metric.label: metric.value for metric in app.metric}["Dependencies"] == "128"
 
 

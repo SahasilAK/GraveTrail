@@ -34,15 +34,6 @@
   border-radius: .85rem;
   background: color-mix(in srgb, var(--gt-surface, currentColor) 4%, transparent);
 }
-.st-key-overview_actions [data-testid="stPageLink"] a,
-.st-key-overview_hero [data-testid="stPageLink"] a {
-  padding-inline: .7rem; border-radius: .55rem;
-  background: color-mix(in srgb, var(--gt-accent, #ed6265) 12%, transparent);
-}
-.st-key-overview_actions [data-testid="stPageLink"] a:hover,
-.st-key-overview_hero [data-testid="stPageLink"] a:hover {
-  background: color-mix(in srgb, var(--gt-accent, #ed6265) 21%, transparent);
-}
 .st-key-overview_footer { margin-top: .5rem; border-top: 1px solid var(--gt-border, color-mix(in srgb, currentColor 18%, transparent)); padding-top: .55rem; }
 .st-key-analysis_run, .st-key-source_import, .st-key-preferences_body { max-width: 64rem; }
 .st-key-analysis_run, .st-key-source_import { padding: .5rem; }
