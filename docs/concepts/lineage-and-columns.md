@@ -11,6 +11,9 @@ establish how an output value is calculated.
 **Transformation lineage** represents supported output expressions and input roles.
 Value inputs, CASE selection, join/filter context, rowsets and window partition/order
 are distinct. Unsupported expressions remain boundaries instead of guessed derivations.
+In **Columns**, the **Lineage graph** opens by default. Switch to **Direct references**
+to see usages. In **Lineage**, expand a table for a shorter view of column links
+between neighboring tables.
 
 For example, `SUM(amount)` uses amount values and a contributing rowset; `COUNT(*)`
 depends on a rowset without claiming a particular column value. A WHERE condition

@@ -1,8 +1,8 @@
 # Column transformation lineage
 
-Choose **Transformation lineage**, directly below **Columns** in Explore, to follow a
-column's value through analyzed SQL or SAS. **Columns** retains the existing direct
-usage report. A join/filter reference can influence which rows appear without supplying
+Choose **Columns → Lineage graph** to follow a column's value through analyzed
+SQL, SAS, or dbt. **Direct references** lists column usage separately. A join or
+filter reference can influence which rows appear without supplying
 the value of every output column.
 
 ## Trace a column
@@ -33,7 +33,8 @@ connect column rows and distinguish value flow from dependencies such as matchin
 and row filters. A write can show its previous value as a separate row. Select a
 card header, row, or link to open its transformation logic. When several steps
 apply, the picker starts with a step that produces a selected column if available.
-Drag anywhere on the graph to pan, or type a column name to highlight matching rows.
+Drag a card header to move it, drag the background or Alt-drag to pan, or type
+a column name to highlight matching rows.
 
 ## Tested static coverage
 
@@ -162,13 +163,15 @@ dynamic Jinja and unsupported compiled-to-original mappings remain partial. Curr
 protocol 5 qualification uses independent nonempty mock fixtures; live accuracy remains
 separate evidence.
 
-## Column graph and parser 21 follow-up
+<span id="column-graph-and-parser-21-follow-up"></span>
 
-Columns offers Direct references and Lineage graph views. Graph selections retain
+## Column graph and parser updates
+
+Columns opens in Lineage graph by default. Graph selections retain
 column and derivation identity, UNION branches, scopes and SAS versions. Display caps
 are separate from trace coverage. Source files load lazily from exact analyzed
 hashes; the graph component receives no expression or source text. Re-run Analysis
-after this parser upgrade.
+after upgrading to the current parser (version 25).
 
 Table aliases and intermediate output columns follow the selected SQL dialect's
 quoted and unquoted identifier rules. Equivalent intermediate references retain

@@ -1,32 +1,14 @@
 # Quick start
 
-Build and inspect a seven-layer lineage graph from the supplied sample project.
-This is the primary, default workflow: local parsing sends no source to an AI
-provider and needs no LLM, API key or AI token usage. Optional [AI analysis](../AI_ANALYSIS.md) independently extracts inferred facts; it
-is a separate choice with provider disclosure, not a requirement for project size.
+Build and inspect a seven-layer lineage graph from the bundled SQL project.
+The example runs local static analysis and requires no AI credentials.
 
 ## 1. Install and launch
 
-These steps describe development commit **1864dc8**, including features newer than
-release v0.0.1. Read [installation choices](installation.md) before using an older binary.
-
-Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/), then run:
-
-```sh
-git clone https://github.com/SahasilAK/GraveTrail.git
-cd GraveTrail
-git checkout 1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414
-uv sync --locked --extra dev
-uv run gravetrail-ui --home ./.dataforge
-```
-
-Open [the local application](http://127.0.0.1:8501). The launcher uses loopback and
-port 8501 by default. `./.dataforge` is a persistent runtime directory relative
-to the repository root and is ignored by Git. You can instead supply an
-absolute path outside the checkout.
-
-For pip, Docker and executable alternatives, use the
-[installation reference](../SETUP_AND_DEPLOYMENT.md).
+Follow the [locked installation](installation.md), then open
+[the local application](http://127.0.0.1:8501). A new workspace opens on **Overview**.
+To design a graph yourself, choose [Open Lineage Builder](../user-guide/lineage-builder.md).
+To use your own files, choose [Import sources](../user-guide/sources.md).
 
 ## 2. Run the SQL example
 
@@ -52,10 +34,10 @@ the checkout's
 | [Download the SQL sample](https://github.com/SahasilAK/GraveTrail/raw/refs/heads/main/tests/sample_data/dataforge_sql_lineage_test_project.zip) | `.sql` |
 | [Download the SAS sample](https://github.com/SahasilAK/GraveTrail/raw/refs/heads/main/tests/sample_data/dataforge_sas_lineage_test_project.zip) | `.sas` |
 
-Import the selected files and inspect the inventory. The archives include expected
-lineage manifests and other supporting files; selecting only the script extension
-keeps those reference files out of the analysis. Each project contains 85 persistent
-tables across seven ETL layers. The SAS project also has 16 temporary WORK datasets.
+For the SQL sample, choose **Generic SQL** under **SQL source type**. Select
+**Import into inventory** and expand **Skipped files** to see why supporting files
+were omitted. Then select **Continue to Analysis**. Each project contains 85
+persistent tables across seven ETL layers. The SAS project also has 16 temporary WORK datasets.
 
 <a id="3-generate-and-explore-lineage"></a>
 
@@ -78,10 +60,12 @@ execution order, and a clean fixture result does not establish universal parser 
 ## 4. Inspect and export
 
 Use the source panel to compare a relationship with the complete original code.
-Open **Columns** for direct column references; ambiguous references
-and unexpanded wildcards retain their uncertainty. Export CSV/JSON reports, an
-offline interactive HTML graph or the relevant source ZIP from the available controls.
-Source exports can contain private code, so review them before sharing.
+In **Lineage**, expand a table with **+** to see its known output columns and
+their links to neighboring tables. Open **Columns → Lineage graph** for a deeper
+trace through query steps, or choose **Direct references** to find where a column
+is used. Ambiguous references and unexpanded wildcards retain their uncertainty.
+Export CSV/JSON reports, an offline interactive HTML graph or the relevant source ZIP.
+Review source exports for private code before sharing.
 
 Download the interactive HTML graph and open the saved file in a browser. Try
 Fit, zoom, pan, search and relationship selection. This snapshot does not restore

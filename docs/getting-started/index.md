@@ -11,7 +11,7 @@ Investigate source dependencies before changing an unfamiliar data system. Begin
 with a supplied project so you can recognize a useful result.
 
 1. [Install the documented version](installation.md): prerequisites, checkout versus release and data home.
-2. [Build your first lineage](quick-start.md): import SQL/SAS, analyze without AI, follow evidence, export and reopen.
+2. [Build your first lineage](quick-start.md): run the bundled SQL example or import a SQL/SAS archive, then trace a table or column.
 3. [Set configuration basics](configuration.md): home ownership, workspaces and safe defaults.
 
 Using dbt? Start with the [dbt tutorial](../examples/dbt.md). Need to judge a result?

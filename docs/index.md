@@ -35,6 +35,44 @@ Local static analysis. No AI account required. Imported code is never executed.
 
 </div>
 
+## Start from Overview
+
+<figure class="gt-product" markdown>
+
+![New GraveTrail workspace with actions to open Lineage Builder, import sources, or run the SQL example](assets/images/gravetrail-overview-start.png)
+
+</figure>
+
+<div class="gt-questions" markdown>
+<div markdown>
+
+### Design lineage
+
+Use **Open Lineage Builder** to sketch tables, joins and column flows.
+
+[Design on the canvas](user-guide/lineage-builder.md)
+
+</div>
+<div markdown>
+
+### Trace your files
+
+Use **Import sources** to add SQL, SAS or a dbt project, then analyze the inventory.
+
+[Import and analyze sources](user-guide/sources.md)
+
+</div>
+<div markdown>
+
+### Try an example
+
+Use **Run SQL example** to open a populated lineage graph in an empty workspace.
+
+[Run the bundled example](getting-started/quick-start.md#2-run-the-sql-example)
+
+</div>
+</div>
+
 ## Watch SQL turn into lineage
 
 <figure class="gt-product" markdown>
@@ -59,6 +97,7 @@ affect. GraveTrail traces dependencies from the project files you already have.
 
 Explore inputs across persistent tables and supported temporary steps. Open the
 original statement and line range to understand the relationship.
+Expand a table to see its output columns and the direct column links to its neighbors.
 
 [Explore lineage and evidence](user-guide/explore.md)
 
@@ -67,8 +106,8 @@ original statement and line range to understand the relationship.
 
 ### What depends on this change?
 
-Follow consumers, direct column usage and supported transformations. Use findings
-to plan a migration or review a change, then verify against runtime behavior.
+Follow consumers and trace a column through its transformations. The graph links
+column rows across steps. Select a card or link to inspect the relevant logic.
 
 [Investigate columns and impact](user-guide/columns.md)
 
@@ -93,9 +132,6 @@ trace downstream paths with colors, and save or transfer an editable design.
 Clearing a canvas preserves workspace schemas.
 
 [Use the lineage builder and canvas](user-guide/lineage-builder.md){ .md-button }
-
-The builder guide includes the source version needed for this development feature;
-the older introductory tutorial checkout does not include it.
 
 ## Local analysis first. AI when you choose.
 
@@ -122,9 +158,8 @@ gateway can forward requests upstream. AI does not guarantee complete or correct
 
 ## A useful first run, on your machine.
 
-These guides describe development commit **1864dc8**. dbt and the current AI pipeline
-postdate release v0.0.1. Use [the pinned installation](getting-started/installation.md)
-to reproduce the examples rather than assuming an older binary has the same controls.
+Use [the pinned installation](getting-started/installation.md) to reproduce the
+controls and examples shown here.
 
 1. [Install and launch](getting-started/installation.md).
 2. [Run the bundled SQL example or import a sample ZIP](getting-started/quick-start.md).

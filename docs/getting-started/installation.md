@@ -1,8 +1,7 @@
 # Install the documented version
 
-These guides describe development commit **1864dc8**, 48 commits ahead of the local
-`main` baseline when the overhaul began. dbt and the current independent AI workflow
-postdate release **v0.0.1**. Use this checkout for demonstrated features.
+The walkthroughs use development commit **313587e**. Use this checkout to
+reproduce the controls shown in the screenshots.
 
 ## Recommended: locked source checkout
 
@@ -12,7 +11,7 @@ Initial setup normally downloads packages. No AI credentials or dbt installation
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
-git checkout 1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414
+git checkout 313587e3217104dddc9e094a7a78cb79bf1ed64b
 uv sync --locked --extra dev
 uv run gravetrail-ui --home ./.dataforge
 ```
@@ -28,10 +27,6 @@ references still work without an available native store. See [secure configurati
 The explicit home is persistent and Git-ignored; an absolute directory can keep data
 outside the checkout. Pass the same home when switching to CLI/MCP. **Stop the UI with
 Ctrl+C first:** one process owns each DuckDB home.
-
-The pin reproduces application behavior. This documentation overhaul remains on
-`chore/documentation-overhaul` until review; contributors editing these pages should
-use that branch rather than checking out the baseline over their changes.
 
 ## Choose another delivery method
 

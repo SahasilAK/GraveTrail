@@ -1,25 +1,28 @@
 # Screenshot and diagram recipes
 
-Captures in this overhaul use application commit `1864dc8`, Python 3.11+, the locked
-environment and a disposable `.dataforge/docs-overhaul-ui` home on loopback port 8517.
-No provider was configured or called. Screenshots show real UI with safe tracked
-fixtures; browser chrome is excluded. Preserve readable text and descriptive alt/captions.
+The refreshed workspace and graph captures use application commit `313587e`,
+the locked environment and a disposable home on loopback. The reference captures
+for source evidence, exports, and dbt date from `1864dc8`. Use tracked sample data
+and exclude browser chrome. Preserve readable text and descriptive alt text.
 
 ```sh
 uv run gravetrail-ui --home .dataforge/docs-capture --port 8517 --no-browser
 ```
 
-Create **SQL sample**, import `tests/sample_data/dataforge_sql_lineage_test_project.zip`
-with only `sql` selected, and run **Analyze all files** with AI unchecked.
+Start with a new workspace. **Run SQL example** imports the bundled fixture and
+opens its graph. For the import capture, use a separate workspace and ZIP the
+public files `pipeline.sql` and `stream_insert.sql` from
+`tests/fixtures/vendors/databricks/`.
 
 | Asset under `docs/assets/images/` | Reproduce the view |
 | --- | --- |
+| `gravetrail-overview-start.png` | Overview in an empty workspace with all three starting actions visible |
 | `gravetrail-workspace-dashboard.png` | Overview after static SQL sample analysis |
-| `gravetrail-source-import.png` | Sources → Import, ordinary files, only sql selected, SQL ZIP loaded/imported |
-| `gravetrail-analysis-results.png` | Analysis → Run after success; leave AI checkbox visibly unchecked |
-| `gravetrail-lineage-explorer.png` | Lineage, exact `stg.orders_clean`, upstream, depth 30, temporary steps collapsed; frame graph/toolbar |
+| `gravetrail-source-import.png` | Sources → Import with the fixture ZIP loaded and **Databricks** selected |
+| `gravetrail-analysis-results.png` | Analysis → Run after **Analyze all files**, with AI unchecked |
+| `gravetrail-lineage-explorer.png` | Lineage, exact `stg.orders_clean`, upstream. Expand the table with **+**, fit, then select its header to highlight the column links |
 | `gravetrail-source-evidence.png` | Same asset → Source evidence; original `03_staging/036_orders_clean.sql` and line-numbered statement |
-| `gravetrail-columns.png` | Columns, exact `stg.orders_clean`, unfiltered direct usage |
+| `gravetrail-columns.png` | Columns → Lineage graph, exact `stg.orders_clean`, **amount · cte:1**, depth 3. Fit the upstream trace and frame the cards |
 | `gravetrail-export-controls.png` | Same Lineage asset → Export image popover, default SVG/light/normal options |
 | `gravetrail-dbt-resources.png` | Separate dbt sample workspace, source-mode dbt ZIP, analyze locally; Lineage → dbt resources and macro impact |
 | `lineage-example.png` | Standalone `docs/assets/examples/lineage.html`, Fit graph and select a relationship |

@@ -1,8 +1,8 @@
 # dbt retail example
 
 This synthetic project exercises source-only dbt analysis without a database, dbt runtime
-or AI provider. It is included in the source checkout at **`1864dc8`**; the published
-**v0.0.1** release predates dbt support. For your own project, follow
+or AI provider. Use the [documented source checkout](../getting-started/installation.md).
+For your own project, follow
 [Analyze a dbt project](../project-types/dbt.md).
 
 ## Get the sample
@@ -25,6 +25,7 @@ or run-results artifact. It qualifies source mode; artifact behavior has separat
 3. Open **Analysis → Run**, leave **Use AI for analysis** unchecked and choose **Analyze all files**.
 4. Open **Lineage**, select `fct_orders`, and inspect its upstream graph and evidence.
 5. Expand **dbt resources and macro impact**. Inspect `money`, then `scale`, downstream.
+6. Open **Columns → Lineage graph** and select a column to inspect its expression and input roles.
 
 The graph should include `raw.orders → stg_orders → int_orders → fct_orders`, with
 `stg_customers → fct_orders`. `int_orders` is ephemeral but remains a logical dependency.

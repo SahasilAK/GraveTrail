@@ -1,8 +1,6 @@
 # dbt project support
 
-This reference describes the source checkout at **`1864dc8`** on
-`codex/resumable-ai-lineage`. The published **v0.0.1** release predates dbt support;
-use the [source installation](SETUP_AND_DEPLOYMENT.md#4-python-installation) for these features.
+Use the [documented source installation](getting-started/installation.md) for this workflow.
 Start with [Analyze a dbt project](project-types/dbt.md) for the workflow or the
 [dbt retail example](examples/dbt.md) for reproducible input and expected results.
 
@@ -78,13 +76,13 @@ change the stored snapshot. Changes to dbt settings also make analysis stale.
 
 ## Models, columns and resources
 
-The normal Lineage, Columns and Transformations pages use logical dbt data assets. A model
+The **Lineage** and **Columns** views use logical dbt data assets. A model
 SELECT writes its logical output and uses the shared dialect-aware SQL column engine.
 Traces follow named values through `ref()`, `source()`, model versions, and ephemeral
 models. Wildcards can expand from known model projections, CSV seed headers, or matching
 catalog columns. Documented YAML columns alone provide descriptive metadata.
 
-Parser version 24 refreshes dbt column coverage. Run **Analyze all files** after upgrading.
+Run **Analyze all files** after upgrading to refresh existing results.
 
 **dbt resources and macro impact** in Lineage lists models, sources, seeds, snapshots,
 macros, tests and other declared resources. Inspect upstream dependencies or downstream

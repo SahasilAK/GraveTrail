@@ -5,13 +5,14 @@ Public branding plus real browser captures using safe synthetic fixtures and dis
 - `icon.png` — supplied navy/orange transparent icon, shared with UI; logo/favicon.
 - `banner.svg` — accessible README hero with existing motion/reduced-motion fallback.
 - `mark.svg` — retained earlier vector source; not automatically public.
-- `gravetrail-workspace-dashboard.png` — static SQL sample Overview after import/analysis.
-- `gravetrail-source-import.png` — real Sources import controls with SQL fixture selection.
+- `gravetrail-overview-start.png` — new workspace Overview with three starting actions.
+- `gravetrail-workspace-dashboard.png` — static SQL sample Overview after import and analysis.
+- `gravetrail-source-import.png` — Sources import controls with a fixture ZIP and Databricks selected.
 - `gravetrail-analysis-results.png` — real successful static analysis view with AI unchecked.
-- `gravetrail-lineage-explorer.png` — readable stg.orders_clean upstreamdepth30, temporary collapse, 3nodes/2edges; larger all_kpis separately verified.
+- `gravetrail-lineage-explorer.png` — expanded stg.orders_clean with highlighted incoming column links.
 - `gravetrail-lineage-builder.png` — Current authored canvas with safe customers/products → orders → report branches, join, catalog, Save/Clear and downstream trace selection; capture recipe pins builder a803b6e.
 - `gravetrail-source-evidence.png` — exact analyzed original 03_staging/036_orders_clean.sql, version metadata and numbered statement.
-- `gravetrail-columns.png` — direct usage for stg.orders_clean.
+- `gravetrail-columns.png` — upstream column graph for stg.orders_clean.amount.
 - `gravetrail-export-controls.png` — real Lineage SVG export popover/options.
 - `gravetrail-dbt-resources.png` — real synthetic dbt workspace resource and macro-impact panel after local source-mode analysis.
 - `lineage-example.png` — standalone safe scenario graph with selected relationship/evidence, four assets/three relationships.

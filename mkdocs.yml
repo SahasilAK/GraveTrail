@@ -40,6 +40,7 @@ extra:
     - assets/diagrams/lineage.svg
     - assets/stylesheets/extra.css
     - assets/javascripts/themes.js
+    - assets/images/gravetrail-overview-start.png
     - assets/images/gravetrail-workspace-dashboard.png
     - assets/images/gravetrail-lineage-explorer.png
     - assets/images/gravetrail-lineage-builder.png
