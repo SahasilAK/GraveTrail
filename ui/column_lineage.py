@@ -120,17 +120,25 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
                 edge = next(e for e in scene["edges"] if e["id"] == selection["id"])
                 related = [d for d in steps if d["derivation_id"] == edge["derivation_id"]]
             else:
-                cid = next(n["column_id"] for n in scene["nodes"] if n["id"] == selection["id"])
-                refs = [r for d in steps for r in [d["target"], *d["inputs"]] if r["column_id"] == cid]
-                if refs:
-                    st.caption("Selected column: " + refs[0]["table"] + "." + (refs[0]["column_name"] or "[rowset]"))
-                related = [d for d in steps if d["target"]["column_id"] == cid or any(i["column_id"] == cid for i in d["inputs"])]
+                if selection["kind"] == "card":
+                    card = next(c for c in scene["cards"] if c["id"] == selection["id"])
+                    st.caption("Selected scope: " + card["label"] + (" · " + card["scope"] if card["scope"] else ""))
+                    column_ids = {row["column_id"] for row in card["rows"]}
+                else:
+                    node = next(n for n in scene["nodes"] if n["id"] == selection["id"])
+                    st.caption("Selected column: " + node["label"])
+                    column_ids = {node["column_id"]}
+                related = [d for d in steps if d["target"]["column_id"] in column_ids
+                           or any(i["column_id"] in column_ids for i in d["inputs"])]
+                root_id = root["column_id"] if root else None
+                related.sort(key=lambda d: (d["target"]["column_id"] not in column_ids,
+                                            d["target"]["column_id"] != root_id))
         if not related:
-            st.info("No returned transformation is associated with this column.")
+            st.info("No returned transformation is associated with this selection.")
         else:
             candidates = {d["derivation_id"]: d for d in related}
             selected_id = st.selectbox("Transformation step", [None, *candidates],
-                index=1 if selection and len(candidates) == 1 else 0,
+                index=1 if selection else 0,
                 format_func=lambda did: "Choose a transformation" if did is None else
                     candidates[did]["target"]["table"] + "." + candidates[did]["target"]["column_name"] + " · " + candidates[did]["category"],
                 key=key + "_step_" + scene_key + (selection["id"] if selection else ""))

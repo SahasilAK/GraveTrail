@@ -57,7 +57,8 @@ GRAPH_CSS = """
 .df-graph button,.df-graph input{font:inherit;min-height:36px;padding:6px 12px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:7px;background:transparent;color:inherit;box-sizing:border-box;max-width:100%}
 .df-graph button{cursor:pointer;touch-action:manipulation}.df-graph button:active{transform:scale(.97)}
 .df-graph :is(button,input):focus-visible{outline:2px solid var(--st-primary-color,#2869c7);outline-offset:3px}
-.df-graph svg{display:block;width:100%;height:420px;border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;background:var(--st-secondary-background-color,#f5f7fa)}
+.df-graph svg{display:block;width:100%;height:clamp(420px,60vh,560px);border:1px solid var(--st-border-color,#bdc8d6);border-radius:10px;touch-action:none;user-select:none;cursor:grab;background:var(--st-secondary-background-color,#f5f7fa)}
+.df-graph svg.panning,.df-graph svg.panning *{cursor:grabbing}
 .df-graph .node{cursor:pointer}.df-graph .node:focus rect,.df-graph .edge:focus{stroke:#c47b18;stroke-width:4;outline:none}
 .df-graph .edge{cursor:pointer;stroke:#829ab1;stroke-width:2;fill:none}
 .df-graph .chosen{stroke:#d67d0d!important;stroke-width:4!important}
@@ -85,7 +86,60 @@ GRAPH_CSS = """
 """
 
 
-GRAPH_JS = COPY_JS + r"""
+SVG_PAN_JS = r"""
+function bindSvgPan(svg, stage, getBox, setBox) {
+ const listeners=new AbortController(), options={signal:listeners.signal};
+ let drag=null, frame=null, suppressClick=false;
+ const resetPreview=()=>{
+   if(frame!==null){cancelAnimationFrame(frame);frame=null}
+   stage.style.transform='';
+   svg.classList.remove('panning');
+ };
+ svg.addEventListener('pointerdown',e=>{
+   if(!e.isPrimary||e.button!==0)return;
+   const matrix=svg.getScreenCTM()?.inverse();
+   if(!matrix)return;
+   suppressClick=false;
+   drag={id:e.pointerId,x:e.clientX,y:e.clientY,matrix,moved:false,dx:0,dy:0};
+   // Keep a simple click on its original element, even with pointer capture.
+   e.target.setPointerCapture(e.pointerId);
+ },options);
+ svg.addEventListener('pointermove',e=>{
+   if(e.pointerId!==drag?.id)return;
+   const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+   if(!drag.moved){
+     if(Math.hypot(dx,dy)<4)return;
+     drag.moved=true;
+     svg.classList.add('panning');
+   }
+   const {a,b,c,d}=drag.matrix;
+   drag.dx=a*dx+c*dy;drag.dy=b*dx+d*dy;
+   // Move the scene without invalidating the SVG viewport on every pointer event.
+   if(frame===null)frame=requestAnimationFrame(()=>{
+     frame=null;
+     stage.style.transform=`translate(${drag.dx}px,${drag.dy}px)`;
+   });
+ },options);
+ const finish=e=>{
+   if(e.pointerId!==drag?.id)return;
+   suppressClick=drag.moved;
+   if(drag.moved){
+     const [x,y,width,height]=getBox();
+     resetPreview();
+     setBox([x-drag.dx,y-drag.dy,width,height]);
+   }
+   drag=null;
+ };
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])svg.addEventListener(event,finish,options);
+ for(const event of ['click','dblclick'])svg.addEventListener(event,e=>{
+   if(suppressClick&&e.detail){e.preventDefault();e.stopImmediatePropagation()}
+ },{...options,capture:true});
+ return ()=>{listeners.abort();if(drag?.moved)resetPreview();drag=null};
+}
+"""
+
+
+GRAPH_JS = COPY_JS + SVG_PAN_JS + r"""
 function mountGraph(root, data, notify, navigate) {
  if(root._graphCleanup)root._graphCleanup();
  const svg=root.querySelector('svg'), stage=root.querySelector('.stage'), details=root.querySelector('.detail');
@@ -165,17 +219,14 @@ function mountGraph(root, data, notify, navigate) {
  const zoom=(f)=>{box=[box[0]+box[2]*(1-f)/2,box[1]+box[3]*(1-f)/2,box[2]*f,box[3]*f];view()};
  root.querySelector('.plus').onclick=()=>zoom(.8);root.querySelector('.minus').onclick=()=>zoom(1.25);
  svg.onwheel=e=>{e.preventDefault();zoom(e.deltaY>0?1.1:.9)};
- let drag=null;
- svg.onpointerdown=e=>{if(e.target===svg){drag=[e.clientX,e.clientY,...box];svg.setPointerCapture(e.pointerId)}};
- svg.onpointermove=e=>{if(drag){box=[drag[2]-(e.clientX-drag[0])*drag[4]/svg.clientWidth,drag[3]-(e.clientY-drag[1])*drag[5]/svg.clientHeight,drag[4],drag[5]];view()}};
- svg.onpointerup=()=>drag=null;svg.onpointercancel=()=>drag=null;
+ const stopPan=bindSvgPan(svg,stage,()=>box,next=>{box=next;view()});
  root.querySelector('.find').oninput=e=>{let value=e.target.value.toLowerCase();highlight(new Set(data.nodes.filter(n=>value&&nodeLabel(n).toLowerCase().includes(value)).map(n=>n.asset_id)))};
- root._graphCleanup=()=>{clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
+ root._graphCleanup=()=>{stopPan();clearTimeout(clickTimer);if(doc)doc.removeEventListener('fullscreenchange',syncFullscreen)};
  return root._graphCleanup;
 }
 """
 
-GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag background to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
+GRAPH_BODY = """<div class="df-graph"><div class="toolbar"><button class="fit">Fit graph</button><button class="plus" aria-label="Zoom in">+</button><button class="minus" aria-label="Zoom out">−</button><button class="fullscreen">Fullscreen</button><input class="find" aria-label="Find a node" placeholder="Find a node"><span class="hint">Select for evidence. Double-click a node (Alt+Enter) to focus it. Drag the graph to pan.</span></div><svg role="group" aria-label="Directed lineage graph"><defs><marker id="df-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#829ab1"/></marker></defs><g class="stage"></g></svg><div class="status" role="status"></div><pre class="detail" aria-live="polite">Select a relationship to inspect its evidence.</pre></div>"""
 
 
 def graph_data(
@@ -189,12 +240,13 @@ def graph_data(
     condensed = nx.condensation(graph.graph)
     groups = list(nx.topological_generations(condensed))
     width = min(700, max([215] + [len(n["name"]) * 7 + 24 for n in graph.nodes.values()])) if appearance.graph_labels == "full" else 215
+    layer_gap, row_gap = 200, 76
     nodes = []
     for level, components in enumerate(groups):
         ids = sorted(n for c in components for n in condensed.nodes[c]["members"])
         for row, node in enumerate(ids):
             attrs = dict(graph.nodes[node])
-            attrs.update(x=20 + level * (width + 85), y=20 + row * 85, width=width,
+            attrs.update(x=20 + level * (width + layer_gap), y=20 + row * (48 + row_gap), width=width,
                          source=graph.graph.in_degree(node) == 0,
                          target=graph.graph.out_degree(node) == 0, job_id=asset_job(attrs))
             nodes.append(attrs)

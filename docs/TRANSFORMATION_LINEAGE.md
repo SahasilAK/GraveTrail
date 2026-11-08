@@ -28,8 +28,12 @@ can still apply. Downstream paths distinguish values, row selection and pipeline
 Display input limits do not change those labels. Equivalent quoted and unquoted column names share an
 identity under workspace case rules; quoted case and escaped identifier characters are retained.
 
-In the graph, matching and row-filter edges retain their own effects. A write can show
-its previous value as a separate node. Typed column names highlight the resolved graph node.
+The graph groups traced columns by their table, file, or intermediate scope. Arrows
+connect column rows and distinguish value flow from dependencies such as matching
+and row filters. A write can show its previous value as a separate row. Select a
+card header, row, or link to open its transformation logic. When several steps
+apply, the picker starts with a step that produces a selected column if available.
+Drag anywhere on the graph to pan, or type a column name to highlight matching rows.
 
 ## Tested static coverage
 
@@ -160,8 +164,8 @@ separate evidence.
 
 ## Column graph and parser 21 follow-up
 
-Columns offers Direct references and Lineage graph views. Graph boxes retain
-column/derivation identity, UNION branches, scopes and SAS versions. Display caps
+Columns offers Direct references and Lineage graph views. Graph selections retain
+column and derivation identity, UNION branches, scopes and SAS versions. Display caps
 are separate from trace coverage. Source files load lazily from exact analyzed
 hashes; the graph component receives no expression or source text. Re-run Analysis
 after this parser upgrade.

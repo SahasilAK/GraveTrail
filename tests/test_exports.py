@@ -89,7 +89,7 @@ def test_graph_mount_supports_component_document_fragment_without_style() -> Non
         script = GRAPH_JS + r'''
 const attributes={},properties={};
 const elements={
-  'svg':{setAttribute:(k,v)=>attributes[k]=v},
+  'svg':{setAttribute:(k,v)=>attributes[k]=v,addEventListener(){}},
   '.stage':{replaceChildren:()=>{}}, '.detail':{},
   '.df-graph':{toggleAttribute(){},style:{setProperty:(k,v)=>properties[k]=v,removeProperty(){}}},
   '#df-arrow path':{setAttribute(){}},
@@ -119,6 +119,7 @@ def test_graph_double_click_cancels_selection_and_copy_keeps_full_name() -> None
     setAttribute(k,v){this.attrs[k]=v}
     appendChild(e){this.children.push(e)}
     replaceChildren(){this.children=[]}
+    addEventListener(){}
     querySelectorAll(){return []}
     getComputedTextLength(){return 999}
   }
