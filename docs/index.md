@@ -35,54 +35,16 @@ Local static analysis. No AI account required. Imported code is never executed.
 
 </div>
 
-## Start from Overview
-
-<figure class="gt-product" markdown>
-
-![New GraveTrail workspace with actions to open Lineage Builder, import sources, or run the SQL example](assets/images/gravetrail-overview-start.png)
-
-</figure>
-
-<div class="gt-questions" markdown>
-<div markdown>
-
-### Design lineage
-
-Use **Open Lineage Builder** to sketch tables, joins and column flows.
-
-[Design on the canvas](user-guide/lineage-builder.md)
-
-</div>
-<div markdown>
-
-### Trace your files
-
-Use **Import sources** to add SQL, SAS or a dbt project, then analyze the inventory.
-
-[Import and analyze sources](user-guide/sources.md)
-
-</div>
-<div markdown>
-
-### Try an example
-
-Use **Run SQL example** to open a populated lineage graph in an empty workspace.
-
-[Run the bundled example](getting-started/quick-start.md#2-run-the-sql-example)
-
-</div>
-</div>
-
 ## Watch SQL turn into lineage
 
 <figure class="gt-product" markdown>
 
-<video controls playsinline preload="none" poster="assets/images/gravetrail-lineage-explorer.png" style="width: 100%" aria-label="GraveTrail SQL example, lineage graph and source evidence">
+<video controls playsinline preload="none" poster="assets/images/gravetrail-lineage-explorer.png" style="width: 100%" aria-label="GraveTrail SQL example showing table lineage, column lineage and transformation logic">
   <source src="assets/images/gravetrail-sql-example.mp4" type="video/mp4">
   <a href="assets/images/gravetrail-sql-example.mp4">Download the SQL example recording</a>
 </video>
 
-<figcaption>The bundled SQL example opens the upstream graph for <code>pub.all_kpis</code>. The recording shows how to open the original SQL behind a relationship.</figcaption>
+<figcaption>Run the bundled SQL example and follow the upstream tables for <code>pub.all_kpis</code>. Expand <code>stg.orders_clean</code> to see its incoming column links, then trace <code>amount</code> in Columns and open the SQL expression that casts it.</figcaption>
 </figure>
 
 ## Begin with the question in front of you

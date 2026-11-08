@@ -21,7 +21,7 @@ Public learning paths plus retained technical references. Homepage hero: “Noth
 - `overrides/` — shared registry theme injection without app dependencies; [map](overrides/KNOWLEDGE.md).
 - `prompts/`, `superpowers/` — ignored local app-building context and requirements, including their knowledge maps; excluded from public output.
 
-The homepage shows the app's Overview and links to the builder, source import and SQL example. The installation guide pins the application checkout used for the refreshed workflow captures.
+The homepage leads with a walkthrough of table and column lineage using the bundled SQL example. The installation guide pins the application checkout used for the workflow captures.
 
 ## Root references
 - `index.md` — public homepage and learning-path entry; eight full-card navigation links include task descriptions, including developer code walkthroughs and CLI/MCP tools.
