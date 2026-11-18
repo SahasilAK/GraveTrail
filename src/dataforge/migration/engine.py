@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from pathlib import PurePosixPath
 
@@ -19,16 +19,22 @@ from dataforge.dbt.resources import inherited_config
 from dataforge.dbt.yaml import read_project_paths
 from dataforge.migration.sources import (
     SECRET_FILE,
+    SQL_BATCH_SEPARATOR,
     dbt_model_name,
     declaration,
+    grouping_key_errors,
     project_yaml,
     relation,
     sas_units,
     script_writes,
     sql_regions,
     sql_unit,
+    temporary_relation,
+    ungrouped_columns,
 )
 from dataforge.migration.targets import warehouse
+from dataforge.parsers.sas import parse_sas
+from dataforge.parsers.sql import parse_sql
 
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]{0,127}\Z")
 RESERVED_PATH = re.compile(r"CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]", re.I)
@@ -39,7 +45,7 @@ CONFIG_ARG = re.compile(r"""\s*(materialized|alias)\s*=\s*(['"])([A-Za-z_][A-Za-
 MARKER = "__migration_ref_"
 MAX_ARTIFACT = 1024 * 1024
 MAX_PROJECT = 100 * MAX_ARTIFACT
-VERSION = 4
+VERSION = 8
 DIALECT_ERRORS = (SqlglotError, ValueError, RecursionError, TypeError, KeyError, AttributeError)
 UNSAFE_FUNCTIONS = frozenset({"java_method", "reflect", "read_files", "read_csv", "read_parquet", "http_get"})
 
@@ -142,10 +148,21 @@ def inspect_sql(text, dialect):
     return query, tables, refs, configs[0] if configs else None
 
 
+def _scope_inputs(scope):
+    """Include relations used as filters by SEMI and ANTI joins."""
+    inputs = {}
+    for alias, node in scope.references:
+        if alias in inputs:
+            raise ValueError(f"Alias already used: {alias}")
+        if alias in scope.sources:
+            inputs[alias] = (node, scope.sources[alias])
+    return inputs
+
+
 def query_tables(query):
     tables = []
     for scope in traverse_scope(query):
-        for node, source in scope.selected_sources.values():
+        for node, source in _scope_inputs(scope).values():
             if isinstance(source, exp.Table):
                 relation(source)
                 tables.append(node)
@@ -159,10 +176,10 @@ def _physical_input(parts, logical, physical):
     source_id = slug(logical) + "_" + digest(logical)[:8]
     group = "legacy_" + digest(logical)[:8]
     key = f"source:{group}.{source_id}"
-    physical[key] = {
+    physical.setdefault(key, {
         "group": group, "name": source_id, "identifier": name,
         "catalog": catalog, "schema": schema, "relation": logical,
-    }
+    })
     return key, "{{ source('" + group + "', '" + source_id + "') }}"
 
 
@@ -255,6 +272,10 @@ def _inventory(snapshot, metadata, declarations):
                 yield source, start, end, query, names, gap, materialization, ""
         elif kind == "sql":
             for start, end, compound in sql_regions(text, dialect):
+                if dialect == "tsql" and (batch := SQL_BATCH_SEPARATOR.fullmatch(text[start:end])):
+                    gap = "Account for repeated T-SQL batch execution and writes." if batch["repeat"] else ""
+                    yield source, start, end, None, [], gap, None, "" if gap else "preserved"
+                    continue
                 if compound:
                     yield (source, start, end, None, script_writes(text[start:end], dialect),
                            "Review the procedural block, execution ordering and any dynamic outputs as a whole.", None, "")
@@ -265,7 +286,9 @@ def _inventory(snapshot, metadata, declarations):
                         declarations[fact[0]].append(fact[1])
                         yield source, start, end, None, [], "", None, "preserved"
                         continue
-                    query, name, materialization, gap = sql_unit(text[start:end], dialect)
+                    query, name, materialization, gap = sql_unit(text[start:end], dialect, merge_draft=True)
+                    if query is not None and materialization == "view":
+                        query.meta["migration_view_definition"] = True
                 except DIALECT_ERRORS:
                     query, name, materialization, gap = None, None, None, "Recover opaque SQL and identify affected outputs."
                 names = [name] if name else script_writes(text[start:end], dialect) if gap else []
@@ -314,7 +337,23 @@ def _binding(call, project):
     return first
 
 
-def _inputs(query, sql, source, producers, target, physical, materialization, project):
+class SourceBindingError(ValueError):
+    pass
+
+
+def source_relation(name, kind):
+    """Match analyzed SAS WORK names to one-level source spelling."""
+    key = name.casefold()
+    return "work." + key if kind == "sas" and "." not in key else key
+
+
+def _preceding_writer(writes, position):
+    index = bisect_left(writes, position, key=lambda writer: writer[0])
+    return writes[index - 1][1] if index else None
+
+
+def _inputs(query, sql, source, producers, target, physical, materialization, project, staged=None, *,
+            local_writes=None, position=0):
     kind = source["kind"]
     if kind == "dbt":
         _, tables, template_refs, config = inspect_sql(sql, source.get("dialect") or target.dialect)
@@ -331,23 +370,47 @@ def _inputs(query, sql, source, producers, target, physical, materialization, pr
     bindings = []
     templates = {}
     table_scopes = [(node, scope) for scope in traverse_scope(query)
-                    for node, source_node in scope.selected_sources.values() if isinstance(source_node, exp.Table)]
+                    for node, source_node in _scope_inputs(scope).values() if isinstance(source_node, exp.Table)
+                    or (isinstance(node, exp.Table) and temporary_relation(relation(node)))]
     for table, scope in table_scopes:
         logical = relation(table)
-        linked = producers.get(logical)
+        identity = source_relation(logical, kind)
+        work = kind == "sas" and identity.startswith("work.")
+        temporary = temporary_relation(logical)
+        linked = (staged or {}).get(logical) if temporary else producers.get(logical)
+        writes = (local_writes or {}).get(identity if work else logical, ())
+        prior_version = False
+        if temporary and not linked:
+            raise SourceBindingError(
+                "A temporary input needs exactly one preceding SELECT INTO writer in this T-SQL script. "
+                "Resolve its session lifetime, control flow and other writes before conversion.")
+        if work:
+            linked = _preceding_writer(writes, position)
+            if not linked:
+                raise SourceBindingError(
+                    f"SAS input {logical} needs an earlier WORK writer in the same session. "
+                    "Confirm the job order and select the actual inputs in a conversion contract.")
+        elif kind == "sql" and writes and position is not None:
+            linked = _preceding_writer(writes, position)
+            prior_version = not linked
         if linked:
             call = "{{ ref('" + linked + "') }}"
         else:
-            if any(name.casefold() == logical.casefold() or name.split(".")[-1].casefold() == logical.split(".")[-1].casefold()
-                   for name in producers):
+            if not prior_version and any(name.casefold() == logical.casefold()
+                    or name.split(".")[-1].casefold() == logical.split(".")[-1].casefold() for name in producers):
                 raise ValueError("A possible transformation producer needs an exact relation mapping")
             linked, call = _physical_input([p.name for p in table.parts], logical, physical)
+            if prior_version:
+                physical[linked].update(prior_version=True, assumed_location=True)
         token = f"{MARKER}{len(templates)}__"
         templates[token] = call
         # Preserve the implicit table alias when replacing a name with dbt metadata.
         unaliased = not table.alias
-        name = table.this.copy()
+        name = exp.to_identifier(table.name, quoted=table.this.quoted) if temporary else table.this.copy()
         for column in scope.columns:
+            qualifier = column.args.get("table")
+            if temporary and qualifier is not None and qualifier.name.lstrip("#").casefold() == table.alias_or_name.casefold():
+                column.set("table", exp.to_identifier(table.alias_or_name, quoted=name.quoted))
             if (column.table == table.alias_or_name and (column.db or column.catalog)
                     and (not column.db or column.db == table.db)
                     and (not column.catalog or column.catalog == table.catalog)):
@@ -366,6 +429,45 @@ def _inputs(query, sql, source, producers, target, physical, materialization, pr
     return rendered + "\n", sorted(set(bindings)), materialization
 
 
+def _manual_inputs(raw, source, output, producers, physical, local_writes, position):
+    """Recover literal parser edges for the named output within a retained source span."""
+    kind = source["kind"]
+    dialect = source.get("dialect", "")
+    if kind == "sas":
+        code = raw if re.search(r"\b(?:data|proc)\s+", raw, re.I) else "proc sql;\n" + raw + "\nquit;"
+        parsed = parse_sas(code, sql_dialect=dialect)
+        name = source_relation(output["name"], kind)
+    else:
+        parsed = parse_sql(raw, dialect)
+        name = output["name"]
+    inputs = set()
+    for op in parsed.operations:
+        if any(ref.name.casefold() == name.casefold() for ref in op.targets):
+            for ref in op.sources:
+                if ref.name.casefold() != name.casefold() and not temporary_relation(ref.name):
+                    key = _manual_binding(ref.name, kind, producers, physical, local_writes, position)
+                    if key:
+                        inputs.add(key)
+    return inputs
+
+
+def _manual_binding(logical, kind, producers, physical, local_writes, position):
+    identity = source_relation(logical, kind)
+    writes = local_writes.get(identity if kind == "sas" else logical, ())
+    if kind == "sas" and identity.startswith("work."):
+        return _preceding_writer(writes, position)
+    linked = _preceding_writer(writes, position) if writes else producers.get(logical)
+    if linked:
+        return linked
+    parts = logical.split(".")
+    if len(parts) <= 3 and all(NAME.fullmatch(part) for part in parts):
+        key = _physical_input(parts, logical, physical)[0]
+        if writes:
+            physical[key].update(prior_version=True, assumed_location=True)
+        return key
+    return None
+
+
 def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, checkpoint=None):
     """Cover every source range and plan every known output before qualifying any model."""
     target = warehouse(snapshot)
@@ -373,8 +475,10 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
     sources = {s["id"]: s for s in snapshot["sources"]}
     regions, outputs, candidates, files, physical = [], {}, {}, {}, dict(metadata["sources"])
     producers, writers = {}, defaultdict(list)
+    local_writes = defaultdict(lambda: defaultdict(list))
     declarations = defaultdict(list)
     barriers = []
+    opaque_sql = set()
     source_index = None
     line_offsets = []
     for source, start, end, query, names, gap, materialization, disposition in _inventory(snapshot, metadata, declarations):
@@ -404,9 +508,14 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             region["disposition"] = "excluded"
         if query is None and gap and not names and region["disposition"] != "excluded":
             barriers.append(region_id)
+        if query is None and gap and source["kind"] == "sql":
+            opaque_sql.add(source["id"])
         for name in names:
             plain = name.split(".")[-1].strip('"')
-            key = name if source["kind"] != "dbt" else name.casefold()
+            identity = source_relation(name, source["kind"])
+            work = source["kind"] == "sas" and identity.startswith("work.")
+            temporary = source["kind"] == "sql" and temporary_relation(name)
+            key = (source["id"], identity) if temporary or work else identity if source["kind"] == "dbt" else name
             # A later identified writer cannot be silently dropped; give it its own conversion obligation.
             existing = bool(writers[key])
             model = plain if NAME.fullmatch(plain) else slug(name) + "_" + digest(name)[:8]
@@ -414,7 +523,10 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                 model = slug(name) + "_" + digest(source["id"] + ":" + str(start) + ":" + name)[:10]
             model = model.casefold() if source["kind"] != "dbt" else model
             writers[key].append(model)
-            producers.setdefault(key, model)
+            if not temporary and not work:
+                producers.setdefault(key, model)
+            if not temporary and (work or source["kind"] == "sql"):
+                local_writes[source["id"]][identity if work else name].append((start, model))
             region["outputs"].append(model)
             outputs[model] = {
                 "name": name, "region": region_id, "kind": source["kind"], "inputs": [],
@@ -430,22 +542,39 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                 candidates[model] = query[name] if isinstance(query, dict) else query
                 if isinstance(query, dict):
                     outputs[model].update(manual=gap, critical=True)
+                elif keys := query.meta.get("migration_merge_keys"):
+                    outputs[model]["suggested_merge_keys"] = keys
+                elif order := query.meta.get("migration_sas_order"):
+                    outputs[model].update(manual=gap, critical=True, sas_order=order)
+                elif remerge := query.meta.get("migration_sas_remerge"):
+                    outputs[model].update(manual=gap, critical=True, sas_remerge=remerge)
+                elif stack := query.meta.get("migration_sas_stack"):
+                    outputs[model].update(manual=gap, sas_stack=stack)
             elif gap:
                 outputs[model]["manual"] = gap
-                if any(word in gap for word in ("ordering", "macros", "row state", "procedure", "Python model")):
+                if source["kind"] in {"sas", "sql"} or "Python model" in gap:
                     outputs[model]["critical"] = True
     region_by_id = {row["id"]: row for row in regions}
     if progress:
         progress(.5, "Lowering inventoried transformation outputs")
     declared_outputs = snapshot.get("known_outputs", {})
-    mapped = {(r["source"], outputs[model]["name"].casefold()) for r in regions for model in r["outputs"]}
+    regions_by_source = defaultdict(list)
+    for region in regions:
+        regions_by_source[region["source"]].append(region)
+    mapped = {(r["source"], source_relation(outputs[model]["name"], outputs[model]["kind"]))
+              for r in regions for model in r["outputs"]}
     for file_id, names in declared_outputs.items():
         for name in dict.fromkeys(names):
-            if (file_id, name.casefold()) in mapped or file_id not in sources:
+            if file_id not in sources:
                 continue
-            # Analysis identifies an output that the converter cannot locate safely.
             source = sources[file_id]
-            region = next((r for r in regions if r["source"] == file_id and r["gap"]), None)
+            identity = source_relation(name, source["kind"])
+            if (file_id, identity) in mapped:
+                continue
+            mapped.add((file_id, identity))
+            # A parsed output may still be missing from an otherwise clean converter ledger.
+            source_regions = regions_by_source[file_id]
+            region = next((row for row in source_regions if row["gap"]), source_regions[0] if source_regions else None)
             if region is None:
                 continue
             model = slug(name) + "_" + digest(file_id + name)[:10]
@@ -453,7 +582,8 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             outputs[model] = {"name": name, "region": region["id"], "kind": source["kind"], "inputs": [],
                               "materialization": "table", "hard": [], "review": [],
                               "manual": "Locate this analyzed output in its retained source.", "critical": True}
-            producers.setdefault(name.casefold(), model)
+            if not temporary_relation(name) and not (source["kind"] == "sas" and identity.startswith("work.")):
+                producers.setdefault(name.casefold(), model)
     for models in writers.values():
         if len(models) > 1:
             for model in models:
@@ -474,6 +604,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             pending.clear()
 
     generated_bytes = 0
+    staged_by_source = defaultdict(dict)
     for model, query in candidates.items():
         if cancelled():
             flush()
@@ -483,6 +614,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
         source = sources[region["source"]]
         raw = source["text"][region["start"]:region["end"]]
         dialect = source.get("dialect", "")
+        staged = staged_by_source[source["id"]]
         if source["kind"] not in ("sas", "builder") and dialect not in {"", target.dialect}:
             output["review"].append("Source dialect translation requires semantic review.")
         if source["kind"] == "sas":
@@ -509,16 +641,30 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                 rendered, dependencies, materialization, bindings = saved
             else:
                 bindings = {}
+                # A view definition retains live relation references. SELECT/CTAS snapshots read at their statement.
+                position = None if query.meta.get("migration_view_definition") else region["start"]
                 rendered, dependencies, materialization = _inputs(
-                    query, raw, source, producers, target, bindings, output["materialization"], metadata["project"])
+                    query, raw, source, producers, target, bindings, output["materialization"], metadata["project"], staged,
+                    local_writes=local_writes[source["id"]], position=position)
             size = len(rendered.encode())
             if size > MAX_ARTIFACT or generated_bytes + size > MAX_PROJECT:
                 raise ValueError("Generated model exceeds the artifact budget")
             output["inputs"] = dependencies
             output["materialization"] = materialization
-            physical.update(bindings)
-            files[model] = {"sql": rendered, "origin": "static", "hash": digest(rendered)}
-            generated_bytes += size
+            for key, binding in bindings.items():
+                if binding.get("prior_version") or key not in physical:
+                    physical[key] = binding
+            if not output.get("sas_order"):
+                files[model] = {"sql": rendered, "origin": "static", "hash": digest(rendered)}
+                generated_bytes += size
+            if (temporary_relation(output["name"]) and materialization == "ephemeral" and not output["hard"]
+                    and source["id"] not in opaque_sql and len(writers[source["id"], output["name"]]) == 1):
+                staged[output["name"]] = model
+            elif temporary_relation(output["name"]):
+                output["hard"].append("Resolve temporary table writes and control flow in the source script.")
+        except SourceBindingError as exc:
+            output.update(manual=str(exc), critical=True)
+            region.update(gap=str(exc), disposition="manual_required")
         except DIALECT_ERRORS:
             output["hard"].append("Lowering failed. Resolve dynamic names, ambiguous producers or target syntax.")
         else:
@@ -530,7 +676,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
     table_by_id = {s["id"].removeprefix("builder-"): s for s in sources.values() if s["kind"] == "builder"}
     builder_columns = dict(snapshot.get("builder_columns", {}))
     for model, output in outputs.items():
-        if model in candidates:
+        if model in files or output.get("sas_order") and output["inputs"]:
             continue
         region = region_by_id[output["region"]]
         source = sources[region["source"]]
@@ -548,26 +694,26 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                     key, _ = _physical_input([logical], logical, physical)
                     inputs.add(key)
                     builder_columns[key] = builder_columns.get(logical, {})
-        elif output["kind"] == "sas" and not output.get("critical"):
-            # Static SQL blocks with unresolved syntax use explicit engineer source contracts.
-            output["review"].append("Confirm the manual source and output contract.")
-        elif output["kind"] == "sas" and "text" in source:
+        elif output["kind"] in {"sas", "sql"} and "text" in source and output.get("manual"):
             raw = source["text"][region["start"]:region["end"]]
-            for match in re.finditer(r"\b(?:set|merge)\s+([a-z_]\w*(?:\.[a-z_]\w*)?)\s*;", raw, re.I):
-                logical = match[1].casefold()
-                if logical in producers:
-                    inputs.add(producers[logical])
-                else:
-                    key, _ = _physical_input(logical.split("."), logical, physical)
-                    inputs.add(key)
+            try:
+                inputs.update(_manual_inputs(raw, source, output, producers, physical,
+                                             local_writes[source["id"]], region["start"]))
+            except DIALECT_ERRORS:
+                output["review"].append("Supply literal dependencies in the conversion contract.")
         output["inputs"] = sorted(inputs)
     selected = snapshot.get("selected_outputs")
     restricted = any(source.get("selected") is False for source in sources.values())
     if selected or restricted:
-        wanted = {name.casefold() for name in selected or ()}
-        active = {model for model, row in outputs.items() if (
-            row["name"].casefold() in wanted if selected else
-            sources[region_by_id[row["region"]]["source"]].get("selected", True))}
+        wanted = {kind: {source_relation(name, kind) for name in selected or ()} for kind in {s["kind"] for s in sources.values()}}
+        active = set()
+        for model, row in outputs.items():
+            source = sources[region_by_id[row["region"]]["source"]]
+            chosen = source.get("selected", True)
+            name = source_relation(row["name"], row["kind"])
+            work = row["kind"] == "sas" and name.startswith("work.")
+            if (selected and name in wanted[row["kind"]] and (chosen or not work)) or (not selected and chosen):
+                active.add(model)
         queue = list(active)
         while queue:
             for parent in outputs[queue.pop()]["inputs"]:
@@ -590,7 +736,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
     declared_sources = dict(physical)
     declaration_conflicts = []
     for key, row in declared_sources.items():
-        facts = declarations.get(row.get("relation"), [])
+        facts = [] if row.get("prior_version") else declarations.get(row.get("relation"), [])
         if facts and all(fact == facts[0] for fact in facts):
             metadata["columns"][key] = facts[0]
         elif facts:
@@ -598,6 +744,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
         override = snapshot.get("source_mappings", {}).get(key)
         if override:
             row.update({k: override[k] for k in ("catalog", "schema", "identifier")})
+            row["assumed_location"] = False
         if row.get("catalog") is None:
             row["catalog"] = snapshot["catalog"]
             row["assumed_location"] = True
@@ -610,12 +757,35 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             "declaration_conflicts": declaration_conflicts, "docs": metadata["docs"],
             "project": metadata["project"], "version": VERSION}
     return plan, files
+def _join_bindings(query, aliases, alias_keys, invalid):
+    """Track merged keys and which inputs are visible in each ON clause and in the result."""
+    groups, predicates = {}, {}
+    joins = [(join, alias_keys[join.this.alias_or_name.casefold()]) for join in query.args.get("joins") or ()
+             if join.this.alias_or_name.casefold() in alias_keys]
+    visible = set(aliases) - {right for _, right in joins}
+    for join, right in joins:
+        predicates[id(join)] = visible | {right}
+        filters = join.kind in {"SEMI", "ANTI"}
+        for column in join.args.get("using") or ():
+            name = column.name.casefold()
+            left = {alias for alias in visible if name in aliases[alias][1] or not aliases[alias][2]}
+            _, right_columns, right_complete = aliases[right]
+            if not left or right_complete and name not in right_columns:
+                invalid.setdefault(column.sql(), column.meta.get("line"))
+            elif not filters and (len(left) == 1 or left == groups.get(name)):
+                groups[name] = left | {right}
+        if not filters:
+            visible.add(right)
+    return groups, visible, predicates
+
+
 def _column_bindings(query, refs, plan, schemas, complete, target, model_config):
     layouts, bindings, invalid = {}, {}, {}
     uncertain = False
     for scope in traverse_scope(query):
-        aliases = {}
-        for alias, (node, source) in scope.selected_sources.items():
+        aliases, alias_keys = {}, {}
+        for alias, (node, source) in _scope_inputs(scope).items():
+            original_alias = alias.casefold()
             if isinstance(source, exp.Table):
                 call = refs.get(source.name)
                 key = _binding(call, plan.get("project")) if call else "physical:" + relation(source)
@@ -630,18 +800,32 @@ def _column_bindings(query, refs, plan, schemas, complete, target, model_config)
             else:
                 facts, full = layouts.get(id(source), ({}, False))
                 aliases[alias.casefold()] = (None, facts, full)
+            alias_keys[original_alias] = alias.casefold()
+        groups, projection_aliases, predicates = _join_bindings(scope.expression, aliases, alias_keys, invalid)
         for column in scope.columns:
             if column.is_star:
                 continue
             name = column.name.casefold()
+            visible = predicates.get(id(column.find_ancestor(exp.Join)), projection_aliases)
             if column.table:
-                candidates = [aliases[column.table.casefold()]] if column.table.casefold() in aliases else []
+                qualifier = column.table.casefold()
+                if qualifier in aliases and qualifier not in visible:
+                    invalid.setdefault(column.sql(), column.this.meta.get("line"))
+                    continue
+                candidates = [aliases[qualifier]] if qualifier in visible else []
                 if not candidates and (scope.is_subquery or any(
                         column.table.casefold() in cols for _, cols, _ in aliases.values())):
                     uncertain = True
                     continue
             else:
-                candidates = list(aliases.values())
+                candidates = [alias for key, alias in aliases.items() if key in visible]
+                if group := groups.get(name):
+                    possible = {alias for alias, (_, cols, full) in aliases.items() if alias in visible and (name in cols or not full)}
+                    if possible == group:
+                        joined = [aliases[alias] for alias in sorted(group)]
+                        bindings[id(column)] = (tuple(dict.fromkeys(key for key, _, _ in joined if key)),
+                                                _common_type([cols.get(name) for _, cols, _ in joined]))
+                        continue
             matches = [(key, cols[name]) for key, cols, _ in candidates if name in cols]
             unknown = [(key, None) for key, cols, full in candidates if not full and name not in cols]
             if len(matches) > 1 or not matches and not unknown:
@@ -650,18 +834,18 @@ def _column_bindings(query, refs, plan, schemas, complete, target, model_config)
                     continue
                 invalid.setdefault(column.sql(), column.this.meta.get("line"))
             elif len(matches) + len(unknown) == 1:
-                bindings[id(column)] = (matches or unknown)[0]
+                key, dtype = (matches or unknown)[0]
+                bindings[id(column)] = ((key,) if key else (), dtype)
             else:
                 uncertain = True
         projected = {}
         full = True
-        for selection in scope.expression.selects:
+        for selection, expressions in zip(scope.expression.selects, _projection_groups(scope.expression)):
             name = output_name(selection)
             if selection.is_star or not name or name.casefold() in projected:
                 full = False
                 continue
-            expression = selection.this if isinstance(selection, exp.Alias) else selection
-            projected[name.casefold()] = _infer_type(expression, bindings, target)
+            projected[name.casefold()] = _projection_type(expressions, bindings, target)
         if scope.outer_columns:
             full = full and len(scope.outer_columns) == len(projected)
             projected = dict(zip(map(str.casefold, scope.outer_columns), projected.values())) if full else {}
@@ -681,7 +865,33 @@ def _infer_type(expression, bindings, target):
         return bindings.get(id(expression), (None, None))[1]
     if isinstance(expression, exp.Count):
         return "BIGINT"
+    if isinstance(expression, exp.Cast) and isinstance(expression.to, exp.DataType):
+        return target.map_type(expression.to.sql(dialect=target.dialect))
     return None
+
+
+def _common_type(types):
+    if not types or None in types:
+        return None
+    if len(set(types)) == 1:
+        return types[0]
+    integers = ("TINYINT", "SMALLINT", "INT", "BIGINT")
+    if all(dtype in integers for dtype in types):
+        return max(types, key=integers.index)
+    return None
+
+
+def _projection_groups(query):
+    query = query.unnest()
+    if isinstance(query, exp.SetOperation):
+        left, right = _projection_groups(query.this), _projection_groups(query.expression)
+        return [expressions + (right[index] if index < len(right) and not query.args.get("by_name") else [None])
+                for index, expressions in enumerate(left)]
+    return [[item.this if isinstance(item, exp.Alias) else item] for item in query.selects]
+
+
+def _projection_type(expressions, bindings, target):
+    return _common_type([_infer_type(item, bindings, target) for item in expressions if not isinstance(item, exp.Null)])
 
 
 def _known_columns(snapshot, plan, model, query, refs, schemas, complete, target, model_config):
@@ -695,14 +905,13 @@ def _known_columns(snapshot, plan, model, query, refs, schemas, complete, target
     lineage = []
     names = set()
     missing_layout = False
-    for index, selection in enumerate(query.selects):
+    for index, (selection, expressions) in enumerate(zip(query.selects, _projection_groups(query))):
         name = output_name(selection)
         if selection.is_star or not name or name.casefold() in names:
             missing_layout = True
             continue
         names.add(name.casefold())
-        expression = selection.this if isinstance(selection, exp.Alias) else selection
-        inferred = _infer_type(expression, bindings, target)
+        inferred = _projection_type(expressions, bindings, target)
         declared = declarations.get(name)
         override = overrides.get(f"{model}.{name}")
         supported = target.map_type(override or declared) if override or declared else inferred
@@ -714,10 +923,19 @@ def _known_columns(snapshot, plan, model, query, refs, schemas, complete, target
             ),
             "ordinal": index + 1,
         }
-        for column in expression.find_all(exp.Column):
-            if parent := bindings.get(id(column), (None, None))[0]:
-                lineage.append({"source": parent, "source_column": column.name, "model": model,
-                                "output_column": name, "inferred": not isinstance(expression, exp.Column)})
+        contributors = {}
+        for expression in expressions:
+            if expression is None:
+                continue
+            for column in expression.find_all(exp.Column):
+                parents, _ = bindings.get(id(column), ((), None))
+                for parent in parents:
+                    key = (parent, column.name)
+                    contributors[key] = (contributors.get(key, False) or len(parents) > 1
+                                         or not isinstance(expression, exp.Column))
+        for (parent, column), inferred_lineage in contributors.items():
+            lineage.append({"source": parent, "source_column": column, "model": model,
+                            "output_column": name, "inferred": inferred_lineage})
     sensitive = (exp.Where, exp.Join, exp.Having, exp.Group, exp.Order, exp.Distinct, exp.Cast,
                  exp.Add, exp.Sub, exp.Mul, exp.Div, exp.Mod, exp.AggFunc, exp.Predicate,
                  exp.Case, exp.Coalesce, exp.Window)
@@ -776,10 +994,21 @@ def validate(snapshot, plan, files, reviews=None):
     if "unmatched-selection" in plan["barriers"]:
         finding("unmatched_selection", "Find the producer of the selected analyzed asset before handoff.", hard=True)
     elif snapshot.get("selected_outputs"):
-        seen = {output["name"].casefold() for output in outputs.values() if not output.get("excluded")}
+        seen = defaultdict(set)
+        for output in outputs.values():
+            if not output.get("excluded"):
+                kind = output["kind"]
+                seen[kind, source_relation(output["name"], kind)].add(regions[output["region"]]["source"])
+        kinds = {kind for kind, _ in seen}
+        paths = {source["id"]: source["path"] for source in snapshot["sources"]}
         for name in snapshot["selected_outputs"]:
-            if name.casefold() not in seen:
+            if not any((kind, source_relation(name, kind)) in seen for kind in kinds):
                 finding("unmatched_selection", f"Locate the producer of {name}.", hard=True)
+            work = source_relation(name, "sas")
+            producers = seen.get(("sas", work), ())
+            if work.startswith("work.") and len(producers) > 1:
+                candidates = ", ".join(sorted(paths.get(source, source) for source in producers))
+                finding("ambiguous_work_selection", f"Choose one producing SAS file for {work}: {candidates}.", hard=True)
     for missing in snapshot.get("analysis_gaps", []):
         finding("incomplete_analysis", missing, hard=True)
     for source in snapshot["sources"]:
@@ -798,6 +1027,12 @@ def validate(snapshot, plan, files, reviews=None):
         if legacy_producers and any(key in physical for key in output["inputs"]):
             finding("legacy_producer_inventory", "Create a fresh migration to recheck opaque producers against these inputs.",
                     model, hard=True)
+        if plan["version"] < 7 and output["kind"] == "sql" and output["materialization"] != "view":
+            reader = regions[output["region"]]
+            writes = [regions[outputs[parent]["region"]] for parent in output["inputs"] if parent in outputs]
+            if any(write["source"] == reader["source"] and write["start"] >= reader["start"] for write in writes):
+                finding("legacy_source_order", "Reconvert from pinned sources to confirm the relation read before its later write.",
+                        model, hard=True)
         file = files.get(model)
         if not file:
             finding("missing_output", output.get("manual", "Provide the required output file."), model, hard=True)
@@ -853,8 +1088,13 @@ def validate(snapshot, plan, files, reviews=None):
                 if dependency not in physical:
                     finding("broken_source", f"Declare and map dbt source {call[1]}.{call[2]}.", model, hard=True, line=line)
                 elif physical[dependency].get("assumed_location"):
-                    finding("source_mapping", f"Confirm the catalog and schema for {physical[dependency]['relation']}.",
-                            model, hard=True, line=line)
+                    source = physical[dependency]
+                    message = (f"Map the version of {source['relation']} read before the write in this script."
+                               if source.get("prior_version") else f"Confirm the catalog and schema for {source['relation']}.")
+                    finding("source_mapping", message, model, hard=True, line=line)
+                elif physical[dependency].get("prior_version"):
+                    finding("prior_version", "Verify that the mapped input preserves the relation version read before the write.",
+                            model, line=line)
                 if dependency in plan.get("declaration_conflicts", []) and not snapshot.get("input_types", {}).get(dependency):
                     finding("schema_conflict", "Reconcile conflicting source declarations with a confirmed schema.", model)
             actual.add(dependency)
@@ -894,6 +1134,12 @@ def validate(snapshot, plan, files, reviews=None):
     model_config = {model: {"materialized": outputs[model]["materialization"],
                             **outputs[model].get("dbt_config", {}), **(entry[3] or {})}
                     for model, entry in parsed.items()}
+    incremental = snapshot.get("incremental", {})
+    for model, keys in incremental.items():
+        if model in model_config:
+            model_config[model].update(materialized="incremental", incremental_strategy="merge",
+                                       unique_key=keys[0] if len(keys) == 1 else keys,
+                                       file_format="delta", on_schema_change="fail", full_refresh=False)
     materializations = {model: cfg["materialized"] for model, cfg in model_config.items()}
     aliases = defaultdict(list)
     physical_names = {(row["catalog"].casefold(), row["schema"].casefold(), row["identifier"].casefold())
@@ -917,6 +1163,16 @@ def validate(snapshot, plan, files, reviews=None):
             complete.add(model)
         if partial:
             finding("unknown_layout", "Resolve wildcard layout, unnamed expressions or duplicate output columns.", model)
+        for key in {item.sql(): item for select in query.find_all(exp.Select)
+                    for item in grouping_key_errors(select)}.values():
+            finding("target_aggregation", f"Replace invalid GROUP BY key {key.sql()} with a grouping expression.",
+                    model, hard=True, line=key.meta.get("line"))
+        for expression in {item.sql(): item for select in query.find_all(exp.Select)
+                           for item in ungrouped_columns(select)}.values():
+            anchor = expression.this if isinstance(expression, exp.Column) else expression
+            finding("target_aggregation", f"Expression {expression.sql()} is outside the grouping and aggregate expressions. "
+                    "Preserve the intended row grain when revising this SELECT.", model, hard=True,
+                    line=anchor.meta.get("line"))
         set_layouts = [(operation.this.unnest().selects, operation.expression.unnest().selects)
                        for operation in query.find_all(exp.SetOperation)]
         if any(not branch or any(projection.is_star for projection in branch)
@@ -924,6 +1180,18 @@ def validate(snapshot, plan, files, reviews=None):
             finding("set_layout", "Expand or confirm the exact layouts of all set-operation branches.", model, hard=True)
         elif any(len(left) != len(right) for left, right in set_layouts):
             finding("set_layout", "Reconcile the mismatched output counts of the set-operation branches.", model, hard=True)
+        if isinstance(query.unnest(), exp.SetOperation) and any(fact["provenance"] == "assumed_string" for fact in layout.values()):
+            finding("set_types", "Confirm compatible output types across all set-operation branches.", model)
+        if stack := outputs[model].get("sas_stack"):
+            inputs = outputs[model]["inputs"]
+            facts_by_input = [{name.casefold(): fact["target_type"] for name, fact in schemas.get(parent, {}).items()
+                               if fact["provenance"] != "assumed_string"} for parent in inputs]
+            issues = [name for name in stack["columns"]
+                      if not _common_type([facts.get(name.casefold()) for facts in facts_by_input])]
+            if issues:
+                manual = files[model]["origin"] != "static" and outputs[model].get("contract")
+                finding("sas_stack_schema", "Confirm compatible input layouts for SAS SET columns " + ", ".join(issues)
+                        + ", or document and implement the differences in a reviewed conversion.", model, hard=not manual)
         if sensitive:
             finding("unknown_sensitive_type", "Confirm operand types and coercion used by predicates, grouping or calculations.", model)
         for column, line in sorted(invalid.items()):
@@ -931,6 +1199,17 @@ def validate(snapshot, plan, files, reviews=None):
                     model, hard=True, line=line)
         if uncertain:
             finding("unproven_column_binding", "Confirm which inputs supply unbound column references.", model)
+        if model in incremental:
+            if "materialized" in (parsed[model][3] or {}):
+                finding("incremental_config", "Remove inline materialization before applying the approved Delta merge config.",
+                        model, hard=True)
+            if any(column not in layouts[model] or layouts[model][column]["provenance"] == "assumed_string"
+                   for column in incremental[model]):
+                finding("merge_key", "Restore or confirm the incremental merge keys in the output schema.", model, hard=True)
+            finding("incremental_merge", "Verify unique non-null keys, repeat runs, late arrivals and delete behavior.", model)
+        if (required_keys := outputs[model].get("suggested_merge_keys")) and incremental.get(model) != required_keys:
+            finding("merge_configuration", "Confirm the original MERGE keys and the Delta merge materialization in Validation.",
+                    model, hard=True)
         check(model, "schema", "fail" if invalid else "unknown" if partial or sensitive or uncertain else "pass")
         check(model, "semantic_obligations", "unknown" if by_model[model] else "pass")
     for colliding in aliases.values():
@@ -958,6 +1237,7 @@ def validate(snapshot, plan, files, reviews=None):
             "parents": [(parent, review_keys.get(parent), schemas.get(parent), physical.get(parent)) for parent in nodes[model]],
             "findings": [(row["code"], row["message"]) for row in own], "rules": file and file.get("rules", []),
             "target": target.profile,
+            **({"incremental": incremental[model]} if model in incremental else {}),
         })
         accepted = (
             file and model in reviews and reviews[model]["key"] == review_keys[model]

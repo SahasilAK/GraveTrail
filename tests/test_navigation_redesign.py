@@ -142,3 +142,8 @@ def test_migration_entry_and_offline_create(workspace) -> None:
     assert not at.exception and not at.error
     note, = service.review_comments(store, w, project["id"])
     assert note["line"] == 1 and note["revision"] == revision["id"]
+    next(widget for widget in at.segmented_control if widget.label == "Migration view").set_value("Validation").run()
+    assert not at.exception and not at.error
+    assert any(heading.value == "External validation" for heading in at.subheader)
+    assert any(button.label == "Record validation results" for button in at.button)
+    assert any(button.label == "Record comparison results" for button in at.button)

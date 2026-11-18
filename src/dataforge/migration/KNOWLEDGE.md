@@ -9,3 +9,4 @@ Static, workspace-owned dbt migration. Imported code remains data throughout the
 - `assistance.py` — Scoped disclosure, provider budgets and attempt journal, proposals and approved lessons.
 - `exports.py` — Revision-pinned dbt project, documentation, lineage and review bundle.
 - `inspection.py` — Code inventory, line-anchored annotations and inert evidence for unresolved regions.
+- `validation.py` — Confirmed dbt tests, reconciliation specifications and revision-bound external artifact summaries.

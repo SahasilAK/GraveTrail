@@ -12,6 +12,7 @@ class Warehouse:
     dialect: str
     profile: str
     adapter_version: str
+    core_version: str
     string_type: str = "STRING"
     materializations: tuple[str, ...] = ("table", "view", "ephemeral")
 
@@ -30,10 +31,10 @@ class Warehouse:
             return None
 
 
-DBT_CORE_VERSION = "1.10.13"
 FORMATS = {"dbt": "dbt"}
+LEGACY_DATABRICKS = Warehouse("Databricks", "databricks", "dbt-core-1.10.13-databricks-1.10.13", "1.10.13", "1.10.13")
 WAREHOUSES = {
-    "databricks": Warehouse("Databricks", "databricks", "dbt-core-1.10.13-databricks-1.10.13", "1.10.13")
+    "databricks": Warehouse("Databricks", "databricks", "dbt-core-1.12.5-databricks-1.12.8", "1.12.8", "1.12.5")
 }
 
 
@@ -41,6 +42,8 @@ def warehouse(snapshot):
     if snapshot.get("format", "dbt") not in FORMATS or snapshot.get("warehouse") not in WAREHOUSES:
         raise ValueError("Choose a supported format and warehouse")
     target = WAREHOUSES[snapshot["warehouse"]]
+    if snapshot.get("profile") == LEGACY_DATABRICKS.profile and target.dialect == LEGACY_DATABRICKS.dialect:
+        target = LEGACY_DATABRICKS
     if snapshot.get("profile", target.profile) != target.profile:
         raise ValueError("Unknown compatibility profile")
     for field in ("catalog", "schema"):

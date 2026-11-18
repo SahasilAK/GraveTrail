@@ -6,8 +6,9 @@ import streamlit as st
 from dataforge.agent.contracts import AgentError
 from dataforge.agent.jobs import TERMINAL
 from dataforge.configuration import VisualizationSettings
+from dataforge.exports import report_csv
 from dataforge.lineage_builder import load_builder
-from dataforge.migration import assistance, engine, service
+from dataforge.migration import assistance, engine, service, validation
 from dataforge.migration.exports import lineage_graph
 from dataforge.migration.inspection import annotated, artifacts, source_location
 from dataforge.migration.targets import FORMATS, WAREHOUSES
@@ -88,6 +89,9 @@ def setup(store, workspace, prefix, entry):
             st.error(str(exc))
     if previous := st.session_state.get(prefix + "preflight"):
         st.subheader("Preflight")
+        for finding in previous["findings"]:
+            if finding["code"] == "ambiguous_work_selection":
+                st.warning(finding["message"])
         st.caption(f"{len(previous['sources']):,} inventory files · {len(previous['outputs']):,} planned outputs · "
                    f"{len(previous['findings']):,} findings")
         table_page("Planned outputs and upstream dependencies", previous["outputs"], prefix + "preview_out")
@@ -285,6 +289,8 @@ def review(store, workspace, project, base, details, key):
     if selected is None:
         return
     output = plans[selected]
+    if remerge := output.get("sas_remerge"):
+        st.text("SAS source grain · " + remerge["grain"])
     if details["active"].get(selected) == "engineer_accepted":
         st.caption("Engineer accepted · semantic equivalence unverified")
     elif base["reviews"].get(selected, {}).get("key") == details["review_keys"][selected]:
@@ -292,17 +298,34 @@ def review(store, workspace, project, base, details, key):
     if output.get("manual"):
         with st.expander("Define this output's conversion contract"):
             with st.form(key + selected + "contract"):
-                possible = [name for name in plans if name != selected] + list(base["plan"]["physical"])
+                possible = [name for name, row in plans.items() if name != selected and not row.get("excluded")]
+                possible += list(base["plan"]["physical"])
                 inputs = st.multiselect("Required inputs", possible, default=[
                     name for name in output["inputs"] if name in possible])
                 contract = output.get("contract", {})
                 behavior = st.text_area("Intended output behavior", contract.get("behavior", ""), max_chars=2000)
                 prerequisites = st.text_area("Source, ordering and retained processing prerequisites",
                                              contract.get("prerequisites", ""), max_chars=2000)
+                relations = st.text_area("Additional external inputs", placeholder="schema.table or catalog.schema.table, one per line",
+                                         max_chars=4000)
                 if st.form_submit_button("Save conversion contract"):
                     service.set_contract(store, workspace, project["id"], base["id"], selected, inputs,
-                                         behavior, prerequisites)
+                                         behavior, prerequisites, relations=relations.split())
                     st.rerun()
+    if output.get("sas_order") and output.get("contract"):
+        with st.expander("Draft ordered SAS SQL"):
+            st.caption(output["manual"])
+            with st.form(key + selected + "sas_order"):
+                order = st.text_input("Priority columns in order", placeholder="event_date ASC, event_id ASC", max_chars=800)
+                confirmed = st.checkbox("I confirmed the priority uniquely orders rows within each SAS group.")
+                if st.form_submit_button("Preview ordered SQL diff"):
+                    if not confirmed:
+                        raise ValueError("Confirm that the priority uniquely orders rows within each SAS group")
+                    st.session_state[key + "sas_proposal"] = service.ordered_sas_proposal(
+                        project, base, selected, order.split(","))
+            if proposal := st.session_state.get(key + "sas_proposal"):
+                if selected in proposal["edits"]:
+                    patch_panel(store, workspace, project, base, proposal)
     obligations = [row for row in details["findings"] if row["model"] == selected and not row["inherited_from"]]
     if details["tiers"][selected] != "blocked":
         with st.expander("Record engineer review"):
@@ -335,6 +358,20 @@ def schemas(store, workspace, project, base, details, key):
         row for row in rows if (not only_assumed or row["provenance"] == "assumed_string")
         and query in (row["model"] + "." + row["column"]).casefold()], key + "columns")
     physical = base["plan"]["physical"]
+    if physical:
+        with st.expander("Bulk source mappings"):
+            template = [{"source": name, **{field: row[field] for field in ("catalog", "schema", "identifier")}}
+                        for name, row in physical.items()]
+            st.download_button("Download mapping CSV", report_csv(template), "source-mappings.csv", "text/csv",
+                               on_click="ignore", key=key + "mapping-template")
+            upload = st.file_uploader("Edited source mapping CSV", type=["csv"], key=key + "mapping-upload")
+            if upload:
+                mappings = service.read_source_mappings(upload.getvalue())
+                table_page("Mappings to confirm", [{"source": name, **row} for name, row in mappings.items()], key + "mapping-preview")
+                if st.button("Apply source mappings", key=key + "apply-mappings"):
+                    service.revise_schemas(store, workspace, project["id"], base["id"], {
+                        "source_mappings": {**base["settings"].get("source_mappings", {}), **mappings}})
+                    st.rerun()
     with st.expander("Confirm a source mapping", expanded=bool(physical)):
         if physical:
             source = st.selectbox("Source", list(physical), format_func=lambda name: physical[name].get("relation", name))
@@ -381,6 +418,162 @@ def schemas(store, workspace, project, base, details, key):
                               **{f"{group}.{name}": value for name, value in parsed.items()}}}
                 service.revise_schemas(store, workspace, project["id"], base["id"], settings)
                 st.rerun()
+
+
+def reconciliation_view(store, workspace, project, base, details, key, revisions):
+    st.subheader("Legacy reconciliation")
+    st.caption("The coverage table reflects the latest external results for each model and its approved checks.")
+    plans = validation.reconciliation_plan(project, base, details)
+    runs = service.reconciliation_runs(store, workspace, project["id"])
+    recent = {}
+    for run in reversed(runs):
+        if run["revision"] == base["id"]:
+            recent.update({model: entry for model, entry in run["models"].items()
+                           if model in plans and plans[model]["comparison_id"] == entry["comparison_id"]})
+    if plans:
+        coverage = []
+        for model, plan in plans.items():
+            stages = [*plan["stages"]]
+            if replay_stage := plan.get("replay_stage"):
+                stages.append(replay_stage)
+            for stage in stages:
+                recorded = recent.get(model, {}).get("stages", {}).get(stage, {})
+                coverage.append({"model": model, "legacy baseline": plan["legacy"], "target": plan["target"],
+                                 "stage": stage.replace("_", " "), "status": recorded.get("status", "not observed"),
+                                 "coverage": "complete" if recorded.get("complete") else "incomplete"})
+        table_page("Current reconciliation coverage", coverage, key + "comparison-coverage")
+        model = st.selectbox("Comparison template model", list(plans), key=key + "template-model")
+        st.download_button("Download results template", validation.reconciliation_template({model: plans[model]}),
+                           f"{model}-reconciliation-results.csv", "text/csv", on_click="ignore", key=key + "template")
+    elif not runs:
+        st.info("Confirm a legacy baseline for an active model to start recording comparisons.")
+    if runs:
+        by_id = {run["id"]: run for run in runs}
+        record = st.selectbox("Recorded comparison", list(by_id), key=key + "comparison-record",
+                              format_func=lambda value: f"{by_id[value]['recorded_at'][:19]} · "
+                              f"{'current' if by_id[value]['revision'] == base['id'] else 'previous'} revision")
+        run = by_id[record]
+        if run["revision"] != base["id"]:
+            st.info(f"Showing evidence from revision {run['revision'][:8]}.")
+        if any("initial_load" in (stages := entry.get("stages", {})) and validation.REPLAY_STAGE not in stages
+               for entry in run["models"].values()):
+            st.info("This upload predates the incremental replay checks.")
+        if any(entry.get("empty_sample") for entry in run["models"].values()):
+            st.info("A comparison stage with zero rows in both systems has incomplete coverage.")
+        elif any(entry.get("complete") is False for entry in run["models"].values()):
+            st.info("This upload has incomplete coverage for one or more comparison stages.")
+        table_page("Reported reconciliation checks", [
+            {"model": model, **check, "stage": check.get("stage", "comparison").replace("_", " "),
+             "check": check["check"].replace("_", " ")}
+            for model, entry in sorted(run["models"].items()) for check in entry["checks"]
+        ], key + "comparison-checks")
+    with st.expander("Import comparison results"):
+        st.caption("Use the same snapshot, confirmed keys, and date window for both relations. Enter keyed counts "
+                   "in comparison_value and other metrics in both relation columns.")
+        st.caption("For incremental models, enter the same input_snapshot_id on the initial_load and repeat_run "
+                   "row_count rows. Use initial_vs_repeat rows to compare the saved target after the initial load "
+                   "directly with the target after replay.")
+        with st.form(key + "import-comparison"):
+            revision_id = st.selectbox("Comparison revision", revisions)
+            upload = st.file_uploader("Reconciliation results CSV", type=["csv"])
+            if st.form_submit_button("Record comparison results"):
+                if not upload:
+                    raise ValueError("Upload the filled reconciliation results CSV")
+                service.import_reconciliation(store, workspace, project["id"], revision_id, upload.getvalue())
+                st.rerun()
+
+
+def validation_view(store, workspace, project, base, details, key):
+    st.subheader("External validation")
+    st.caption("Compile, build, and data-test results are recorded for the selected revision. "
+               "Runtime equivalence requires a separate comparison with the legacy system.")
+    runs = service.validation_runs(store, workspace, project["id"])
+    if runs:
+        by_id = {row["invocation"]: row for row in runs}
+        run_id = st.selectbox("Recorded invocation", list(by_id), key=key + "run",
+                              format_func=lambda value: f"{by_id[value]['command']} · {value[:8]} · "
+                              + ("current revision" if by_id[value]["revision"] == base["id"] else "previous revision"))
+        run = by_id[run_id]
+        if run["revision"] == base["id"] and (omitted := details["active"].keys() - run["models"].keys()):
+            st.caption(f"{len(omitted)} active models were outside this invocation's project scope.")
+        table_page("Imported model observations", [
+            {"model": model, "compile": entry.get("compile", "not observed"), "build": entry.get("build", "not observed"),
+             "tests": ", ".join(f"{entry.get('test_labels', {}).get(test, test)} · {status}"
+                                for test, status in entry.get("tests", {}).items()) or "not observed"}
+            for model, entry in sorted(run["models"].items())], key + "evidence-rows")
+    revisions = [base["id"], *(row["id"] for row in service.history(store, workspace, project["id"])
+                              if row["id"] != base["id"])]
+    with st.expander("Import dbt artifacts"):
+        st.caption(f"Set {validation.REVISION_ENV} to the revision in the handoff. Upload both files from one external invocation.")
+        with st.form(key + "import-validation"):
+            revision_id = st.selectbox("Handoff revision", revisions)
+            manifest = st.file_uploader("dbt manifest.json", type=["json"])
+            results = st.file_uploader("dbt run_results.json", type=["json"])
+            if st.form_submit_button("Record validation results"):
+                if not manifest or not results:
+                    raise ValueError("Upload both dbt artifacts from the same invocation")
+                service.import_validation(store, workspace, project["id"], revision_id, manifest.getvalue(), results.getvalue())
+                st.rerun()
+    reconciliation_view(store, workspace, project, base, details, key, revisions)
+    models = sorted(set(base["files"]) & details["schemas"].keys())
+    if not models:
+        return
+    st.subheader("Confirmed checks and materialization")
+    model = st.selectbox("Model to configure", models, key=key + "rules-model")
+    if warning := details["validation_warnings"].get(model):
+        st.warning(warning, title="Update the saved validation checks")
+    columns = [name for name in details["schemas"][model] if engine.NAME.fullmatch(name)]
+    rules = base["settings"].get("validation_rules", {}).get(model, {})
+    comparison = rules.get("comparison", {})
+    parents = [parent for parent in details["lineage"]["nodes"][model] if parent in models]
+    current_parent = rules.get("relationship", {}).get("model", "")
+    parent = st.selectbox("Relationship test parent", ["", *parents], index=parents.index(current_parent) + 1
+                          if current_parent in parents else 0, format_func=lambda value: value or "None", key=key + model + "parent")
+    with st.form(key + model + "checks"):
+        not_null = st.multiselect("Required columns", columns, default=[c for c in rules.get("not_null", []) if c in columns])
+        unique = st.multiselect("Individually unique columns", columns, default=[c for c in rules.get("unique", []) if c in columns])
+        relationship = None
+        if parent and columns:
+            saved = rules.get("relationship", {})
+            parent_columns = [name for name in details["schemas"][parent] if engine.NAME.fullmatch(name)]
+            child_key = st.selectbox("Foreign key column", columns, index=columns.index(saved["column"])
+                                     if saved.get("column") in columns else 0)
+            parent_key = st.selectbox("Referenced parent column", parent_columns, index=parent_columns.index(saved["field"])
+                                      if saved.get("field") in parent_columns else 0)
+            relationship = {"column": child_key, "model": parent, "field": parent_key}
+        legacy = st.text_input("Legacy relation for reconciliation", comparison.get("legacy", ""), max_chars=386)
+        keys = st.multiselect("Comparison keys (together identify a row)", columns,
+                              default=[c for c in comparison.get("keys", []) if c in columns])
+        keyed_values = st.multiselect("Keyed value columns", columns,
+                                     default=[c for c in comparison.get("columns", []) if c in columns],
+                                     max_selections=32,
+                                     help="Compare these non-key columns across matching keys. Numeric sum columns are also checked by key when keys are set.")
+        totals = st.multiselect("Numeric columns to compare by sum", columns,
+                                default=[c for c in comparison.get("totals", []) if c in columns])
+        tolerance = st.number_input("Absolute tolerance for comparison totals", min_value=0.0,
+                                    value=float(comparison.get("tolerance", 0)), format="%.9g")
+        window = comparison.get("window", {})
+        dates = [column for column in columns if details["schemas"][model][column]["target_type"].startswith(("DATE", "TIMESTAMP"))]
+        date_column = st.selectbox("Comparison window column", ["", *dates],
+                                   index=dates.index(window["column"]) + 1 if window.get("column") in dates else 0,
+                                   format_func=lambda value: value or "All rows")
+        starts = st.text_input("Window start (inclusive, YYYY-MM-DD)", value=window.get("start", ""), max_chars=10)
+        ends = st.text_input("Window end (exclusive, YYYY-MM-DD)", value=window.get("end", ""), max_chars=10)
+        suggested = base["plan"]["outputs"][model].get("suggested_merge_keys", [])
+        merge = base["settings"].get("incremental", {}).get(model, suggested)
+        merge_keys = st.multiselect("Delta merge keys", columns, default=[c for c in merge if c in columns],
+                                    help="Use for an upsert-ready SELECT with one non-null row per key. "
+                                         "An empty selection uses the original materialization.")
+        if st.form_submit_button("Save confirmed checks and materialization"):
+            baseline = {"legacy": legacy.strip(), "keys": keys, "columns": keyed_values,
+                        "totals": totals, "tolerance": tolerance}
+            if date_column:
+                baseline["window"] = {"column": date_column, "start": starts, "end": ends}
+            service.configure_validation(store, workspace, project["id"], base["id"], model, {
+                "not_null": not_null, "unique": unique, "relationship": relationship,
+                "comparison": baseline if legacy.strip() else None,
+            }, merge_keys)
+            st.rerun()
 
 
 def chat(store, workspace, project, base, details, key):
@@ -452,12 +645,14 @@ def chat(store, workspace, project, base, details, key):
                   for row in responses}
         selected = st.selectbox("Responses and proposed edits", list(labels), format_func=labels.get)
         response = next(row for row in responses if row["id"] == selected)
+        st.caption("Model response")
         st.text(response["answer"])
         if response["citations"]:
             st.text("Source regions: " + ", ".join(response["citations"]))
         if response["missing_outputs"]:
             st.warning("Unresolved in this response: " + ", ".join(response["missing_outputs"]))
         if proposal := response.get("proposal"):
+            st.caption("Files in the proposed diff · " + ", ".join(proposal["edits"]))
             patch_panel(store, workspace, project, base, proposal)
 
 
@@ -505,18 +700,22 @@ def project_view(store, workspace, project_id):
     st.caption(f"dbt · {WAREHOUSES[project['snapshot']['warehouse']].label} · "
                f"Revision {base['id'][:8]} · Runtime equivalence unverified")
     job_status(store, workspace, project_id)
+
+    def start_conversion(*, reconvert=False):
+        def work(progress, cancelled):
+            progress(.15, "Converting retained sources")
+            try:
+                result = service.convert(store, workspace, project_id, base["id"], cancelled, progress, reconvert=reconvert)
+                return {"revision": result["id"]}
+            except ValueError as exc:
+                return {"status": "failed", "error": str(exc)[:600]}
+        assistance.start_job(store, workspace, project_id, analysis_jobs(str(store.home)), work)
+        st.rerun()
+
     if base["plan"] is None:
         st.info("The input snapshot is ready. Run static conversion to produce candidate models and review findings.")
         if st.button("Run static conversion", type="primary"):
-            def work(progress, cancelled):
-                progress(.15, "Converting retained sources")
-                try:
-                    result = service.convert(store, workspace, project_id, base["id"], cancelled, progress)
-                    return {"revision": result["id"]}
-                except ValueError as exc:
-                    return {"status": "failed", "error": str(exc)[:600]}
-            assistance.start_job(store, workspace, project_id, analysis_jobs(str(store.home)), work)
-            st.rerun()
+            start_conversion()
         return
     details = service.report(project, base)
     st.caption(f"{sum(details['coverage'].values()):,} regions accounted for · "
@@ -528,7 +727,7 @@ def project_view(store, workspace, project_id):
                f"{active.count('engineer_accepted'):,} engineer-accepted models")
     key = f"migration_{workspace}_{project_id}_{base['id']}_"
     view = section("Migration view", ["Scope", "Schemas & mappings", "Review", "AI assistance", "Lineage",
-                                      "Export", "Knowledge"], "migration_view_" + project_id)
+                                      "Validation", "Export", "Knowledge"], "migration_view_" + project_id)
     if view == "Scope":
         table_page("Source ledger", base["plan"]["regions"], key + "regions")
         st.caption("Coverage by decoded source characters")
@@ -549,6 +748,11 @@ def project_view(store, workspace, project_id):
                                               external=json.loads(external) if external.strip() else None)
                         st.rerun()
         with st.expander("Revision history"):
+            st.caption("Create a fresh draft with the current converter and the project's pinned sources and target profile. "
+                       "SQL edits, mappings, scope decisions, validation settings, and reviews stay on their saved revisions. "
+                       "Restore an earlier revision here to bring those decisions back.")
+            if st.button("Reconvert from pinned sources", key=key + "reconvert"):
+                start_conversion(reconvert=True)
             histories = {row["id"]: str(row["created_at"]) for row in service.history(store, workspace, project_id)
                          if row["id"] != base["id"]}
             if histories:
@@ -573,16 +777,33 @@ def project_view(store, workspace, project_id):
         original = project["snapshot"].get("original_edge_labels", project["snapshot"].get("original_edges", []))
         table_page("Pinned analyzed lineage", [{"source": a, "target": b} for a, b in original], key + "original")
         st.json({name: details["lineage"][name] for name in ("missing", "extra")})
+    elif view == "Validation":
+        validation_view(store, workspace, project, base, details, key)
     elif view == "Export":
-        reviewed = st.radio("Bundle", [False, True], format_func=lambda mode: "Reviewed handoff" if mode else "Draft bundle")
+        mode = st.radio("Bundle", ["Draft bundle", "Reviewed handoff", "Pilot handoff"])
+        reviewed = mode != "Draft bundle"
+        pilot = None
+        pilot_ready = True
+        if mode == "Pilot handoff":
+            pilot = st.multiselect("Pilot outputs", sorted(details["active"]))
+            pilot_ready = False
+            if pilot:
+                try:
+                    picked, inputs = service.pilot_scope(base, details, pilot)
+                    table_page("Included models", [{"model": model, "required upstream": model not in pilot}
+                                                   for model in sorted(picked)], key + "pilot")
+                    st.caption(f"{len(inputs)} required external sources")
+                    pilot_ready = True
+                except ValueError as exc:
+                    st.info(str(exc))
         image = st.selectbox("Graph image", [None, "svg", "png"], format_func=lambda value: value.upper() if value else "None")
         workbook = st.checkbox("Include mapping and type workbook")
-        if reviewed and not details["eligible"]:
+        if mode == "Reviewed handoff" and not details["eligible"]:
             st.info("Resolve required outputs, structural findings and outstanding reviews for a reviewed handoff.")
-        if st.button("Prepare dbt bundle", disabled=reviewed and not details["eligible"]):
+        if st.button("Prepare dbt bundle", disabled=not pilot_ready or (pilot is None and reviewed and not details["eligible"])):
             with st.spinner("Preparing revision-pinned bundle…"):
                 data = service.bundle(store, workspace, project_id, base["id"], reviewed,
-                                      image_format=image, workbook=workbook)
+                                      image_format=image, workbook=workbook, pilot=pilot)
             st.download_button("Download dbt project", data, f"{engine.slug(project['name'])}-{base['id'][:8]}.zip",
                                mime="application/zip", on_click="ignore")
     elif view == "Knowledge":

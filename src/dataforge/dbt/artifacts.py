@@ -18,7 +18,7 @@ class ArtifactDocument:
     kind: str
 
 
-def read_artifact(source, text, limits=None):
+def read_artifact(source, text, limits=None, *, node_limit=100_000, track_spans=True):
     decoder = json.JSONDecoder(parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid JSON constant')))
     spans, count = {}, 0
 
@@ -30,7 +30,7 @@ def read_artifact(source, text, limits=None):
     def parse(i, path=()):
         nonlocal count
         count += 1
-        if count > 100000 or len(path) > 64:
+        if count > node_limit or len(path) > 64:
             raise ValueError('Artifact node or nesting budget exceeded')
         i = whitespace(i)
         start = i
@@ -71,7 +71,8 @@ def read_artifact(source, text, limits=None):
             i += 1
         else:
             value, i = decoder.raw_decode(text, i)
-        spans[path] = (start, i)
+        if track_spans:
+            spans[path] = (start, i)
         return value, i
 
     try:

@@ -11,6 +11,13 @@ cycles and generated graph edges. Unsupported semantics stay review findings. Un
 unavailable sources stay visible in the inventory and coverage. A small registry and warehouse
 adapter own the compatibility profile, dialect, materializations and type mapping.
 
+T-SQL temporary writes stay scoped to the pinned source script. Only an earlier, single local
+`SELECT INTO` with a clear lifetime can supply an ephemeral model dependency. Materializing SQL
+statements resolve against preceding local writes, with earlier relation versions requiring a
+confirmed source mapping. SAS `WORK` writers resolve in their pinned script and use the same names
+as analyzed lineage. SAS ordered steps record their input binding and source requirements during
+inventory. The engineer supplies the tie-breaking order through a revision-checked SQL proposal.
+
 Schema version 11 adds four workspace-owned tables. Project rows point at immutable revisions.
 Source rows retain compressed decoded evidence and the snapshot retains original byte hashes,
 encoding and admission metadata. Revision rows hold the plan, candidate files, schema decisions
@@ -27,9 +34,21 @@ No response can publish code directly.
 Static conversion checkpoints completed model lowering in bounded batches. Retrying the same
 revision rebuilds inventory from the pinned snapshot and reuses completed model SQL and bindings
 from the same converter version. Successful publication removes the temporary checkpoint records.
+Reconversion uses the same job and checkpoint flow from an already converted revision. The new
+static draft uses the embedded source snapshot and pinned target profile. Earlier plans, edits,
+settings and reviews remain in revision history and can be restored as a new revision.
 
-The registered handoff profile uses stable package releases
-[dbt Core 1.10.13](https://pypi.org/project/dbt-core/1.10.13/) and
-[dbt-databricks 1.10.13](https://pypi.org/project/dbt-databricks/1.10.13/).
-This pins project generation and the external installation target. It carries no runtime
-equivalence evidence.
+New handoffs pin [dbt Core 1.12.5](https://pypi.org/project/dbt-core/1.12.5/) and
+[dbt-databricks 1.12.8](https://pypi.org/project/dbt-databricks/1.12.8/). Existing 1.10.13
+profiles remain resolvable on their original projects. These versions identify the external
+installation target and static output format.
+
+The Validation view stores confirmed dbt tests and reconciliation plans in a revision. Uploaded
+dbt artifacts are checked against the revision environment marker, invocation, model text,
+target and source bindings. Activity rows keep bounded summaries and artifact digests. Compile,
+build and model-test observations are distinct from engineer acceptance and legacy equivalence.
+Reconciliation uploads bind aggregate and keyed metrics to the revision, plan fingerprint, and run
+stage. Incremental comparisons record initial-load and repeat-run results. Activity rows store
+bounded numeric evidence and computed outcomes. A partial upload leaves coverage incomplete.
+Pilot exports take dependency closure from the fully validated project graph and write only the
+included models and their prerequisites.

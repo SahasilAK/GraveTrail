@@ -12,9 +12,10 @@ from dataforge.exports import graph_html, report_csv
 from dataforge.graph import LineageGraph
 from dataforge.graph_images import render_graph_image
 from dataforge.ingestion import safe_relative
+from dataforge.migration import validation
 from dataforge.migration.engine import MAX_PROJECT, digest, slug
 from dataforge.migration.inspection import annotated, artifacts, commented_source, source_path
-from dataforge.migration.targets import DBT_CORE_VERSION, warehouse
+from dataforge.migration.targets import warehouse
 
 
 def lineage_graph(details):
@@ -62,13 +63,37 @@ def _mapping_workbook(mappings, assumptions):
     return output.getvalue()
 
 
-def build_bundle(project, revision, details, reviewed, image_format=None, workbook=False, *, read_evidence=None):
-    if reviewed and not details["eligible"]:
+def build_bundle(project, revision, details, reviewed, image_format=None, workbook=False, *, read_evidence=None, pilot=None):
+    if reviewed and pilot is None and not details["eligible"]:
         raise ValueError("Resolve all required outputs, structural findings and outstanding reviews first")
+    stale_rules = details.get("validation_warnings", {}).keys()
+    if reviewed and (stale_rules if pilot is None else stale_rules & pilot[0]):
+        raise ValueError("Update stale confirmed checks in Validation before preparing a reviewed handoff")
     target = warehouse(project["snapshot"])
     plan = revision["plan"]
+    if pilot is not None:
+        models, inputs = pilot
+        outputs = {key: value for key, value in plan["outputs"].items() if key in models}
+        region_ids = {row["region"] for row in outputs.values()}
+        plan = {**plan, "outputs": outputs, "physical": {key: plan["physical"][key] for key in sorted(inputs)},
+                "regions": [{**row, "outputs": [model for model in row["outputs"] if model in models]}
+                            for row in plan["regions"] if row["id"] in region_ids]}
+        revision = {**revision, "plan": plan}
+        lineage = details["lineage"]
+        details = {**details, "lineage": {**lineage, "nodes": {model: lineage["nodes"][model] for model in sorted(models)},
+                   "edges": [row for row in lineage["edges"] if row["target"] in models],
+                   "columns": [row for row in lineage["columns"] if row["model"] in models],
+                   **{key: [row for row in lineage[key] if row[1] in models] for key in ("missing", "extra")}},
+                   **{key: {model: details[key][model] for model in sorted(models) if model in details[key]}
+                      for key in ("active", "tiers", "review_keys", "schemas")},
+                   **{key: [row for row in details[key] if row["model"] in models] for key in ("findings", "checks")}}
+        snapshot = project["snapshot"]
+        source_ids = {region["source"] for region in plan["regions"]}
+        project = {**project, "snapshot": {**snapshot, "sources": [source for source in snapshot["sources"]
+                                                                 if source["id"] in source_ids],
+                                           "upload_report": [], "selected_outputs": [], "builder_links": []}}
     project_name = plan.get("project") or slug(project["name"])
-    name = "Reviewed handoff" if reviewed else "Draft bundle"
+    name = "Pilot handoff" if pilot else "Reviewed handoff" if reviewed else "Draft bundle"
     content = {}
     used_paths = set()
     total = 0
@@ -87,7 +112,8 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
 
     write("dbt_project.yml", _yaml({
         "name": project_name, "version": "1.0.0", "config-version": 2, "profile": project_name,
-        "require-dbt-version": "==" + DBT_CORE_VERSION, "model-paths": ["models"],
+        "require-dbt-version": "==" + target.core_version, "model-paths": ["models"],
+        **({"flags": {"require_generic_test_arguments_property": True}} if not target.core_version.startswith("1.10.") else {}),
     }))
     write("profiles.yml.example", _yaml({
         project_name: {"target": "migration", "outputs": {"migration": {
@@ -98,10 +124,12 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
             "token": "{{ env_var('DATABRICKS_TOKEN') }}",
         }}},
     }))
-    write("requirements.txt", f"dbt-core=={DBT_CORE_VERSION}\ndbt-databricks=={target.adapter_version}\n")
+    write("requirements.txt", f"dbt-core=={target.core_version}\ndbt-databricks=={target.adapter_version}\n")
     regions = {row["id"]: row for row in plan["regions"]}
     sources = {row["id"]: row for row in project["snapshot"]["sources"]}
     models, mappings, assumptions = [], [], []
+    rules = revision["settings"].get("validation_rules", {})
+    active_layouts = {model: details["schemas"].get(model, {}) for model in details["active"]}
     physical = defaultdict(list)
     redact = current_connections().redact
     inventory = artifacts(project, revision, details)
@@ -125,6 +153,8 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
             "name": item["name"], "identifier": item["identifier"], "columns": columns,
         })
     # dbt requires a unique source name across schemas.
+    if len({group for group, _, _ in physical}) != len(physical):
+        raise ValueError("A dbt source group spans multiple locations. Align its source mappings before export.")
     source_rows = []
     for (group, catalog, schema), tables in physical.items():
         source_rows.append({"name": group, "database": catalog, "schema": schema, "tables": tables,
@@ -147,11 +177,17 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
                 if redact(content_sql) != content_sql:
                     raise ValueError("A model contains credential-like text. Review the model before exporting.")
                 write(path, content_sql)
+                layout = active_layouts[model]
+                columns = {column: {"name": _literal(column), "data_type": fact["target_type"],
+                                   "meta": {"migration_type_provenance": fact["provenance"]}}
+                           for column, fact in layout.items()}
+                confirmed = rules.get(model, {}) if model not in stale_rules else {}
+                for kind, column, test_name, args in validation.data_tests(model, confirmed, layout, active_layouts):
+                    parameters = {"arguments": args} if args and not target.core_version.startswith("1.10.") else args
+                    columns[column].setdefault("data_tests", []).append({kind: {"name": test_name, **parameters}})
                 models.append({"name": model, "description": _literal(redact(plan["docs"].get(output["name"], ""))),
                                "config": details["model_config"][model],
-                               "columns": [{"name": _literal(column), "data_type": fact["target_type"],
-                                            "meta": {"migration_type_provenance": fact["provenance"]}}
-                                           for column, fact in details["schemas"].get(model, {}).items()]})
+                               "columns": list(columns.values())})
                 if status == "engineer_accepted" and entry["findings"]:
                     annotation_path = f"review/{model}.sql.txt"
                     write(annotation_path, annotated(entry, redact=redact, include_source_path=not reviewed)[0])
@@ -198,20 +234,39 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
           "Use the pinned dependencies and the credential-free profile template. "
           "Review source mappings and operational prerequisites before running anything externally.\n\n"
           f"## External validation\n\n{checklist}\n\n"
-          "Propose data tests after confirming business requirements. Generated tests have no execution evidence.\n")
+          f"Set `{validation.REVISION_ENV}={revision['id']}` in the external dbt environment. "
+          "Save manifest.json and run_results.json from the same invocation and import them in Migration → Validation.\n\n"
+          "Approved tests are included in models/schema.yml. Compare the same data snapshot and window in both systems. "
+          "Enter row, null, duplicate and sum metrics in both relation value columns of reconciliation-results.csv. "
+          "For confirmed keys, compare distinct non-null keys in both systems. Record shared keys as matched, "
+          "legacy-only keys as missing and target-only keys as extra. Count unequal values among matched keys for each "
+          "planned value column, treating two nulls as equal. Enter these keyed counts in comparison_value. "
+          "For incremental models, capture the target after the initial load and again after a repeat run with "
+          "unchanged inputs. Compare each target with the same legacy baseline. Enter the same external "
+          "input_snapshot_id, such as a warehouse snapshot or batch identifier, on the row_count rows for "
+          "initial_load and repeat_run. Use the initial_vs_repeat rows for a direct keyed comparison of the two "
+          "target snapshots. Count initial-only keys as missing and repeat-only keys as extra. Record counts "
+          "for each planned value column. Replay requires confirmed keys and unchanged baseline and target metrics. "
+          "Upload the filled template in Migration → Validation.\n")
+    comparisons = validation.reconciliation_plan(project, revision, details)
+    write("migration/reconciliation.json", _json(list(comparisons.values())))
+    if comparisons:
+        write("migration/reconciliation-results.csv", validation.reconciliation_template(comparisons))
     write("migration/source-map.json", _json(mappings))
     write("migration/coverage.json", _json({"regions": plan["regions"], "counts": details["coverage"],
                                            "characters": details["characters"], "utf8_bytes": details["utf8_bytes"],
                                            "admission": project["snapshot"].get("upload_report", []),
-                                           "inventory": list(sources.values())}))
+                                            "inventory": list(sources.values()),
+                                            "totals_scope": "full_revision"}))
     write("migration/findings.json", _json(details["findings"]))
-    write("migration/validation.json", _json({k: details[k] for k in ("checks", "tiers", "active", "runtime_equivalence")}))
+    write("migration/validation.json", _json({**{k: details[k] for k in ("checks", "tiers", "active", "runtime_equivalence")},
+          "pending_checks": {model: details["validation_warnings"][model] for model in stale_rules if model in details["active"]}}))
     write("migration/conversion-contracts.json", _json({key: value["contract"] for key, value in plan["outputs"].items()
                                                        if value.get("contract")}))
     write("migration/reviews.json", _json({model: review for model, review in revision["reviews"].items()
                                          if review["key"] == details["review_keys"].get(model)}))
     write("migration/lineage.json", _json({**details["lineage"], "revision": revision["id"],
-                                         "original_edges": project["snapshot"].get("original_edges", [])}))
+                                          "original_edges": [] if pilot else project["snapshot"].get("original_edges", [])}))
     write("migration/assumptions.csv", report_csv(assumptions))
     write("migration/model-mapping.csv", report_csv(mappings))
     if workbook:
@@ -229,11 +284,12 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
         write(f"migration/lineage.{image_format}", image)
     write("review/manual-work.json", _json([row for row in plan["regions"] if row["gap"]]))
     write("migration/manifest.json", _json({
-        "project": project["id"], "revision": revision["id"], "mode": "reviewed" if reviewed else "draft",
+        "project": project["id"], "revision": revision["id"], "mode": "pilot" if pilot else "reviewed" if reviewed else "draft",
         "profile": target.profile, "runtime_equivalence": "not_evaluated", "converter_version": plan["version"],
         "analysis_run": project["snapshot"].get("analysis_run"), "scope": project["snapshot"].get("selected_outputs", []),
         "source_prerequisites": plan["physical"], "builder_revision": project["snapshot"].get("builder_revision"),
         "builder_links": project["snapshot"].get("builder_links", []),
+        "included_models": sorted(details["active"]),
         "files": {path: {"sha256": digest(data), "bytes": len(data)} for path, data in content.items()},
     }))
     output = io.BytesIO()

@@ -9,12 +9,21 @@ Choose dbt and Databricks, confirm the target catalog and schema, and preview th
 Read admission, planned outputs and findings before creating the project. **Run static conversion**
 creates a revision with model candidates. One source file can contribute several models.
 
+To regenerate the draft after a converter update, open **Scope → Revision history** and choose
+**Reconvert from pinned sources**. The job uses the project's saved source snapshot and target
+profile. SQL edits, schema mappings, scope decisions, validation settings and engineer reviews
+stay on their saved revisions. Use **Restore as new revision** to bring a prior draft and its
+decisions back. After cancellation, choose **Reconvert from pinned sources** again to resume
+from saved checkpoints for the same revision and converter version.
+An older draft that linked a materialized SQL read to a later write remains available for review.
+Reconvert it before making a reviewed handoff for the affected models.
+
 ## Source coverage
 
 | Input | Initial conversion coverage |
 | --- | --- |
-| SQL | Candidates for single relational queries, CTAS, views and statically named SELECT INTO results. Generic and Databricks projections can satisfy static checks. Other dialects, schema-sensitive expressions, procedural code and mutations require additional work. |
-| SAS | Candidates for simple PROC SQL and explicit single-input DATA step projections with scalar assignments and subsetting conditions. A simple IF/ELSE split gets separate model drafts with a warning about missing-value handling. Macros, row state, I/O and procedure options remain explicit obligations. |
+| SQL | Candidates for relational queries, CTAS, views and statically named SELECT INTO results. T-SQL `SELECT INTO #temp` can become an ephemeral model if there is exactly one writer before its readers in the same script. Plain single or composite equality-key `MERGE` with unconditional same-column update and insert branches gets a SELECT draft. Confirm non-null unique keys and Delta materialization before review. Conditional mutations, repeated batches and uncertain temporary lifetimes require manual conversion. |
+| SAS | Candidates for simple PROC SQL and DATA steps with literal `KEEP`, `DROP` and `RENAME`. Simple remerges get a window draft that keeps the detail rows. Literal `%LET` substitutions can be analyzed statically. A plain multi-input `SET` with an explicit `KEEP` gets a `UNION ALL` draft with input layout checks. Simple two-output IF/ELSE splits keep shared and per-output `KEEP` and `DROP` settings. Common BY-group running totals and `PROC SORT NODUPKEY` can get order-confirmed drafts. SAS match `MERGE`, dynamic macro execution, I/O and other stateful code remain review obligations with retained evidence. |
 | dbt | Compatible Databricks SQL models can keep their exact bytes. The converter preserves literal references, supported materializations and aliases, and basic source/model metadata. Unsupported configuration, external packages, versioned models, tests, snapshots, macros and Python resources need review before bringing them into the active project. |
 | Builder | Snapshotted tables, columns and relationships. Supply grain, projections, filters and join intent before implementing a model. |
 
@@ -22,9 +31,21 @@ The ledger covers retained source offsets and records exclusions, missing output
 regions. The original analysis and the independently extracted migrated lineage have separate
 views. A dependency match cannot establish equivalence.
 
+When SQL materializes a result before a later write to its input, map the version read at that
+statement under **Schemas & mappings**. A SAS `WORK` input can bind to an earlier writer in the
+same script. When multiple scripts share a SAS session, include the producer and consumer in the
+migration and use the conversion contract to record the job order and select the input model.
+If multiple chosen source files produce the selected `WORK` output, pick its producing SAS file
+in the source selector. For a multi-input `SET`, confirm projected types on each input and review
+whether downstream logic depends on SAS input order or missing-value behavior.
+
 In **Schemas & mappings**, confirm input location and actual types. A known column with an
 unknown type gets `STRING` metadata marked `assumed_string`. Wildcard outputs can have unknown
 column names and unresolved layouts. The fallback adds neither SQL casts nor dbt contracts.
+For positional set operations, the schema uses compatible evidence across branches. Review
+mixed or unknown branch types and use explicit casts where needed.
+Use the bulk mapping CSV to confirm multiple relations in one revision. Edit the physical catalog,
+schema and table columns, preview the upload, then apply. Keep source keys unchanged.
 
 ## Review and assistance
 
@@ -32,8 +53,13 @@ column names and unresolved layouts. The fallback adds neither SQL casts nor dbt
   Choose an artifact and a finding to locate the annotation in the numbered draft. The pinned
   original appears alongside it when expanded. Post a comment against an original source line,
   a generated SQL line or a whole section. Each comment keeps the revision it was written on.
-- Define a conversion contract
-  for unresolved outputs when authoring their behavior manually. Record scope exclusions and any
+- Define a conversion contract for unresolved outputs. Select discovered inputs and add literal
+  external relations when needed. Confirm any inferred location under **Schemas & mappings**.
+  For an ordered SAS draft, record the contract and enter priority columns in **Draft ordered SAS
+  SQL**. Preserve the directions of any original `BY` columns that follow the reset key. Confirm
+  the tie-breaker identifies the original row order or survivor, then preview the diff and check
+  missing-value and output-column behavior as part of the review.
+- Record scope exclusions and any
   processing that stays with the legacy system. To keep consuming a deliberately excluded
   transformation, record the externally supplied relation, confirmed columns and responsible owner,
   then review a patch that changes consumers to use the new source.
@@ -57,6 +83,17 @@ column names and unresolved layouts. The fallback adds neither SQL casts nor dbt
 
 ## Export and verify
 
+Use **Validation** to confirm unique and required columns, an optional relationship to a direct
+upstream model, and a reconciliation baseline. Key columns can be composite for reconciliation.
+Select non-key value columns to compare for each matched key. Numeric sum columns also receive
+keyed checks when keys are confirmed.
+Optional date windows use an inclusive start and exclusive end. Sum checks use an absolute
+tolerance. Align legacy column names, row grain and time zones in the external comparison environment.
+
+For a SELECT that supplies one non-null row per business key, confirm **Delta merge keys** and
+review the incremental behavior. Review backfill, existing target data, late arrivals and deletes.
+The configuration uses incremental merge, fails on schema changes, and disables dbt full refresh.
+
 **Draft bundle** includes annotated SQL candidates and comment-only drafts under `review/`.
 Untranslated source sections are preserved as commented text under `review/sources/`, with line
 numbers and source mappings. Draft bundles can contain original source excerpts. Models that depend
@@ -65,13 +102,44 @@ outputs and closure, with each semantic obligation checked or accepted. Both exp
 source maps, checks, schema provenance, lineage and the external validation checklist. Optionally
 include a mapping and type workbook or SVG/PNG lineage. The ZIP manifest hashes the packaged bytes.
 Engineer-accepted models with remaining review findings have a companion annotated copy under
-`review/`. The active model preserves the accepted SQL bytes.
+`review/`. The active model preserves the accepted SQL bytes. **Pilot handoff** exports selected
+eligible models with their transitive upstream models and required sources. The complete project's
+scope and outstanding work remain visible in Migration.
 
-The profile example contains environment-variable placeholders. The handoff targets
-dbt Core 1.10.13 and dbt-databricks 1.10.13. GraveTrail performs conversion and static inspection
-only. It never runs the model, a macro, SAS, dbt commands or warehouse queries. Use a separately
-controlled environment to validate schemas, row counts, null behavior, duplicates and business
-results, then plan operational cutover.
+The profile example contains environment-variable placeholders. New projects target dbt Core
+1.12.5 and dbt-databricks 1.12.8. Existing projects retain their pinned profile. Confirm the target
+profile in your controlled environment. Set the revision environment variable shown in
+`migration/handoff.md`, then save `manifest.json` and `run_results.json` from the same dbt invocation.
+Import them under **Validation** to record compile, build and approved data-test statuses. Earlier
+revisions are labeled in the invocation history. Each upload is limited to 16 MiB. Results are external observations. Legacy
+equivalence requires a separate comparison.
+
+GraveTrail performs conversion and static inspection only. Run checks externally. Approved dbt
+tests ship in `models/schema.yml` and the comparison plan ships in `migration/reconciliation.json`.
+The accompanying `migration/reconciliation-results.csv` has one row per check and run stage.
+Keep its revision and comparison identifiers and use the same data snapshot and date window.
+Fill both relation value columns with row counts, per-column null counts, counts of key combinations
+that occur more than once, and decimal sums. Row and null counts must match. Duplicate and null
+key counts must be zero. Sums may differ by the approved absolute tolerance.
+
+For confirmed keys, count distinct non-null keys that are shared, legacy-only, and target-only.
+For each planned value column, count unequal values among matching keys. Treat two nulls as equal.
+Fill `comparison_value` for these keyed checks. Leave the value fields blank for an unmeasured
+check.
+
+For incremental models, save the target after the initial load and again after a repeat run with
+unchanged inputs. Compare each target with the same legacy baseline. In one CSV, enter the same
+external `input_snapshot_id`, such as a warehouse snapshot or batch identifier, on the `row_count`
+rows for `initial_load` and `repeat_run`. Use the `initial_vs_repeat` rows to compare the two saved
+target outputs directly. Count initial-only keys as missing and repeat-only keys as extra. For
+each planned value column, count changes among matching keys. Replay requires confirmed comparison
+keys and exact agreement in the reported legacy and target metrics across the two run stages.
+
+Upload the filled CSV from **Validation → Import comparison results**. The page reports passing,
+failing and missing checks for each model. A partial upload stays incomplete. The current coverage
+table uses the latest comparison for each model without combining measurements from different uploads.
+Zero-row comparisons stay incomplete. Download a current template for any incremental comparison
+exported before the replay checks were added. Results cover the configured scope and supplied evidence.
 
 ## Try a small migration
 

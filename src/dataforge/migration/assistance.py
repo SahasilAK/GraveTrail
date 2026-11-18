@@ -18,7 +18,7 @@ from dataforge.llm_resources import request_slot
 from dataforge.migration import engine, service
 from dataforge.provider_service import get_profile
 
-PROTOCOL = 4
+PROTOCOL = 6
 MAX_REQUESTS = 40
 MAX_RESERVED_TOKENS = 400_000
 MAX_ATTEMPTS = 3
@@ -37,10 +37,17 @@ provide one SQL model or null if it cannot safely be translated. For each null, 
 In conversion and edit requests, put SQL only in edits. Use answer for a short review summary.
 If a generated body already meets the request, return that body as its edits value.
 Do not combine requested outputs into a single query.
-For amendments, restrict edits to selected output names. Keep unknown behavior visible in the answer.
+Only outputs marked editable=true may be edited. Entries marked editable=false are dependency context.
+Summarize edits by names present in your edits object. For partial translations, add SQL line
+comments beside unresolved behavior that say what the engineer needs to supply or verify. If no safe
+relational draft is possible, use null and explain the missing behavior. Do not add placeholder rows,
+filters or values to stand in for unsupported logic. Do not infer SAS row order or tie-breaking rules.
 For a comment-only request, copy each generated SQL string exactly and append the requested SQL comment.
 Treat assumed_string as unknown. Do not substitute a raw source for an upstream ref, or claim that a
 SAS missing-value rule is preserved by SQL comparison without evidence.
+For an output with sas_remerge evidence, use its grain and detail columns when describing the draft.
+A partitioned aggregate window repeats a summary on each detail row. Treat SAS special missing
+values, NULL partition keys and all-missing summaries as unverified unless the request supplies evidence.
 Use plain target relational SQL with literal dbt ref/source and table/view/ephemeral config calls only.
 Each file name already names the dbt output. Its SQL body is a bare SELECT or UNION of SELECTs.
 Never include SELECT INTO, CREATE TABLE, CREATE VIEW, INSERT, or the output name as a write target.
@@ -240,6 +247,8 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
                        "columns": details["schemas"].get(model, {}),
                        "expected_inputs": output["inputs"], "materialization": output["materialization"],
                        "expected_bindings": {key: _binding_expression(plan, key) for key in output["inputs"]},
+                       "conversion_contract": output.get("contract"),
+                       "sas_remerge": output.get("sas_remerge"),
                        "findings": [row["message"] for row in details["findings"] if row["model"] == model]})
     rules, conflicts = _matching_lessons(store, workspace, project, scoped)
     if conflicts:

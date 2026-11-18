@@ -1,6 +1,8 @@
 """Workspace-owned snapshots, optimistic revisions and scoped review records."""
 from __future__ import annotations
 
+import csv
+import io
 import json
 import re
 import uuid
@@ -15,8 +17,8 @@ from dataforge.connections import current_connections
 from dataforge.dbt.models import DbtSettings
 from dataforge.ingestion import decode
 from dataforge.lineage_builder import load_builder
-from dataforge.migration import engine
-from dataforge.migration.sources import SECRET_FILE
+from dataforge.migration import engine, validation
+from dataforge.migration.sources import SECRET_FILE, sas_ordered_query
 from dataforge.migration.targets import warehouse
 from dataforge.services import PARSER_VERSION, source_dialect
 
@@ -328,11 +330,12 @@ def _publish(store, workspace, project_id, base, revision):
                   [revision["id"], workspace, project_id])
 
 
-def convert(store, workspace, project_id, expected_revision, cancelled=lambda: False, progress=None):
+def convert(store, workspace, project_id, expected_revision, cancelled=lambda: False, progress=None, *, reconvert=False):
+    """Publish a static draft from pinned sources, even after initial conversion when requested."""
     project, base = load(store, workspace, project_id, expected_revision)
     if project["revision"] != expected_revision:
         raise ValueError("Migration changed. Refresh before conversion.")
-    if base["plan"]:
+    if base["plan"] is not None and not reconvert:
         return base
     snapshot = _stored_snapshot(store, workspace, project)
     if cancelled():
@@ -372,6 +375,13 @@ def report(project, revision):
         raise ValueError("Run conversion first")
     snapshot = {**project["snapshot"], **revision["settings"]}
     details = engine.validate(snapshot, revision["plan"], revision["files"], revision["reviews"])
+    validation_warnings = {}
+    for model, rules in revision["settings"].get("validation_rules", {}).items():
+        if model in details["active"]:
+            try:
+                validation.approved_rules(model, rules, details)
+            except ValueError as exc:
+                validation_warnings[model] = str(exc)
     coverage = Counter()
     spans = Counter()
     byte_spans = Counter()
@@ -383,7 +393,8 @@ def report(project, revision):
         coverage[status] += 1
         spans[status] += row["end"] - row["start"]
         byte_spans[status] += row.get("utf8_bytes", row["end"] - row["start"])
-    details.update(coverage=dict(coverage), characters=dict(spans), utf8_bytes=dict(byte_spans))
+    details.update(coverage=dict(coverage), characters=dict(spans), utf8_bytes=dict(byte_spans),
+                   validation_warnings=validation_warnings)
     return details
 
 
@@ -428,12 +439,12 @@ def resolve_scope(store, workspace, project_id, expected_revision, region_id, re
     return revision
 
 
-def set_contract(store, workspace, project_id, expected_revision, model, inputs, behavior, prerequisites):
+def set_contract(store, workspace, project_id, expected_revision, model, inputs, behavior, prerequisites, *, relations=()):
     """Record authored input/ordering evidence before manually implementing an unresolved output."""
     if not all(isinstance(value, str) and 1 <= len(value.strip()) <= 2000 for value in (behavior, prerequisites)):
         raise ValueError("Describe the output behavior and its source/order prerequisites")
     with store.transaction():
-        _, base = load(store, workspace, project_id, expected_revision)
+        project, base = load(store, workspace, project_id, expected_revision)
         plan = base["plan"]
         output = plan and plan["outputs"].get(model)
         if not output or not output.get("manual") or output.get("excluded"):
@@ -441,11 +452,58 @@ def set_contract(store, workspace, project_id, expected_revision, model, inputs,
         allowed = {key for key, row in plan["outputs"].items() if key != model and not row.get("excluded")}
         if set(inputs) - (allowed | plan["physical"].keys()) or set(output["inputs"]) - set(inputs):
             raise ValueError("Keep every known dependency and select available inputs")
-        output["inputs"] = sorted(set(inputs))
+        if len(relations) > 50:
+            raise ValueError("Add up to 50 literal source relations")
+        names = {row["name"].casefold() for row in plan["outputs"].values()}
+        added = set(inputs)
+        for literal in relations:
+            logical = literal.casefold()
+            parts = logical.split(".")
+            if (len(parts) not in {2, 3} or not all(engine.NAME.fullmatch(part) for part in parts)
+                    or logical.startswith("work.") or logical in names):
+                raise ValueError("Use a literal schema.table or catalog.schema.table for an external input")
+            bindings = {}
+            key, _ = engine._physical_input(parts, logical, bindings)
+            row = bindings[key]
+            if row["catalog"] is None:
+                row.update(catalog=project["snapshot"]["catalog"], assumed_location=True)
+            plan["physical"].setdefault(key, row)
+            added.add(key)
+        output["inputs"] = sorted(added)
         output["contract"] = current_connections().sanitize({"behavior": behavior, "prerequisites": prerequisites})
         revision = {**base, "id": uuid.uuid4().hex, "parent": base["id"]}
         _publish(store, workspace, project_id, base["id"], revision)
     return revision
+
+
+def ordered_sas_proposal(project, base, model, order):
+    plan = base["plan"]
+    output = plan["outputs"].get(model, {})
+    spec = output.get("sas_order")
+    if not spec or not output.get("contract") or output.get("excluded") or len(output["inputs"]) != 1:
+        raise ValueError("Save the ordered SAS contract with exactly one planned input before drafting SQL")
+    keys = []
+    if not 1 <= len(order) <= 20:
+        raise ValueError("Provide between one and twenty tie-breaking columns")
+    for value in order:
+        parts = value.strip().split()
+        if not parts or len(parts) > 2 or not engine.NAME.fullmatch(parts[0]):
+            raise ValueError("Enter literal tie-breaking columns, with optional ASC or DESC")
+        direction = parts[1].lower() if len(parts) == 2 else "asc"
+        if direction not in {"asc", "desc"}:
+            raise ValueError("Order direction must be ASC or DESC")
+        keys.append({"column": parts[0], "direction": direction})
+    binding = output["inputs"][0]
+    query = sas_ordered_query(spec, keys)
+    logical = engine.source_relation(spec["source"], "sas")
+    producers = {logical: binding} if binding in plan["outputs"] else {}
+    local = {logical: [(-1, binding)]} if producers and logical.startswith("work.") else {}
+    sql, actual, _ = engine._inputs(query, "", {"kind": "sas"}, producers, warehouse(project["snapshot"]), {},
+                                    output["materialization"], plan["project"], local_writes=local)
+    if actual != [binding]:
+        raise ValueError("The draft does not match the recorded SAS input binding")
+    review = output["manual"]
+    return propose(base, {model: "-- " + review + "\n" + sql}, review, scopes=[model])
 
 
 def propose(base, replacements, rationale, *, origin="manual", scopes=None, rules=None):
@@ -502,7 +560,7 @@ def apply(store, workspace, project_id, proposal):
         details = report(project, revision)
         mechanical = {"unsafe_sql", "broken_ref", "broken_source", "unmapped_table",
                       "changed_dependencies", "artifact_integrity", "cycle", "missing_column", "set_layout",
-                      "target_collision"}
+                      "target_collision", "merge_key", "incremental_config", "target_aggregation"}
         previous = {(row["model"], row["code"], row["message"]) for row in report(project, base)["findings"]}
         if any(row["code"] in mechanical and (row["model"] in proposal["edits"]
                or (row["model"], row["code"], row["message"]) not in previous) for row in details["findings"]):
@@ -510,6 +568,26 @@ def apply(store, workspace, project_id, proposal):
         revision.update(id=uuid.uuid4().hex, parent=base["id"], proposal=proposal["id"])
         _publish(store, workspace, project_id, base["id"], revision)
     return revision
+
+
+def read_source_mappings(body):
+    if len(body) > engine.MAX_ARTIFACT:
+        raise ValueError("Source mapping CSV exceeds 1 MiB")
+    try:
+        reader = csv.DictReader(io.StringIO(body.decode("utf-8-sig")), strict=True)
+        if reader.fieldnames != ["source", "catalog", "schema", "identifier"]:
+            raise ValueError("Use the source mapping CSV template")
+        rows = {}
+        for row in reader:
+            key = row.pop("source")
+            if key in rows or not key or None in row or any(value is None for value in row.values()):
+                raise ValueError("Supply one complete mapping per source")
+            rows[key] = row
+        if not rows:
+            raise ValueError("Add at least one source mapping")
+        return rows
+    except (csv.Error, UnicodeError) as exc:
+        raise ValueError("Invalid UTF-8 source mapping CSV") from exc
 
 
 def revise_schemas(store, workspace, project_id, expected_revision, settings):
@@ -528,17 +606,124 @@ def revise_schemas(store, workspace, project_id, expected_revision, settings):
             if not target.map_type(value):
                 raise ValueError("Use a supported Databricks type")
         for key, row in settings.get("source_mappings", {}).items():
-            if key not in base["plan"]["physical"] or set(row) != {"catalog", "schema", "identifier"} or any(
-                not isinstance(value, str) or not re.fullmatch(r"[A-Za-z_][\w]{0,127}", value) for value in row.values()
-            ):
+            if (key not in base["plan"]["physical"] or not isinstance(row, dict)
+                    or set(row) != {"catalog", "schema", "identifier"}
+                    or any(not isinstance(value, str) or not engine.NAME.fullmatch(value) for value in row.values())):
                 raise ValueError("Map a known input to a literal catalog, schema and table")
         plan = {**base["plan"], "physical": {key: dict(row) for key, row in base["plan"]["physical"].items()}}
         for key, row in settings.get("source_mappings", {}).items():
             plan["physical"][key].update(row, assumed_location=False)
+        if "source_mappings" in settings:
+            groups = defaultdict(set)
+            for row in plan["physical"].values():
+                groups[row["group"]].add((row["catalog"], row["schema"]))
+            if any(len(locations) > 1 for locations in groups.values()):
+                raise ValueError("Tables in one dbt source group must share a catalog and schema")
         revision = {**base, "id": uuid.uuid4().hex, "parent": base["id"], "plan": plan,
                     "settings": {**base["settings"], **settings}}
         _publish(store, workspace, project_id, base["id"], revision)
     return revision
+
+
+def configure_validation(store, workspace, project_id, expected_revision, model, values, merge_keys=None):
+    """Publish confirmed validation rules and an optional Databricks merge materialization."""
+    with store.transaction():
+        project, base = load(store, workspace, project_id, expected_revision)
+        details = report(project, base)
+        if model not in details["schemas"] or model not in base["files"]:
+            raise ValueError("Choose a model with a known output schema")
+        rules = validation.approved_rules(model, values, details)
+        settings = dict(base["settings"])
+        settings["validation_rules"] = {**settings.get("validation_rules", {}), model: rules}
+        if merge_keys is not None:
+            keys = validation.approved_rules(model, {"not_null": merge_keys}, details)["not_null"]
+            expected_keys = base["plan"]["outputs"][model].get("suggested_merge_keys")
+            if keys and expected_keys and keys != expected_keys:
+                raise ValueError("Use the key in the original MERGE predicate")
+            if any(details["schemas"][model][key]["provenance"] == "assumed_string" for key in keys):
+                raise ValueError("Confirm types for every merge key")
+            if keys and details["model_config"][model]["materialized"] == "ephemeral":
+                raise ValueError("Choose a persisted SELECT model for incremental merge")
+            if keys:
+                config = engine.inspect_sql(base["files"][model]["sql"], warehouse(project["snapshot"]).dialect)[3] or {}
+                if "materialized" in config:
+                    raise ValueError("Remove the inline materialization through a reviewed SQL edit before configuring Delta merge")
+            incremental = dict(settings.get("incremental", {}))
+            if keys:
+                incremental[model] = keys
+            else:
+                incremental.pop(model, None)
+            settings["incremental"] = incremental
+        revision = {**base, "id": uuid.uuid4().hex, "parent": base["id"], "settings": settings}
+        _publish(store, workspace, project_id, base["id"], revision)
+    return revision
+
+
+def import_validation(store, workspace, project_id, revision_id, manifest, run_results):
+    project, revision = load(store, workspace, project_id, revision_id)
+    summary = validation.import_summary(project, revision, report(project, revision), manifest, run_results)
+    with store.transaction():
+        _project(store, workspace, project_id)
+        row = store.rows("""SELECT body FROM migration_activity WHERE workspace_id=? AND project_id=?
+            AND kind='validation' AND activity_id=?""", [workspace, project_id, summary["invocation"]])
+        if row:
+            if _read(row[0]["body"]) != summary:
+                raise ValueError("Different evidence already exists for this invocation")
+        else:
+            store.execute("""INSERT INTO migration_activity(workspace_id,project_id,activity_id,kind,status,body)
+                VALUES (?,?,?,'validation','recorded',?)""", [workspace, project_id, summary["invocation"], _dump(summary)])
+    return summary
+
+
+def validation_runs(store, workspace, project_id):
+    _project(store, workspace, project_id)
+    rows = store.rows("""SELECT body FROM migration_activity WHERE workspace_id=? AND project_id=?
+        AND kind='validation' ORDER BY created_at DESC,activity_id LIMIT 100""", [workspace, project_id])
+    return [_read(row["body"]) for row in rows]
+
+
+def import_reconciliation(store, workspace, project_id, revision_id, body):
+    project, revision = load(store, workspace, project_id, revision_id)
+    summary = validation.reconciliation_summary(project, revision, report(project, revision), body)
+    entry = "reconciliation-" + engine.fingerprint(summary)
+    with store.transaction():
+        _project(store, workspace, project_id)
+        store.execute("""INSERT INTO migration_activity(workspace_id,project_id,activity_id,kind,status,body)
+            VALUES (?,?,?,'reconciliation','recorded',?) ON CONFLICT DO NOTHING""",
+                      [workspace, project_id, entry, _dump(summary)])
+    return summary
+
+
+def reconciliation_runs(store, workspace, project_id):
+    _project(store, workspace, project_id)
+    rows = store.rows("""SELECT activity_id, created_at, body FROM migration_activity
+        WHERE workspace_id=? AND project_id=? AND kind='reconciliation'
+        ORDER BY created_at DESC, activity_id LIMIT 100""", [workspace, project_id])
+    return [{**_read(row["body"]), "id": row["activity_id"], "recorded_at": str(row["created_at"])} for row in rows]
+
+
+def pilot_scope(revision, details, selected):
+    """Compute a dependency-closed subset of eligible models from the full revision."""
+    active, nodes = details["active"], details["lineage"]["nodes"]
+    models = set(selected)
+    if not models or models - active.keys():
+        raise ValueError("Choose at least one reviewed or statically qualified model")
+    queue = list(models)
+    while queue:
+        for parent in nodes[queue.pop()]:
+            if parent in nodes and parent not in models:
+                if parent not in active:
+                    raise ValueError("Resolve the pilot's upstream models before exporting")
+                models.add(parent)
+                queue.append(parent)
+    plan = revision["plan"]
+    regions = {plan["outputs"][model]["region"] for model in models}
+    files = {row["source"] for row in plan["regions"] if row["id"] in regions}
+    region_files = {row["id"]: row["source"] for row in plan["regions"]}
+    if any(row["model"] is None and (row["code"] != "unresolved_region" or region_files.get(row["region"]) in files)
+           for row in details["findings"]):
+        raise ValueError("Resolve scope-wide blockers and untranslated logic in the pilot's source files first")
+    return models, {parent for model in models for parent in nodes[model] if parent in plan["physical"]}
 
 
 def record_review(store, workspace, project_id, expected_revision, model, reviewer, rationale, obligations):
@@ -568,7 +753,7 @@ def restore_revision(store, workspace, project_id, expected_revision, revision_i
     return revision
 
 
-def bundle(store, workspace, project_id, revision_id, reviewed=False, *, image_format=None, workbook=False):
+def bundle(store, workspace, project_id, revision_id, reviewed=False, *, image_format=None, workbook=False, pilot=None):
     from dataforge.migration.exports import build_bundle
 
     project, revision = load(store, workspace, project_id, revision_id)
@@ -584,8 +769,12 @@ def bundle(store, workspace, project_id, revision_id, reviewed=False, *, image_f
             raise ValueError("Invalid pinned source evidence")
         return text[region["start"]:region["end"]]
 
-    return build_bundle(project, revision, report(project, revision), reviewed,
-                        image_format=image_format, workbook=workbook, read_evidence=read)
+    details = report(project, revision)
+    scope = pilot_scope(revision, details, pilot) if pilot is not None and reviewed else None
+    if pilot is not None and not reviewed:
+        raise ValueError("Pilot exports require reviewed handoff checks")
+    return build_bundle(project, revision, details, reviewed,
+                        image_format=image_format, workbook=workbook, read_evidence=read, pilot=scope)
 
 
 def review_comments(store, workspace, project_id):
