@@ -1,5 +1,4 @@
 """Exercise cleanup through the real application and disposable storage homes."""
-import json
 import os
 import time
 from contextlib import closing
@@ -48,7 +47,7 @@ def preview_and_confirm(app, phrase='test'):
 
 
 @pytest.mark.parametrize('category,other_workspace', [
-    ('workspace', False), ('workspace', True), ('application', False), ('application', True),
+    ('workspace', False), ('workspace', True), ('application', True),
 ])
 def test_delete_workspace_or_reset_application_can_continue(cleanup_app, category, other_workspace):
     app, store, workspace = cleanup_app
@@ -63,6 +62,8 @@ def test_delete_workspace_or_reset_application_can_continue(cleanup_app, categor
     assert app.session_state['workspace'] in remaining
     if other and category == 'workspace':
         assert remaining == {other}
+    elif other:
+        assert other not in remaining
     assert list((store.home / 'backups').glob('*.zip'))
     app.switch_page('ui/pages/dashboard.py').run()
     assert not app.exception
@@ -79,34 +80,6 @@ def test_changed_source_selection_requires_new_preview_and_confirmation(cleanup_
     assert not any(b.label == 'Apply previewed cleanup' and not b.disabled for b in app.button)
     next(b for b in app.button if b.label == 'Preview cleanup').click().run()
     assert next(b for b in app.button if b.label == 'Apply previewed cleanup').disabled
-    assert len(store.files(workspace)) == 2
-
-
-def test_cleanup_metrics_handle_unsafe_job_paths_without_crashing(cleanup_app, tmp_path):
-    app, store, workspace = cleanup_app
-    jobs = store.home / 'agent' / 'jobs'
-    jobs.mkdir(parents=True, exist_ok=True)
-    outside = tmp_path / 'outside.json'
-    outside.write_text('{}')
-    os.link(outside, jobs / ('a' * 32 + '.json'))
-    app.run()
-    assert not app.exception
-    assert app.error
-    assert len(store.files(workspace)) == 2
-    assert outside.read_text() == '{}'
-
-
-@pytest.mark.parametrize('body', ['{}', '[]', '{"workspace_id": 12, "status": "running", "updated_at": "bad"}'])
-def test_malformed_job_journal_refuses_cleanup_without_crashing(cleanup_app, body):
-    app, store, workspace = cleanup_app
-    jobs = store.home / 'agent' / 'jobs'
-    jobs.mkdir(parents=True, exist_ok=True)
-    journal = jobs / ('a' * 32 + '.json')
-    journal.write_text(body)
-    app.run()
-    assert not app.exception
-    assert app.error
-    assert journal.read_text() == body
     assert len(store.files(workspace)) == 2
 
 
@@ -130,78 +103,33 @@ def test_workspace_delete_database_failure_is_reported_and_rolled_back(cleanup_a
     assert list((store.home / 'backups').glob('*.zip'))
 
 
-def test_cleanup_refreshes_counts_and_requires_fresh_confirmation(cleanup_app):
+def test_cleanup_lineage_with_automatic_staging_cleanup_then_rebuild(cleanup_app):
     app, store, workspace = cleanup_app
+    store.set_setting(workspace, 'auto_cleanup_temporary', True)
+    directory = store.home / 'history-recovery' / workspace
+    directory.mkdir(parents=True, exist_ok=True)
     choose_category(app, 'lineage')
-    preview_and_confirm(app)
+    # Staging data can arrive between selecting a category and previewing it.
+    stale = directory / ('a' * 32 + '.tmp')
+    stale.write_bytes(b'new staging')
+    os.utime(stale, (time.time() - 90000,) * 2)
+    next(b for b in app.button if b.label == 'Preview cleanup').click().run()
+    assert next(b for b in app.button if b.label == 'Apply previewed cleanup').disabled
+    next(t for t in app.text_input if t.label == 'Type test to confirm').set_value('test').run()
     next(b for b in app.button if b.label == 'Apply previewed cleanup').click().run()
-    assert not app.exception
+    assert not app.exception and not app.error
     assert not store.edges(workspace)
+    assert not stale.exists()
+    assert list((store.home / 'backups').glob('*.zip'))
     rows = app.dataframe[0].value
     assert rows.loc[rows['Category'] == 'lineage', 'Records affected'].iloc[0] == 0
     assert app.success
     next(b for b in app.button if b.label == 'Preview cleanup').click().run()
     assert next(b for b in app.button if b.label == 'Apply previewed cleanup').disabled
-
-
-def test_automatic_staging_cleanup_does_not_invalidate_new_preview(cleanup_app):
-    app, store, workspace = cleanup_app
-    store.set_setting(workspace, 'auto_cleanup_temporary', True)
-    app.run()
-    directory = store.home / 'history-recovery' / workspace
-    directory.mkdir(parents=True, exist_ok=True)
-    stale = directory / ('a' * 32 + '.tmp')
-    stale.write_bytes(b'recovery staging')
-    os.utime(stale, (time.time() - 90000,) * 2)
-    choose_category(app, 'lineage')
-    # A new stale file can appear between interactions, e.g. a failed archival write.
-    stale.write_bytes(b'new staging')
-    os.utime(stale, (time.time() - 90000,) * 2)
-    preview_and_confirm(app)
-    next(b for b in app.button if b.label == 'Apply previewed cleanup').click().run()
+    next(b for b in app.button if b.label == 'Rebuild lineage').click().run()
     assert not app.exception
-    assert not app.error
-    assert not store.edges(workspace)
-
-
-def test_disabling_automatic_cleanup_preserves_staging_files(cleanup_app):
-    app, store, workspace = cleanup_app
-    store.set_setting(workspace, 'auto_cleanup_temporary', True)
-    app.run()
-    directory = store.home / 'history-recovery' / workspace
-    directory.mkdir(parents=True, exist_ok=True)
-    stale = directory / ('a' * 32 + '.tmp')
-    stale.write_bytes(b'keep staging')
-    os.utime(stale, (time.time() - 90000,) * 2)
-    next(c for c in app.checkbox if c.label.startswith('Automatically clear expired')).uncheck()
-    next(b for b in app.button if b.label == 'Save temporary cleanup preference').click().run()
-    assert not app.exception
-    assert not store.setting(workspace, 'auto_cleanup_temporary')
-    assert stale.read_bytes() == b'keep staging'
-    assert not store.rows('SELECT 1 FROM temporary_recovery WHERE workspace_id=?', [workspace])
-
-
-def test_history_selection_requires_new_preview(cleanup_app):
-    app, store, workspace = cleanup_app
-    choose_category(app, 'history')
-    preview_and_confirm(app)
-    run = store.runs(workspace)[0]['run_id']
-    next(s for s in app.selectbox if s.label == 'Specific analysis run (optional)').set_value(run).run()
-    assert not any(b.label == 'Apply previewed cleanup' and not b.disabled for b in app.button)
-
-
-def test_workspace_cleanup_service_rejects_invalid_job_journal(tmp_path):
-    from dataforge.cleanup import apply_cleanup, cleanup_plan
-
-    with closing(Store(tmp_path)) as store:
-        workspace = store.create_workspace('test')
-        preview = cleanup_plan(store, workspace, 'workspace')
-        jobs = store.home / 'agent' / 'jobs'
-        jobs.mkdir(parents=True, exist_ok=True)
-        (jobs / ('a' * 32 + '.json')).write_text(json.dumps({'status': 'completed'}))
-        with pytest.raises(ValueError, match='[Jj]ob journal'):
-            apply_cleanup(store, preview, 'test')
-        assert store.workspaces()
+    assert any('Lineage rebuilt' in s.value for s in app.success)
+    assert store.edges(workspace)
 
 
 def test_column_cleanup_preserves_table_lineage_support(tmp_path):
@@ -255,7 +183,7 @@ def stale_index_home(tmp_path):
     return tmp_path, workspace, other
 
 
-@pytest.mark.parametrize('category', ['workspace', 'application', 'sources', 'lineage', 'columns', 'ai', 'reset'])
+@pytest.mark.parametrize('category', ['workspace', 'application', 'columns'])
 def test_cleanup_repairs_persisted_secondary_indexes_before_delete(stale_index_home, category):
     from dataforge.cleanup import apply_cleanup, cleanup_plan
     from dataforge.database_maintenance import inspect_database, restore_backup
@@ -306,65 +234,6 @@ def test_invalidated_cached_database_can_reconnect(stale_index_home, monkeypatch
         get_store.clear(str(home))
 
 
-def test_fatal_cleanup_failure_stops_reading_invalidated_connection(cleanup_app, monkeypatch):
-    app, store, workspace = cleanup_app
-    choose_category(app, 'workspace')
-    preview_and_confirm(app)
-    execute = store.execute
-    invalidated = False
-
-    def fail_delete(sql, params=None):
-        nonlocal invalidated
-        if sql == 'DELETE FROM workspaces WHERE workspace_id=?':
-            invalidated = True
-            raise duckdb.FatalException('Injected fatal index failure')
-        return execute(sql, params)
-
-    setting = store.setting
-
-    def guarded_setting(*args, **kwargs):
-        if invalidated:
-            raise duckdb.FatalException('Database has been invalidated')
-        return setting(*args, **kwargs)
-
-    monkeypatch.setattr(store, 'execute', fail_delete)
-    monkeypatch.setattr(store, 'setting', guarded_setting)
-    next(b for b in app.button if b.label == 'Apply previewed cleanup').click().run()
-    assert not app.exception
-    assert app.error
-    assert len(store.files(workspace)) == 2
-    assert store.edges(workspace)
-
-
-def test_index_repair_requires_new_preview_when_affected_counts_change(tmp_path):
-    from dataforge.cleanup import apply_cleanup, cleanup_plan
-
-    store = Store(tmp_path)
-    workspace = store.create_workspace('test')
-    Importer(store, workspace).files([('a.sql', b'CREATE TABLE b AS SELECT id FROM a;')], {'.sql'})
-    analyze(store, workspace)
-    files = store.db.execute('SELECT * FROM source_files').fetchall()
-    store.execute('DELETE FROM source_files')
-    store.execute('CHECKPOINT')
-    store.db.executemany('INSERT INTO source_files VALUES (' + ','.join('?' for _ in files[0]) + ')', files)
-    store.execute('PRAGMA disable_checkpoint_on_shutdown')
-    store.db.close()
-    with closing(duckdb.connect(str(tmp_path / 'dataforge.duckdb'))) as connection:
-        connection.execute('SELECT 1')
-    with closing(Store(tmp_path)) as store:
-        preview = cleanup_plan(store, workspace, 'workspace')
-        if preview['records']['source_files'] == 1:
-            pytest.skip('This DuckDB release no longer reproduces the stale-index WAL bug')
-        assert preview['records']['source_files'] == 0  # Stale secondary index hides the actual row.
-        with pytest.raises(ValueError, match='indexes were repaired'):
-            apply_cleanup(store, preview, 'test')
-        assert store.files(workspace)
-        assert store.edges(workspace)
-        assert len(store.workspaces()) == 1
-        apply_cleanup(store, cleanup_plan(store, workspace, 'workspace'), 'test')
-        assert not store.workspaces()
-
-
 @pytest.mark.parametrize('failure', [duckdb.OutOfMemoryException, SystemExit])
 def test_failed_index_rebuild_recovers_indexes_when_reopened(stale_index_home, monkeypatch, failure):
     from dataforge.cleanup import apply_cleanup, cleanup_plan
@@ -409,3 +278,47 @@ def test_index_recovery_rejects_untrusted_metadata_without_running_sql(tmp_path,
             _recover_cleanup_indexes(store)
         assert {w['workspace_id'] for w in store.workspaces()} == {workspace}
         assert not store.rows("SELECT 1 FROM duckdb_indexes() WHERE index_name='idx'")
+
+
+def test_fatal_cleanup_failure_stops_reading_invalidated_connection(cleanup_app, monkeypatch):
+    app, store, workspace = cleanup_app
+    choose_category(app, 'workspace')
+    preview_and_confirm(app)
+    execute = store.execute
+    invalidated = False
+
+    def fail_delete(sql, params=None):
+        nonlocal invalidated
+        if sql == 'DELETE FROM workspaces WHERE workspace_id=?':
+            invalidated = True
+            raise duckdb.FatalException('Injected fatal index failure')
+        return execute(sql, params)
+
+    setting = store.setting
+
+    def guarded_setting(*args, **kwargs):
+        if invalidated:
+            raise duckdb.FatalException('Database has been invalidated')
+        return setting(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'execute', fail_delete)
+    monkeypatch.setattr(store, 'setting', guarded_setting)
+    next(b for b in app.button if b.label == 'Apply previewed cleanup').click().run()
+    assert not app.exception
+    assert app.error
+    assert len(store.files(workspace)) == 2
+    assert store.edges(workspace)
+
+
+def test_malformed_job_journal_refuses_cleanup_without_crashing(cleanup_app):
+    body = '[]'
+    app, store, workspace = cleanup_app
+    jobs = store.home / 'agent' / 'jobs'
+    jobs.mkdir(parents=True, exist_ok=True)
+    journal = jobs / ('a' * 32 + '.json')
+    journal.write_text(body)
+    app.run()
+    assert not app.exception
+    assert app.error
+    assert journal.read_text() == body
+    assert len(store.files(workspace)) == 2

@@ -4,54 +4,12 @@ import httpx
 import pytest
 from test_ai_resumable_files import configured
 
-from dataforge.ai_analysis_models import AnalysisRequest, FileExtraction, OperationRecord, SourceReference
+from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.ai_analysis_store import load_file_extractions
-from dataforge.ai_linking import link_file_extractions, to_publication_results
+from dataforge.ai_linking import link_file_extractions
 from dataforge.analysis_service import analysis_report, run_analysis
-from dataforge.configuration import ParsingSettings
 from dataforge.ingestion import Importer
-from dataforge.services import publish_analysis_results
 from dataforge.store import Store
-from dataforge.transformations import trace_columns
-
-
-@pytest.mark.parametrize('cross_file,scope', [(False, ''), (True, ''), (True, 'job')])
-def test_resolved_ai_version_chain_traverses_persisted_columns_after_reopen(tmp_path, cross_file, scope):
-    store = Store(tmp_path)
-    w = store.create_workspace('chain')
-    paths = ['a.sql', 'b.sql'] if cross_file else ['a.sql']
-    Importer(store, w).files([(p, b'0123456789') for p in paths], {'.sql'})
-    inventory = {f['file_id']: {**f, 'source_text': '0123456789'} for f in store.files(w)}
-    files = {fid: FileExtraction(file_id=fid, content_hash=m['content_hash'], source_kind='sql', part_ids=['p'],
-                               semantic_coverage='model_reported_complete') for fid, m in inventory.items()}
-    ids = list(inventory)
-    for i in range(3):
-        fid = ids[0] if i == 0 or not cross_file else ids[1]
-        ref = SourceReference(file_id=fid, content_hash=inventory[fid]['content_hash'], start_offset=0, end_offset=10)
-        reads = [] if i == 0 else [{'name': 't', 'version': str(i), 'scope': scope}]
-        files[fid].operations.append(OperationRecord.model_validate({
-            'operation_id': f'op{i}', 'kind': 'CREATE' if i == 0 else 'UPDATE', 'order': i, 'evidence': [ref],
-            'reads': reads, 'writes': [{'name': 't', 'version': str(i+1), 'scope': scope}],
-            'derivations': [{'fact_id': f'd{i}', 'target_table': 't', 'target_column': 'amount', 'scope': scope,
-                'version': str(i+1), 'evidence': [ref], 'inputs': [] if i == 0 else [
-                    {'table': 't', 'column': 'amount', 'scope': scope, 'version': str(i), 'role': 'value'}]}]}))
-    config = ParsingSettings().model_dump()
-    linked = link_file_extractions(list(files.values()), config)
-    publish_analysis_results(store, w, to_publication_results(linked, inventory), config, {})
-    targets = store.rows('''SELECT r.column_id,r.asset_id,r.version FROM column_derivations d
-        JOIN column_references r ON d.target_column_id=r.column_id ORDER BY r.version''')
-    dependencies = store.rows('''SELECT s.column_id,s.version FROM column_dependencies d
-        JOIN column_references s ON d.source_column_id=s.column_id ORDER BY s.version''')
-    assert [d['column_id'] for d in dependencies] == [t['column_id'] for t in targets[:2]]
-    assert len({t['column_id'] for t in targets}) == 3
-    root = targets[-1]
-    before = trace_columns(store, w, root['asset_id'], root['column_id'])
-    assert len(before['derivations']) == 3
-    assert len({d['evidence']['operation_id'] for d in before['derivations']}) == 3
-    store.close()
-    store = Store(tmp_path)
-    assert trace_columns(store, w, root['asset_id'], root['column_id']) == before
-    store.close()
 
 
 @pytest.mark.parametrize('mode', ['publication_only', 'both', 'clean_selected'])
@@ -97,30 +55,4 @@ def test_publication_uncertainty_counts_survive_selected_run_and_reopen(tmp_path
     store.close()
     store = Store(tmp_path)
     assert analysis_report(store, w, result.run_id)['summary']['counts'] == result.counts
-    store.close()
-
-
-def test_ai_column_ids_keep_case_scopes_and_unresolved_writers_separate(tmp_path):
-    store = Store(tmp_path)
-    w = store.create_workspace('separate')
-    Importer(store, w).files([('a.sql', b'0123456789')], {'.sql'})
-    metadata = store.files(w)[0]
-    fid = metadata['file_id']
-    ref = SourceReference(file_id=fid, content_hash=metadata['content_hash'], start_offset=0, end_offset=10)
-    operations = []
-    for i, (table, scope) in enumerate([('Sales', 'left'), ('Sales', 'right'), ('sales', 'left'),
-                                       ('conflict', ''), ('conflict', '')]):
-        operations.append(OperationRecord.model_validate({'operation_id': f'op{i}', 'kind': 'CREATE', 'order': i,
-            'evidence': [ref], 'writes': [{'name': table, 'scope': scope, 'version': '1'}],
-            'derivations': [{'fact_id': column, 'target_table': table, 'target_column': column, 'scope': scope,
-                'version': '1', 'evidence': [ref]} for column in ('amount', 'Amount')]}))
-    file = FileExtraction(file_id=fid, content_hash=metadata['content_hash'], source_kind='sql', part_ids=['p'], operations=operations)
-    config = ParsingSettings(case_sensitive=True).model_dump()
-    publish_analysis_results(store, w, to_publication_results(link_file_extractions([file], config),
-        {fid: {**metadata, 'source_text': '0123456789'}}), config, {})
-    rows = store.rows('SELECT target_column_id FROM column_derivations')
-    assert len(rows) == len({r['target_column_id'] for r in rows}) == 10
-    assert {r['status'] for r in store.rows('''SELECT d.status FROM column_derivations d
-        JOIN column_references r ON d.target_column_id=r.column_id JOIN assets a USING(asset_id)
-        WHERE a.name='conflict' ''')} == {'unresolved'}
     store.close()

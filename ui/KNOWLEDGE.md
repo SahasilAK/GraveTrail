@@ -8,6 +8,7 @@ Shared Streamlit presentation and provider/assistance forms. Uses dataforge serv
 
 ## Subfolders
 - `pages/` — [pages/KNOWLEDGE.md](pages/KNOWLEDGE.md).
+- `migration_navigation.py` — Transfers Analysis, Explorer and Builder scope to Engineering → Migration.
 
 ## Files
 - `streamlit.toml` — Versioned shared defaults for source bootstrap and packaged runtime configuration; user .streamlit settings remain ignored.

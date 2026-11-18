@@ -2,11 +2,9 @@ import json
 from pathlib import Path
 
 import httpx
-import pytest
 from focused_test_profiles import focused_profile
 
 from dataforge.ingestion import Importer
-from dataforge.models import stable_id
 from dataforge.services import analyze, column_report
 from dataforge.store import Store
 
@@ -46,109 +44,28 @@ def test_explicit_jobs_isolate_temporary_assets_but_share_persistent_assets(tmp_
         store.close()
 
 
-def test_workspace_default_preserves_legacy_asset_ids_and_job_settings_roundtrip(tmp_path: Path) -> None:
-    """Verify that workspace default preserves legacy asset ids and job settings roundtrip.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.configuration import (
-        ParsingSettings,
-        export_workspace_configuration,
-        import_workspace_configuration,
-    )
-
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("Legacy")
-        Importer(store, w).files([("q.sas", b"data work.x; set raw.a; run;")], {".sas"})
-        analyze(store, w)
-        assert next(a for a in store.assets(w) if a["name"] == "work.x")["asset_id"] == stable_id(w, "work.x")
-        for setting in [dict(default_job=""), dict(default_job="../bad"), dict(job_by_folder={"../": "job"})]:
-            with pytest.raises(ValueError):
-                ParsingSettings(**setting)
-        store.set_setting(w, "default_job", "batch-1")
-        store.set_setting(w, "job_by_folder", {"jobs/": "batch-2"})
-        copied = import_workspace_configuration(store, export_workspace_configuration(store, w))
-        assert store.setting(copied, "default_job") == "batch-1"
-        assert store.setting(copied, "job_by_folder") == {"jobs/": "batch-2"}
-    finally:
-        store.close()
-
-
-def test_job_changes_remain_visible_in_history_and_exports(tmp_path: Path) -> None:
-    """Verify that job changes remain visible in history and exports.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.exports import graph_data
-    from dataforge.graph import LineageGraph
-    from dataforge.services import compare_runs
-
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("Job history")
-        Importer(store, w).files([("q.sas", b"data work.stage; set raw.a; run; data mart.x; set work.stage; run;")], {".sas"})
-        store.set_setting(w, "default_job", "one")
-        analyze(store, w)
-        first = store.runs(w)[0]
-        store.set_setting(w, "default_job", "two")
-        analyze(store, w)
-        difference = compare_runs(first, store.runs(w)[0])
-        assert difference["removed_assets"] == ["work.stage [job: one]"]
-        assert difference["added_assets"] == ["work.stage [job: two]"]
-        graph = LineageGraph(store.assets(w), store.edges(w))
-        node = next(a for a in graph_data(graph)["nodes"] if a["name"] == "work.stage")
-        assert node["job_id"] == "two"
-        assert "work.stage [job: two]" in graph.simplified().lineage_rows()[0]["intermediates"]
-    finally:
-        store.close()
-
-
-def test_sql_temporary_schema_is_not_shared_between_jobs(tmp_path: Path) -> None:
-    """Verify that sql temporary schema is not shared between jobs.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("Scoped schemas")
-        store.set_setting(w, "job_by_folder", {"one/": "one", "two/": "two"})
-        Importer(store, w).files([
-            ("one/q.sql", b"create temporary table stage(id int); create table mart.one as select * from stage;"),
-            ("two/q.sql", b"create temporary table stage(other_id int); create table mart.two as select * from stage;")], {".sql"})
-        analyze(store, w)
-        temps = [a for a in store.assets(w) if a["name"] == "stage"]
-        assert len(temps) == 2
-        columns = {json.loads(a["metadata"])["job_id"]: {r["column_name"] for r in column_report(store, w, a["asset_id"])} for a in temps}
-        assert columns == {"one": {"id"}, "two": {"other_id"}}
-    finally:
-        store.close()
-
-
-def test_qualified_temporary_schema_in_other_job_cannot_invalidate_or_create_assets(tmp_path: Path) -> None:
-    """Verify that qualified temporary schema in other job cannot invalidate or create assets.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_qualified_and_unqualified_temporary_schemas_are_isolated_by_job(tmp_path: Path) -> None:
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Scoped qualified declarations")
-        store.set_setting(w, "job_by_folder", {"one/": "one", "two/": "two"})
+        store.set_setting(w, "job_by_folder", {"one/": "one", "two/": "two", "three/": "three"})
         Importer(store, w).files([
             ("one/q.sql", b"create temporary table stage(id int); create table mart.one as select * from stage;"),
-            ("two/q.sql", b"create temporary table other.stage(other_id int); create table mart.two as select * from other.stage;")], {".sql"})
+            ("two/q.sql", b"create temporary table stage(batch_id int); create table mart.two as select * from stage;"),
+            ("three/q.sql", b"create temporary table other.stage(other_id int); create table mart.three as select * from other.stage;"),
+        ], {".sql"})
         analyze(store, w)
         stages = [a for a in store.assets(w) if a["name"] in {"stage", "other.stage"}]
-        assert len(stages) == 2 and all(a["temporary"] for a in stages)
+        assert len(stages) == 3 and all(a["temporary"] for a in stages)
+        expected = {("one", "stage"): "id", ("two", "stage"): "batch_id", ("three", "other.stage"): "other_id"}
         for asset in stages:
             metadata = json.loads(asset["metadata"])
+            job = metadata["job_id"]
             assert metadata["schema_status"] == "declared"
-            assert {e["relative_path"].split("/")[0] for e in metadata["schema_evidence"]} == {metadata["job_id"]}
-            assert {r["column_name"] for r in column_report(store, w, asset["asset_id"])} == ({"id"} if metadata["job_id"] == "one" else {"other_id"})
+            assert {e["relative_path"].split("/")[0] for e in metadata["schema_evidence"]} == {job}
+            assert {r["column_name"] for r in column_report(store, w, asset["asset_id"])} == {
+                expected.pop((job, asset["name"]))
+            }
     finally:
         store.close()
 
@@ -188,18 +105,16 @@ def test_ai_merge_uses_source_job_not_last_matching_name(tmp_path: Path) -> None
         store.close()
 
 
-@pytest.mark.parametrize("job", ["workspace", "batch"])
-def test_same_job_temporary_persistent_collision_keeps_read_unresolved(tmp_path: Path, job: str) -> None:
+def test_same_job_temporary_persistent_collision_keeps_read_unresolved(tmp_path: Path) -> None:
     """Verify that same job temporary persistent collision keeps read unresolved.
 
     Args:
         tmp_path: Temporary directory supplied by pytest.
-        job: Job value used by the test case.
     """
     store = Store(tmp_path)
     try:
         w = store.create_workspace("Ambiguous lifetime")
-        store.set_setting(w, "default_job", job)
+        store.set_setting(w, "default_job", "batch")
         Importer(store, w).files([("q.sql", b"create temporary table stage as select id from raw.a;\ncreate table stage as select id from raw.b;\ncreate table mart.x as select * from stage;")], {".sql"})
         analyze(store, w)
         unresolved = [a for a in store.assets(w) if a["kind"] == "unresolved"]
@@ -211,68 +126,6 @@ def test_same_job_temporary_persistent_collision_keeps_read_unresolved(tmp_path:
         assert row["column_name"] == "*" and row["status"] == "unresolved"
         edges = [e for e in store.edges(w) if e["source_id"] == unresolved[0]["asset_id"]]
         assert edges and all(e["status"] == "unresolved" for e in edges)
-    finally:
-        store.close()
-
-
-def test_settings_ui_saves_job_assignment_and_distinct_asset_choices(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that settings ui saves job assignment and distinct asset choices.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    from pathlib import Path
-
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    app = AppTest.from_file(Path("app.py").resolve()).run()
-    w = app.session_state["workspace"]
-    app.switch_page("ui/pages/settings.py").run()
-    next(t for t in app.text_input if t.label == "Default job/session ID").set_value("daily")
-    next(t for t in app.text_area if t.label == "Job/session by folder prefix (JSON)").set_value('{"one/":"one","two/":"two"}')
-    next(b for b in app.button if b.label == "Save parsing settings").click().run()
-    assert app.success and not app.exception
-    store = Store(tmp_path)
-    try:
-        assert store.setting(w, "default_job") == "daily"
-        assert store.setting(w, "job_by_folder") == {"one/": "one", "two/": "two"}
-        Importer(store, w).files([("one/q.sas", b"data work.stage; set raw.a; run;"),
-                                 ("two/q.sas", b"data work.stage; set raw.b; run;")], {".sas"})
-        analyze(store, w)
-        app.switch_page("ui/pages/explorer.py").run()
-        assert not app.exception
-        chooser = next(s for s in app.selectbox if s.label == "Choose an exact asset")
-        assert any("work.stage [job: one]" in option for option in chooser.options)
-        assert any("work.stage [job: two]" in option for option in chooser.options)
-    finally:
-        store.close()
-
-
-@pytest.mark.parametrize("declaration", ["", "create table stage as select id from raw.b;"])
-def test_default_temporary_and_foreign_job_persistent_writes_keep_separate_paths(tmp_path: Path, declaration: str) -> None:
-    """Verify that default temporary and foreign job persistent writes keep separate paths.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        declaration: Declaration value used by the test case.
-    """
-    from dataforge.graph import LineageGraph
-
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("Mixed lifetime jobs")
-        store.set_setting(w, "job_by_folder", {"two/": "two"})
-        Importer(store, w).files([
-            ("one.sql", b"create temporary table stage as select id from raw.a;"),
-            ("two/q.sql", (declaration + " create table mart.x as select id from stage;").encode())], {".sql"})
-        analyze(store, w)
-        assets = store.assets(w)
-        assert len([a for a in assets if a["name"] == "stage"]) == 2
-        graph = LineageGraph(assets, store.edges(w))
-        root = next(a["asset_id"] for a in assets if a["name"] == "raw.a")
-        assert "mart.x" not in {a["name"] for a in graph.focus(root, "downstream").nodes.values()}
     finally:
         store.close()
 

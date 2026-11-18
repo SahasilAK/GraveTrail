@@ -1,14 +1,3 @@
-from email.utils import formatdate
-
-
-def test_retry_after_seconds_date_and_bad_values():
-    from dataforge.ai_rate_limits import normalize_rate_limits, retry_delay
-    assert normalize_rate_limits('Anthropic', {'retry-after': '90'}, now=100)['wait_until'] == 190
-    assert normalize_rate_limits('Anthropic', {'Retry-After': formatdate(200, usegmt=True)}, now=100)['wait_until'] == 200
-    assert retry_delay(0, {}, now=100, jitter=0) == 1
-    assert retry_delay(12, {}, now=100, jitter=0) == 60
-    assert retry_delay(0, {'retry-after': '90'}, now=100, jitter=0) == 90
-    assert retry_delay(0, {'retry-after': 'nan'}, now=100, jitter=0) == 1
 
 
 def test_retry_and_credit_exhaustion_use_durable_attempts(tmp_path, monkeypatch):

@@ -6,12 +6,14 @@ from dataforge.configuration import VisualizationSettings
 from dataforge.excel_exports import XLSX_MIME
 from dataforge.exports import graph_data, graph_html, path_rows, report_csv, source_bundle
 from dataforge.graph_images import png_available
+from dataforge.migration.service import latest_run
 from dataforge.services import export_graph_image, export_lineage_excel
 from dataforge.transformations import final_column_names, table_column_links
 from ui.common import choose_asset, context, downloads, graph_view, load_graph, source_viewer, title
 from ui.dbt_sections import render_resources
 from ui.lineage_navigation import ALL_ASSETS, focus_asset, move_history, remember_view
 from ui.lineage_tree import render_tree
+from ui.migration_navigation import migration_link
 from ui.presentation import section
 
 title("Lineage", "Trace upstream inputs, downstream impact and the source evidence behind each relationship.")
@@ -46,6 +48,9 @@ if asset:
                   on_click=move_history, args=(st.session_state, w, -1))
         st.button("Forward", icon=":material/arrow_forward:", disabled=history["index"] >= len(history["entries"]) - 1,
                   on_click=move_history, args=(st.session_state, w, 1))
+        if committed := latest_run(store, w):
+            selection = [] if all_assets else [graph.nodes[asset].get("canonical_name", graph.nodes[asset]["name"])]
+            migration_link(w, "Migrate selection", analysis_run=committed, selected_outputs=selection)
         with st.popover('Export', icon=':material/download:'):
             st.caption('Entire filtered graph — fit all nodes in the current bounded result, independent of browser pan/zoom.')
             label = 'All filtered assets' if all_assets else focused.nodes[asset]['name']

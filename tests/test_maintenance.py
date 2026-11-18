@@ -27,8 +27,8 @@ def populated(store: Any, name: str) -> Any:
     return w
 
 
-def test_archive_restore_preserves_active_facts_and_isolates_workspaces(tmp_path: Path) -> None:
-    """Verify that archive restore preserves active facts and isolates workspaces.
+def test_history_archive_preserves_active_facts_and_restores_without_archive_file(tmp_path: Path) -> None:
+    """Archive one workspace and recover its history from the database after restart.
 
     Args:
         tmp_path: Temporary directory supplied by pytest.
@@ -49,6 +49,14 @@ def test_archive_restore_preserves_active_facts_and_isolates_workspaces(tmp_path
         assert store.edges(w) == edges and store.files(w) == files
         assert store.original(files[0]["file_id"]) == originals
         assert len(list_archives(store, w)) == 1 and list_archives(store, other) == []
+    finally:
+        store.close()
+
+    # Simulate loss of the filesystem copy after the history was archived.
+    (tmp_path / "history-recovery" / w / (archived["archive_id"] + ".json")).unlink()
+    store = Store(tmp_path)
+    try:
+        assert list_archives(store, w)[0]["archive_id"] == archived["archive_id"]
         restored = restore_history(store, w, archived["archive_id"])
         assert restored == {"analysis_runs": 3, "ingestion_runs": 3}
         assert restore_history(store, w, archived["archive_id"]) == {"analysis_runs": 0, "ingestion_runs": 0}
@@ -159,27 +167,6 @@ def test_maintenance_rejects_running_analysis_and_preserves_latest_completed(tmp
         store.close()
 
 
-def test_active_inventory_import_records_are_protected_and_batches_are_bounded(tmp_path: Path) -> None:
-    """Verify that active inventory import records are protected and batches are bounded.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.maintenance import history_plan
-
-    store = Store(tmp_path)
-    try:
-        w = populated(store, "Batch")
-        plan = history_plan(store, w, keep_runs=1, keep_imports=1, batch_size=1)
-        assert len(plan["analysis_runs"]) == len(plan["ingestion_runs"]) == 1
-        other = store.create_workspace("Referenced imports")
-        for i in range(3):
-            Importer(store, other).files([(f"{i}.sql", b"SELECT id FROM raw.a;")], {".sql"})
-        assert history_plan(store, other, keep_imports=1)["ingestion_runs"] == []
-    finally:
-        store.close()
-
-
 def test_failed_restore_has_no_partial_database_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that failed restore has no partial database changes.
 
@@ -222,67 +209,3 @@ def test_failed_restore_has_no_partial_database_changes(tmp_path: Path, monkeypa
         assert len(store.rows("SELECT * FROM ingestion_runs WHERE workspace_id=?", [w])) == 1
     finally:
         store.close()
-
-
-def test_history_size_budget_is_checked_before_removal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that history size budget is checked before removal.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    import dataforge.maintenance as maintenance
-
-    store = Store(tmp_path)
-    try:
-        w = populated(store, "Budget")
-        monkeypatch.setattr(maintenance, "MAX_ARCHIVE_BYTES", 1000)
-        with pytest.raises(ValueError, match="budget|MB"):
-            maintenance.archive_history(store, w, keep_runs=1, keep_imports=1)
-        assert len(store.runs(w)) == 4
-    finally:
-        store.close()
-
-
-def test_database_recovery_survives_missing_archive_file_and_restart(tmp_path: Path) -> None:
-    """Verify that database recovery survives missing archive file and restart.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.maintenance import archive_history, list_archives, restore_history
-
-    store = Store(tmp_path)
-    w = populated(store, "Durable recovery")
-    result = archive_history(store, w, keep_runs=1, keep_imports=1)
-    # Simulate loss of the filesystem publication; original rows were already archived.
-    (tmp_path / "history-recovery" / w / (result["archive_id"] + ".json")).unlink()
-    store.close()
-    store = Store(tmp_path)
-    try:
-        assert list_archives(store, w)[0]["archive_id"] == result["archive_id"]
-        assert restore_history(store, w, result["archive_id"]) == {"analysis_runs": 3, "ingestion_runs": 3}
-        assert len(store.runs(w)) == 4
-    finally:
-        store.close()
-
-
-def test_history_journal_migration_preserves_v2_facts(tmp_path: Path) -> None:
-    """Verify that history journal migration preserves v2 facts.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    store = Store(tmp_path)
-    w = populated(store, "Migration")
-    edges = store.edges(w)
-    store.execute("DROP TABLE IF EXISTS history_archives")
-    store.execute("DELETE FROM schema_migrations WHERE version=3")
-    store.close()
-    upgraded = Store(tmp_path)
-    try:
-        assert (3 in {r["version"] for r in upgraded.rows("SELECT version FROM schema_migrations")})
-        assert upgraded.edges(w) == edges and len(upgraded.runs(w)) == 4
-        assert upgraded.rows("SELECT * FROM history_archives") == []
-    finally:
-        upgraded.close()

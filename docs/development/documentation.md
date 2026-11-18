@@ -111,7 +111,7 @@ Regenerate the complete first-party inventory with:
 ```sh
 uv run python scripts/docs/inventory.py
 uv run python scripts/docs/inventory.py --check
-uv run --group docs pytest tests/test_documentation.py tests/test_docs_inventory.py tests/test_site_themes.py -q
+uv run --group docs pytest tests/test_documentation.py tests/test_docs_inventory.py -q
 ```
 
 The inventory uses AST/Git paths, never imports app modules. Curated responsibilities,

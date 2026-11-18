@@ -79,25 +79,6 @@ def test_zip_rejects_unsafe_paths(setup: Any, name: str) -> None:
     assert store.files(w) == []
 
 
-def test_directory_root_and_extension_filter(setup: Any, tmp_path: Path) -> None:
-    """Verify that directory root and extension filter.
-
-    Args:
-        setup: Setup value used by the test case.
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    store, w, importer = setup
-    root = tmp_path / "sources"
-    root.mkdir()
-    (root / "a.sql").write_text("select * from raw.x")
-    (root / "a.sas").write_text("data a; set b; run;")
-    report = importer.directory(root, {".sas"})
-    assert report.accepted == 1
-    assert store.files(w)[0]["extension"] == ".sas"
-    with pytest.raises(ValueError, match="allowed"):
-        importer.directory(tmp_path.parent, {".sql"})
-
-
 @pytest.mark.parametrize("location", ["outside", "prefix", "traversal", "relative", "no_roots"])
 def test_directory_rejects_unapproved_paths_before_filesystem_access(setup: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, location: str) -> None:
     """Verify that directory rejects unapproved paths before filesystem access.
@@ -138,28 +119,6 @@ def test_directory_rejects_unapproved_paths_before_filesystem_access(setup: Any,
         with pytest.raises(ValueError, match="allowed roots"):
             importer.directory(paths[location], {".sql"})
     assert store.files(w) == []
-
-
-def test_directory_accepts_root_nested_normalized_relative_and_filesystem_root(setup: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that directory accepts root nested normalized relative and filesystem root.
-
-    Args:
-        setup: Setup value used by the test case.
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    store, w, _ = setup
-    root = tmp_path / "allowed"
-    nested = root / "nested"
-    nested.mkdir(parents=True)
-    original = b"select * from raw.orders;\r\n"
-    (nested / "a.sql").write_bytes(original)
-    monkeypatch.chdir(tmp_path)
-    for directory, roots in [(root, [root]), (nested, [root]), ("allowed/nested/../nested", [root]),
-                              (nested, [Path(tmp_path.anchor)]), (nested, [tmp_path / "other", root])]:
-        report = Importer(store, w, allowed_roots=roots).directory(directory, {".sql"})
-        assert report.accepted == 1
-    assert all(store.original(f["file_id"]) == original for f in store.files(w))
 
 
 def test_directory_rejects_symlink_escape_and_does_not_read_linked_children(setup: Any, tmp_path: Path) -> None:

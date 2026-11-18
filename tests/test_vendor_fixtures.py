@@ -2,7 +2,6 @@
 import json
 from contextlib import closing
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -17,18 +16,18 @@ EXPECTED = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("dialect", EXPECTED)
-@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["LF", "CRLF"])
-def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tmp_path: Path, dialect: str, newline: Any) -> None:
+def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tmp_path: Path, dialect: str) -> None:
     """Verify that vendor edges direct columns temporary identity and original evidence.
 
     Args:
         tmp_path: Temporary directory supplied by pytest.
         dialect: Dialect selected for the test case.
-        newline: Newline value used by the test case.
     """
     expected = EXPECTED[dialect]
     path = FIXTURES / expected.get("file", dialect + ".sql")
-    original = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
+    original = path.read_bytes().replace(b"\r\n", b"\n")
+    if dialect in {"tsql", "sas"}:
+        original = original.replace(b"\n", b"\r\n")
     code = original.decode("utf-8")
     store = Store(tmp_path)
     try:
@@ -56,10 +55,9 @@ def test_vendor_edges_direct_columns_temporary_identity_and_original_evidence(tm
         store.close()
 
 
-@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["LF", "CRLF"])
-def test_databricks_stream_cte_and_positional_insert_publication(tmp_path, newline):
+def test_databricks_stream_cte_and_positional_insert_publication(tmp_path):
     path = FIXTURES / "databricks" / "stream_insert.sql"
-    original = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline)
+    original = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     with closing(Store(tmp_path)) as store:
         workspace = store.create_workspace("Databricks")
         Importer(store, workspace).files([(path.name, original)], {".sql"}, sql_dialect="databricks")

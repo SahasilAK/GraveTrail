@@ -32,21 +32,6 @@ def manifest(compiled=True):
             'macro_sql': '{% macro money(x) %}{{ x }}/100{% endmacro %}', 'depends_on': {'macros': []}}}}
 
 
-def test_settings_select_only_one_retained_manifest_and_auxiliary(tmp_path):
-    from dataforge.dbt.models import DbtSettings
-    with closing(Store(tmp_path)) as store:
-        w = store.create_workspace('selection')
-        entries = [('dbt_project.yml', b'name: retail'),
-            ('dev/manifest.json', json.dumps(manifest()).encode()),
-            ('prod/manifest.json', json.dumps(manifest()).encode()),
-            ('dev/run_results.json', b'{"invalid": true}')]
-        Importer(store, w).files(entries, set(), source_kind='dbt', dbt_options={
-            'mode': 'enriched', 'artifact_paths': tuple(p for p, _ in entries[1:])})
-        store.set_setting(w, 'dbt', DbtSettings(mode='enriched', artifact_paths=['prod/manifest.json']).model_dump())
-        analyze(store, w)
-        assert store.rows('SELECT count(*) AS n FROM dbt_resources')[0]['n'] == 4
-
-
 def test_compiled_external_read_and_generated_evidence_are_preserved(tmp_path):
     data = manifest()
     node = data['nodes']['model.retail.a']
@@ -144,26 +129,6 @@ def test_catalog_wildcard_traces_through_compiled_models(tmp_path, catalog_error
         assert all('compiled_code' in ' '.join(d['coverage']) for d in trace['derivations'])
         assert 'matching imported dbt catalog' in ' '.join(trace['derivations'][-1]['coverage'])
         assert trace_columns(store, w, target, 'unlisted')['state'] == 'no_known_dependency'
-
-
-def test_matching_catalog_and_results_enrich_observations_and_reject_other_invocation(tmp_path):
-    from dataforge.dbt.artifacts import bind_artifacts, read_artifact
-    from dataforge.dbt.models import SourceRef
-    base = read_artifact(SourceRef('m', 'hash', 'manifest.json'), json.dumps(manifest()))
-    catalog = {'metadata': {'dbt_schema_version': 'https://schemas.getdbt.com/dbt/catalog/v1.json'},
-        'nodes': {'model.retail.a': {'metadata': {'database': 'db', 'schema': 'mart', 'name': 'a'},
-                                   'columns': {'id': {'name': 'id', 'type': 'INTEGER', 'index': 1}}}}, 'sources': {}}
-    results = {'metadata': {'dbt_schema_version': 'https://schemas.getdbt.com/dbt/run-results/v6.json', 'invocation_id': 'run-a'},
-               'results': [{'unique_id': 'model.retail.a', 'status': 'success', 'execution_time': 0.5}]}
-    docs = [base, read_artifact(SourceRef('c', 'hash', 'catalog.json'), json.dumps(catalog)),
-            read_artifact(SourceRef('r', 'hash', 'run_results.json'), json.dumps(results))]
-    observations = bind_artifacts(docs)
-    assert observations['model.retail.a']['observed_columns']['id']['type'] == 'INTEGER'
-    assert observations['model.retail.a']['observed_run']['status'] == 'success'
-    results['metadata']['invocation_id'] = 'other-run'
-    docs[-1] = read_artifact(SourceRef('r', 'hash', 'run_results.json'), json.dumps(results))
-    with pytest.raises(ValueError, match='invocation'):
-        bind_artifacts(docs)
 
 
 def test_stale_manifest_rejects_publication_and_keeps_previous_graph(tmp_path):

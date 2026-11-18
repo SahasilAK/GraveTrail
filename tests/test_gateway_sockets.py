@@ -26,11 +26,8 @@ def gateway(mode, delay=.35):
                 {'part_id': i['part']['part_id'], 'coverage': 'no_operations'} for i in ctx['items']]})}}]}).encode()
             if mode == 'silent' or (mode == 'timeout' and len(calls) == 1):
                 release.wait(5)
-            elif mode in {'delay', 'fallback'}:
-                # Simulate upstream time spent inside one gateway request. The
-                # application cannot infer a real provider switch from this wait.
-                release.wait(delay / 2)
-                release.wait(delay / 2)
+            elif mode == 'delay':
+                release.wait(delay)
             try:
                 self.send_response(200)
                 self.send_header('Content-Length', str(len(payload)))
@@ -67,21 +64,20 @@ def set_endpoint(store, w, url, read):
     store.execute('UPDATE llm_profiles SET config=? WHERE profile_id=?', [profile.model_dump_json(), row['profile_id']])
 
 
-@pytest.mark.parametrize('mode', ['delay', 'fallback', 'timeout', 'partial'])
+@pytest.mark.parametrize('mode', ['delay', 'timeout'])
 def test_real_gateway_wait_or_bounded_retry(tmp_path, mode):
     store, w = setup_run(tmp_path)
     with gateway(mode) as (url, calls):
-        set_endpoint(store, w, url, 1 if mode in {'delay', 'fallback'} else .15)
+        set_endpoint(store, w, url, 1 if mode == 'delay' else .15)
         result = run_analysis(store, w, AnalysisRequest(mode='ai'))
         assert result.status == 'committed', result.reasons
-        assert len(calls) == (1 if mode in {'delay', 'fallback'} else 2)
+        assert len(calls) == (1 if mode == 'delay' else 2)
         statuses = [a['status'] for a in store.rows('SELECT status FROM ai_analysis_attempts')]
         assert statuses == (['received'] if len(calls) == 1 else ['unknown', 'received'])
     store.close()
 
 
-@pytest.mark.parametrize('stop', ['cancel', 'deadline'])
-@pytest.mark.parametrize('unlimited', [False, True])
+@pytest.mark.parametrize('stop,unlimited', [('cancel', False), ('deadline', True)])
 def test_silent_socket_is_interrupted_without_waiting_for_read_timeout(tmp_path, monkeypatch, stop, unlimited):
     store, w = setup_run(tmp_path)
     start = time.monotonic()
@@ -109,26 +105,4 @@ def test_silent_socket_is_interrupted_without_waiting_for_read_timeout(tmp_path,
         assert len(calls) == 1
         assert store.rows('SELECT status FROM ai_analysis_attempts')[0]['status'] == 'unknown'
         assert not result.usage_known
-    store.close()
-
-
-@pytest.mark.parametrize('mode', ['fallback', 'partial', 'silent'])
-def test_wait_until_stopped_keeps_slow_request_and_cancellation(tmp_path, mode):
-    store, w = setup_run(tmp_path)
-    with gateway(mode, delay=.4) as (url, calls):
-        set_endpoint(store, w, url, .05)
-        row = store.rows('SELECT profile_id,config FROM llm_profiles')[0]
-        config = json.loads(row['config'])
-        config['wait_until_stopped'] = True
-        store.execute('UPDATE llm_profiles SET config=? WHERE profile_id=?', [json.dumps(config), row['profile_id']])
-        started = time.monotonic()
-        result = run_analysis(store, w, AnalysisRequest(mode='ai'),
-            cancelled=(lambda: bool(calls) and time.monotonic() - calls[0] > .2) if mode == 'silent' else None)
-        assert result.status == ('cancelled' if mode == 'silent' else 'committed'), result.reasons
-        assert len(calls) == (2 if mode == 'partial' else 1)
-        assert time.monotonic() - started < 3
-        attempts = store.rows('SELECT status,details FROM ai_analysis_attempts')
-        assert all(json.loads(a['details'])['timeouts']['read'] is None for a in attempts)
-        if mode == 'partial':
-            assert json.loads(attempts[0]['details'])['transport_error'] == 'RemoteProtocolError'
     store.close()

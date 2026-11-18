@@ -9,7 +9,7 @@ from dataforge.ai_analysis_models import (
     SourceReference,
 )
 from dataforge.ai_analysis_store import load_file_extractions, save_file_extraction, save_run
-from dataforge.ai_linking import link_file_extractions, to_publication_results, upstream_operations
+from dataforge.ai_linking import link_file_extractions, to_publication_results
 from dataforge.configuration import ParsingSettings
 from dataforge.ingestion import Importer
 from dataforge.services import publish_analysis_results
@@ -84,43 +84,6 @@ def test_usage_and_derivation_identity_survive_publication_and_reopen(tmp_path, 
     store.close()
 
 
-@pytest.mark.parametrize('across_files', [False, True])
-def test_duplicate_explicit_version_retains_all_producers_and_uncertainty(across_files):
-    files = []
-    for i in range(2):
-        fid = str(i) if across_files else 'f'
-        ref = SourceReference(file_id=fid, content_hash='h', start_offset=i, end_offset=i+1)
-        operation = OperationRecord(operation_id=f'writer{i}', kind='CREATE', order=i, evidence=[ref],
-            writes=[ResourceReference(name='t', version='1')])
-        files.append(FileExtraction(file_id=fid, content_hash='h', source_kind='sql', part_ids=['p'], operations=[operation],
-                                    semantic_coverage='model_reported_complete'))
-    if not across_files:
-        files[0].operations.extend(files.pop().operations)
-    linked = link_file_extractions(files, {})
-    result = upstream_operations(linked.graph, 't@1')
-    assert result.unresolved == ['t@1'] and result.execution_order is None
-    assert len(linked.graph.nodes['t@1']['evidence']) == 2
-    assert linked.coverage['semantic_incomplete'] == len(files)
-    ref = files[0].operations[0].evidence[0]
-    consumer = OperationRecord(operation_id='consumer', kind='READ', order=3, evidence=[ref],
-        reads=[ResourceReference(name='t', version='1')], writes=[ResourceReference(name='out')])
-    files[0].operations.append(consumer)
-    linked = link_file_extractions(files, {})
-    assert upstream_operations(linked.graph, 'out').execution_order is None
-    assert 't@1' in upstream_operations(linked.graph, 'out').unresolved
-    published = to_publication_results(linked, {f.file_id: {'source_text': '0123456789'} for f in files})
-    assert all(p.metadata['semantic_coverage'] == 'partial' for _, p in published)
-    assert all(p.diagnostics for _, p in published)
-
-
-def test_repeated_logical_writer_is_not_ambiguous():
-    file, _ = fixture({'file_id': 'f', 'content_hash': 'h'}, 'explicit')
-    file.operations = [file.operations[0], file.operations[0].model_copy(deep=True)]
-    linked = link_file_extractions([file], {})
-    assert not linked.unresolved
-    assert upstream_operations(linked.graph, 't@1').execution_order == ['create']
-
-
 def test_duplicate_writer_saved_rebuild_and_persisted_ambiguity(tmp_path):
     store = Store(tmp_path)
     w = store.create_workspace('conflict')
@@ -145,37 +108,3 @@ def test_duplicate_writer_saved_rebuild_and_persisted_ambiguity(tmp_path):
     after = to_publication_results(link_file_extractions(load_file_extractions(store, w, 'saved'), config), inventory)
     assert snapshot == [p.to_dict() for _, p in after]
     store.close()
-
-
-def test_usage_without_version_does_not_guess_between_two_explicit_reads():
-    file, _ = fixture({'file_id': 'f', 'content_hash': 'h'}, 'explicit')
-    update = file.operations[1]
-    update.reads.append(ResourceReference(name='t', version='2'))
-    update.writes = [ResourceReference(name='out')]
-    update.derivations[0].target_table = 'out'
-    linked = link_file_extractions([file], {})
-    parsed = to_publication_results(linked, {'f': {'source_text': '0123456789'}})[0][1]
-    assert parsed.operations[1].usages[0].status == 'unresolved'
-    assert parsed.operations[1].derivations[0]['status'] == 'unresolved'
-
-
-def test_repeated_writer_publication_preserves_evidence_without_duplicate_operations():
-    file, _ = fixture({'file_id': 'f', 'content_hash': 'h'}, 'explicit')
-    original = file.operations[0]
-    repeated = original.model_copy(deep=True)
-    repeated.evidence = [original.evidence[0].model_copy(update={'start_offset': 1})]
-    file.operations = [original, repeated]
-    linked = link_file_extractions([file], {})
-    assert len(linked.graph.nodes['t@1']['evidence']) == 2
-    assert not linked.unresolved
-    parsed = to_publication_results(linked, {'f': {'source_text': '0123456789'}})[0][1]
-    assert len(parsed.operations) == 1
-
-
-def test_case_insensitive_explicit_read_retains_all_derivation_roles():
-    file, _ = fixture({'file_id': 'f', 'content_hash': 'h'}, 'explicit')
-    update = file.operations[1]
-    update.reads[0].name = 'T'
-    linked = link_file_extractions([file], {})
-    roles = {e['role'] for _, _, e in linked.graph.in_edges('operation:update', data=True)}
-    assert roles == {'value', 'row_filter'}

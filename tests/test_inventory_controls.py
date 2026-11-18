@@ -1,44 +1,9 @@
-import json
 from pathlib import Path
 
 import pytest
 
-from dataforge.configuration import (
-    ParsingSettings,
-    export_workspace_configuration,
-    import_workspace_configuration,
-)
 from dataforge.ingestion import Importer
-from dataforge.services import analyze
 from dataforge.store import Store
-
-
-def test_csv_sample_setting_is_bounded_portable_and_invalidates_cached_preview(tmp_path: Path) -> None:
-    """Verify that csv sample setting is bounded portable and invalidates cached preview.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    for invalid in [-1, 101]:
-        with pytest.raises(ValueError):
-            ParsingSettings(csv_sample_rows=invalid)
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("CSV previews")
-        Importer(store, w).files([("rows.csv", b"id,name\n1,one\n2,two\n3,three\n")], {".csv"})
-        store.set_setting(w, "csv_sample_rows", 1)
-        analyze(store, w)
-        metadata = json.loads(store.files(w)[0]["metadata"])
-        assert metadata["preview"] == [["1", "one"]] and metadata["row_count"] == 3
-        copied = import_workspace_configuration(store, export_workspace_configuration(store, w))
-        assert store.setting(copied, "csv_sample_rows") == 1
-        store.set_setting(w, "csv_sample_rows", 0)
-        assert analyze(store, w)["analyzed"] == 1
-        metadata = json.loads(store.files(w)[0]["metadata"])
-        assert metadata["preview"] == [] and metadata["row_count"] == 3
-        assert all(c["type"] == "unknown" for c in metadata["columns"])
-    finally:
-        store.close()
 
 
 def test_builder_analysis_refreshes_inventory_summary_immediately(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

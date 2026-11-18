@@ -1,12 +1,13 @@
 # src/dataforge/
 
 Offline lineage, persistence, authorized automation and optional provider analysis. Keep UI
-imports out of this package. Current Store migration: **10**; parser/publication version: **21**;
+imports out of this package. Current Store migration: **11**; parser/publication version: **25**;
 project AI: **file extraction protocol 5**. Historical readers/migrations remain supported.
 
 ## Subfolders
 - `agent/` — CLI/MCP adapters, permissions and jobs; [map](agent/KNOWLEDGE.md).
 - `dbt/` — Safe project/artifact inventory, identities and evidence; [map](dbt/KNOWLEDGE.md).
+- `migration/` — Static source conversion, review revisions and dbt handoff; [map](migration/KNOWLEDGE.md).
 - `parsers/` — Static SQL/SAS/CSV and transformations; [map](parsers/KNOWLEDGE.md).
 - `tokenizer_assets/` — Packaged offline tokenizer data.
 
@@ -20,7 +21,7 @@ project AI: **file extraction protocol 5**. Historical readers/migrations remain
 - `column_evidence.py` — Workspace/run-validated lazy expression and exact analyzed-source lookup.
 - `services.column_usage_coverage` — Source-free freshness/diagnostic/wildcard coverage; unused names require complete direct usage.
 - `models.py` — AssetRef, Usage, Operation, ParseResult, diagnostics, stable IDs, quote-aware column keys and safe statement splitting.
-- `store.py` — Store owns serialized DuckDB access, additive migrations 1–10, workspaces/settings, original versions and transactions. One owning process per home.
+- `store.py` — Store owns serialized DuckDB access, additive migrations 1–11, workspaces/settings, original versions and transactions. One owning process per home.
 - `ingestion.py` — Bounded imports with discovery and save stages and per-file skip reasons. Lexical authorization precedes resolved containment. Originals are immutable SHA-256 blobs.
 - `services.py` — Static caches and atomic lineage publication with optional stage reporting. analysis_is_current checks inputs, settings, and publication version. Reporting helpers read committed facts.
 - `asset_identity.py`, `schemas.py` — AssetResolver, job/name identities and typed DDL reconciliation; temporary/job scopes and immutable evidence survive. Ambiguous/changed schemas disable guessed expansion.

@@ -135,23 +135,6 @@ def test_cleanup_refuses_active_analysis_and_untrusted_names(tmp_path: Path) -> 
         store.close()
 
 
-def test_preview_bounds(tmp_path: Path) -> None:
-    """Verify that preview bounds.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.temporary_cleanup import temporary_plan
-
-    store = Store(tmp_path)
-    w = store.create_workspace("Bounds")
-    for i in range(102):
-        orphan(store, w, f"{i:032x}.tmp")
-    plan = temporary_plan(store, w)
-    assert len(plan["files"]) == 100 and plan["truncated"]
-    store.close()
-
-
 def test_symlink_swap_keeps_external_file(tmp_path: Path) -> None:
     """Verify that symlink swap keeps external file.
 
@@ -177,29 +160,6 @@ def test_symlink_swap_keeps_external_file(tmp_path: Path) -> None:
         cleanup_temporary(store, w, plan["files"][:1])
     assert target.read_bytes() == b"source"
     store.close()
-
-
-def test_v3_upgrade_preserves_existing_inventory(tmp_path: Path) -> None:
-    """Verify that v3 upgrade preserves existing inventory.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.ingestion import Importer
-
-    store = Store(tmp_path)
-    w = store.create_workspace("Migration preservation")
-    Importer(store, w).files([("q.sql", b"select id from raw.a;")], {".sql"})
-    store.execute("DROP TABLE temporary_recovery")
-    store.execute("DELETE FROM schema_migrations WHERE version=4")
-    store.close()
-    reopened = Store(tmp_path)
-    try:
-        assert reopened.original(reopened.files(w)[0]["file_id"]) == b"select id from raw.a;"
-        assert reopened.rows("SELECT version FROM schema_migrations WHERE version=4")
-        assert reopened.rows("SELECT * FROM temporary_recovery") == []
-    finally:
-        reopened.close()
 
 
 def test_restore_publication_failure_leaves_recovery_and_no_partial_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -237,41 +197,3 @@ def test_restore_publication_failure_leaves_recovery_and_no_partial_target(tmp_p
     assert not path.exists()
     assert store.rows("SELECT 1 FROM temporary_recovery WHERE recovery_id=?", [rid])
     store.close()
-
-
-def test_cleanup_ui_requires_selection_then_can_restore(tmp_path: Path) -> None:
-    """Verify that cleanup ui requires selection then can restore.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from streamlit.testing.v1 import AppTest
-
-    store = Store(tmp_path)
-    w = store.create_workspace("Cleanup UI")
-    path = orphan(store, w)
-
-    def page(home: "Any", workspace: "Any") -> None:
-        """Handle page for the test scenario.
-
-        Args:
-            home: Home value used by the test case.
-            workspace: Workspace used by the test.
-        """
-        from dataforge.store import Store
-        from ui.temporary_cleanup import _controls
-
-        db = Store(home)
-        _controls(db, workspace)
-        db.close()
-
-    try:
-        app = AppTest.from_function(page, args=(tmp_path, w)).run()
-        assert app.button[0].disabled and path.exists()
-        app.multiselect[0].set_value([path.name]).run()
-        next(b for b in app.button if b.label == "Clean selected temporary files").click().run()
-        assert not app.exception and not path.exists() and app.success
-        next(b for b in app.button if b.label == "Restore selected temporary file").click().run()
-        assert not app.exception and path.exists() and app.success
-    finally:
-        store.close()

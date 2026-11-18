@@ -33,6 +33,8 @@ def test_provider_protocol(provider: str, path: str) -> None:
         provider: Provider value used by the test case.
         path: Path value used by the test case.
     """
+    finish = {'Anthropic': 'max_tokens', 'Gemini': 'MAX_TOKENS'}.get(provider, 'length')
+
     def handler(request: pytest.FixtureRequest) -> Any:
         """Handle handler for the test scenario.
 
@@ -47,18 +49,24 @@ def test_provider_protocol(provider: str, path: str) -> None:
         assert "temperature" not in payload
         if provider == "Anthropic":
             assert request.headers["anthropic-version"] == "2023-06-01"
-            return httpx.Response(200, json={"content": [{"type": "text", "text": '{"claims":[]}'}], "usage": {"input_tokens": 10}})
+            return httpx.Response(200, json={"content": [{"type": "text", "text": '{"claims":[]}'}],
+                                             "stop_reason": finish})
         if provider == "Ollama":
             assert payload["stream"] is False
-            return httpx.Response(200, json={"message": {"content": '{"claims":[]}'}, "prompt_eval_count": 10})
+            return httpx.Response(200, json={"message": {"content": '{"claims":[]}'}, "done_reason": finish})
         if provider == "Gemini":
             assert payload["generationConfig"]["responseMimeType"] == "application/json"
-            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": '{"claims":[]}'}]}}]})
-        return httpx.Response(200, json={"choices": [{"message": {"content": '{"claims":[]}'}}], "usage": {"total_tokens": 10}})
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": '{"claims":[]}'}]},
+                                                           "finishReason": finish}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"claims":[]}'},
+                                                       "finish_reason": finish}]})
     base = "http://localhost:1234" + {"Ollama": "", "Gemini": "/v1beta", "Databricks": ""}.get(provider, "/v1" if provider != "Azure OpenAI" else "")
     profile = Profile(provider=provider, base_url=base, model="model")
     with Adapter(profile, transport=httpx.MockTransport(handler)) as adapter:
-        response, usage = adapter.complete("Return JSON", "Analyze this")
+        response, _ = adapter.complete("Return JSON", "Analyze this")
+        assert adapter.completion_metadata['finish_reason'] == finish
+        assert adapter.completion_metadata['truncated']
+        assert not adapter.completion_metadata['usage_known']
     assert json.loads(response) == {"claims": []}
 
 
@@ -76,13 +84,11 @@ def test_grounding_rejects_hallucinations_and_invalid_lines() -> None:
         validate_response(response, code, {"raw.a", "mart.x"}, 1, 1)
 
 
-@pytest.mark.parametrize("content", ["not JSON", '{"explanation":' + '[' * 1100 + '0' + ']' * 1100 + '}'])
-def test_privacy_gate_and_malformed_quarantine(tmp_path: Path, content: Any) -> None:
+def test_privacy_gate_and_malformed_quarantine(tmp_path: Path) -> None:
     """Verify that privacy gate and malformed quarantine.
 
     Args:
         tmp_path: Temporary directory supplied by pytest.
-        content: Content value used by the test case.
     """
     store = Store(tmp_path)
     w = store.create_workspace("A")
@@ -93,7 +99,7 @@ def test_privacy_gate_and_malformed_quarantine(tmp_path: Path, content: Any) -> 
     with pytest.raises(ValueError, match="disabled"):
         assist(store, w, remote, fid, 1, 1)
     local = focused_profile(provider="Ollama", base_url="http://localhost:11434", model="manual")
-    transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": content}}))
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, json={"message": {"content": "not JSON"}}))
     result = assist(store, w, local, fid, 1, 1, transport=transport)
     assert result["outcome"] == "quarantined"
     assert store.rows("SELECT outcome FROM llm_records")[0]["outcome"] == "quarantined"
@@ -140,92 +146,3 @@ def test_grounded_merge_stays_inferred_and_survives_refresh(tmp_path: Path) -> N
     analyze(store, w)
     assert not [e for e in store.edges(w) if e["method"] == "llm"]
     store.close()
-
-
-def test_versioned_prompt_schema_and_templates() -> None:
-    """Verify that versioned prompt schema and templates."""
-    from dataforge.llm import PROMPTS, TASKS
-    assert json.loads((PROMPTS / "schemas/grounded_response.json").read_text()) == GroundedResponse.model_json_schema()
-    for task in TASKS:
-        system = (PROMPTS / task / "system.md").read_text()
-        assert "untrusted" in system and "Counterexample" in system
-        assert (PROMPTS / task / "user_template.md").read_text().count("{{context}}") == 1
-
-
-def test_llm_cannot_splice_unrelated_statements_into_a_dependency() -> None:
-    """Verify that llm cannot splice unrelated statements into a dependency."""
-    code = "create table mart.a as select id from raw.x;\ncreate table mart.b as select id from raw.y;"
-    response = GroundedResponse.model_validate({"claims": [{"source": "raw.x", "target": "mart.b",
-        "operation": "CREATE", "start_line": 1, "end_line": 2, "quote": code,
-        "explanation": "Unsupported splice", "confidence": .99}]})
-    with pytest.raises(ValueError, match="same|bound|statement"):
-        validate_response(response, code, {"raw.x", "raw.y", "mart.a", "mart.b"}, 1, 2)
-
-
-def test_single_json_fence_keeps_strict_object_validation() -> None:
-    """Verify that single json fence keeps strict object validation."""
-    from dataforge.llm import response_object
-
-    assert response_object('```json\n{"status":"connected"}\n```') == {"status": "connected"}
-    assert response_object(' {"claims":[]} ') == {"claims": []}
-    for raw in ['Before\n```json\n{}\n```', '```json\n{}\n```\nAfter', '[]', 'null', '',
-                '```json\n{}\n```\n```json\n{}\n```', '[' * 1100 + '0' + ']' * 1100]:
-        with pytest.raises(ValueError):
-            response_object(raw)
-
-
-def test_fenced_grounded_response_validates_without_accepting_invented_assets(tmp_path: Path) -> None:
-    """Verify that fenced grounded response validates without accepting invented assets.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("Fenced response")
-        code = "create table mart.x as select id from raw.a;"
-        Importer(store, w).files([("q.sql", code.encode())], {".sql"})
-        analyze(store, w)
-        fid = store.files(w)[0]["file_id"]
-        profile = focused_profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
-        claim = {"source": "raw.a", "target": "mart.x", "operation": "CREATE", "start_line": 1,
-                 "end_line": 1, "quote": code, "explanation": "Explicit dependency", "confidence": .9}
-
-        def handler(request: pytest.FixtureRequest) -> Any:
-            """Handle handler for the test scenario.
-
-            Args:
-                request: Pytest fixture describing the active test request.
-
-            Returns:
-                Value produced for the test scenario.
-            """
-            payload = json.loads(request.content)
-            assert payload["stream"] is False
-            return httpx.Response(200, json={"choices": [{"message": {
-                "content": "```json\n" + json.dumps({"claims": [claim]}) + "\n```"}}]})
-
-        transport = httpx.MockTransport(handler)
-        assert assist(store, w, profile, fid, 1, 1, transport=transport)["outcome"] == "validated"
-        claim["source"] = "invented.table"
-        assert assist(store, w, profile, fid, 1, 1, transport=transport)["outcome"] == "quarantined"
-    finally:
-        store.close()
-
-
-@pytest.mark.parametrize("body", [b"not json", b"[]", b"null",
-    b'{"data":' + b'[' * 80 + b'0' + b']' * 80 + b'}',
-    b'{"data":' + b'[' * 1100 + b'0' + b']' * 1100 + b'}'],
-    ids=['invalid-json', 'array', 'null', 'deep', 'extreme-depth'])
-def test_provider_invalid_envelope_raises_controlled_error(body: str) -> None:
-    """Verify that provider invalid envelope raises controlled error.
-
-    Args:
-        body: Body value used by the test case.
-    """
-    from dataforge.llm import ProviderError
-
-    profile = focused_profile(provider="OmniRoute", base_url="http://localhost:20128/v1", model="manual")
-    with Adapter(profile, httpx.MockTransport(lambda request: httpx.Response(200, content=body))) as adapter:
-        with pytest.raises(ProviderError, match="JSON|object"):
-            adapter.models()

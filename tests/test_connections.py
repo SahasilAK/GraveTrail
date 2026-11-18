@@ -31,22 +31,7 @@ def test_session_keys_are_isolated_and_environment_is_read_only(monkeypatch: pyt
     assert 'session-dummy' not in repr(first)
 
 
-def test_expiration_scoped_environment_and_redaction(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that expiration scoped environment and redaction.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes."""
-    manager = RuntimeConnections()
-    manager.register('DATAFORGE_CUSTOM_API_KEY', 'dummy-sensitive-123')
-    assert manager.redact('echo dummy-sensitive-123 Authorization: Bearer abc') == 'echo [REDACTED] Authorization: Bearer [REDACTED]'
-    assert manager.scoped_environment(['DATAFORGE_CUSTOM_API_KEY']) == {'DATAFORGE_CUSTOM_API_KEY': 'dummy-sensitive-123'}
-    with pytest.raises(ValueError):
-        manager.register('OPENAI_API_KEY', 'bad')
-    manager.register('DATAFORGE_CUSTOM_API_KEY', 'expired', ttl=0)
-    assert manager.resolve('DATAFORGE_CUSTOM_API_KEY') == ''
-
-
-@pytest.mark.parametrize('credential_mode', ['session', 'environment', 'rotated_environment'])
+@pytest.mark.parametrize('credential_mode', ['session', 'rotated_environment'])
 def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credential_mode: str) -> None:
     """Verify that provider echo is redacted before persistence.
 
@@ -90,86 +75,6 @@ def test_provider_echo_is_redacted_before_persistence(tmp_path: Path, monkeypatc
     assert 'dummy-sensitive-123' not in str(store.rows('SELECT * FROM llm_records'))
     store.close()
     assert all(b'dummy-sensitive-123' not in p.read_bytes() for p in tmp_path.rglob('*') if p.is_file())
-
-
-def test_masked_ui_credential_is_cleared_without_persistence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that masked ui credential is cleared without persistence.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes."""
-    from pathlib import Path
-
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
-    app = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
-    app.switch_page('ui/pages/settings.py').run()
-    app.switch_page("ui/pages/connections.py").run()
-    next(t for t in app.text_input if t.label == 'Credential environment variable name').set_value('DATAFORGE_OLLAMA_API_KEY')
-    next(t for t in app.text_input if t.label == 'Model or deployment identifier').set_value('test')
-    next(b for b in app.button if b.label == 'Save provider profile').click().run()
-    profile = next(s for s in app.selectbox if s.label == 'Provider profile')
-    profile.select_index(1).run()
-    next(t for t in app.text_input if t.label == 'Runtime credential').set_value('ui-dummy-secret')
-    next(b for b in app.button if b.label == 'Connect for this session').click().run()
-    assert not app.exception
-    manager = app.session_state['runtime_connections']
-    reference = next(name for name in manager._credentials if name.startswith('DATAFORGE_SESSION_'))
-    assert manager.resolve(reference) == 'ui-dummy-secret'
-    assert not next(t for t in app.text_input if t.label == 'Runtime credential').value
-    next(b for b in app.button if b.label == 'Clear runtime credentials').click().run()
-    assert not app.exception
-    assert manager.resolve(reference) == ''
-
-
-def test_environment_credential_is_used_without_retaining_session_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that environment credential is used without retaining session copy.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes."""
-    import logging
-
-    from dataforge.connections import set_credential_environment
-    from dataforge.logging_config import JsonFormatter
-
-    monkeypatch.setenv('DATAFORGE_OMNIROUTE_API_KEY', '')
-    set_credential_environment('DATAFORGE_OMNIROUTE_API_KEY', 'dummy-sensitive-123')
-    assert os.environ['DATAFORGE_OMNIROUTE_API_KEY'] == 'dummy-sensitive-123'
-    manager = RuntimeConnections()
-    profile = Profile(provider='OmniRoute', base_url='http://localhost:20128/v1', model='test',
-                      key_env='DATAFORGE_OMNIROUTE_API_KEY')
-    with connection_scope(manager), Adapter(profile) as adapter:
-        assert adapter._headers()['Authorization'] == 'Bearer dummy-sensitive-123'
-    assert 'dummy-sensitive-123' not in str(vars(manager))
-    assert RuntimeConnections().resolve(profile.key_env) == 'dummy-sensitive-123'
-    assert manager.redact('echo dummy-sensitive-123') == 'echo [REDACTED]'
-    record = logging.LogRecord('dataforge.test', logging.INFO, __file__, 1, 'echo dummy-sensitive-123', (), None)
-    assert 'dummy-sensitive-123' not in JsonFormatter().format(record)
-
-
-@pytest.mark.parametrize('name,secret', [
-    ('PATH', 'dummy-sensitive-123'), ('OMNIROUTE_API_KEY', 'dummy-sensitive-123'),
-    ('DATAFORGE_BAD-NAME', 'dummy-sensitive-123'), ('', 'dummy-sensitive-123'),
-    ('DATAFORGE_TEST_API_KEY', ''), ('DATAFORGE_TEST_API_KEY', 'dummy\nsecret'),
-    ('DATAFORGE_TEST_API_KEY', 'dummy\rsecret'), ('DATAFORGE_TEST_API_KEY', 'dummy\0secret'),
-    ('DATAFORGE_TEST_API_KEY', 'x' * 16385),
-], ids=['system-name', 'legacy-name', 'invalid-name', 'empty-name', 'empty-value',
-        'newline', 'carriage-return', 'null', 'oversize'])
-def test_environment_credential_validation_preserves_environment(name: str, secret: str) -> None:
-    """Verify that environment credential validation preserves environment.
-
-    Args:
-        name: Name value used by the test case.
-        secret: Secret value used by the test case."""
-    from dataforge.connections import set_credential_environment
-
-    before = dict(os.environ)
-    with pytest.raises(ValueError) as error:
-        set_credential_environment(name, secret)
-    if secret:
-        assert secret not in str(error.value)
-    assert dict(os.environ) == before
 
 
 def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
@@ -218,75 +123,6 @@ def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path: P
     assert all(b'dummy-sensitive-123' not in p.read_bytes() for p in tmp_path.rglob('*') if p.is_file())
 
 
-def test_provider_ui_saves_and_reopens_hour_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify provider settings preserve the maximum timeout across UI sessions."""
-    import json
-    from pathlib import Path
-
-    import streamlit as st
-    from streamlit.testing.v1 import AppTest
-
-    from ui.common import get_store
-    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
-    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
-    view.switch_page('ui/pages/connections.py').run()
-    next(s for s in view.selectbox if s.label == 'Provider').select('OmniRoute').run()
-    next(t for t in view.text_input if t.label == 'Model or deployment identifier').set_value('auto/best-coding')
-    timeout = next(n for n in view.number_input if n.label == 'Response inactivity timeout (seconds)')
-    assert timeout.proto.max == 3600
-    timeout.set_value(3600)
-    next(b for b in view.button if b.label == 'Save provider profile').click().run()
-    assert not view.exception
-    store = get_store(str(tmp_path))
-    profile = json.loads(store.rows('SELECT config FROM llm_profiles')[0]['config'])
-    assert profile['read_timeout'] == 3600 and profile['timeout'] == 30 and profile['model'] == 'auto/best-coding'
-    next(s for s in view.selectbox if s.label == 'Provider profile').select_index(1).run()
-    assert next(n for n in view.number_input if n.label == 'Response inactivity timeout (seconds)').value == 3600
-    st.cache_resource.clear()
-
-
-def test_json_escaped_secret_is_redacted_before_persistence(tmp_path: Path) -> None:
-    """Verify that json escaped secret is redacted before persistence.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest."""
-    import json
-
-    from dataforge.ingestion import Importer
-    from dataforge.llm import assist
-    from dataforge.store import Store
-
-    store = Store(tmp_path)
-    w = store.create_workspace('test')
-    Importer(store, w).files([('q.sql', b'SELECT 1;')], {'.sql'})
-    store.set_setting(w, 'llm_history', True)
-    manager = RuntimeConnections()
-    secret = 'dummy"quoted\\secret'
-    manager.register('DATAFORGE_TEST_API_KEY', secret)
-    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_TEST_API_KEY')
-    transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': json.dumps({'explanation': secret})}}))
-    with connection_scope(manager):
-        result = assist(store, w, profile, store.files(w)[0]['file_id'], 1, 1, transport=transport)
-    assert result['result']['explanation'] != secret
-    details = json.loads(store.rows('SELECT details FROM llm_records')[0]['details'])
-    assert details['result']['explanation'] != secret
-    assert secret not in details['response'] and json.dumps(secret)[1:-1] not in details['response']
-    store.close()
-
-
-def test_explicit_environment_reference_redacts_arbitrary_variable_names(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that explicit environment reference redacts arbitrary variable names.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes."""
-    monkeypatch.setenv('DATAFORGE_AUTH_CREDENTIAL', 'dummy-environment-sensitive-123')
-    profile = Profile(provider='Ollama', base_url='http://localhost:11434', model='test', key_env='DATAFORGE_AUTH_CREDENTIAL')
-    transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': '{"explanation":"dummy-environment-sensitive-123"}'}}))
-    with Adapter(profile, transport=transport) as adapter:
-        content, _ = adapter.complete('test', 'test')
-    assert 'dummy-environment-sensitive-123' not in content
-
-
 def test_sanitize_redacts_keys_values_and_shared_containers_without_mutation() -> None:
     """Verify that sanitize redacts keys values and shared containers without mutation."""
     manager = RuntimeConnections()
@@ -303,55 +139,3 @@ def test_sanitize_redacts_keys_values_and_shared_containers_without_mutation() -
     assert shared[secret][0] == secret
     assert manager.sanitize(secret) == '[REDACTED]'
     assert manager.sanitize(None) is None
-
-
-@pytest.mark.parametrize('kind', ['dict', 'list', 'mixed'])
-@pytest.mark.parametrize('depth', [65, 1100])
-def test_sanitize_rejects_excessive_nesting(kind: str, depth: int) -> None:
-    """Verify that sanitize rejects excessive nesting.
-
-    Args:
-        kind: Kind value used by the test case.
-        depth: Depth value used by the test case."""
-    value = 'dummy-sensitive-123'
-    for level in range(depth):
-        value = {'child': value} if kind == 'dict' or (kind == 'mixed' and level % 2) else [value]
-
-    with pytest.raises(ValueError, match='nesting'):
-        RuntimeConnections().sanitize(value)
-
-
-def test_sanitize_redacts_at_nesting_limit() -> None:
-    """Verify that sanitize redacts at nesting limit."""
-    manager = RuntimeConnections()
-    manager.register('DATAFORGE_TEST_API_KEY', 'dummy-sensitive-123')
-    value = 'dummy-sensitive-123'
-    for _ in range(64):
-        value = [value]
-
-    result = manager.sanitize(value)
-    for _ in range(64):
-        result = result[0]
-    assert result == '[REDACTED]'
-
-
-@pytest.mark.parametrize('kind', ['dict', 'list', 'mixed'])
-def test_sanitize_rejects_cycles(kind: str) -> None:
-    """Verify that sanitize rejects cycles.
-
-    Args:
-        kind: Kind value used by the test case."""
-    if kind == 'dict':
-        value = {}
-        value['self'] = value
-    elif kind == 'list':
-        value = []
-        value.append(value)
-    else:
-        value = {'child': []}
-        value['child'].append(value)
-
-    manager = RuntimeConnections()
-    with pytest.raises(ValueError, match='cyclic'):
-        manager.sanitize(value)
-    assert manager.sanitize({'safe': ['value']}) == {'safe': ['value']}

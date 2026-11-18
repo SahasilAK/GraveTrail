@@ -100,6 +100,7 @@ nav:
       - Explore lineage and impact: user-guide/explore.md
       - Inspect evidence: user-guide/evidence.md
       - Columns and transformations: user-guide/columns.md
+      - Migrate to dbt on Databricks: user-guide/migration.md
       - Exports and sharing: user-guide/exports.md
       - Workspaces and recovery: DATA_MANAGEMENT.md
       - UI reference: USER_GUIDE.md
@@ -137,6 +138,7 @@ nav:
       - Newcomer walkthrough: development/getting-started.md
       - Architecture: architecture/overview.md
       - Contracts and persistence: architecture/contracts.md
+      - Migration architecture: architecture/migration.md
       - Subsystem code map: development/code-map.md
       - Complete source inventory: development/source-inventory.md
       - Internal API examples: development/internal-api.md

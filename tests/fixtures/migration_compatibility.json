@@ -1,0 +1,11 @@
+{
+  "profile": "dbt-core-1.10.13-databricks-1.10.13",
+  "requirements": {
+    "dbt-core": {"version": "1.10.13", "release": "https://pypi.org/project/dbt-core/1.10.13/"},
+    "dbt-databricks": {"version": "1.10.13", "release": "https://pypi.org/project/dbt-databricks/1.10.13/"}
+  },
+  "project_config_version": 2,
+  "materializations": ["table", "view", "ephemeral"],
+  "qualification": "static",
+  "runtime_equivalence": "not_evaluated"
+}

@@ -89,6 +89,9 @@ def render_history(store: Store, w: str) -> None:
             return f"{options[k]['created_at']} ({k[:8]})"
         before = st.selectbox("Baseline run", list(options), index=1, format_func=fmt)
         after = st.selectbox("Comparison run", list(options), format_func=fmt)
+        from ui.migration_navigation import migration_link
+
+        migration_link(w, "Migrate comparison run", analysis_run=after)
         result = compare_runs(options[before], options[after])
         st.dataframe([{"Change": name.replace("_", " ").capitalize(), "Count": len(values)} for name, values in result.items()],
                      hide_index=True, alt="Changes between completed analysis runs")

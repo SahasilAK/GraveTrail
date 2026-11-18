@@ -10,14 +10,9 @@ from dataforge.services import analyze
 from dataforge.store import Store
 
 
-def test_maintenance_reads_never_archive_or_cleanup(tmp_path: Path) -> None:
-    """Verify that maintenance reads never archive or cleanup.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
+def test_mcp_previews_history_and_local_archive_requires_confirmation_and_backup(tmp_path: Path) -> None:
     store = Store(tmp_path)
-    w = store.create_workspace('maintenance')
+    w = store.create_workspace('local maintenance')
     for _ in range(3):
         analyze(store, w)
     store.set_setting(w, 'auto_cleanup_temporary', True)
@@ -32,23 +27,6 @@ def test_maintenance_reads_never_archive_or_cleanup(tmp_path: Path) -> None:
         assert not {'archive_history', 'restore_history', 'cleanup_temporary', 'checkpoint', 'backup'} & names
         with pytest.raises(AgentError):
             service.call('database_inspect')
-    finally:
-        service.close()
-        store.close()
-
-
-def test_local_history_archive_requires_fresh_preview_confirmation_and_backup(tmp_path: Path) -> None:
-    """Verify that local history archive requires fresh preview confirmation and backup.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    store = Store(tmp_path)
-    w = store.create_workspace('local maintenance')
-    for _ in range(3):
-        analyze(store, w)
-    service = AgentService(store, AccessPolicy(allow_write=True))
-    try:
         plan = service.call('history_preview', w, keep_runs=1)
         with pytest.raises(AgentError):
             service.call('history_archive', w, preview=plan, confirmation='wrong')

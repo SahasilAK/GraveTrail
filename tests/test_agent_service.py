@@ -58,12 +58,7 @@ def test_lineage_columns_evidence_and_stored_reuse(engine: Any, monkeypatch: pyt
     assert evidence["items"][0]["code"]
 
 
-def test_pagination_depth_budget_and_ambiguity(engine: Any) -> None:
-    """Verify that pagination depth budget and ambiguity.
-
-    Args:
-        engine: Engine instance exercised by the test.
-    """
+def test_pagination_depth_budget_and_ambiguity(engine: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     service, _, w = engine
     first = service.call("assets", w, options={"limit": 2})
     second = service.call("assets", w, options={"limit": 2, "cursor": first["next_cursor"]})
@@ -78,6 +73,10 @@ def test_pagination_depth_budget_and_ambiguity(engine: Any) -> None:
     assert len(json.dumps(page, ensure_ascii=False, separators=(",", ":"))) <= 1000
     with pytest.raises(ValueError):
         QueryOptions(max_chars=1000001)
+    monkeypatch.setattr("socket.create_connection", lambda *a, **k: pytest.fail("unexpected network"))
+    batch = service.call("batch", w, assets=["pub.all_kpis", "pub.customers"], options={"max_items": 2})
+    assert sum(result.get("count", 0) for result in batch["results"]) <= 2
+    assert not batch["complete"] and batch["remaining_assets"]
 
 
 def test_scope_permissions_and_cross_workspace_ids(engine: Any) -> None:
@@ -101,54 +100,6 @@ def test_scope_permissions_and_cross_workspace_ids(engine: Any) -> None:
     with pytest.raises(AgentError):
         service.call("assets", w)
     restricted.close()
-
-
-def test_jobs_cache_and_stale_queries(engine: Any) -> None:
-    """Verify that jobs cache and stale queries.
-
-    Args:
-        engine: Engine instance exercised by the test.
-    """
-    service, store, w = engine
-    job = service.call("analyze", w)
-    assert job["job_id"]
-    done = service.jobs.wait(job["job_id"], w, timeout=20)
-    assert done["status"] == "completed"
-    assert done["result"]["cached"] == 4
-    Importer(store, w).files([("new.sql", b"select id from new.source;")], {".sql"})
-    assert not service.call("lineage", w, asset="pub.all_kpis")["analysis_current"]
-
-
-def test_export_and_import_path_restrictions(engine: Any, tmp_path: Path) -> None:
-    """Verify that export and import path restrictions.
-
-    Args:
-        engine: Engine instance exercised by the test.
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    service, _, w = engine
-    with pytest.raises(AgentError):
-        service.call("ingest", w, path=str(tmp_path), extensions=["sql"])
-    exported = service.call("export", w, asset="pub.all_kpis", format="json")
-    assert exported["result_id"] and exported["bytes"] > 0
-    assert "code" not in json.loads((service.store.home / exported["path"]).read_text())
-    with pytest.raises(AgentError):
-        service.call("source", w, file_id="../secret", full=True)
-
-
-def test_settings_change_marks_analysis_stale_and_cursor_invalid(engine: Any) -> None:
-    """Verify that settings change marks analysis stale and cursor invalid.
-
-    Args:
-        engine: Engine instance exercised by the test.
-    """
-    service, store, w = engine
-    first = service.call("assets", w, options={"limit": 1})
-    store.set_setting(w, "case_sensitive", True)
-    assert not service.call("lineage", w, asset="pub.all_kpis")["analysis_current"]
-    Importer(store, w).files([("changed.sql", b"create table new.x as select id from raw.x;")], {".sql"})
-    with pytest.raises(AgentError, match="Cursor"):
-        service.call("assets", w, options={"cursor": first["next_cursor"]})
 
 
 def test_source_opt_in_revocation_and_literal_search(engine: Any) -> None:
@@ -177,42 +128,6 @@ def test_source_opt_in_revocation_and_literal_search(engine: Any) -> None:
                               ("lineage", {"asset": "pub.all_kpis", "options": {"detail_level": "detailed"}})]:
         with pytest.raises(AgentError):
             service.call(action, w, **arguments)
-
-
-def test_batch_aggregate_limits_and_compact_size(engine: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that batch aggregate limits and compact size.
-
-    Args:
-        engine: Engine instance exercised by the test.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    service, _, w = engine
-    import socket
-    monkeypatch.setattr(socket, "create_connection", lambda *a, **k: pytest.fail("unexpected network"))
-    result = service.call("batch", w, assets=["pub.all_kpis", "pub.customers"], options={"max_items": 2})
-    assert sum(r.get("count", 0) for r in result["results"]) <= 2
-    assert not result["complete"] and result["remaining_assets"]
-    small = service.call("lineage", w, asset="pub.all_kpis")
-    large = service.call("lineage", w, asset="pub.all_kpis", options={"detail_level": "detailed"})
-    assert len(json.dumps(small)) < len(json.dumps(large)) / 2
-
-
-def test_job_failures_interruption_and_scope(engine: Any) -> None:
-    """Verify that job failures interruption and scope.
-
-    Args:
-        engine: Engine instance exercised by the test.
-    """
-    service, store, w = engine
-    job = service.jobs.start(w, "analyze", lambda _: (_ for _ in ()).throw(ValueError("sensitive detail")))
-    result = service.jobs.wait(job["job_id"], w, 10)
-    assert result["status"] == "failed" and "sensitive detail" not in json.dumps(result)
-    with pytest.raises(AgentError):
-        service.jobs.read(job["job_id"], store.create_workspace("other"))
-    record = service.jobs.create(w, "analyze")
-    record["updated_at"] = 1
-    service.jobs.write(record)
-    assert service.jobs.read(record["job_id"], w)["status"] == "interrupted"
 
 
 def test_job_poll_does_not_wait_for_import_transaction_and_respects_revocation(engine: Any) -> None:

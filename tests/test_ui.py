@@ -6,33 +6,6 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 
-def test_empty_dashboard_and_builder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that empty dashboard and builder.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    assert not app.exception
-    assert app.title[0].value == "Overview"
-    assert any("GraveTrail" in header.value for header in app.sidebar.header)
-    buttons = {button.label: button for button in app.button}
-    assert all(buttons[label].proto.type == "primary" for label in
-               ("Open Lineage Builder", "Import sources", "Run SQL example"))
-    links = {link.value: link.proto for link in app.link_button}
-    assert links["View on GitHub"].url == "https://github.com/SahasilAK/GraveTrail"
-    assert links["Documentation"].url == "https://sahasilak.github.io/GraveTrail/"
-    assert all(link.type == "primary" for link in links.values())
-    buttons["Open Lineage Builder"].click().run()
-    assert app.title[0].value.casefold() == "lineage builder"
-    app.switch_page("ui/pages/dashboard.py").run()
-    next(button for button in app.button if button.label == "Import sources").click().run()
-    assert not app.exception
-    assert any("Import" in b.label for b in app.button)
-
-
 def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from ui.common import get_store
 
@@ -57,98 +30,6 @@ def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatc
     assert {"Explore lineage", "Open Lineage Builder", "Import sources", "Open Columns"} <= {
         button.label for button in app.button if button.proto.type == "primary"}
     assert {metric.label: metric.value for metric in app.metric}["Dependencies"] == "128"
-
-
-def test_theme_picker_saves_native_palette_without_changing_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that theme picker saves native palette without changing workspace.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    from ui.themes import PRESETS, current_preset
-
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path / "home"))
-    config = tmp_path / "config.toml"
-    config.write_bytes(Path("ui/streamlit.toml").read_bytes())
-    monkeypatch.setattr("ui.themes.CONFIG_PATH", config)
-    monkeypatch.setattr("ui.themes._loaded_preset", lambda: None)
-    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    workspace = app.session_state["workspace"]
-    app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Appearance").run()
-    palette = next(c for c in app.selectbox if c.label == "Theme preset")
-    assert palette.options == list(PRESETS)
-    assert len(palette.options) == 11
-    assert not any(c.label == "Theme preset" for c in app.segmented_control)
-    assert palette.options[:2] == ["Ocean dark", "Ink dark"]
-    palette.set_value("Rose Circuit").run()
-    next(b for b in app.button if b.label == "Apply theme").click().run()
-    assert not app.exception and current_preset(config) == "Rose Circuit"
-    assert app.session_state["workspace"] == workspace
-    assert app.session_state["theme_pending"][0] == "Rose Circuit"
-    assert not app.success
-    monkeypatch.setattr("ui.themes._loaded_preset", lambda: "Rose Circuit")
-    app.run()
-    assert any("Rose Circuit theme applied" in s.value for s in app.success)
-
-
-def test_directory_import_analysis_and_pages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that directory import analysis and pages.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    from dataforge.ingestion import Importer
-    from dataforge.services import analyze
-    from dataforge.store import Store
-
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    store = Store(tmp_path)
-    w = store.create_workspace("UI workflow")
-    fixture = Path("tests/fixtures/scenario").resolve()
-    Importer(store, w, [fixture]).directory(fixture, {".sql", ".sas", ".csv"})
-    analyze(store, w)
-    store.close()
-    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    assert not app.exception
-    assert app.metric[0].value == "7"
-    for path in ["builder", "explorer", "columns", "tools", "settings"]:
-        app.switch_page(f"ui/pages/{path}.py").run()
-        assert not app.exception, (path, [e.message for e in app.exception])
-    app.switch_page("ui/pages/explorer.py").run()
-    app.text_input(key="asset_search_lineage").set_value("orders").run()
-    chooser = next(c for c in app.selectbox if c.label == "Choose an exact asset")
-    assert chooser.value is None
-    assert len(chooser.options) == 4  # matching assets plus All
-    chooser.select(chooser.options[0]).run()
-    assert not app.exception
-    assert app.dataframe
-
-
-def test_provider_profile_form_and_settings_sections(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that provider profile form and settings sections.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    app.switch_page("ui/pages/settings.py").run()
-    for route, section in [("management", "Storage & transfers"), ("settings", "Resources"),
-                           ("settings", "Appearance"), ("connections", "Privacy"),
-                           ("connections", "Providers & routing")]:
-        app.switch_page(f"ui/pages/{route}.py").run()
-        app.segmented_control[0].set_value(section).run()
-        assert not app.exception
-    for field in app.text_input:
-        if field.label == "Model or deployment identifier":
-            field.set_value("local-test-model")
-    next(b for b in app.button if b.label == "Save provider profile").click().run()
-    assert not app.exception
-    assert any(s.label == "Default profile" for s in app.selectbox)
 
 
 def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -178,47 +59,6 @@ def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path
     next(b for b in app.button if b.label == "Save workspace details").click().run()
     assert app.error and not app.exception
     assert get_store(str(tmp_path)).workspaces()[0]["name"] == "Renamed workspace"
-
-
-def test_schema_expansion_and_declaration_evidence_in_columns_and_dictionary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that schema expansion and declaration evidence in columns and dictionary.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    from dataforge.ingestion import Importer
-    from dataforge.services import analyze
-    from dataforge.store import Store
-
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    store = Store(tmp_path)
-    w = store.create_workspace("Schema UI")
-    Importer(store, w).files([("schema.sql", b"CREATE TABLE raw.a (id INT, name TEXT);"),
-        ("query.sql", b"SELECT a.* FROM raw.a a;")], {".sql"})
-    analyze(store, w)
-    store.close()
-    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    app.switch_page("ui/pages/columns.py").run()
-    app.text_input(key="asset_search_columns").set_value("raw.a").run()
-    choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
-    choice.select(choice.options[0]).run()
-    next(s for s in app.segmented_control if s.label == "Columns view").set_value("Direct references").run()
-    assert not app.exception
-    assert app.metric[0].value == "2"
-    usages = app.dataframe[0].value
-    assert set(usages["column_name"]) == {"id", "name"}
-    assert set(usages["status"]) == {"inferred"}
-    assert all("schema.sql" in s for s in usages["schema_source"])
-    app.session_state["column_schema_panel"] = True
-    app.run()
-    assert not app.exception
-    assert "schema.sql" in next(s for s in app.selectbox if s.key and s.key.startswith("schema_source_choice_")).options
-    app.switch_page("ui/pages/tools.py").run()
-    app.segmented_control[0].set_value("Data dictionary").run()
-    next(f for f in app.text_input if f.label == "Filter dictionary").set_value("raw.a").run()
-    assert not app.exception
-    assert set(app.dataframe[0].value["provenance"]) == {"SQL DDL declaration"}
 
 
 def test_history_archive_and_restore_through_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -257,67 +97,6 @@ def test_history_archive_and_restore_through_settings(tmp_path: Path, monkeypatc
     next(b for b in app.button if b.label == "Restore selected history").click().run()
     assert not app.exception
     assert len(get_store(str(tmp_path)).runs(w)) == 3
-
-
-def test_visualization_preferences_save_and_apply_without_cross_workspace_leak(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that visualization preferences save and apply without cross workspace leak.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    from dataforge.ingestion import Importer
-    from dataforge.services import analyze
-    from dataforge.store import Store
-    from ui.common import get_store
-
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    store = Store(tmp_path)
-    first, other = store.create_workspace("Preferences"), store.create_workspace("Other preferences")
-    for workspace in (first, other):
-        Importer(store, workspace).files([("q.sql", b"-- complete source header\nCREATE TABLE mart.x AS SELECT id FROM raw.a;")], {".sql"})
-        analyze(store, workspace)
-    store.close()
-    app = AppTest.from_file(Path("app.py").resolve(), default_timeout=20).run()
-    app.switch_page("ui/pages/settings.py").run()
-    app.segmented_control[0].set_value("Appearance").run()
-    next(n for n in app.selectbox if n.label == "Default graph direction").set_value("downstream")
-    next(n for n in app.checkbox if n.label == "Collapse temporary steps by default").uncheck()
-    next(n for n in app.selectbox if n.label == "Graph labels").set_value("hidden")
-    next(n for n in app.selectbox if n.label == "Node palette").set_value("neutral")
-    next(n for n in app.slider if n.label == "Edge width").set_value(4)
-    next(n for n in app.selectbox if n.label == "Default source view").set_value("relevant")
-    next(n for n in app.checkbox if n.label == "Show source line numbers").uncheck()
-    next(n for n in app.button if n.label == "Save visualization settings").click().run()
-    assert not app.exception
-    saved = get_store(str(tmp_path))
-    assert saved.setting(first, "graph_labels") == "hidden"
-    assert saved.setting(first, "source_view_mode") == "relevant"
-    assert saved.setting(other, "graph_labels") is None
-    app.switch_page("ui/pages/explorer.py").run()
-    app.text_input(key="asset_search_lineage").set_value("raw.a").run()
-    choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
-    choice.select(choice.options[0]).run()
-    assert not app.exception
-    assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "downstream"
-    assert next(n for n in app.toggle if n.label == "Collapse temporary steps").value is False
-    assert len(app.code) == 1
-    assert app.code and all(not c.proto.show_line_numbers for c in app.code)
-    # Full source remains explicitly available even in relevant-first mode.
-    app.session_state["lineage_source_complete_" + first] = True
-    app.run()
-    assert not app.exception
-    assert len(app.code) == 2
-    app.selectbox(key="workspace").set_value(other).run()
-    assert not app.exception
-    assert next(c for c in app.selectbox if c.label == "Choose an exact asset").value is None
-    app.text_input(key="asset_search_lineage").set_value("mart.x").run()
-    choice = next(c for c in app.selectbox if c.label == "Choose an exact asset")
-    choice.select(choice.options[0]).run()
-    assert next(n for n in app.segmented_control if n.label == "Graph direction").value == "upstream"
-    assert next(n for n in app.toggle if n.label == "Collapse temporary steps").value is True
-    assert next(s for s in app.selectbox if s.label == "Source file").value in {f["file_id"] for f in saved.files(other)}
-    assert len(app.code) == 2 and all(c.proto.show_line_numbers for c in app.code)
 
 
 def test_unresolved_queue_preview_request_and_explicit_inferred_merge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

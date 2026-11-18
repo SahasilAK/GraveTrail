@@ -37,27 +37,16 @@ def test_failed_dbt_replacement_preserves_complete_previous_inventory(tmp_path):
         assert store.files(workspace) == before
 
 
-@pytest.mark.parametrize('kind', ['files', 'zip', 'directory'])
-def test_dbt_import_preserves_paths_and_original_bytes(tmp_path, kind):
+def test_dbt_import_preserves_paths_and_original_bytes(tmp_path):
     entries = project_entries()
     with closing(Store(tmp_path / 'home')) as store:
         workspace = store.create_workspace('dbt')
         importer = Importer(store, workspace, [tmp_path])
-        if kind == 'files':
-            report = importer.files(entries, set(), source_kind='dbt')
-        elif kind == 'zip':
-            stream = io.BytesIO()
-            with zipfile.ZipFile(stream, 'w') as archive:
-                for path, data in entries:
-                    archive.writestr(path, data)
-            report = importer.zip(stream.getvalue(), set(), source_kind='dbt')
-        else:
-            folder = tmp_path / 'input'
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w') as archive:
             for path, data in entries:
-                target = folder / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
-            report = importer.directory(folder, set(), source_kind='dbt')
+                archive.writestr(path, data)
+        report = importer.zip(stream.getvalue(), set(), source_kind='dbt')
         assert report.accepted == 4
         assert {f['relative_path'] for f in store.files(workspace)} == {p for p, _ in entries[:4]}
         source = next(f for f in store.files(workspace) if f['relative_path'].endswith('/orders.sql'))

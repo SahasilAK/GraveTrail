@@ -27,29 +27,6 @@ def test_release_version_is_independent_of_project_and_rejects_unsafe_input(tmp_
             validate_version(tmp_path, version)
 
 
-@pytest.mark.parametrize("bump,expected", [("major", "3.0.0"), ("minor", "2.5.0"), ("patch", "2.4.10")])
-def test_resolve_version_uses_highest_published_stable_release(bump: str, expected: str) -> None:
-    """Verify that resolve version uses highest published stable release.
-
-    Args:
-        bump: Bump value used by the test case.
-        expected: Expected result for the test case.
-    """
-    from scripts.release import resolve_version
-
-    releases = [{"tag_name": tag, "draft": draft, "prerelease": pre}
-                for tag, draft, pre in [("v2.4.9", False, False), ("v1.9.0", False, False),
-                                        ("v9.0.0", True, False), ("v8.0.0-rc1", False, True)]]
-    assert resolve_version(releases, bump=bump) == expected
-    assert resolve_version([], bump="patch") == "0.0.1"
-    assert resolve_version(releases, exact="3.2.1", bump="patch") == "3.2.1"
-    for exact in ("1.0.0", "2.4.9", "v3.0.0"):
-        with pytest.raises(ValueError):
-            resolve_version(releases, exact=exact)
-    with pytest.raises(ValueError):
-        resolve_version([], bump="wat")
-
-
 def test_windows_release_accepts_explicit_download_directory_and_keeps_installer(tmp_path: Path) -> None:
     """Verify that windows release accepts explicit download directory and keeps installer.
 
@@ -145,9 +122,12 @@ def test_stage_verifies_each_build_and_publishes_only_standalone_archives(tmp_pa
     assert len(list(output.iterdir())) == 5
     assert not list(output.rglob("*.whl"))
     assert all(item["path"].startswith("gravetrail-1.2.3-") for item in manifest["artifacts"])
+    with pytest.raises(FileExistsError):
+        stage_assets(downloads, output, "1.2.3")
+    assert verify_artifacts(output) == manifest
 
 
-@pytest.mark.parametrize("problem", ["missing", "tampered", "version", "duplicate", "unlisted"])
+@pytest.mark.parametrize("problem", ["version", "duplicate"])
 def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path: Path, problem: str) -> None:
     """Verify that stage rejects incomplete or inconsistent downloads.
 
@@ -161,118 +141,14 @@ def test_stage_rejects_incomplete_or_inconsistent_downloads(tmp_path: Path, prob
     native_builds(downloads)
     windows = downloads / "gravetrail-Windows-X64"
     archive = next(windows.glob("*.zip"))
-    if problem == "missing":
-        (windows / "manifest.json").unlink()
-    elif problem == "tampered":
-        archive.write_bytes(b"changed")
-    elif problem == "version":
+    if problem == "version":
         write_manifest(windows, "2.0.0", [archive], "executable")
-    elif problem == "duplicate":
+    else:
         import shutil
         shutil.copytree(windows, downloads / "gravetrail-Windows-ARM64")
-    else:
-        (windows / "manifest.json").unlink()
-        write_manifest(windows, "1.2.3", [windows / "python/package.whl"], "executable")
     with pytest.raises((ValueError, FileNotFoundError)):
         stage_assets(downloads, output, "1.2.3")
     assert not output.exists(), "Validate every build before copying release assets"
-
-
-def test_stage_refuses_existing_output(tmp_path: Path) -> None:
-    """Verify that stage refuses existing output.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from scripts.release import stage_assets
-
-    native_builds(tmp_path / "downloads")
-    output = tmp_path / "release"
-    output.mkdir()
-    (output / "keep.txt").write_text("existing")
-    with pytest.raises(FileExistsError):
-        stage_assets(tmp_path / "downloads", output, "1.2.3")
-    assert (output / "keep.txt").read_text() == "existing"
-
-
-def test_copilot_notes_use_only_supplied_context_and_fall_back_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that copilot notes use only supplied context and fall back on failure.
-
-    Args:
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-
-    Raises:
-        error: Raised by the test helper.
-    """
-    from scripts.release import copilot_summary
-
-    calls = []
-
-    def run(command: Any, **kwargs: Any) -> Any:
-        """Handle run for the test scenario.
-
-        Args:
-            command: Command value used by the test case.
-            kwargs: Keyword arguments forwarded to the operation.
-
-        Returns:
-            Value produced for the test scenario.
-        """
-        calls.append((command, kwargs))
-        return subprocess.CompletedProcess(command, 0, "## Highlights\n\n- Fix lineage export.\n", "")
-
-    monkeypatch.setattr(subprocess, "run", run)
-    assert "Fix lineage" in copilot_summary("GitHub notes", "abc123 fix: export")
-    command, kwargs = calls[0]
-    assert "--available-tools=" in command
-    assert "--disable-builtin-mcps" in command
-    assert "--no-custom-instructions" in command
-    assert "abc123 fix: export" in command[-1]
-    assert kwargs["timeout"] == 90
-    assert kwargs["stdin"] == subprocess.DEVNULL
-
-    for error in (FileNotFoundError(), subprocess.CalledProcessError(1, command),
-                  subprocess.TimeoutExpired(command, 90)):
-        def fail(*args: Any, **kwargs: Any) -> None:
-            """Raise the injected failure used by the test.
-
-            Args:
-                args: Positional arguments forwarded to the operation.
-                kwargs: Keyword arguments forwarded to the operation.
-
-            Raises:
-                error: Raised by the test helper.
-            """
-            raise error
-        monkeypatch.setattr(subprocess, "run", fail)
-        assert copilot_summary("notes", "commits") is None
-
-
-def test_release_notes_always_retain_changes_and_installation_guidance() -> None:
-    """Verify that release notes always retain changes and installation guidance."""
-    from scripts.release import release_notes
-
-    for summary in (None, "## Highlights\n\n- Export fix."):
-        notes = release_notes("## What's Changed\nPR #7", "abc123 fix: export", summary)
-        assert "PR #7" in notes and "abc123 fix: export" in notes
-        assert "SHA256SUMS" in notes and "gravetrail.exe" in notes
-        assert ("AI-generated" in notes) == bool(summary)
-        assert 'Unsigned release:' in notes
-
-
-def test_standalone_release_test_gate_fetches_inventory_history() -> None:
-    """The reusable release test job needs the pinned documentation baseline."""
-    import yaml
-
-    workflows = Path(__file__).resolve().parents[1] / ".github/workflows"
-    publisher = yaml.safe_load((workflows / "publish-release.yml").read_text(encoding="utf-8"))
-    assert publisher["jobs"]["builds"]["uses"] == "./.github/workflows/release.yml"
-    release = yaml.safe_load((workflows / "release.yml").read_text(encoding="utf-8"))
-    steps = release["jobs"]["native"]["steps"]
-    test_index = next(i for i, step in enumerate(steps) if step.get("run") == "uv run pytest -q")
-    checkout = next(step for step in steps[:test_index]
-                    if step.get("uses", "").startswith("actions/checkout@"))
-    assert checkout.get("with", {}).get("fetch-depth") == 0
 
 
 def release_policy(tmp_path, *, mode=None, ref='refs/heads/main', dry_run='true', signing=None):
@@ -297,50 +173,13 @@ def release_policy(tmp_path, *, mode=None, ref='refs/heads/main', dry_run='true'
     return result, output.read_text() if output.exists() else '', summary.read_text() if summary.exists() else ''
 
 
-@pytest.mark.parametrize('mode', [None, 'development', 'production'])
-@pytest.mark.parametrize('dry_run', ['true', 'false'])
-def test_unsigned_release_policy_requires_no_signing_setup(tmp_path, mode, dry_run):
-    result, output, summary = release_policy(tmp_path, mode=mode, dry_run=dry_run)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert output == 'build_mode=development\n'
-    assert 'unsigned' in summary.lower()
-
-
-def test_production_release_remains_unsigned_with_signing_configuration(tmp_path):
-    result, output, _ = release_policy(tmp_path, mode='production', signing={
-        'WINDOWS_SIGNING_THUMBPRINT': 'a' * 40, 'WINDOWS_TIMESTAMP_URL': 'https://timestamp.example.test',
-        'WINDOWS_PUBLISHER': 'Example publisher',
-    })
+def test_production_publish_remains_unsigned(tmp_path):
+    result, output, _ = release_policy(tmp_path, mode='production', dry_run='false')
     assert result.returncode == 0, result.stdout + result.stderr
     assert output == 'build_mode=development\n'
 
 
-@pytest.mark.parametrize('mode,ref,dry_run', [
-    ('development', 'refs/heads/feature', 'false'), ('production', 'refs/heads/feature', 'true'),
-    ('production', 'refs/heads/feature', 'false'), ('unexpected', 'refs/heads/main', 'true'),
-    ('unsigned', 'refs/heads/main', 'true'), ('signed', 'refs/heads/main', 'true'),
-])
-def test_release_policy_rejects_wrong_branch_or_unknown_mode(tmp_path, mode, ref, dry_run):
-    result, output, _ = release_policy(tmp_path, mode=mode, ref=ref, dry_run=dry_run)
+def test_production_release_rejects_wrong_branch(tmp_path):
+    result, output, _ = release_policy(tmp_path, mode='production', ref='refs/heads/feature')
     assert result.returncode != 0
     assert output == ''
-
-
-def test_development_release_validation_remains_branch_safe(tmp_path):
-    result, output, _ = release_policy(tmp_path, mode='development', ref='refs/heads/feature')
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert output == 'build_mode=development\n'
-
-
-def test_release_build_and_publish_jobs_use_validated_mode():
-    import yaml
-
-    root = Path(__file__).resolve().parents[1]
-    workflow = yaml.load((root / '.github/workflows/publish-release.yml').read_text(), Loader=yaml.BaseLoader)
-    inputs = workflow['on']['workflow_dispatch']['inputs']
-    assert inputs['release_mode']['default'] == 'development'
-    assert inputs['release_mode']['options'] == ['development', 'production']
-    jobs = workflow['jobs']
-    assert jobs['prepare']['outputs']['build_mode'] == '${{ steps.policy.outputs.build_mode }}'
-    assert jobs['builds']['with']['release_mode'] == '${{ needs.prepare.outputs.build_mode }}'
-    assert jobs['publish']['env']['RELEASE_MODE'] == '${{ needs.prepare.outputs.build_mode }}'

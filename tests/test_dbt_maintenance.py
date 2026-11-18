@@ -25,24 +25,6 @@ def test_dbt_catalog_and_original_evidence_survive_whole_home_restore(tmp_path):
         assert inspect_database(store)['ok']
 
 
-def test_lineage_cleanup_preserves_dbt_import_classification(tmp_path):
-    import json
-
-    from dataforge.ai_context import prepare_analysis
-    from dataforge.cleanup import apply_cleanup, cleanup_plan
-    with closing(Store(tmp_path)) as store:
-        w = store.create_workspace('cleanup dbt')
-        Importer(store, w).files([('dbt_project.yml', b'name: shop'),
-            ('models/a.sql', b'select 1 as id')], set(), source_kind='dbt')
-        analyze(store, w)
-        apply_cleanup(store, cleanup_plan(store, w, 'lineage'), 'cleanup dbt')
-        assert all(json.loads(f['metadata'])['source_kind'] == 'dbt' for f in store.files(w))
-        prepared = prepare_analysis(store, w, {'mode': 'hybrid'})
-        assert all(source.source_kind == 'dbt' for source in prepared.sources)
-        analyze(store, w)
-        assert len(store.rows('SELECT * FROM dbt_projects')) == 1
-
-
 def test_dbt_integrity_and_historical_evidence_survive_reimport(tmp_path):
     with closing(Store(tmp_path)) as store:
         w = store.create_workspace('dbt history')

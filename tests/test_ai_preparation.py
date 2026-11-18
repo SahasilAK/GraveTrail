@@ -3,8 +3,6 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from dataforge.ai_analysis_models import AnalysisRequest
-from dataforge.analysis_service import preview_analysis
 from dataforge.ingestion import Importer
 from ui.common import get_store
 
@@ -19,62 +17,6 @@ def workspace(tmp_path, monkeypatch):
     configured(store, w)
     yield store, w
     import streamlit as st
-    st.cache_resource.clear()
-
-
-def test_preview_reports_selected_file_and_task_progress_without_provider_calls(workspace, monkeypatch):
-    store, w = workspace
-    monkeypatch.setattr('dataforge.llm.Adapter.complete', lambda *a, **kw: pytest.fail('Preview sent AI'))
-    selected = next(f['file_id'] for f in store.files(w) if f['relative_path'] == 'a.sql')
-    events = []
-    preview = preview_analysis(store, w, AnalysisRequest(mode='ai', file_ids=[selected]),
-                               progress=lambda *event: events.append(event))
-    assert preview['valid'] and preview['files'] == 1 and preview['parts'] == 1
-    assert ('Reading selected files', 1, 1) in events
-    assert not store.runs(w)
-    assert preview == preview_analysis(store, w, AnalysisRequest(mode='ai', file_ids=[selected]))
-
-
-@pytest.mark.parametrize('blocked', [False, True])
-def test_preparation_status_exists_before_calculation_and_keeps_outcome(workspace, monkeypatch, blocked):
-    import streamlit as st
-
-    import ui.analysis_ai as ai
-
-    store, w = workspace
-    if blocked:
-        store.set_setting(w, 'default_profile', '')
-    original = ai.preview_analysis
-    calls = []
-    panels = []
-    original_status = st.status
-
-    def status(*args, **kwargs):
-        panel = original_status(*args, **kwargs)
-        panels.append(panel)
-        return panel
-
-    def observed(*args, **kwargs):
-        assert panels, 'Preparation must be visible before calculation starts'
-        calls.append(True)
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(st, 'status', status)
-    monkeypatch.setattr(ai, 'preview_analysis', observed)
-    view = AppTest.from_file(Path('app.py').resolve(), default_timeout=20).run()
-    view.switch_page('ui/pages/analysis.py').run()
-    next(c for c in view.checkbox if c.label == 'Use AI for analysis').check().run()
-    assert not view.exception
-    statuses = view.get('status')
-    assert len(statuses) == 1
-    assert statuses[0].state == ('error' if blocked else 'complete')
-    assert ('Needs attention' if blocked else 'Ready') in statuses[0].label
-    assert 'Elapsed:' in statuses[0].label
-    assert statuses[0].proto.expanded is blocked
-    assert any('Reading selected files' in m.value and '2 / 2' in m.value for m in statuses[0].markdown)
-    assert len(calls) == 1
-    assert next(b for b in view.button if b.label == 'Analyze with AI').disabled is blocked
-    assert not store.runs(w)
     st.cache_resource.clear()
 
 

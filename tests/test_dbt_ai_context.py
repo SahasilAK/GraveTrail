@@ -19,7 +19,8 @@ def test_dbt_models_keep_project_context_and_macros_are_context_only(tmp_path):
         ('macros/twice.sql', b'{% macro twice(x) %}{{ x }} * 2{% endmacro %}'),
         ('macros/unrelated.sql', b'{% macro unrelated() %}1{% endmacro %}'),
     ], set(), source_kind='dbt')
-    prepared = prepare_analysis(store, w, AnalysisRequest(mode='ai'))
+    prepared = prepare_analysis(store, w, AnalysisRequest(mode='hybrid'))
+    assert all(source.source_kind == 'dbt' for source in prepared.sources)
     parts = [p for source in prepared.sources for p in plan_file_parts(source, {}, model())]
     assert len(parts) == 5  # Context-only sources are also processed completely.
     unit = next(p for p in parts if p.file_id == next(s.file_id for s in prepared.sources if s.path.endswith('use.sql')))

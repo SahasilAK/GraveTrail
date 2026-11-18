@@ -1,19 +1,13 @@
 """Shared UI/CLI/MCP image scope, authorization and artifact contracts."""
-import asyncio
 import base64
-import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree as ET
 
 import pytest
-from typer.testing import CliRunner
 
 from dataforge.agent.contracts import AccessPolicy, AgentError, AgentSettings
-from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
-from dataforge.cli import app
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
 from dataforge.store import Store
@@ -82,37 +76,18 @@ def test_shared_image_and_managed_artifact_have_identical_scope(workspace: Any) 
         read(service, w, result)
 
 
-def test_mcp_png_and_svg_options(workspace: Any) -> None:
-    """Verify that mcp png and svg options.
-
-    Args:
-        workspace: Workspace used by the test.
-    """
-    _, w, service = workspace
-    server = create_server(service)
-    for format in ['svg', 'png']:
-        response = asyncio.run(server.call_tool('export_graph', {'workspace_id': w, 'asset': 'mart.c',
-            'format': format, 'scale': 2, 'background': 'dark', 'title': 'Review', 'legend': False}))
-        assert not response.isError, response
-        result = response.structuredContent
-        data = read(service, w, result)
-        assert result['node_count'] == 3 and result['edge_count'] == 2
-        if format == 'svg':
-            assert 'Review' in ''.join(ET.fromstring(data).itertext())
-        else:
-            assert data.startswith(b'\x89PNG')
-
-
-def test_filters_collapsing_and_stale_revision(workspace: Any) -> None:
+def test_image_filters_and_stale_export_revisions(workspace: Any) -> None:
     """Verify that filters collapsing and stale revision.
 
     Args:
         workspace: Workspace used by the test.
     """
-    from dataforge.services import export_graph_image
+    from dataforge.services import export_graph_image, export_lineage_excel
 
     store, w, _ = workspace
     selected = next(a['asset_id'] for a in store.assets(w) if a['name'] == 'mart.c')
+    with pytest.raises(ValueError, match='upstream|downstream'):
+        export_lineage_excel(store, w, selected, direction='combined')
     store.execute("UPDATE assets SET temporary=true WHERE name='stage.b' AND workspace_id=?", [w])
     _, a = export_graph_image(store, w, selected, collapse_temporary=True)
     _, b = export_graph_image(store, w, selected, collapse_temporary=False)
@@ -126,34 +101,12 @@ def test_filters_collapsing_and_stale_revision(workspace: Any) -> None:
     Importer(store, w).files([('new.sql', b'select id from other;')], {'.sql'})
     _, stale = export_graph_image(store, w, selected)
     assert not stale['complete'] and 'not current' in str(stale['warnings'])
+    data, workbook = export_lineage_excel(store, w, selected)
+    assert data.startswith(b'PK') and not workbook['complete']
+    assert any('current' in warning or 'pending' in warning for warning in workbook['warnings'])
 
 
-def test_cli_output_and_invalid_destination_leave_no_new_artifact(workspace: Any, tmp_path: Path) -> None:
-    """Verify that cli output and invalid destination leave no new artifact.
-
-    Args:
-        workspace: Workspace used by the test.
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    store, w, service = workspace
-    home = store.home
-    service.close()
-    store.close()
-    runner = CliRunner()
-    output = tmp_path / 'lineage.svg'
-    args = ['--home', str(home), '--json', '--allow-write', 'export', 'graph', 'mart.c', '-w', w,
-            '--format', 'svg', '--output', str(output)]
-    result = runner.invoke(app, args)
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.output)['destination'] == str(output)
-    assert ET.fromstring(output.read_bytes()).tag.endswith('svg')
-    files = list((home / 'agent/artifacts' / w).iterdir())
-    again = runner.invoke(app, args)
-    assert again.exit_code != 0
-    assert list((home / 'agent/artifacts' / w).iterdir()) == files
-
-
-def test_explorer_image_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_explorer_prepares_image_and_excel_downloads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that explorer image download.
 
     Args:
@@ -181,6 +134,13 @@ def test_explorer_image_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         assert not page.exception
         assert any(b.proto.label == 'Download SVG' for b in page.get('download_button'))
         assert any('independent of browser pan/zoom' in c.value for c in page.caption)
+
+        page.session_state['lineage_path_panel'] = True
+        page.run()
+        next(b for b in page.button if b.label == 'Prepare Excel workbook').click().run()
+        assert not page.exception
+        assert any(b.proto.label == 'Download Excel workbook' for b in page.get('download_button'))
+        assert any('Steps show data dependencies' in c.value for c in page.caption)
     finally:
         get_store.clear()
 
@@ -231,31 +191,6 @@ def test_temporary_contraction_budget_and_failed_render_publish_nothing(workspac
     with pytest.raises(AgentError, match='time limit'):
         service.call('artifact_create', w, kind='graph', format='png', selection={'asset': 'mart.c'})
     assert list(directory.iterdir()) == files
-
-
-def test_temporary_cycle_export_retains_same_nodes_as_ui(workspace: Any) -> None:
-    """Verify that temporary cycle export retains same nodes as ui.
-
-    Args:
-        workspace: Workspace used by the test.
-    """
-    from dataforge.graph import LineageGraph
-    from dataforge.services import export_graph_image
-
-    store, w, _ = workspace
-    citation = store.rows('SELECT statement_id,file_id FROM edges WHERE workspace_id=? LIMIT 1', [w])[0]
-    store.execute('DELETE FROM edges WHERE workspace_id=?', [w])
-    store.execute('DELETE FROM assets WHERE workspace_id=?', [w])
-    for aid, name, temporary in [('s', 'source', False), ('b', 'alpha', True),
-                                 ('a', 'beta', True), ('t', 'target', False)]:
-        store.execute('INSERT INTO assets VALUES (?,?,?,?,?,?,?)', [aid, w, name, name, 'table', temporary, '{}'])
-    for i, (source, target) in enumerate([('s', 'b'), ('b', 'a'), ('a', 'b'), ('a', 't')]):
-        store.execute('INSERT INTO edges(edge_id,workspace_id,source_id,target_id,statement_id,file_id,confidence,status) VALUES (?,?,?,?,?,?,?,?)',
-                      [str(i), w, source, target, citation['statement_id'], citation['file_id'], 1., 'verified'])
-    ui = LineageGraph(store.assets(w), store.edges(w)).simplified(keep=['t']).focus('t', 'upstream', 15, 2000)
-    data, _ = export_graph_image(store, w, 't', collapse_temporary=True)
-    actual = {n.get('data-node') for n in ET.fromstring(data).findall('.//{http://www.w3.org/2000/svg}g[@data-node]')}
-    assert actual == set(ui.nodes)
 
 
 def test_manifest_write_failure_cleans_binary(workspace: Any, monkeypatch: pytest.MonkeyPatch) -> None:

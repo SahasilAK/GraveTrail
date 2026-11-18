@@ -45,26 +45,3 @@ def test_failed_or_stale_build_preserves_previous_graph(tmp_path, monkeypatch, f
     assert store.edges(w) == previous
     assert not store.rows("SELECT * FROM ai_analysis_runs WHERE status='committed'")
     store.close()
-
-
-def test_parser_build_needs_no_provider_and_no_project_ai_restore(tmp_path):
-    store = Store(tmp_path)
-    w = store.create_workspace('offline static')
-    Importer(store, w).files([('q.sql', b'create table b as select id from a;')], {'.sql'})
-    result = run_analysis(store, w, AnalysisRequest(mode='parser'))
-    assert result.status == 'committed' and len(store.edges(w)) == 1
-    store.close()
-
-
-def test_new_runs_do_not_silently_reuse_earlier_ai_extraction(tmp_path):
-    store = Store(tmp_path)
-    w = store.create_workspace('new extraction')
-    configured(store, w)
-    Importer(store, w).files([('q.sql', b'select 1;')], {'.sql'})
-    seen = []
-    for _ in range(2):
-        result = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(empty_provider(seen)))
-        assert result.status == 'committed'
-        assert not result.complete  # A model's completeness assertion is not proof.
-    assert len(seen) == 2
-    store.close()

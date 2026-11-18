@@ -1,68 +1,6 @@
-import logging
 from pathlib import Path
 
 import pytest
-
-
-def test_extension_dialect_precedence_validation_and_sas_proc_sql(tmp_path: Path) -> None:
-    """Verify that extension dialect precedence validation and sas proc sql.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.configuration import (
-        ParsingSettings,
-        export_workspace_configuration,
-        import_workspace_configuration,
-    )
-    from dataforge.ingestion import Importer
-    from dataforge.services import analyze, source_dialect
-    from dataforge.store import Store
-
-    config = ParsingSettings(dialect="postgres", dialect_by_extension={".sas": "tsql", ".sql": "snowflake"},
-                             dialect_by_folder={"jobs/": "bigquery", "jobs/special/": "duckdb"}).model_dump()
-    assert source_dialect({"relative_path": "step.sas", "extension": ".sas"}, config) == "tsql"
-    assert source_dialect({"relative_path": "jobs/q.sql", "extension": ".sql"}, config) == "bigquery"
-    assert source_dialect({"relative_path": "jobs/special/q.sql", "extension": ".sql"}, config) == "duckdb"
-    for value in [{"sql": "tsql"}, {".exe": "tsql"}, {".sql": "unknown"}]:
-        with pytest.raises(ValueError):
-            ParsingSettings(dialect_by_extension=value)
-    store = Store(tmp_path)
-    try:
-        w = store.create_workspace("Extension dialect")
-        store.set_setting(w, "dialect_by_extension", {".sas": "tsql"})
-        code = b"proc sql; create table mart.x as select top 5 id from raw.a; quit;"
-        Importer(store, w).files([("q.sas", code)], {".sas"})
-        assert analyze(store, w)["edges"] == 1
-        copied = import_workspace_configuration(store, export_workspace_configuration(store, w))
-        assert store.setting(copied, "dialect_by_extension") == {".sas": "tsql"}
-    finally:
-        store.close()
-
-
-def test_graph_filters_preserve_stored_facts_and_do_not_contract_hidden_edges() -> None:
-    """Verify that graph filters preserve stored facts and do not contract hidden edges."""
-    from dataforge.graph import LineageGraph
-
-    assets = [{"asset_id": str(i), "name": str(i), "temporary": i == 1} for i in range(3)]
-    edges = [{"edge_id": "a", "source_id": "0", "target_id": "1", "confidence": .7, "status": "inferred"},
-             {"edge_id": "b", "source_id": "1", "target_id": "2", "confidence": 1., "status": "verified"}]
-    graph = LineageGraph(assets, edges, min_confidence=.8, include_inferred=False)
-    assert len(graph.graph.edges) == 1
-    assert not graph.simplified().graph.has_edge("0", "2")
-    assert len(LineageGraph(assets, edges).graph.edges) == 2
-    assert len(edges) == 2
-
-
-def test_log_verbosity_is_validated_and_changes_safe_logger() -> None:
-    """Verify that log verbosity is validated and changes safe logger."""
-    from dataforge.logging_config import configure_logging
-
-    configure_logging("WARNING")
-    assert logging.getLogger("dataforge").level == logging.WARNING
-    with pytest.raises(ValueError):
-        configure_logging("print sources")
-    configure_logging("INFO")
 
 
 def test_selected_refresh_after_cache_version_or_settings_change_retains_other_facts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

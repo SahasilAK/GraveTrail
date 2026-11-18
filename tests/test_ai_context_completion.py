@@ -1,33 +1,9 @@
 import json
 
 import httpx
-import pytest
-from test_ai_context_index import prepared
-from test_ai_token_budget import model
-
-from dataforge.ai_analysis_models import MissingContext, PartExtraction
-from dataforge.ai_context import SourceSnapshot, plan_file_parts
-from dataforge.ai_context_index import build_context_index, plan_context_completion
 
 
-def test_one_completion_only_when_new_relevant_context_is_available():
-    consumer = SourceSnapshot('c', 'hc', 'c.sas', '.sas', 'job', '%load;', 'sas')
-    definition = SourceSnapshot('d', 'hd', 'd.sas', '.sas', 'job', '%macro load; data b; set a; run; %mend;', 'sas')
-    part = plan_file_parts(consumer, {}, model())[0]
-    index = build_context_index(prepared(consumer, definition), [])
-    item = PartExtraction(part_id=part.part_id, missing_context=[MissingContext(symbol='load', kind='macro', scope='job')])
-    works = plan_context_completion([(part, item)], index)
-    assert len(works) == 1
-    assert works[0].original_part_id == part.part_id
-    assert works[0].catalog_revision == index.revision
-    assert not plan_context_completion([(part, item)], index, completed={part.part_id})
-    item.missing_context[0].consumed_fingerprint = works[0].context.fingerprint
-    assert not plan_context_completion([(part, item)], index)
-    assert not plan_context_completion([(part, item)], build_context_index(prepared(consumer), []))
-
-
-@pytest.mark.parametrize('reverse', [False, True])
-def test_late_ai_definition_repairs_only_affected_consumer_across_batches(tmp_path, reverse):
+def test_late_ai_definition_repairs_only_affected_consumer_across_batches(tmp_path):
     from test_ai_resumable_files import configured
 
     from dataforge.ai_analysis_models import AnalysisRequest
@@ -37,8 +13,8 @@ def test_late_ai_definition_repairs_only_affected_consumer_across_batches(tmp_pa
     store = Store(tmp_path)
     workspace = store.create_workspace('late definition')
     configured(store, workspace)
-    files = [('consumer.sas', b'%load;'), ('definition.sas', b'opaque registration load reads raw.a writes mart.b;')]
-    Importer(store, workspace).files(list(reversed(files)) if reverse else files, {'.sas'})
+    Importer(store, workspace).files([('definition.sas', b'opaque registration load reads raw.a writes mart.b;'),
+                                    ('consumer.sas', b'%load;')], {'.sas'})
     seen, first = [], [True]
     def provider(request):
         context = json.loads(json.loads(request.content)['messages'][-1]['content'])

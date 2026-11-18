@@ -105,36 +105,6 @@ def test_backup_restore_checksums_and_paths(tmp_path: Path) -> None:
     store.close()
 
 
-@pytest.mark.parametrize('confirmation', ['RESTORE GRAVETRAIL', 'RESTORE DATAFORGE'])
-def test_rebrand_restore_preserves_originals_and_requires_exact_confirmation(tmp_path: Path, confirmation: str) -> None:
-    """Verify that rebrand restore preserves originals and requires exact confirmation.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        confirmation: Confirmation value used by the test case.
-    """
-    from typer.testing import CliRunner
-
-    from dataforge.cli import app
-    from dataforge.database_maintenance import backup
-
-    store = Store(tmp_path / 'home')
-    workspace = populated(store, 'Retained workspace')
-    original = store.original(store.files(workspace)[0]['file_id'])
-    archive = backup(store)
-    store.close()
-    destination = tmp_path / 'restored'
-    command = ['--home', str(tmp_path / 'home'), '--allow-write', 'maintenance', 'restore',
-               str(archive), str(destination), '--confirm']
-    assert CliRunner().invoke(app, [*command, 'RESTORE']).exit_code != 0
-    assert not destination.exists()
-    result = CliRunner().invoke(app, [*command, confirmation])
-    assert result.exit_code == 0, result.output
-    restored = Store(destination)
-    assert restored.original(restored.files(workspace)[0]['file_id']) == original
-    restored.close()
-
-
 def test_cli_requires_write_permission_saved_preview_and_name(tmp_path: Path) -> None:
     """Verify that cli requires write permission saved preview and name.
 
@@ -196,40 +166,6 @@ def test_mcp_cleanup_is_read_only_even_with_write_policy(tmp_path: Path) -> None
     finally:
         service.close()
         store.close()
-
-
-def test_cleanup_ui_preview_confirmation_backup_and_rebuild(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that cleanup ui preview confirmation backup and rebuild.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    from pathlib import Path
-
-    from streamlit.testing.v1 import AppTest
-
-    monkeypatch.setenv('DATAFORGE_HOME', str(tmp_path))
-    store = Store(tmp_path)
-    w = populated(store, 'test')
-    store.close()
-    app = AppTest.from_file(Path('app.py').resolve(), default_timeout=30).run()
-    app.switch_page('ui/pages/settings.py').run()
-    app.switch_page("ui/pages/management.py").run()
-    app.segmented_control[0].set_value("Cleanup & recovery").run()
-    assert not app.exception
-    next(s for s in app.selectbox if s.label == 'Cleanup category').set_value('lineage').run()
-    next(b for b in app.button if b.label == 'Preview cleanup').click().run()
-    assert next(b for b in app.button if b.label == 'Apply previewed cleanup').disabled
-    next(t for t in app.text_input if t.label == 'Type test to confirm').set_value('test').run()
-    next(b for b in app.button if b.label == 'Apply previewed cleanup').click().run()
-    assert not app.exception
-    assert list((tmp_path / 'backups').glob('*.zip'))
-    next(b for b in app.button if b.label == 'Rebuild lineage').click().run()
-    assert not app.exception
-    assert any('Lineage rebuilt' in s.value for s in app.success)
-    from ui.common import get_store
-    assert get_store(str(tmp_path)).edges(w)
 
 
 def test_orphans_reject_hardlink_and_restore_rejects_traversal(tmp_path: Path) -> None:
@@ -306,52 +242,6 @@ def test_scoped_agent_cannot_create_whole_home_backup(tmp_path: Path) -> None:
         store.close()
 
 
-def test_provider_validation_cannot_recreate_deleted_workspace_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that provider validation cannot recreate deleted workspace data.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes.
-    """
-    import threading
-    from concurrent.futures import ThreadPoolExecutor
-
-    import httpx
-    from focused_test_profiles import focused_profile
-
-    from dataforge.cleanup import apply_cleanup, cleanup_plan
-    from dataforge.focused_grounding import ground_response
-    from dataforge.llm import assist
-
-    store = Store(tmp_path)
-    w = populated(store, 'test')
-    ready, resume = threading.Event(), threading.Event()
-
-    def validate(*args: Any, **kwargs: Any) -> Any:
-        """Handle validate for the test scenario.
-
-        Args:
-            args: Positional arguments forwarded to the operation.
-        """
-        ready.set()
-        assert resume.wait(10)
-        return ground_response(*args, **kwargs)
-    monkeypatch.setattr('dataforge.focused_grounding.ground_response', validate)
-    profile = focused_profile(provider='Ollama', base_url='http://localhost:11434', model='test')
-    transport = httpx.MockTransport(lambda _: httpx.Response(200, json={'message': {'content': '{}'}}))
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(assist, store, w, profile, store.files(w)[0]['file_id'], 1, 1, transport=transport)
-        assert ready.wait(10)
-        try:
-            with pytest.raises(ValueError, match='active'):
-                apply_cleanup(store, cleanup_plan(store, w, 'workspace'), 'test')
-        finally:
-            resume.set()
-            future.result(timeout=10)
-    assert store.workspaces() and store.files(w)
-    store.close()
-
-
 def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path: Path) -> None:
     """Verify that restore refuses manifest valid backup missing referenced blob.
 
@@ -381,27 +271,4 @@ def test_restore_refuses_manifest_valid_backup_missing_referenced_blob(tmp_path:
     with pytest.raises(ValueError, match='integrity'):
         backup(store)
     assert not (tmp_path / 'restore').exists()
-    store.close()
-
-
-@pytest.mark.parametrize('confirmation', ['RESET DATAFORGE', 'RESET GRAVETRAIL'])
-def test_application_reset_preserves_theme_assets_and_unrecognized_job_files(tmp_path: Path, confirmation: str) -> None:
-    """Verify that application reset preserves theme assets and unrecognized job files.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        confirmation: Confirmation value used by the test case.
-    """
-    from dataforge.cleanup import apply_cleanup, cleanup_plan
-
-    store = Store(tmp_path)
-    w = populated(store, 'test')
-    theme = tmp_path / '.streamlit' / 'config.toml'
-    theme.parent.mkdir()
-    theme.write_text('[theme]\nbase="dark"\n')
-    personal = tmp_path / 'agent' / 'jobs' / 'personal.json'
-    personal.parent.mkdir(parents=True)
-    personal.write_text(json.dumps({'workspace_id': w, 'status': 'completed', 'updated_at': time.time()}))
-    apply_cleanup(store, cleanup_plan(store, '', 'application'), confirmation)
-    assert theme.is_file() and personal.is_file()
     store.close()

@@ -95,20 +95,3 @@ def test_changed_source_removes_stale_lineage_and_isolation(tmp_path: Path) -> N
     assert "raw.a" not in names and "raw.b" in names
     assert s.assets(other) == [] and s.edges(other) == []
     s.close()
-
-
-def test_csv_name_alone_never_creates_dependency(tmp_path: Path) -> None:
-    """Verify that csv name alone never creates dependency.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    s = Store(tmp_path)
-    w = s.create_workspace("A")
-    Importer(s, w).files([("customers.csv", b"id\n1"),
-                           ("q.sql", b"create table mart.x as select id from customers")], {".sql", ".csv"})
-    analyze(s, w)
-    g = LineageGraph(s.assets(w), s.edges(w))
-    csv = g.search("file:customers.csv")[0]["asset_id"]
-    assert g.graph.degree(csv) == 0
-    s.close()

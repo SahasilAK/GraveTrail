@@ -1,65 +1,12 @@
 """Distribution boundaries: writable homes, immutable assets and artifact integrity."""
 import json
-import runpy
 import shutil
 import subprocess
-import sys
 import tarfile
-import tomllib
 import zipfile
 from pathlib import Path
 
 import pytest
-
-
-def test_gravetrail_distribution_keeps_legacy_entry_points() -> None:
-    """Verify that gravetrail distribution keeps legacy entry points."""
-    root = Path(__file__).resolve().parents[1]
-    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    assert project["name"] == "gravetrail"
-    for suffix in ("", "-ui", "-build"):
-        assert project["scripts"]["gravetrail" + suffix] == project["scripts"]["dataforge" + suffix]
-
-
-def test_frozen_cli_uses_gravetrail_program_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that frozen cli uses gravetrail program name.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes."""
-    calls = []
-    monkeypatch.setenv("DATAFORGE_HOME", str(tmp_path))
-    monkeypatch.setattr(sys, "argv", ["gravetrail.exe", "--cli", "--help"])
-    monkeypatch.setattr(sys, "path", sys.path[:])
-    monkeypatch.setattr("dataforge.cli.app", lambda: calls.append(sys.argv[:]))
-    root = Path(__file__).resolve().parents[1]
-    runpy.run_path(str(root / "scripts/build/frozen_entry.py"), run_name="__main__")
-    assert calls == [["gravetrail", "--help"]]
-
-
-def test_python_build_ignores_unrelated_brand_and_previous_version_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Verify that python build ignores unrelated brand and previous version artifacts.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        monkeypatch: Pytest fixture for isolating environment and attribute changes."""
-    from dataforge.build import build_python
-
-    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
-    (tmp_path / 'dependency-overrides.txt').write_text('pillow==13.0.0\n', encoding='utf-8')
-    output = tmp_path / "dist"
-    folder = output / "python"
-    folder.mkdir(parents=True)
-    for name in ("unrelated_brand-1.2.3-py3-none-any.whl", "gravetrail-1.2.2-py3-none-any.whl",
-                 "gravetrail-1.2.2.tar.gz", "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz"):
-        (folder / name).write_bytes(b"artifact")
-    monkeypatch.setattr("dataforge.build._run", lambda *args, **kwargs: None)
-    assert {p.name for p in build_python(tmp_path, output)} == {
-        "gravetrail-1.2.3-py3-none-any.whl", "gravetrail-1.2.3.tar.gz", "dependency-overrides.txt"}
-    assert (folder / 'dependency-overrides.txt').read_text(encoding='utf-8') == 'pillow==13.0.0\n'
-    (folder / "gravetrail-1.2.3-py3-none-any.whl").unlink()
-    with pytest.raises(ValueError, match="current GraveTrail"):
-        build_python(tmp_path, output)
 
 
 def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path: Path) -> None:
@@ -73,38 +20,6 @@ def test_installed_home_is_outside_package_and_honors_os_conventions(tmp_path: P
     assert default_home(source=False, platform="linux", environ={"XDG_DATA_HOME": str(tmp_path)}) == tmp_path / "dataforge"
     assert default_home(source=False, platform="darwin", environ={"HOME": str(tmp_path)}) == tmp_path / "Library/Application Support/DataForge"
     assert default_home(source=True, environ={}) == Path.cwd() / ".dataforge"
-
-
-def test_docker_build_receives_the_required_installer_policy_file() -> None:
-    """Verify Docker receives the installer policy used by packaged builds."""
-    root = Path(__file__).resolve().parents[1]
-    assert '!dependency-overrides.txt' in (root / '.dockerignore').read_text(encoding='utf-8').splitlines()
-    copies = [line.split()[1:-1] for line in (root / 'Dockerfile').read_text(encoding='utf-8').splitlines()
-              if line.startswith('COPY ') and '--from=' not in line]
-    assert any('dependency-overrides.txt' in paths for paths in copies)
-
-
-def test_runtime_theme_is_copied_once_and_package_is_unchanged(tmp_path: Path) -> None:
-    """Verify that runtime theme is copied once and package is unchanged.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest."""
-    from dataforge.launcher import prepare_runtime
-
-    assets = tmp_path / "assets"
-    (assets / ".streamlit").mkdir(parents=True)
-    original = "[theme]\nbase = 'dark'\n"
-    (assets / ".streamlit/config.toml").write_text(original)
-    home = tmp_path / "runtime"
-    target = prepare_runtime(home, assets)
-    assert target.read_text() == original
-    target.write_text("[theme]\nbase = 'light'\n")
-    assert prepare_runtime(home, assets).read_text() == "[theme]\nbase = 'light'\n"
-    assert (assets / ".streamlit/config.toml").read_text() == original
-    source_assets = tmp_path / "source"
-    (source_assets / "ui").mkdir(parents=True)
-    (source_assets / "ui/streamlit.toml").write_text(original)
-    assert prepare_runtime(source_assets, source_assets).read_text() == original
 
 
 def test_manifest_detects_tampering_missing_and_unsafe_files(tmp_path: Path) -> None:

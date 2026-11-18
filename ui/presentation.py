@@ -115,6 +115,9 @@ def sync_context(store: Store, workspace: str) -> None:
             if key.startswith(prefixes) or key in {"workspace_notice", "lineage_direction_tabs", "runtime_secret", "connection_notice"}:
                 st.session_state.pop(key, None)
         if previous[:2] != signature[:2]:
+            for key in list(st.session_state):
+                if key.startswith("migration_"):
+                    st.session_state.pop(key, None)
             for key in ("asset_search_lineage", "asset_search_columns", "asset_search_impact"):
                 st.session_state.pop(key, None)
     st.session_state["view_context"] = signature

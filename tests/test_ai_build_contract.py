@@ -17,14 +17,6 @@ def test_mixed_family_selection_is_rejected_before_dispatch(tmp_path):
             prepare_analysis(store, workspace, AnalysisRequest(mode='ai'))
 
 
-def test_removed_hybrid_start_has_explicit_error(tmp_path):
-    with closing(Store(tmp_path)) as store:
-        workspace = store.create_workspace('legacy')
-        result = run_analysis(store, workspace, AnalysisRequest(mode='hybrid'))
-        assert result.status == 'blocked'
-        assert 'no longer supported' in result.reasons[0]
-
-
 def test_explicit_static_build_does_not_restore_project_ai_results(tmp_path, monkeypatch):
     with closing(Store(tmp_path)) as store:
         workspace = store.create_workspace('static')

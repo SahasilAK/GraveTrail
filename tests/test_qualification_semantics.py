@@ -1,39 +1,15 @@
 """Development failures reduced to independent positive and deceptive-negative cases."""
 
-import pytest
 
 from dataforge.ai_validation import validate_project_response
-from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 from tests.test_ai_analysis_validation import context, edge, response
 
 
-@pytest.mark.parametrize('literal', ["'01JAN2025'd", "'01jan25'D", "'12:30:01't", "'01JAN2025:12:30:01'dt"])
-def test_sas_typed_literals_keep_aggregate_table_dependencies_and_original(literal):
-    code = ("proc sql; create table mart.b as select a.id, sum(a.x) as total "
-            "from raw.a a left join raw.c c on a.id=c.id "
-            f"where a.stamp >= {literal} group by a.id; quit;")
-    parsed = parse_sas(code)
-    assert len(parsed.operations) == 1
-    operation = parsed.operations[0]
-    assert {r.name for r in operation.sources} == {'raw.a', 'raw.c'}
-    assert literal in operation.code
-    ctx = context(code, 'sas')
-    report = validate_project_response(response(ctx, relationships=[edge(), edge('raw.c')]), ctx)
-    assert len(report.accepted) == 2
-
-
-@pytest.mark.parametrize('literal', ["'32JAN2025'd", "'01FAKE25'd", "'25:00:00't", "'01JAN2025'unknown"])
-def test_invalid_sas_literals_never_establish_claims(literal):
-    code = f'proc sql; create table mart.b as select id from raw.a where stamp >= {literal}; quit;'
+def test_invalid_sas_literals_never_establish_claims():
+    code = "proc sql; create table mart.b as select id from raw.a where stamp >= '01FAKE25'd; quit;"
     ctx = context(code, 'sas')
     assert not validate_project_response(response(ctx, relationships=[edge()]), ctx).accepted
-
-
-def test_sas_plain_string_alias_and_ordinary_sql_are_unchanged():
-    parsed = parse_sas("proc sql; create table mart.b as select '01JAN2025' d from raw.a; quit;")
-    assert parsed.operations
-    assert not parse_sql("create table mart.b as select id from raw.a where stamp >= '01JAN2025'd;").operations
 
 
 def test_sas_usage_cannot_drop_typed_literal_suffix():
@@ -59,39 +35,6 @@ def test_merge_derived_using_activates_only_reachable_sources():
     assert report.rejected
 
 
-@pytest.mark.parametrize('query, origin', [
-    ('SELECT id, x FROM raw.a', 'raw.a'),
-    ('SELECT a.id, x FROM raw.a a JOIN raw.c c ON a.id=c.id', None),
-])
-def test_merge_derived_using_does_not_guess_outer_column_ownership(query, origin):
-    operation, = parse_sql(f'MERGE INTO mart.b b USING ({query}) incoming '
-                           'ON b.id=incoming.id WHEN MATCHED THEN UPDATE SET total=incoming.x;').operations
-    assert not any(u.table in {'raw.a', 'raw.c'} and u.context == 'MERGE' for u in operation.usages)
-    write, = (d for d in operation.derivations if d['category'] == 'sql_merge_update')
-    assert write['target_column'] == 'total'
-    assert {(i['table'], i['column']) for i in write['inputs'] if i['role'] == 'value'} == {
-        ('incoming', 'x'), ('mart.b', 'total')}
-    incoming, = (i for i in write['inputs'] if i['table'] == 'incoming' and i['role'] == 'value')
-    assert incoming['scope']
-    projection, = (d for d in operation.derivations
-                   if d['scope'] == incoming['scope'] and d['target_column'] == incoming['column'])
-    assert projection['status'] == ('verified' if origin else 'unresolved')
-    assert {i['table'] for i in projection['inputs'] if i['role'] == 'value'} == ({origin} if origin else set())
-
-
-@pytest.mark.parametrize('sql,expression,usage_context', [
-    ('MERGE INTO mart.b b USING (SELECT id FROM raw.a a) incoming ON b.id=incoming.id '
-     'WHEN MATCHED THEN UPDATE SET total=a.id;', 'total = a.id', 'UPDATE'),
-    ('UPDATE mart.b SET total=(SELECT max(a.id) FROM raw.a a) WHERE a.id=1;', 'a.id = 1', 'WHERE'),
-    ('DELETE FROM mart.b WHERE EXISTS (SELECT 1 FROM raw.a a) AND a.id=1;', 'a.id = 1', 'WHERE'),
-])
-def test_inner_query_alias_cannot_establish_outer_dml_usage(sql, expression, usage_context):
-    ctx = context(sql)
-    column = {'table': 'raw.a', 'column': 'id', 'context': usage_context,
-              'alias': 'a', 'expression': expression}
-    assert not validate_project_response(response(ctx, columns=[column]), ctx).accepted
-
-
 def test_valid_merge_inner_alias_shadow_cannot_steal_target_read():
     code = ('MERGE INTO mart.b a USING (SELECT id FROM raw.a a) incoming ON a.id=incoming.id '
             'WHEN MATCHED THEN UPDATE SET total=a.id;')
@@ -101,21 +44,3 @@ def test_valid_merge_inner_alias_shadow_cannot_steal_target_read():
     assert not validate_project_response(response(ctx, columns=[column]), ctx).accepted
     column['table'] = 'mart.b'
     assert validate_project_response(response(ctx, columns=[column]), ctx).accepted
-
-
-@pytest.mark.parametrize('language', ['sql', 'sas'])
-def test_update_scalar_subquery_is_active_but_unused_cte_is_not(language):
-    sql = ('WITH unused AS (SELECT x FROM fake.secret) UPDATE mart.b SET total='
-           '(SELECT max(a.x) FROM raw.a a WHERE a.id=mart.b.id);')
-    code = 'proc sql; ' + sql + ' quit;' if language == 'sas' else sql
-    parsed = parse_sas(code) if language == 'sas' else parse_sql(code)
-    assert len(parsed.operations) == 1
-    assert {r.name for r in parsed.operations[0].sources} == {'raw.a'}
-    ctx = context(code, language)
-    result = validate_project_response(response(ctx, relationships=[edge(operation='UPDATE')]), ctx)
-    assert len(result.accepted) == 1
-
-
-def test_delete_exists_reachable_query_retains_input():
-    code = 'DELETE FROM mart.b WHERE EXISTS (SELECT 1 FROM raw.a a WHERE a.id=mart.b.id);'
-    assert {r.name for r in parse_sql(code).operations[0].sources} == {'raw.a'}

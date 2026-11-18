@@ -150,6 +150,9 @@ def update_settings(store: Store, policy: AccessPolicy, workspace: str, section:
             else:
                 for key in changed:
                     store.set_setting(workspace, key, after[key])
+                if section == 'privacy' and {'llm_history', 'llm_retention_days'}.intersection(changed):
+                    from dataforge.migration.assistance import expire_responses
+                    expire_responses(store, workspace)
         return {'changed_fields': changed, 'settings_revision': revision(store, workspace),
                 'analysis_required': bool(changed) and section in {'parsing', 'dbt'}, 'reload_required': False,
                 'warnings': ['Analyze to apply parsing changes; existing facts retained'] if changed and section in {'parsing', 'dbt'} else []}

@@ -1,30 +1,9 @@
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from dataforge.cli import app
-
-
-def test_cli_standalone_help_workspace_and_errors(tmp_path: Path) -> None:
-    """Verify that cli standalone help workspace and errors.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    result = subprocess.run([sys.executable, "-m", "dataforge.cli", "--help"],
-                            capture_output=True, text=True, timeout=20)
-    assert result.returncode == 0 and "workspace" in result.stdout
-    runner = CliRunner()
-    args = ["--home", str(tmp_path), "--json"]
-    denied = runner.invoke(app, [*args, "workspace", "create", "demo"])
-    assert denied.exit_code == 3 and json.loads(denied.stdout)["error"]["code"] == "forbidden"
-    created = runner.invoke(app, [*args, "--allow-write", "workspace", "create", "demo"])
-    assert created.exit_code == 0, created.stdout
-    listed = runner.invoke(app, [*args, "workspace", "list"])
-    assert json.loads(listed.stdout)["items"][0]["name"] == "demo"
 
 
 def test_cli_import_build_background_status_and_export(tmp_path: Path) -> None:

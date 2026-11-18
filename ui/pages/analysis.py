@@ -2,9 +2,11 @@ from collections import Counter
 
 import streamlit as st
 
+from dataforge.migration.service import latest_run
 from dataforge.services import analyze
 from ui.common import context, title
 from ui.dbt_sections import render_projects
+from ui.migration_navigation import migration_link
 from ui.presentation import empty_state, section
 
 title("Analysis", "Turn source code into dependencies you can inspect, verify and trace.")
@@ -33,6 +35,8 @@ elif mode == "Run":
             st.page_link("ui/pages/explorer.py", label="Explore lineage", icon=":material/account_tree:")
             st.button("Review diagnostics", icon=":material/fact_check:",
                       on_click=lambda: st.session_state.update({"analysis_section_" + w: "Diagnostics"}))
+    if committed := latest_run(store, w):
+        migration_link(w, "Create migration", analysis_run=committed)
     statuses = Counter(f["parsing_status"] for f in files)
     with st.container(horizontal=True):
         for label, status in [("Successful parses", "success"), ("Partial parses", "partial"),

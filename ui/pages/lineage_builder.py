@@ -28,6 +28,7 @@ from dataforge.lineage_builder import (
 from dataforge.schema_imports import import_schema
 from ui.builder_canvas import builder_html, builder_node_colors, canvas, column_editor
 from ui.common import context, title
+from ui.migration_navigation import migration_link
 from ui.presentation import section
 from ui.themes import _loaded_preset
 
@@ -107,6 +108,9 @@ def table_form(existing: BuilderTable | None = None, place: bool = False) -> Non
 
 mode = section("Builder workspace", ["Schemas & data entry", "Build lineage", "Export schemas", "Saved work"], prefix + "section")
 st.caption(f"{len(document.tables)} workspace tables · {sum(len(t.columns) for t in document.tables)} columns · {sum(t.position is not None for t in document.tables)} tables on canvas · {len(document.links)} relationships")
+if document.tables:
+    migration_link(w, "Create migration", builder_revision=document.revision,
+                   builder_tables=[table.id for table in document.tables if table.canvas_member] or None)
 
 if mode == "Schemas & data entry":
     action = section("Schema action", ["Create table", "Import schemas", "Edit tables"], prefix + "schema_action")

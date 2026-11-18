@@ -19,7 +19,7 @@ ROOT_FILES = {
 }
 GROUPS = (
     "Entry points and package", "Static parsing and identity", "Storage and configuration",
-    "Graphs, columns and exports", "AI and provider services", "dbt",
+    "Graphs, columns and exports", "AI and provider services", "dbt", "Migration",
     "CLI and MCP automation", "Streamlit UI", "Prompts and response schemas",
     "Verification and release tooling", "Documentation tooling", "Build and packaging tooling",
     "Continuous integration and repository templates", "Runtime and development configuration",
@@ -70,6 +70,8 @@ def subsystem(name: str) -> str:
         return "CLI and MCP automation"
     if name.startswith("src/dataforge/dbt/"):
         return "dbt"
+    if name.startswith("src/dataforge/migration/"):
+        return "Migration"
     if name.startswith("ui/"):
         return "Streamlit UI"
     if name.startswith("prompts/"):

@@ -16,14 +16,16 @@ ARCHIVE = Path('tests/sample_data/banking_legacy_sql_2114_lineage_stress_test.zi
 REPORTED_FILE = '09_vendor_dialects/mysql/mysql_004_treasury_treasury_positions.sql'
 
 
-def test_reported_mysql_range_with_full_banking_estate(tmp_path):
+def test_reported_mysql_range_is_unaffected_by_unrelated_catalog_assets(tmp_path):
     store = Store(tmp_path)
     try:
         w = store.create_workspace('first_test replay')
         with ZipFile(ARCHIVE) as archive:
-            Importer(store, w).files(((name, archive.read(name)) for name in archive.namelist()
-                                     if name.endswith(('.sql', '.csv'))), {'.sql', '.csv'})
+            Importer(store, w).files([(REPORTED_FILE, archive.read(REPORTED_FILE))], {'.sql'})
         analyze(store, w)
+        referenced = 'core.treasury_treasury_positions_current'
+        store.execute("INSERT INTO assets VALUES ('referenced', ?, ?, ?, 'table', false, '{}')",
+                      [w, referenced, referenced])
         source = next(f for f in store.files(w) if f['relative_path'] == REPORTED_FILE)
         profile = Profile(provider='LM Studio', base_url='http://localhost:1234/v1', model='qwen3.5-4b',
                           output_mode='automatic', source_limit_policy='token_capacity')
@@ -32,13 +34,18 @@ def test_reported_mysql_range_with_full_banking_estate(tmp_path):
         store.set_setting(w, 'task_models', {'sql_lineage': 'reported'})
         item = store.rows('SELECT diagnostic_id FROM diagnostics WHERE workspace_id=? AND file_id=? AND severity IN (?,?)',
                           [w, source['file_id'], 'warning', 'error'])[0]
+        before = preview_review(store, w, item['diagnostic_id'], 1, 13)['budget']
+        store.execute("""INSERT INTO assets
+            SELECT 'unrelated-' || i, ?, name, name, 'table', false, '{}'
+            FROM (SELECT i, 'other.unrelated_long_catalog_name_' || i AS name FROM range(3000) t(i))""", [w])
         result = preview_review(store, w, item['diagnostic_id'], 1, 13)
         budget = result['budget']
         assert budget['input_allowance'] == 71501 and budget['reserved_output'] == 30643
         assert budget['fits'], budget
         assert budget['estimated_input_tokens'] < 10000
+        assert budget['estimated_input_tokens'] == before['estimated_input_tokens']
         assert budget['context_scope']['policy'] == 'selected_source_references'
-        assert budget['context_scope']['available_assets'] > 1000
+        assert budget['context_scope']['available_assets'] == before['context_scope']['available_assets'] + 3000
         assert budget['context_scope']['prompt_assets'] == 1
         prepared = prepare_assistance(store, w, profile, source['file_id'], 1, 13, 'sql_lineage',
                                       profile_id='reported')
@@ -46,11 +53,11 @@ def test_reported_mysql_range_with_full_banking_estate(tmp_path):
         assert len(original) == 974 and original == result['code']
         context = json.loads(prepared['user'].split('\n', 1)[-1])
         assert context['source'] == original
-        assert context['known_assets'] == ['core.treasury_treasury_positions_current']
+        assert context['known_assets'] == [referenced]
         # The default parser has not established this MySQL target. Budgeting
         # keeps catalog context distinct from source-backed resource proposals.
         assert 'vendor_mysql.treasury_treasury_positions_004' not in prepared['known']
-        assert 'core.treasury_funding_deals_current' in prepared['known']
+        assert 'other.unrelated_long_catalog_name_2999' in prepared['known']
         assert len(prepared['known']) > 1000  # Full identity context remains local.
         seen = []
 

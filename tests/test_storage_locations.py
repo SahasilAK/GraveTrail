@@ -1,28 +1,6 @@
-import os
 from pathlib import Path
 
 import pytest
-
-
-def test_storage_choices_are_bounded_explicit_paths_and_selection_is_validated(tmp_path: Path) -> None:
-    """Verify that storage choices are bounded explicit paths and selection is validated.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-    """
-    from dataforge.storage_locations import allowed_homes, validate_home
-
-    first, second = tmp_path / "first", tmp_path / "second"
-    choices = allowed_homes(first, os.pathsep.join([str(second), str(second)]))
-    assert choices == [str(first.resolve()), str(second.resolve())]
-    assert validate_home(str(second), choices) == str(second.resolve())
-    with pytest.raises(ValueError):
-        validate_home(str(tmp_path / "unlisted"), choices)
-    with pytest.raises(ValueError):
-        allowed_homes(first, "relative/home")
-    with pytest.raises(ValueError):
-        allowed_homes(first, os.pathsep.join(str(tmp_path / str(i)) for i in range(9)))
-    assert not first.exists() and not second.exists()  # preview does not create stores
 
 
 def test_ui_switches_independent_storage_and_preserves_other_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

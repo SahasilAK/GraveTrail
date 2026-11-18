@@ -14,11 +14,12 @@ from typing import Any
 
 from dataforge.dbt.persistence import DBT_TABLES
 from dataforge.maintenance import _idle
+from dataforge.migration.service import TABLES as MIGRATION_TABLES
 from dataforge.store import AI_ANALYSIS_TABLES, COLUMN_TABLES, Store
 
 GRAPH = (*DBT_TABLES, *COLUMN_TABLES, 'edges', 'column_usages', 'operation_assets', 'operations', 'statements',
          'asset_aliases', 'assets', 'diagnostics')
-WORKSPACE_TABLES = (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'ingestion_runs', 'source_files',
+WORKSPACE_TABLES = (*MIGRATION_TABLES, *AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'ingestion_runs', 'source_files',
                     'history_archives', 'temporary_recovery', 'llm_profiles', 'settings', 'workspaces')
 CATEGORIES = ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'cache', 'reset',
               'workspace', 'orphans', 'application')
@@ -247,7 +248,7 @@ def _selection(store: Store, workspace: str, category: str, file_ids: list[str] 
     tables = {
         'sources': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'source_files'),
         'lineage': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs'), 'columns': ('analysis_fact_support', *COLUMN_TABLES, 'column_usages'),
-        'ai': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records'),  # remove dependent inferred graph, rebuild deterministically
+        'ai': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'migration_activity'),
         'history': ('analysis_runs', 'ingestion_runs'), 'jobs': (), 'cache': ('parse_cache',),
         'reset': (*AI_ANALYSIS_TABLES, *GRAPH, 'analysis_runs', 'llm_records', 'history_archives', 'temporary_recovery', 'ingestion_runs'),
         'workspace': WORKSPACE_TABLES, 'orphans': (),
@@ -256,6 +257,8 @@ def _selection(store: Store, workspace: str, category: str, file_ids: list[str] 
     selected = {}
     for table in tables:
         where, params = ('TRUE', []) if global_scope else ('workspace_id=?', [workspace])
+        if category == 'ai' and table == 'migration_activity':
+            where += " AND kind='response'"
         if category == 'columns' and table == 'analysis_fact_support':
             where += " AND fact_type IN ('usage','derivation')"
         if table == 'source_files' and file_ids:

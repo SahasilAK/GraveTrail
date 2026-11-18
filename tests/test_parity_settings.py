@@ -1,7 +1,6 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -44,24 +43,23 @@ def test_typed_sections_atomic_conflicts_and_mcp(tmp_path: Path) -> None:
     assert result.exit_code == 0 and json.loads(result.output)['values']['parse_workers'] == 3
 
 
-@pytest.mark.parametrize('section,patch', [('privacy', {'external_llm': True}), ('privacy', {'redact_secrets': False}), ('privacy', {'max_context_chars': 10000}), ('agent_access', {'max_chars': 20000}), ('temporary_cleanup', {'enabled': True})])
-def test_settings_refuse_escalation(tmp_path: Path, section: str, patch: dict[str, Any]) -> None:
-    """Verify that settings refuse escalation.
-
-    Args:
-        tmp_path: Temporary directory supplied by pytest.
-        section: Section value used by the test case.
-        patch: Patch value used by the test case.
-    """
+def test_settings_refuse_escalation(tmp_path: Path) -> None:
     store = Store(tmp_path)
     w = store.create_workspace('no escalation')
     service = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True))
     try:
-        before = service.call('settings_get', w, section=section)
-        with pytest.raises(AgentError) as caught:
-            service.call('settings_update', w, section=section, values=patch, expected_revision=before['settings_revision'])
-        assert caught.value.code == 'requires_local_admin'
-        assert service.call('settings_get', w, section=section) == before
+        for section, patch in (
+            ('privacy', {'external_llm': True}),
+            ('privacy', {'redact_secrets': False}),
+            ('privacy', {'max_context_chars': 10000}),
+            ('agent_access', {'max_chars': 20000}),
+            ('temporary_cleanup', {'enabled': True}),
+        ):
+            before = service.call('settings_get', w, section=section)
+            with pytest.raises(AgentError) as caught:
+                service.call('settings_update', w, section=section, values=patch, expected_revision=before['settings_revision'])
+            assert caught.value.code == 'requires_local_admin', (section, patch)
+            assert service.call('settings_get', w, section=section) == before
     finally:
         service.close()
         store.close()

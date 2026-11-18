@@ -12,6 +12,8 @@ optional JSON Pointers. Normalized snapshots retain historical source reachabili
 Version 9 adds durable AI request/attempt/context/link journals; version 10 adds separate
 opt-in `ai_inspection_artifacts` request/response capture. Protocol 5 file/part results reuse
 the run/unit tables rather than requiring another schema migration.
+Version 11 adds workspace-owned migration projects, embedded source snapshots, immutable
+revisions and activity records. See [Migration architecture](architecture/migration.md).
 Do not edit schema destructively or delete runtime data to resolve a migration error.
 
 ```mermaid

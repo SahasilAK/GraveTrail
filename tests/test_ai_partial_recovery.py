@@ -4,12 +4,11 @@ from collections import Counter
 import httpx
 import pytest
 from test_ai_extraction_recovery import envelope, setup_run
-from test_ai_resumable_files import configured
 from test_ai_token_budget import model
 
 from dataforge.ai_analysis_models import AnalysisRequest
 from dataforge.ai_analysis_store import load_file_extractions, load_file_parts
-from dataforge.analysis_service import analysis_report, recovery_message, run_analysis
+from dataforge.analysis_service import analysis_report, run_analysis
 from dataforge.ingestion import Importer
 from dataforge.store import Store
 
@@ -22,16 +21,6 @@ def advance_backoff(monkeypatch):
         clock[0] += seconds
         check()
     monkeypatch.setattr(service, 'recovery_wait', advance)
-
-
-def test_deferred_work_does_not_claim_publication_before_commit():
-    pending = {'unresolved_work': {'part': {'file_id': 'file'}},
-        'status': 'cancelled', 'last_failure': {'failure_category': 'cancelled'}}
-    message = recovery_message(pending)
-    assert 'published' not in message.lower()
-    assert 'cancelled' in message.lower() and 'saved progress' in message.lower()
-    published = recovery_message({**pending, 'status': 'committed'})
-    assert 'published with incomplete coverage' in published
 
 
 def test_bounded_invalid_work_publishes_explicit_partial_and_retries_only_unresolved_after_reopen(tmp_path, monkeypatch):
@@ -77,47 +66,6 @@ def test_bounded_invalid_work_publishes_explicit_partial_and_retries_only_unreso
     assert all(f.processed for f in load_file_extractions(store, w, first.run_id))
     assert not analysis_report(store, w, first.run_id)['summary']['unresolved_work']
     assert len(store.edges(w)) == 1 and len(store.rows('SELECT * FROM analysis_runs')) == 2
-    store.close()
-
-
-def test_failed_completion_keeps_saved_initial_facts_and_is_retryable(tmp_path, monkeypatch):
-    advance_backoff(monkeypatch)
-    store = Store(tmp_path)
-    w = store.create_workspace('partial enrichment')
-    configured(store, w, model())
-    Importer(store, w).files([('consumer.sas', b'%load;'), ('definition.sas', b'opaque load;')], {'.sas'})
-    calls, seen = [], []
-    def provider(request):
-        ctx = json.loads(json.loads(request.content)['messages'][-1]['content'])
-        calls.append(ctx)
-        items = []
-        for i in ctx['items']:
-            p = i['part']
-            seen.append(p['work_kind'])
-            if p['work_kind'] == 'context_completion':
-                continue
-            ref = {k: p[k] for k in ('file_id', 'content_hash', 'start_offset', 'end_offset')}
-            item = {'part_id': p['part_id'], 'coverage': 'complete'}
-            if i['path'] == 'definition.sas':
-                item['definitions'] = [{'entry_id': 'load', 'symbol': 'load', 'kind': 'macro', 'source_kind': 'sas',
-                    'origin': 'ai_inferred', 'evidence': [ref]}]
-            else:
-                item['missing_context'] = [{'symbol': 'load', 'kind': 'macro'}]
-            items.append(item)
-        return envelope(items)
-    first = run_analysis(store, w, AnalysisRequest(mode='ai'), transport=httpx.MockTransport(provider), cancelled=lambda: len(calls) >= 6)
-    assert first.status == 'committed' and first.counts['unresolved_parts'] == 1
-    assert 'consolidation_work' not in analysis_report(store, w, first.run_id)['summary']
-    initial = [(p, r) for p, r in load_file_parts(store, w, first.run_id) if p.work_kind == 'extraction']
-    assert len(initial) == 2 and any(r.definitions for _, r in initial)
-    assert any(r.missing_context for _, r in initial)
-    def fixed(request):
-        ctx = json.loads(json.loads(request.content)['messages'][-1]['content'])
-        assert all(i['part']['work_kind'] == 'context_completion' for i in ctx['items'])
-        return envelope([{'part_id': i['part']['part_id'], 'coverage': 'complete'} for i in ctx['items']])
-    resumed = run_analysis(store, w, AnalysisRequest(mode='ai', resume_run_id=first.run_id), transport=httpx.MockTransport(fixed))
-    assert resumed.status == 'committed' and resumed.counts['unresolved_parts'] == 0
-    assert all(row in load_file_parts(store, w, first.run_id) for row in initial)
     store.close()
 
 

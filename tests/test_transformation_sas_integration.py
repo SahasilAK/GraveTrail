@@ -300,9 +300,11 @@ def test_sas_trace_preserves_ordered_variable_versions_and_original_source(tmp_p
         assert second['target']['version'] == '2' and first['target']['version'] == '1'
         assert physical['inputs'][0]['column_id'] == second['target']['column_id']
         assert second['inputs'][0]['column_id'] == first['target']['column_id']
-        assert {(i['table'], i['column_name']) for i in first['inputs']} == {
-            ('raw.orders', 'quantity'), ('raw.orders', 'price')}
+        assert {(i['table'], i['column_name'], i['role']) for i in first['inputs']} == {
+            ('raw.orders', 'quantity', 'value'), ('raw.orders', 'price', 'value')}
+        assert first['expression'] == 'amount=quantity * price;'
         assert second['expression'] == 'amount=amount * 2;'
+        assert all(d['status'] == 'verified' for d in trace['derivations'])
         assert all(d['evidence']['code'] == code and d['evidence']['method'] == 'sas-rules'
                    for d in trace['derivations'])
     finally:
