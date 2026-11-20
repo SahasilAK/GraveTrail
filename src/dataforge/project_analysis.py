@@ -79,6 +79,6 @@ class ProjectAnalysisOperations:
     def _job_cancel(self, w, opts, job_id):
         self._workspace(w, write=True)
         record = self.jobs.read(job_id, w)
-        if record['operation'] not in {'analyze', 'ai_analysis'}:
+        if record['operation'] not in {'analyze', 'ai_analysis', 'migration', 'migration_convert'}:
             raise AgentError('invalid_argument', 'This job does not support cooperative cancellation')
         return self.jobs.cancel(job_id, w)

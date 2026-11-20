@@ -85,7 +85,7 @@ exception internals. HTTP access logging is disabled to keep source/credentials 
 
 ## Discovery and tools
 
-The complete registered interface has **83 tools**, verified on 2026-10-19.
+The complete registered interface has **98 tools**.
 The table lists every tool and every top-level input. `options` is the shared bounded
 query object described below. Required inputs are separate from optional inputs;
 optional defaults and enum values are available through MCP tool discovery or
@@ -104,11 +104,13 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `clear_runtime_connection` | `profile_id`, `workspace_id` | `options` |
 | `compare_analysis_runs` | `after`, `before`, `workspace_id` | `options` |
 | `connect_runtime_reference` | `profile_id`, `workspace_id` | `options` |
+| `create_migration_project` | `expected_pin`, `name`, `workspace_id` | `setup` |
 | `create_workspace` | `name` | `description` |
 | `discover_provider_models` | `profile_id`, `workspace_id` | `options` |
 | `export_ai_result` | `record_id`, `workspace_id` | `options` |
 | `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `include_evidence`, `include_source_text`, `max_paths`, `options` |
 | `export_graph` | `asset`, `workspace_id` | `background`, `direction`, `format`, `legend`, `options`, `scale`, `title` |
+| `export_migration_bundle` | `project_id`, `revision_id`, `workspace_id` | `image_format`, `pilot`, `reviewed`, `workbook` |
 | `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` |
 | `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` |
 | `export_results` | `asset`, `workspace_id` | `direction`, `format`, `options` |
@@ -154,10 +156,13 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `trace_dbt_dependencies` | `workspace_id`, `resource_id` | `direction`, `relationship_kinds`, `max_depth`, `options` |
 | `inspect_cleanup` | `workspace_id` | — |
 | `inspect_database_maintenance` | — | `options` |
+| `inspect_migration_revision` | `project_id`, `workspace_id` | `anchor`, `item`, `offset`, `options`, `revision_id`, `view` |
 | `list_ai_results` | `workspace_id` | `options` |
 | `list_analysis_runs` | `workspace_id` | `options` |
 | `list_history_archives` | `workspace_id` | `options` |
 | `list_ingestion_runs` | `workspace_id` | `options` |
+| `list_migration_projects` | `workspace_id` | `options` |
+| `list_migration_targets` | `workspace_id` | `options` |
 | `list_provider_profiles` | `workspace_id` | `options` |
 | `list_review_candidates` | `workspace_id` | `options` |
 | `list_runtime_backups` | — | `options` |
@@ -169,18 +174,24 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_cleanup` | `category`, `workspace_id` | `file_ids`, `run_id` |
 | `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
 | `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
+| `preview_migration_ai` | `models`, `profile_id`, `project_id`, `purpose`, `revision_id`, `workspace_id` | `dependencies`, `message`, `offset`, `options` |
+| `preview_migration_edit` | `arguments`, `project_id`, `revision_id`, `workspace_id` | `options` |
+| `preview_migration_project` | `name`, `workspace_id` | `options`, `setup` |
 | `preview_project_analysis` | `workspace_id` | `file_ids`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id` | Shared static/AI analysis service |
 | `preview_staging_cleanup` | `workspace_id` | `age_hours`, `options` |
 | `remove_provider_profile` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options`; `expected_request` |
 | `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options`; `expected_request` |
+| `request_migration_ai` | `expected_pin`, `models`, `profile_id`, `project_id`, `purpose`, `revision_id`, `workspace_id` | `dependencies`, `message`, `options` |
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
 | `start_lineage_analysis` | `workspace_id` | `file_ids`, `force`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id`, `retry_unknown` | Shared static/AI analysis service |
+| `start_migration_conversion` | `expected_revision`, `project_id`, `workspace_id` | `reconvert` |
 | `test_local_agent_access` | `workspace_id` | `options` |
 | `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
 | `update_application_logging` | `level` | `options` |
+| `update_migration_revision` | `arguments`, `operation`, `project_id`, `revision_id`, `workspace_id` | — |
 | `update_model_routing` | `expected_revision`, `values`, `workspace_id` | `options` |
 | `update_workspace` | `description`, `expected_revision`, `name`, `workspace_id` | — |
 | `update_workspace_settings` | `expected_revision`, `section`, `values`, `workspace_id` | — |
@@ -309,3 +320,73 @@ with unresolved required work can resume to retry only those items; completed
 checkpoints and cumulative reservations are retained.
 
 Focused AI previews return budget diagnostics and `request_fingerprint`. Pass it as `expected_request` to either request tool to bind dispatch to that exact prepared selection/profile/context. Both request tools share source-backed resource proposals and explicit `merge_ai_claims` acceptance; advisory tasks cannot merge.
+
+## Migration tools
+
+The [app walkthrough](user-guide/migration.md#watch-the-workflow) shows the revision, review evidence
+and pilot scope that these tools expose.
+
+1. Call `list_migration_targets` for supported profiles and the current Analysis and Lineage Builder
+   revisions. Use `list_migration_projects` to find an existing project.
+2. Call `preview_migration_project` with a name and `setup`. Set `selection` to ingested file IDs,
+   `analysis_run` to a committed run ID or `latest`, or `builder_revision` to a revision ID or
+   `current`. Use `selected_outputs` with an analysis run and `builder_tables` with a Builder
+   revision to narrow the plan. `dialects` can override an ingested SQL file's dialect by ID.
+   Target fields include `format`, `warehouse`, `profile`, `catalog`, `schema`, and `materialization`.
+   A setup without an explicit selection or a Builder revision picks supported workspace sources.
+   Pass the same name and setup to `create_migration_project` with the returned `pin` as `expected_pin`.
+3. Call `start_migration_conversion` with the current `expected_revision` and use `get_job_status`
+   to wait for the published revision ID. Set `reconvert` to draft again from the pinned snapshot.
+   Use `inspect_migration_revision` to inspect the result, including its scope, findings,
+   original and migrated lineage, schemas, reviews, and evidence. Use the `artifact` view with
+   an artifact ID in `item` and `anchor` set to `generated`, `source`, or `annotated` to read code.
+   Use `view: "pilot"` with comma-separated model IDs in `item` to preview dependency closure.
+4. Call `preview_migration_edit` with `arguments` containing `replacements` (model IDs mapped to
+   SQL), `rationale`, and optional `scopes`. For an ordered SAS draft, provide `model` and `order`.
+   For a large replacement map, use `replacements_path` under an approved import root.
+   To review an existing AI proposal, pass `proposal`. Apply through `update_migration_revision`
+   with `operation: "apply"` and `arguments` containing the previewed `proposal` and `expected_pin`.
+   For a large proposal, save the proposal object as JSON under an approved import root and use
+   `proposal_path` for preview and apply.
+5. Use `export_migration_bundle` with an explicit revision. Set `reviewed` for a reviewed handoff
+   and include `pilot` model IDs for a dependency-closed subset. Set `image_format` and `workbook`
+   to add a lineage image and mapping/type details. Fetch the ZIP with `get_export` and its
+   `artifact_id`. Follow `next_offset` until all bytes are retrieved and verify the SHA-256.
+
+Use `options.cursor` for list pages. For a text response, pass `next_offset` back as `offset`
+to the same revision and view. For `preview_migration_edit`, place `offset` in `arguments`.
+If the result has `encoding: "json"`, concatenate the `text` chunks before parsing them.
+Setup, conversion, edits, evidence views, and bundle creation and retrieval require the workspace's
+source permission. Project lists, revision summaries and revision history are metadata reads.
+
+`preview_migration_ai` prepares an offline disclosure for 1–50 model IDs and the selected
+provider profile. Review the full result, following `next_offset` if needed. Dispatch only
+with the same inputs and the returned `pin` as `expected_pin` in `request_migration_ai`.
+The request requires startup write and network grants, a permitted origin and credential reference,
+and current workspace write, source and privacy permissions. AI suggestions go through the
+same patch preview and apply flow as manual edits. Set `options.max_chars` within the workspace's
+cap if the reply needs more room. With AI history enabled, inspect saved replies with `view: "ai_responses"`.
+
+Run dbt and comparison checks in your controlled environment. Import external evidence through
+`update_migration_revision`. Pass inline evidence as UTF-8 text or use an approved path under a
+configured import root. Streamable HTTP requests have a 64 KiB body cap. Each evidence import
+stays bound to its revision. Runtime observations, reconciliation, and engineer review are recorded
+separately. See the [Migration user guide](user-guide/migration.md) for the handoff workflow.
+
+| `operation` | Fields in `arguments` |
+| --- | --- |
+| `resolve_scope` | `region_id`, `reason`, optional `external` relation with `catalog`, `schema`, `identifier`, `owner`, and `columns` |
+| `set_contract` | `model`, `inputs`, `behavior`, `prerequisites`, optional `relations` |
+| `apply` | `expected_pin` and either `proposal` or `proposal_path` |
+| `revise_schemas` | `settings` containing `types`, `input_types`, or `source_mappings` |
+| `bulk_mappings` | `csv` or `path`, using the `source_mappings_template` view |
+| `import_schema` | `group` (model or physical source ID) and either `filename` with `content`, or `path`. Optional `types` map supplements the imported columns. |
+| `configure_validation` | `model`, `values` with `not_null`, `unique`, `relationship`, or `comparison`, optional `merge_keys` |
+| `import_validation` | `manifest` or `manifest_path`, and `run_results` or `results_path` from the same dbt invocation |
+| `import_reconciliation` | `csv` or `path`, using the `reconciliation_template` view |
+| `record_review` | `model`, `reviewer`, `rationale`, `obligations` |
+| `restore` | `prior_revision` |
+| `add_comment` | `artifact`, `anchor` (`source`, `generated`, or `section`), `line` (use `null` for `section`), `author`, `message` |
+| `resolve_comment` | `comment_id` |
+| `save_lesson` | `lesson` with `kind`, `pattern`, `guidance`, `example`, `counterexample`, and `owner`. Optional lesson fields are `scope`, `dialect`, and `required_types`. Pass `evidence_model` and optionally `replaces`. |
+| `revoke_lesson` | `lesson_id` |

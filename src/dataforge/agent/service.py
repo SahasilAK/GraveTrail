@@ -22,6 +22,10 @@ from dataforge.agent.contracts import (
     job_settings,
 )
 from dataforge.agent.jobs import Jobs, status_result
+from dataforge.agent.migration import READS as MIGRATION_READS
+from dataforge.agent.migration import SOURCE_ACTIONS as MIGRATION_SOURCE_ACTIONS
+from dataforge.agent.migration import WRITES as MIGRATION_WRITES
+from dataforge.agent.migration import MigrationOperations
 from dataforge.agent.paging import page
 from dataforge.ai_service import READS as AI_READS
 from dataforge.ai_service import WRITES as AI_WRITES
@@ -50,11 +54,12 @@ WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
 MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', 'staging_recoveries',
                      'database_inspect', 'backups_list'}
 APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
-WRITES |= {'theme_apply', 'logging_update'} | PROJECT_WRITES
-LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge'}
+WRITES |= {'theme_apply', 'logging_update'} | PROJECT_WRITES | MIGRATION_WRITES
+LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge', 'migration_ai_request'}
 
 
-class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperations, ArtifactOperations, ProjectAnalysisOperations):
+class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperations, ArtifactOperations,
+                   ProjectAnalysisOperations, MigrationOperations):
     """Coordinate authorized automation requests over application services."""
 
     def __init__(self, store: Any, policy: AccessPolicy | None = None) -> None:
@@ -143,7 +148,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS | DBT_READS:
+                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS | DBT_READS | MIGRATION_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -172,7 +177,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                     if administrator:
                         self.policy.require('admin')
                     settings = self._workspace(workspace_id, write=write,
-                        source=action in {"source", "result"} or (options or {}).get("detail_level") == "detailed",
+                        source=action in {"source", "result"} | MIGRATION_SOURCE_ACTIONS
+                        or (options or {}).get("detail_level") == "detailed",
                         administrator=administrator)
                 values = {"detail_level": settings.default_detail, **(options or {})}
                 values["max_chars"] = min(values.get("max_chars", settings.max_chars), settings.max_chars)
@@ -190,7 +196,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             if write:
                 self.audit(workspace_id, action, exc.code)
             raise
-        except (ValueError, TypeError, ValidationError) as exc:
+        except (ValueError, TypeError, KeyError, ValidationError) as exc:
             from dataforge.credentials import CredentialError
             if isinstance(exc, CredentialError):
                 raise AgentError('credential_unavailable', str(exc)) from None
@@ -1267,7 +1273,9 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         Raises:
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
         self._workspace(w, write=True)
-        if operation == "analyze":
+        if operation == "migration_convert":
+            result = self._run_migration_conversion(w, **arguments, progress=progress, cancelled=cancelled)
+        elif operation == "analyze":
             if arguments.get('mode', 'parser') != 'parser' or arguments.get('resume_run_id'):
                 from dataforge.ai_analysis_models import AnalysisRequest
                 options = dict(arguments)

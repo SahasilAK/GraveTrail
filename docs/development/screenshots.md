@@ -32,6 +32,28 @@ smaller branch so node names remain readable. Source snippets are public synthet
 fixture data. Never capture credentials, personal absolute paths or private projects.
 Review each replaced image and update this table when controls/fixtures change.
 
+## Migration walkthrough
+
+Use a fresh **Order migration demo** workspace with the SQL and SAS files from
+[the migration example](../user-guide/migration.md#try-a-small-migration). Open the app on loopback
+and record the application viewport at 1440 × 960 without browser chrome. The capture uses app
+commit `1a5d3c2` for the migration UI.
+
+| Asset under `docs/assets/images/` | Capture the view |
+| --- | --- |
+| `gravetrail-migration-setup.png` | Preflight with both retained files and the Databricks target. |
+| `gravetrail-migration-review.png` | `accepted_orders` in **Review**, with **Show pinned source evidence** and **Annotated draft** selected. |
+| `gravetrail-migration-lineage.png` | **Migrated lineage** graph showing the SQL edge and the two SAS drafts. |
+| `gravetrail-migration-validation.png` | The external dbt artifact controls and configured `daily_order_totals` comparison, before importing observations. |
+| `gravetrail-migration-export.png` | **Pilot handoff** prepared for `daily_order_totals`, with `stg_orders` in the included models. |
+| `gravetrail-migration-walkthrough.mp4` | Record preview, conversion, the pinned SAS finding, lineage, comparison setup and pilot bundle preparation in that order. |
+
+Keep the original capture in a disposable folder and record when each view opens. Trim the initial
+blank frames, add short action captions in a margin below the UI, and encode a web-ready H.264 MP4
+with `yuv420p` and `+faststart`. Check each caption against the actual screen and verify the pilot ZIP
+contains both SQL models and the reconciliation template. Use no provider credentials or external
+validation artifacts in these captures.
+
 ## Lineage builder canvas
 
 `gravetrail-lineage-builder.png` uses builder source commit `a803b6e` and a disposable

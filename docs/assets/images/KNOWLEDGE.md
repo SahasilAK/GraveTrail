@@ -15,6 +15,7 @@ Public branding plus real browser captures using safe synthetic fixtures and dis
 - `gravetrail-columns.png` — upstream column graph for stg.orders_clean.amount.
 - `gravetrail-export-controls.png` — real Lineage SVG export popover/options.
 - `gravetrail-dbt-resources.png` — real synthetic dbt workspace resource and macro-impact panel after local source-mode analysis.
+- `gravetrail-migration-*.png` and `gravetrail-migration-walkthrough.mp4` — real synthetic SAS/SQL setup, review, migrated lineage, external comparison setup and pilot handoff. Captioned MP4 uses the same sample files as the migration guide.
 - `lineage-example.png` — standalone safe scenario graph with selected relationship/evidence, four assets/three relationships.
 
 The screenshot recipes distinguish real application captures from the standalone fixture graph. Local browser proof/intermediate captures remain excluded from publication.

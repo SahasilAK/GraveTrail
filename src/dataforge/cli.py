@@ -14,6 +14,7 @@ import typer
 
 from dataforge.agent.cli_ai import register as register_ai
 from dataforge.agent.cli_dbt import register as register_dbt
+from dataforge.agent.cli_migration import register as register_migration
 from dataforge.agent.cli_reports import register as register_reports
 from dataforge.agent.cli_reports import register_maintenance
 from dataforge.agent.cli_settings import register as register_settings
@@ -109,12 +110,13 @@ def configure(ctx: typer.Context,
                            "collapse_temporary": collapse_temporary}}
 
 
-def emit(ctx: typer.Context, result: dict[str, Any]) -> None:
+def emit(ctx: typer.Context, result: dict[str, Any], *, show_page_metadata: bool = False) -> None:
     """Render a result according to the configured output options.
 
     Args:
         ctx: Typer context containing output preferences.
         result: Structured service result to display or save.
+        show_page_metadata: Whether to include metadata such as migration pins above paged items.
 
     Raises:
         AgentError: If the operation is invalid, unauthorized, or unavailable."""
@@ -131,6 +133,10 @@ def emit(ctx: typer.Context, result: dict[str, Any]) -> None:
     if config["json"] or "error" in result:
         typer.echo(text)
     elif "items" in result:
+        if show_page_metadata:
+            for key, value in result.items():
+                if key not in {"items", "count", "total", "complete", "next_cursor"}:
+                    typer.echo(f"{key}: {compact(value) if isinstance(value, (dict, list)) else value}")
         for item in result["items"]:
             typer.echo("  ".join(f"{k}: {v}" for k, v in item.items()))
         typer.echo(f"{result['count']} of {result['total']} records; complete={result['complete']}")
@@ -200,7 +206,7 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                         settings = job_settings(config['home'], workspace_id, record)
                         if not config['policy'].allow_write or not settings.allow_write:
                             raise AgentError('forbidden', 'Cancellation requires explicit workspace write access')
-                        if record['operation'] not in {'analyze', 'ai_analysis'}:
+                        if record['operation'] not in {'analyze', 'ai_analysis', 'migration', 'migration_convert'}:
                             raise AgentError('invalid_argument', 'This job does not support cancellation')
                         result = jobs.cancel(job_id, workspace_id)
                         break
@@ -235,11 +241,17 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                 if action == 'analyze' and arguments.get('mode', 'parser') != 'parser':
                     service._workspace(workspace_id, write=True, source=True)
                     service.policy.require('network')
+                if action == 'migration_convert':
+                    service._workspace(workspace_id, write=True, source=True)
+                    service._migration_current(workspace_id, arguments['project_id'], arguments['expected_revision'])
                 QueryOptions.model_validate(config["options"])
                 if action == "ingest":
                     config["policy"].import_path(arguments["path"])
                 record = service.jobs.create(workspace_id, action,
                     AgentSettings.from_store(store, workspace_id).model_dump())
+                if action == 'migration_convert':
+                    from dataforge.migration.assistance import record_job
+                    record_job(store, workspace_id, arguments['project_id'], record['job_id'])
                 # A detached worker opens DuckDB only after this CLI releases its connection.
                 record["request"] = {"arguments": arguments, "policy": asdict(config['policy'])}
                 service.jobs.write(record)
@@ -273,10 +285,10 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                         raise AgentError('conflict', 'Downloaded artifact checksum failed')
                     result = {'artifact_id': artifact_id, 'destination': str(download_to), 'bytes': offset,
                               'sha256': digest.hexdigest(), 'complete': chunk['artifact_complete']}
-                if action in {"ingest", "analyze"}:
+                if action in {"ingest", "analyze", "migration_convert"}:
                     service.jobs.wait(result["job_id"], workspace_id)
                     result = service.job_status(workspace_id, result["job_id"], config["options"])
-        emit(ctx, result)
+        emit(ctx, result, show_page_metadata=action.startswith('migration_'))
         if result.get("status") in {"failed", "interrupted"}:
             raise typer.Exit(6)
     except AgentError as exc:
@@ -413,7 +425,7 @@ def project_report(ctx: typer.Context, workspace: Workspace, run_id: str | None 
 
 @jobs_app.command('cancel')
 def cancel_analysis_job(ctx: typer.Context, workspace: Workspace, job_id: str) -> None:
-    """Request cancellation of an active analysis job.
+    """Request cancellation of an active analysis or migration job.
 
     Args:
         ctx: Typer command context.
@@ -781,6 +793,7 @@ register_application(app, invoke)
 register_ai(app, invoke, fail)
 register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
 register_dbt(app, invoke)
+register_migration(app, invoke, fail)
 register_maintenance(app, maintenance_app, invoke, fail)
 
 if __name__ == "__main__":

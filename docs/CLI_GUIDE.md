@@ -29,8 +29,8 @@ Omit the option to inherit workspace rules. Pass an empty value to explicitly se
 
 ## Commands
 
-Verified against the registered interface on 2026-10-19: **103 executable command
-routes and 29 command groups**. Prefix every route below with `gravetrail`.
+Verified against the registered interface on 2026-11-20. The CLI has **118 executable command
+routes and 31 command groups**. Prefix every route below with `gravetrail`.
 Global options go before the route; command options go after it. An empty
 argument cell means no positional arguments, not that the command has no required
 options. **required** marks mandatory options; all commands accept `--help`.
@@ -114,6 +114,17 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `maintenance inspect` | — | `--help` |
 | `maintenance restore` | `ARCHIVE`, `DESTINATION` | `--confirm`; `--help` |
 | `mcp` | — | `--transport`; `--host`; `--port`; `--public-url`; `--help` |
+| `migration ai-preview` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--model` **required**; `--purpose` **required**; `--message`; `--dependencies`, `--no-dependencies`; `--offset`; `--help` |
+| `migration ai-request` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--model` **required**; `--purpose` **required**; `--expected-pin` **required**; `--message`; `--dependencies`, `--no-dependencies`; `--help` |
+| `migration change` | `PROJECT_ID`, `OPERATION`, `ARGUMENTS` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
+| `migration convert` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--expected-revision`, `--revision` **required**; `--reconvert`, `--no-reconvert`; `--background`, `--no-background`; `--help` |
+| `migration create` | `NAME`, `SETUP` | `--workspace`, `-w` **required**; `--expected-pin` **required**; `--help` |
+| `migration edit-preview` | `PROJECT_ID`, `ARGUMENTS` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
+| `migration export` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--reviewed`, `--no-reviewed`; `--image-format`; `--workbook`, `--no-workbook`; `--pilot`; `--destination`; `--help` |
+| `migration inspect` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision`; `--view`; `--item`; `--anchor`; `--offset`; `--limit`; `--cursor`; `--help` |
+| `migration list` | — | `--workspace`, `-w` **required**; `--help` |
+| `migration preview` | `NAME`, `SETUP` | `--workspace`, `-w` **required**; `--help` |
+| `migration targets` | — | `--workspace`, `-w` **required**; `--help` |
 | `providers credentials status` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--help` |
 | `providers get` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--help` |
 | `providers list` | — | `--workspace`, `-w` **required**; `--help` |
@@ -177,6 +188,7 @@ Groups organize commands; use `gravetrail GROUP --help` to list their children.
 | `jobs` | Persisted job status and results. |
 | `lineage` | Build and query stored lineage. |
 | `maintenance` | Local database inspection, backup, checkpoint and safe restore. |
+| `migration` | Static conversion, revision-pinned review, scoped AI and Databricks dbt handoffs. |
 | `providers` | Profiles, approved runtime references and explicit outbound tests. |
 | `providers credentials` | Status only; use --credential-prompt on a single operation for hidden input. |
 | `providers routing` | Default, five task routes and ordered fallbacks. |
@@ -382,3 +394,48 @@ Build and preview accept `--output-share` (10–50, default 30 for new runs),
 the same precedence and model clamps as the UI; omitted fields preserve pinned
 resume choices. `--resume-run-id` also retries unresolved work from an explicitly
 incomplete committed run, reusing successes without resetting cumulative spending.
+
+## Static dbt migration
+
+Watch the [app walkthrough](user-guide/migration.md#watch-the-workflow) to see the same project
+setup, source findings, lineage and pilot that the CLI exposes.
+
+Run `gravetrail migration targets -w ID` to find target profiles, the latest committed analysis,
+and the current Lineage Builder revision and table IDs. Run `migration list -w ID` to find project
+and revision IDs. The setup file supports the same target and source fields as the
+[MCP migration tools](MCP_INTEGRATION.md#migration-tools). For example, `setup.json` can contain
+`{"analysis_run":"latest","selected_outputs":["mart.sales"],"catalog":"main","schema":"migration"}`.
+
+```bash
+gravetrail --json migration preview "Sales pilot" setup.json -w WORKSPACE_ID
+gravetrail --json --allow-write migration create "Sales pilot" setup.json -w WORKSPACE_ID --expected-pin SETUP_PIN
+gravetrail --json --allow-write migration convert PROJECT_ID -w WORKSPACE_ID --revision REVISION_ID
+gravetrail --json migration inspect PROJECT_ID -w WORKSPACE_ID --view findings
+gravetrail --json migration inspect PROJECT_ID -w WORKSPACE_ID --view artifact --item MODEL --anchor annotated
+```
+
+Add `--background` to conversion to obtain a job ID for `jobs status --wait` or `jobs cancel`.
+Add `--reconvert` to regenerate a draft from pinned sources. Inspect `history` or use `change ...
+restore` to return to a prior revision. The inspection views include mappings, schemas, original and
+migrated lineage, validation, reconciliation templates, review comments and lessons. Use `--cursor`
+for result pages and `--offset` for artifact text. Use `--view pilot --item MODEL,OTHER_MODEL` to
+preview a reviewed pilot's dependency closure.
+
+Use `migration edit-preview PROJECT_ID EDIT.json -w ID --revision REVISION` to see manual or
+ordered SAS diffs, or to review a returned AI proposal. Apply with `migration change PROJECT_ID
+apply APPLY.json -w ID --revision REVISION` and include the exact previewed `proposal` and its
+pin as `expected_pin`. Other `change` operations accept the same JSON arguments listed in the
+[migration operation table](MCP_INTEGRATION.md#migration-tools), including schema and mapping
+imports, review decisions, external dbt/reconciliation evidence, comments and approved lessons.
+For evidence paths, grant the enclosing directory with `--allowed-root`.
+
+Use `migration ai-preview` with `--profile`, repeatable `--model`, `--purpose`, and the message.
+Review the full disclosure, following its offset continuation if needed. Send the same request
+through `migration ai-request --expected-pin` with launch network, write, origin and credential
+grants. Workspace source and provider privacy settings also apply.
+
+Use `migration export PROJECT_ID -w ID --revision REVISION --destination project.zip` for a
+checksummed ZIP at a new local path. Add `--reviewed`, repeatable `--pilot MODEL`,
+`--image-format svg|png`, or `--workbook`. Source evidence needs source access at creation and
+download. Conversion and inspection are static. Run warehouse and dbt checks externally and
+import their evidence against the exact handoff revision.

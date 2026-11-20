@@ -2,6 +2,9 @@
 
 The Migration page uses the existing workspace Store, job journal, provider connections and
 request budgeting. The migration service has no warehouse client or dbt runtime dependency.
+The CLI and MCP adapters call the same services through the workspace agent policy. Artifact
+downloads recheck source access. Provider dispatch additionally requires launch authorization and
+the exact disclosure pin. Setup, edits, validation and export remain revision-bound.
 
 `dataforge.migration.engine` plans outputs and source obligations before writing candidates.
 Source-specific rules live in `sources.py`. SQLGlot parses and generates SQL with explicit dialects.
@@ -10,6 +13,14 @@ inspection uses inert table tokens and checks dependencies, output accounting, s
 cycles and generated graph edges. Unsupported semantics stay review findings. Unsupported or
 unavailable sources stay visible in the inventory and coverage. A small registry and warehouse
 adapter own the compatibility profile, dialect, materializations and type mapping.
+
+<figure class="gt-product" markdown>
+![Migrated lineage showing the SQL model dependency and a shared source for the two SAS drafts](../assets/images/gravetrail-migration-lineage.png)
+<figcaption>The Lineage view renders the dependencies extracted from dbt drafts. The pinned analyzed lineage is shown separately below the migrated evidence.</figcaption>
+</figure>
+
+See the [recorded migration walkthrough](../user-guide/migration.md#watch-the-workflow) for the
+source scope, review findings and pilot that produced this graph.
 
 T-SQL temporary writes stay scoped to the pinned source script. Only an earlier, single local
 `SELECT INTO` with a clear lifetime can supply an ephemeral model dependency. Materializing SQL

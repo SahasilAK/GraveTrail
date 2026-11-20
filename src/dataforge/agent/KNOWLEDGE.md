@@ -11,6 +11,11 @@ Capability DBT01, four MCP dbt reads and explicit ingestion options share existi
 workspace/source/write/root permissions and cursor budgets.
 CLI `ingest --sql-dialect` and MCP `ingest_sources.sql_dialect` share the optional SQL override.
 
+`migration.py` and `cli_migration.py` expose pinned migration setup, conversion, code and lineage
+inspection, proposals, scoped AI, review, evidence imports and managed dbt ZIPs. Agent source
+access gates evidence and artifact downloads. AI dispatch additionally checks the launch policy
+and exact disclosure pin. Evidence paths stay under approved roots.
+
 Shared authorized automation layer. CLI and MCP delegate to the existing services,
 Store, Importer, LineageGraph, exports and explicit opt-in grounded AI; imported source is never executed.
 

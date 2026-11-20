@@ -110,11 +110,13 @@ def _insert(store, workspace, project, item, kind, status, payload):
         VALUES (?,?,?,?,?,?)""", [workspace, project, item, kind, status, service._dump(payload)])
 
 
-def _activity(store, workspace, project, kind):
+def _activity(store, workspace, project, kind, *, retention_days=None):
+    lifetime = " AND created_at >= current_timestamp - (? * INTERVAL '1 day')" if retention_days is not None else ""
+    params = [workspace, project, kind] + ([retention_days] if retention_days is not None else [])
     return [{"id": row["activity_id"], "status": row["status"], **service._read(row["body"])}
             for row in store.rows("""SELECT activity_id,status,body FROM migration_activity
-            WHERE workspace_id=? AND project_id=? AND kind=? ORDER BY created_at DESC,activity_id DESC""",
-            [workspace, project, kind])]
+            WHERE workspace_id=? AND project_id=? AND kind=?""" + lifetime + " ORDER BY created_at DESC,activity_id DESC",
+            params)]
 
 
 def save_lesson(store, workspace, project_id, revision_id, lesson, evidence_model, *, replaces=None):
@@ -285,7 +287,7 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
 
 
 def dispatch(store, workspace, project_id, revision_id, profile_id, models, purpose, message, expected_pin,
-             *, dependencies=False, cancelled=lambda: False, transport=None):
+             *, dependencies=False, cancelled=lambda: False, transport=None, authorize=None):
     prepared = prepare(store, workspace, project_id, revision_id, profile_id, models, purpose, message,
                        dependencies=dependencies)
     if prepared["pin"] != expected_pin:
@@ -307,6 +309,8 @@ def dispatch(store, workspace, project_id, revision_id, profile_id, models, purp
             project = service._project(store, workspace, project_id)
             latest = get_profile(store, workspace, profile_id)
             _allowed(store, workspace, latest)
+            if authorize:
+                authorize(latest)
             if project["revision"] != revision_id or latest != profile:
                 raise ValueError("Migration or provider changed before disclosure")
             records = _activity(store, workspace, project_id, "attempt")
@@ -407,10 +411,13 @@ def _check_optimization(revision, edits, dialect):
             raise ValueError("Optimization changed protected projections, refs, materialization or row semantics")
 
 
-def responses(store, workspace, project_id):
+def responses(store, workspace, project_id, *, prune=True):
     service._project(store, workspace, project_id)
-    expire_responses(store, workspace)
-    return _activity(store, workspace, project_id, "response")
+    if prune:
+        expire_responses(store, workspace)
+    if not store.setting(workspace, "llm_history", False):
+        return []
+    return _activity(store, workspace, project_id, "response", retention_days=int(store.setting(workspace, "llm_retention_days", 30)))
 
 
 def expire_responses(store, workspace):
@@ -426,7 +433,11 @@ def attempts(store, workspace, project_id):
     return _activity(store, workspace, project_id, "attempt")
 
 
-def start_job(store, workspace, project_id, jobs, work):
+def record_job(store, workspace, project_id, job_id):
+    _insert(store, workspace, project_id, job_id, "job", "queued", {"job_id": job_id})
+
+
+def start_job(store, workspace, project_id, jobs, work, *, access=None, operation="migration"):
     """Serialize admission using the same store lock as workspace maintenance."""
     with store.lock:
         service._project(store, workspace, project_id)
@@ -439,8 +450,8 @@ def start_job(store, workspace, project_id, jobs, work):
                 continue
             if state not in TERMINAL:
                 raise ValueError("A migration job is already active in this workspace")
-        job = jobs.start(workspace, "migration", work, connections=current_connections(), cancellable=True)
-        _insert(store, workspace, project_id, job["job_id"], "job", "queued", job)
+        job = jobs.start(workspace, operation, work, access, connections=current_connections(), cancellable=True)
+        record_job(store, workspace, project_id, job["job_id"])
         return job["job_id"]
 
 

@@ -1,15 +1,14 @@
 # CLI and MCP capability coverage
 
-Source inventory updated 2026-10-21. All 49 UI coverage IDs are accounted for:
-39 implemented equivalents and 10 explicitly policy-restricted capabilities. Restricted
+The inventory includes 55 UI coverage IDs, with 45 implemented equivalents and 10 explicitly
+policy-restricted capabilities. Restricted
 rows have working permitted reads/local routes; they do **not** claim full MCP parity.
 `gravetrail capabilities` and MCP `get_capabilities` return this versioned inventory,
 including scope, aggregate effects, required grants and current launch authorization.
 Follow `next_cursor`; availability does not mean the current caller has permission.
 
-These 49 IDs group UI capabilities; they are not command/tool counts. The registered
-interface has **107 CLI command routes, 30 CLI groups, 87 MCP tools, 2 concrete resources,
-4 resource templates and 1 prompt** (verified 2026-10-19). The CLI and MCP guides list
+The registered interface has **118 CLI command routes, 31 CLI groups, 98 MCP tools,
+2 concrete resources, 4 resource templates and 1 prompt**. The CLI and MCP guides list
 every route/tool, including basic discovery commands outside this UI capability matrix.
 Documentation tests compare those references with actual registrations and inputs.
 
@@ -84,6 +83,12 @@ is used for session credentials. Redirects are refused.
 | M01 | Database integrity/storage, checkpoint, full-home backup, backup list/download, new-home restore | `maintenance inspect`<br>`maintenance backup`<br>`maintenance checkpoint`<br>`maintenance restore`<br>`maintenance backups`<br>`maintenance download` | `inspect_database_maintenance`<br>`list_runtime_backups` | **Restricted:** MCP exposes authorized unrestricted metadata only. Checkpoint/backup/restore and backup download are local CLI/UI; restore requires a new home. |
 | I01 | Browser ZIP/folder uploads and file inspection | `ingest`<br>`source list`<br>`source metadata`<br>`source download` | `ingest_sources`<br>`search_source_code`<br>`get_source_metadata`<br>`export_original_source` | Implemented |
 | DBT01 | Offline dbt project/resource catalog and macro impact | `dbt projects`<br>`dbt resources`<br>`dbt resource`<br>`dbt dependencies` | `list_dbt_projects`<br>`list_dbt_resources`<br>`get_dbt_resource`<br>`trace_dbt_dependencies` | Implemented; detailed evidence requires source access |
+| MIG01 | Supported targets and workspace migration projects | `migration targets`<br>`migration list` | `list_migration_targets`<br>`list_migration_projects` | Implemented |
+| MIG02 | Preview and pin ingested sources, analysis selections or Lineage Builder designs | `migration preview`<br>`migration create` | `preview_migration_project`<br>`create_migration_project` | Implemented |
+| MIG03 | Static conversion and reconversion, lineage, revision history and artifact inspection | `migration convert`<br>`migration inspect`<br>`jobs status`<br>`jobs cancel` | `start_migration_conversion`<br>`inspect_migration_revision`<br>`get_job_status`<br>`cancel_job` | Implemented |
+| MIG04 | Preview edits and ordered SAS drafts. Apply changes, record reviews and lessons, import external evidence | `migration edit-preview`<br>`migration change` | `preview_migration_edit`<br>`update_migration_revision` | Implemented |
+| MIG05 | Preview an exact AI disclosure, dispatch it explicitly and inspect activity | `migration ai-preview`<br>`migration ai-request`<br>`migration inspect` | `preview_migration_ai`<br>`request_migration_ai`<br>`inspect_migration_revision` | Implemented within source and provider policy |
+| MIG06 | Export and download draft, reviewed and pilot ZIPs with optional lineage images and workbook | `migration export`<br>`export download` | `export_migration_bundle`<br>`get_export` | Implemented with source checks at export and download |
 
 Artifacts use managed IDs, home/workspace binding, exact source versions, SHA-256 and
 bounded base64 reads (at most 16 KiB before encoding and the response budget). Files cap at
@@ -135,3 +140,12 @@ credential redaction do not sanitize that outgoing project source. See
 Capability A06 covers explicit AI builds, offline preview and paged reports; A07 covers
 cooperative cancellation. dbt reports add project/resource inventory and typed dependency
 traversal. Accepted AI facts remain inferred and do not establish semantic completeness.
+
+## Migration
+
+CLI and MCP open the same workspace-owned projects and immutable revisions as the Migration
+page. Project creation uses the setup preview pin. Conversion and reconversion run as local
+jobs against an expected revision. Edit previews bind patches to a specific revision and
+return the pin required to apply the patch. Conversions and exports use static analysis.
+Run dbt and warehouse checks externally, then import their evidence into the pinned revision.
+See [MCP migration tools](MCP_INTEGRATION.md#migration-tools) and the [Migration user guide](user-guide/migration.md).

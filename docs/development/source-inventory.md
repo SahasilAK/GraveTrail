@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **413 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **416 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -39,7 +39,7 @@ python scripts/docs/inventory.py --check
 | [AI and provider services](#ai-and-provider-services) | 31 |
 | [dbt](#dbt) | 14 |
 | [Migration](#migration) | 9 |
-| [CLI and MCP automation](#cli-and-mcp-automation) | 12 |
+| [CLI and MCP automation](#cli-and-mcp-automation) | 14 |
 | [Streamlit UI](#streamlit-ui) | 42 |
 | [Prompts and response schemas](#prompts-and-response-schemas) | 20 |
 | [Verification and release tooling](#verification-and-release-tooling) | 10 |
@@ -52,7 +52,7 @@ python scripts/docs/inventory.py --check
 | [Tests: dbt](#tests-dbt) | 12 |
 | [Tests: automation](#tests-automation) | 12 |
 | [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 32 |
-| [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 29 |
+| [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 30 |
 
 ## Entry points and package
 
@@ -179,7 +179,7 @@ python scripts/docs/inventory.py --check
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
 | `src/dataforge/migration/__init__.py` **new** | Static migration workspace. | — |
-| `src/dataforge/migration/assistance.py` **new** | Explicit provider disclosure, bounded request journals and approved conversion lessons. | `PROTOCOL`, `MAX_REQUESTS`, `MAX_RESERVED_TOKENS`, `MAX_ATTEMPTS`, `MAX_CONTEXT`, `PURPOSES`, `PROVIDER_SYSTEM`, `Response`, `Lesson`, `save_lesson`, `revoke_lesson`, `lessons`, `prepare`, `dispatch`, `responses`, `expire_responses`, `attempts`, `start_job`, `latest_job` |
+| `src/dataforge/migration/assistance.py` **new** | Explicit provider disclosure, bounded request journals and approved conversion lessons. | `PROTOCOL`, `MAX_REQUESTS`, `MAX_RESERVED_TOKENS`, `MAX_ATTEMPTS`, `MAX_CONTEXT`, `PURPOSES`, `PROVIDER_SYSTEM`, `Response`, `Lesson`, `save_lesson`, `revoke_lesson`, `lessons`, `prepare`, `dispatch`, `responses`, `expire_responses`, `attempts`, `record_job`, `start_job`, `latest_job` |
 | `src/dataforge/migration/engine.py` **new** | Plan source regions, emit dbt candidates and inspect the resulting SQL independently. | `NAME`, `RESERVED_PATH`, `TEMPLATE`, `CALL`, `CONFIG`, `CONFIG_ARG`, `MARKER`, `MAX_ARTIFACT`, `MAX_PROJECT`, `VERSION`, `DIALECT_ERRORS`, `UNSAFE_FUNCTIONS`, `QUALIFIED`, `digest`, `fingerprint`, `slug`, `unsafe_query`, `output_name`, `dbt_config`, `inspect_sql`, `query_tables`, `SourceBindingError`, `source_relation`, `convert`, `validate` |
 | `src/dataforge/migration/exports.py` **new** | A revision-pinned dbt handoff with offline evidence and quarantined drafts. | `lineage_graph`, `build_bundle` |
 | `src/dataforge/migration/inspection.py` **new** | Reviewable code artifacts and immutable source anchors. | `artifacts`, `source_path`, `source_location`, `annotated`, `commented_source` |
@@ -196,11 +196,13 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/agent/capabilities.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/capabilities.py) | Versioned explicit UI parity catalog. Restrictions are not operational parity claims. | `INVENTORY`, `capability_catalog` |
 | [`src/dataforge/agent/cli_ai.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_ai.py) | Explicit provider and AI CLI commands. Credentials use hidden per-call input only. | `register` |
 | [`src/dataforge/agent/cli_dbt.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_dbt.py) | Thin dbt catalog CLI adapters. | `register` |
+| `src/dataforge/agent/cli_migration.py` **new** | CLI adapters for revision-pinned migration workflows. | `ArtifactAnchor`, `ImageFormat`, `register` |
 | [`src/dataforge/agent/cli_reports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_reports.py) | Thin CLI adapters for stored inventory, engineering and history reports. | `register`, `register_maintenance` |
 | [`src/dataforge/agent/cli_settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_settings.py) | Thin typed CLI adapters for workspace configuration. | `register`, `register_application` |
 | [`src/dataforge/agent/contracts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/contracts.py) | Bounded requests, local launch permissions and machine-readable failures. | `compact`, `AgentError`, `AccessPolicy`, `QueryOptions`, `AgentSettings`, `job_settings` |
 | [`src/dataforge/agent/jobs.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/jobs.py) | Bounded local jobs with atomic journals and heartbeat-based crash detection. | `TERMINAL`, `ReasoningBuffer`, `Jobs`, `status_result` |
 | [`src/dataforge/agent/mcp_server.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/mcp_server.py) | Official MCP SDK tools/resources/prompts with compact, single-copy structured results. | `create_server`, `BearerGuard`, `http_app`, `serve` |
+| `src/dataforge/agent/migration.py` **new** | Workspace-authorized CLI and MCP access to the static migration service. | `READS`, `WRITES`, `SOURCE_ACTIONS`, `MigrationSetup`, `MigrationOperations` |
 | [`src/dataforge/agent/paging.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/paging.py) | Query-bound continuation cursors and serialized response budgets. | `page` |
 | [`src/dataforge/agent/service.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/service.py) | Shared deterministic automation use cases over the existing application services. | `WRITES`, `MAINTENANCE_READS`, `APPLICATION_ACTIONS`, `LONG_ACTIONS`, `AgentService` |
 | [`src/dataforge/agent/worker.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/worker.py) | Private detached CLI worker; fixed Python entry point, never a supplied command. | `main` |
@@ -558,6 +560,7 @@ python scripts/docs/inventory.py --check
 | `tests/test_local_credentials.py` **new** | No module docstring; inspect the linked source. | 5 test functions; helpers/constants: `FakeBackend`, `vault`, `profile`, `saved_profile` |
 | [`tests/test_logging.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_logging.py) | No module docstring; inspect the linked source. | 1 test functions |
 | `tests/test_migration.py` **new** | No module docstring; inspect the linked source. | 26 test functions |
+| `tests/test_migration_agent.py` **new** | CLI and MCP migration parity across one pinned workspace and revision. | 2 test functions |
 | `tests/test_migration_reconvert.py` **new** | No module docstring; inspect the linked source. | 1 test functions |
 | `tests/test_migration_sas.py` **new** | No module docstring; inspect the linked source. | 4 test functions |
 | [`tests/test_model_capabilities.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_model_capabilities.py) | Provider metadata is capacity evidence, never a spend authorization. | 2 test functions |

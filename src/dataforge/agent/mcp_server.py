@@ -4,18 +4,27 @@ from __future__ import annotations
 import asyncio
 import hmac
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import Field
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions, compact
+from dataforge.agent.migration import MigrationChange, MigrationPurpose, MigrationSetup, MigrationView
 from dataforge.agent.service import AgentService
 from dataforge.connections import current_connections
+
+MigrationName = Annotated[str, Field(min_length=1, max_length=160)]
+MigrationID = Annotated[str, Field(min_length=1, max_length=256)]
+MigrationScope = Annotated[list[MigrationID], Field(min_length=1, max_length=50)]
+MigrationMessage = Annotated[str, Field(max_length=4000)]
+MigrationArguments = Annotated[dict[str, Any], Field(max_length=64)]
+MigrationOffset = Annotated[int, Field(ge=0)]
 
 
 def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 8765) -> FastMCP:
@@ -571,6 +580,88 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
     async def test_local_agent_access(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
         """test local agent access; application writes need explicit unrestricted startup authority. No live owner switch/restart."""
         return await call('agent_self_test', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def list_migration_targets(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """List the supported migration formats, warehouse profiles and materializations."""
+        return await call('migration_targets', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def list_migration_projects(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """Page stored migration project IDs and current revisions in this workspace."""
+        return await call('migration_list', workspace_id, options)
+
+    @server.tool(annotations=read)
+    async def preview_migration_project(workspace_id: str, name: MigrationName, setup: MigrationSetup | None = None,
+                                        options: QueryOptions | None = None) -> CallToolResult:
+        """Preview source selection and target compatibility offline. Use the returned pin to create a project."""
+        return await call('migration_preview', workspace_id, options, name=name, setup=setup or {})
+
+    @server.tool(annotations=write)
+    async def create_migration_project(workspace_id: str, name: MigrationName, expected_pin: MigrationID,
+                                       setup: MigrationSetup | None = None) -> CallToolResult:
+        """Create a workspace migration with an immutable snapshot from the same setup and pin as its preview."""
+        return await call('migration_create', workspace_id, name=name, setup=setup or {}, expected_pin=expected_pin)
+
+    @server.tool(annotations=read)
+    async def inspect_migration_revision(workspace_id: str, project_id: MigrationID, revision_id: MigrationID | None = None,
+                                         view: MigrationView = 'summary',
+                                         item: Annotated[str, Field(min_length=1, max_length=32_768)] | None = None,
+                                         anchor: Literal['generated', 'source', 'annotated'] | None = None,
+                                         offset: MigrationOffset = 0, options: QueryOptions | None = None) -> CallToolResult:
+        """Inspect a pinned revision. Choose a model or artifact ID for focused views and follow the cursor or text offset."""
+        return await call('migration_inspect', workspace_id, options, project_id=project_id, revision_id=revision_id,
+                          view=view, item=item, anchor=anchor, offset=offset)
+
+    @server.tool(annotations=write)
+    async def start_migration_conversion(workspace_id: str, project_id: MigrationID, expected_revision: MigrationID,
+                                         reconvert: bool = False) -> CallToolResult:
+        """Queue static conversion from the pinned source snapshot. Poll get_job_status with the returned job ID."""
+        return await call('migration_convert', workspace_id, project_id=project_id, expected_revision=expected_revision,
+                          reconvert=reconvert)
+
+    @server.tool(annotations=read)
+    async def preview_migration_edit(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                     arguments: MigrationArguments, options: QueryOptions | None = None) -> CallToolResult:
+        """Preview and validate a patch offline. Supply replacements and rationale with optional scopes, model and order for SAS, or an existing proposal."""
+        return await call('migration_edit_preview', workspace_id, options, project_id=project_id, revision_id=revision_id,
+                          arguments=arguments)
+
+    @server.tool(annotations=write)
+    async def update_migration_revision(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                        operation: MigrationChange, arguments: MigrationArguments) -> CallToolResult:
+        """Apply a pinned migration change. Patch application needs the previewed proposal and expected_pin. Import external validation and reconciliation evidence inline."""
+        return await call('migration_change', workspace_id, project_id=project_id, revision_id=revision_id,
+                          operation=operation, arguments=arguments)
+
+    @server.tool(annotations=read)
+    async def preview_migration_ai(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                   profile_id: MigrationID, models: MigrationScope, purpose: MigrationPurpose,
+                                   message: MigrationMessage = '', dependencies: bool = False, offset: MigrationOffset = 0,
+                                   options: QueryOptions | None = None) -> CallToolResult:
+        """Preview the exact provider disclosure and token budget offline for the selected outputs."""
+        return await call('migration_ai_preview', workspace_id, options, project_id=project_id, revision_id=revision_id,
+                          profile_id=profile_id, models=models, purpose=purpose, message=message, dependencies=dependencies,
+                          offset=offset)
+
+    @server.tool(annotations=network)
+    async def request_migration_ai(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                   profile_id: MigrationID, models: MigrationScope, purpose: MigrationPurpose,
+                                   expected_pin: MigrationID, message: MigrationMessage = '',
+                                   dependencies: bool = False, options: QueryOptions | None = None) -> CallToolResult:
+        """Send an explicitly previewed request to an approved provider. Review any proposed edits before applying."""
+        return await call('migration_ai_request', workspace_id, options, project_id=project_id, revision_id=revision_id,
+                          profile_id=profile_id, models=models, purpose=purpose, message=message,
+                          dependencies=dependencies, expected_pin=expected_pin)
+
+    @server.tool(annotations=write)
+    async def export_migration_bundle(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                      reviewed: bool = False, image_format: Literal['svg', 'png'] | None = None,
+                                      workbook: bool = False,
+                                      pilot: Annotated[list[MigrationID], Field(min_length=1, max_length=500)] | None = None) -> CallToolResult:
+        """Create a revision-pinned draft or reviewed dbt ZIP. Read the managed artifact using get_export."""
+        return await call('migration_export', workspace_id, project_id=project_id, revision_id=revision_id,
+                          reviewed=reviewed, image_format=image_format, workbook=workbook, pilot=pilot)
 
     @server.resource("gravetrail://workspaces")
     @server.resource("dataforge://workspaces")

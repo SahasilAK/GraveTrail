@@ -5,9 +5,33 @@ migration** on Analysis pins the latest committed analysis. **Migrate selection*
 starts from the selected asset and includes known upstream producers. **Create migration** in
 Lineage Builder pins the current design and starts a scaffold.
 
+The same workflow is available through [the CLI](../CLI_GUIDE.md#static-dbt-migration) and
+[MCP](../MCP_INTEGRATION.md#migration-tools).
+
+## Watch the workflow
+
+<figure class="gt-product" markdown>
+
+<video controls playsinline preload="none" poster="../../assets/images/gravetrail-migration-setup.png" style="width: 100%" aria-label="Migration walkthrough from SAS and SQL setup to a Databricks dbt pilot export">
+  <source src="../../assets/images/gravetrail-migration-walkthrough.mp4" type="video/mp4">
+  <a href="../../assets/images/gravetrail-migration-walkthrough.mp4">Download the migration walkthrough</a>
+</video>
+
+<figcaption>Screen recording with on-screen captions. Follow synthetic orders through static conversion, a SAS review finding, lineage, external validation setup and a scoped dbt pilot.</figcaption>
+</figure>
+
+[Follow along with the same example](#try-a-small-migration).
+
+## Set up a project
+
 Choose dbt and Databricks, confirm the target catalog and schema, and preview the migration.
 Read admission, planned outputs and findings before creating the project. **Run static conversion**
 creates a revision with model candidates. One source file can contribute several models.
+
+<figure class="gt-product" markdown>
+![Migration setup with dbt and Databricks selected and the SAS and SQL source files retained](../assets/images/gravetrail-migration-setup.png)
+<figcaption>Preflight inventories the retained files and plans four outputs before any candidates are saved.</figcaption>
+</figure>
 
 To regenerate the draft after a converter update, open **Scope → Revision history** and choose
 **Reconvert from pinned sources**. The job uses the project's saved source snapshot and target
@@ -48,6 +72,11 @@ Use the bulk mapping CSV to confirm multiple relations in one revision. Edit the
 schema and table columns, preview the upload, then apply. Keep source keys unchanged.
 
 ## Review and assistance
+
+<figure class="gt-product" markdown>
+![Migration inspector showing the pinned SAS routing step alongside a line-annotated dbt draft and its missing-value finding](../assets/images/gravetrail-migration-review.png)
+<figcaption>The SAS example asks an engineer to decide which branch receives missing amounts. The pinned source is visible beside the finding and draft SQL.</figcaption>
+</figure>
 
 - Open **Review** to see the converted-code inventory, confidence tier, findings and open comments.
   Choose an artifact and a finding to locate the annotation in the numbered draft. The pinned
@@ -90,6 +119,11 @@ keyed checks when keys are confirmed.
 Optional date windows use an inclusive start and exclusive end. Sum checks use an absolute
 tolerance. Align legacy column names, row grain and time zones in the external comparison environment.
 
+<figure class="gt-product" markdown>
+![Validation screen with upload controls for external dbt artifacts and an incomplete reconciliation plan for daily order totals](../assets/images/gravetrail-migration-validation.png)
+<figcaption>The comparison plan exists for this revision. Its coverage stays incomplete until external results are imported.</figcaption>
+</figure>
+
 For a SELECT that supplies one non-null row per business key, confirm **Delta merge keys** and
 review the incremental behavior. Review backfill, existing target data, late arrivals and deletes.
 The configuration uses incremental merge, fails on schema changes, and disables dbt full refresh.
@@ -105,6 +139,11 @@ Engineer-accepted models with remaining review findings have a companion annotat
 `review/`. The active model preserves the accepted SQL bytes. **Pilot handoff** exports selected
 eligible models with their transitive upstream models and required sources. The complete project's
 scope and outstanding work remain visible in Migration.
+
+<figure class="gt-product" markdown>
+![Pilot export showing daily_order_totals selected and stg_orders included as a required upstream model](../assets/images/gravetrail-migration-export.png)
+<figcaption>The selected SQL pilot includes its upstream model. The SAS findings remain open in the full project.</figcaption>
+</figure>
 
 The profile example contains environment-variable placeholders. New projects target dbt Core
 1.12.5 and dbt-databricks 1.12.8. Existing projects retain their pinned profile. Confirm the target
@@ -143,13 +182,32 @@ exported before the replay checks were added. Results cover the configured scope
 
 ## Try a small migration
 
-Import this SQL through **Sources**, analyze it, and choose **Create migration**.
+Save the two synthetic examples as `orders_pipeline.sql` and `legacy_routing.sas`.
+Import both through **Sources**, then open **Engineering → Migration**.
 
 ```sql
-create table accounts as select 1 as account_id;
-create view account_ids as select account_id from accounts;
+CREATE VIEW stg_orders AS
+SELECT 101 AS order_id, 24 AS amount;
+
+CREATE VIEW daily_order_totals AS
+SELECT order_id, amount FROM stg_orders;
 ```
 
-The preview should list two outputs. Run static conversion, inspect the generated `ref('accounts')`,
-then export a reviewed handoff. The lineage should contain a single edge from `accounts` to
-`account_ids` and the manifest should report `not_evaluated` for runtime equivalence.
+```sas
+data accepted_orders held_orders;
+  set raw.orders;
+  if amount > 0 then output accepted_orders;
+  else output held_orders;
+run;
+```
+
+1. Choose Databricks and retain both files. Preview the four outputs, create the project, and run
+   static conversion.
+2. In **Review**, inspect `review/accepted_orders.sql.txt` and open **Show pinned source evidence**.
+   Find the note about which branch receives a missing amount.
+3. In **Lineage**, find the generated edge from `stg_orders` to `daily_order_totals`.
+4. In **Validation**, choose `daily_order_totals`, enter `legacy.daily_order_totals` as the baseline,
+   select `order_id` as the comparison key and `amount` as the keyed value, then save.
+5. In **Export**, choose **Pilot handoff** and select `daily_order_totals`. Choose **Prepare dbt
+   bundle**, then **Download dbt project**. The ZIP includes both SQL models. Its manifest records
+   `not_evaluated` for runtime equivalence.

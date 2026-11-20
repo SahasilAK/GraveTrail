@@ -24,6 +24,7 @@ These focused guides help you repeat one part on your own project.
 | Read the original statement | [Inspect source evidence](evidence.md) |
 | Trace column transformations and find references | [Columns and transformations](columns.md) |
 | Save reports, images or snapshots | [Exports and sharing](exports.md) |
+| Convert retained SAS, SQL or dbt sources into a reviewed Databricks project | [Migration walkthrough](migration.md#watch-the-workflow) |
 | Recover data or history | [Data management](../DATA_MANAGEMENT.md) |
 | Use optional AI | [AI analysis](../AI_ANALYSIS.md) · [controls and recovery](ai-analysis-controls-and-recovery.md) |
 
