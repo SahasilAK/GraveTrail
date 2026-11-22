@@ -5,8 +5,8 @@ Public branding plus real browser captures using safe synthetic fixtures and dis
 - `icon.png` — supplied navy/orange transparent icon, shared with UI; logo/favicon.
 - `banner.svg` — accessible README hero with existing motion/reduced-motion fallback.
 - `mark.svg` — retained earlier vector source; not automatically public.
-- `gravetrail-overview-start.png` — new workspace Overview with three starting actions.
-- `gravetrail-workspace-dashboard.png` — static SQL sample Overview after import and analysis.
+- `gravetrail-overview-start.png` — new workspace Overview with four starting actions, including Migration.
+- `gravetrail-workspace-dashboard.png` — static SQL sample Overview with Migration under Workspace tools.
 - `gravetrail-source-import.png` — Sources import controls with a fixture ZIP and Databricks selected.
 - `gravetrail-analysis-results.png` — real successful static analysis view with AI unchecked.
 - `gravetrail-lineage-explorer.png` — expanded stg.orders_clean with highlighted incoming column links.

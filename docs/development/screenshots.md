@@ -1,7 +1,8 @@
 # Screenshot and diagram recipes
 
-The refreshed workspace and graph captures use application commit `313587e`,
-the locked environment and a disposable home on loopback. The reference captures
+The Overview captures include the **Open Migration** card and use the locked environment
+and a disposable home on loopback. The other workspace and graph captures use application
+commit `313587e`. The reference captures
 for source evidence, exports, and dbt date from `1864dc8`. Use tracked sample data
 and exclude browser chrome. Preserve readable text and descriptive alt text.
 
@@ -16,8 +17,8 @@ public files `pipeline.sql` and `stream_insert.sql` from
 
 | Asset under `docs/assets/images/` | Reproduce the view |
 | --- | --- |
-| `gravetrail-overview-start.png` | Overview in an empty workspace with all three starting actions visible |
-| `gravetrail-workspace-dashboard.png` | Overview after static SQL sample analysis |
+| `gravetrail-overview-start.png` | Overview in an empty workspace with all four starting actions visible |
+| `gravetrail-workspace-dashboard.png` | Overview after static SQL sample analysis, with **Open Migration** under Workspace tools |
 | `gravetrail-source-import.png` | Sources → Import with the fixture ZIP loaded and **Databricks** selected |
 | `gravetrail-analysis-results.png` | Analysis → Run after **Analyze all files**, with AI unchecked |
 | `gravetrail-lineage-explorer.png` | Lineage, exact `stg.orders_clean`, upstream. Expand the table with **+**, fit, then select its header to highlight the column links |

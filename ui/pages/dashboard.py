@@ -43,7 +43,7 @@ def _run_sql_example(store, workspace):
         st.switch_page("ui/pages/explorer.py")
 
 
-title("Overview", "Build a lineage, trace your own sources, or try the SQL example.")
+title("Overview", "Trace your sources, design lineage, or prepare a dbt migration.")
 store, w = context()
 files = store.files(w)
 pending = sum(f["parsing_status"] == "pending" for f in files)
@@ -113,7 +113,7 @@ if files:
 
 st.subheader("Workspace tools" if files or (design and design.tables) else "Choose a starting point")
 with st.container(key="overview_actions"):
-    build, sources, trace = st.columns(3, gap="medium", border=True)
+    build, sources, trace, migration = st.columns(4, gap="medium", border=True)
     with build:
         st.subheader("Design a lineage", icon=":material/account_tree:")
         st.write("Lay out tables and connect their columns on a canvas.")
@@ -136,6 +136,10 @@ with st.container(key="overview_actions"):
             st.subheader("Analyze your sources", icon=":material/play_circle:")
             st.write("Process your inventory to build table and column lineage.")
             _page_button("Analyze files", "ui/pages/analysis.py", ":material/arrow_forward:", width="stretch")
+    with migration:
+        st.subheader("Migrate to dbt", icon=":material/conversion_path:")
+        st.write("Convert SQL, SAS, or dbt sources into a draft dbt project for Databricks.")
+        _page_button("Open Migration", "ui/pages/migration.py", ":material/arrow_forward:", width="stretch")
 
 if files:
     connected, health = st.columns([2, 1], gap="medium", border=True)

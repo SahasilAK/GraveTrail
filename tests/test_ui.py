@@ -31,6 +31,14 @@ def test_sql_example_builds_and_opens_focused_lineage(tmp_path: Path, monkeypatc
         button.label for button in app.button if button.proto.type == "primary"}
     assert {metric.label: metric.value for metric in app.metric}["Dependencies"] == "128"
 
+    next(button for button in app.button if button.label == "Open Migration").click().run()
+
+    assert not app.exception
+    assert app.title[0].value == "Migration"
+    assert app.session_state["workspace"] == workspace
+    retained = next(field for field in app.multiselect if field.label == "Retained sources")
+    assert set(retained.value) == {source["file_id"] for source in store.files(workspace)}
+
 
 def test_workspace_edit_refreshes_sidebar_and_preserves_active_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that workspace edit refreshes sidebar and preserves active identity.

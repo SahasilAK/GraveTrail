@@ -19,7 +19,8 @@ hide:
 
 GraveTrail helps data engineers, analysts and architects understand SQL, SAS and
 dbt projects. Turn source code and supported project artifacts into explorable
-lineage, dependency relationships and the source evidence behind them.
+lineage, dependency relationships and the source evidence behind them. Use
+[Migration](#migrate-to-dbt-on-databricks) to convert retained sources into a dbt project for Databricks.
 
 <nav class="gt-hero-actions" aria-label="Get started and GitHub" markdown>
 
@@ -45,6 +46,21 @@ Local static analysis. No AI account required. Imported code is never executed.
 </video>
 
 <figcaption>Run the bundled SQL example and follow the upstream tables for <code>pub.all_kpis</code>. Expand <code>stg.orders_clean</code> to see its incoming column links, then trace <code>amount</code> in Columns and open the SQL expression that casts it.</figcaption>
+</figure>
+
+## Migrate to dbt on Databricks
+
+Open **Engineering → Migration** to convert retained SQL, SAS or dbt sources into a draft dbt
+project. Inspect generated models beside their original source, review unresolved logic and
+trace dependencies before exporting a pilot. Conversion and inspection run statically.
+
+[Watch the migration walkthrough](user-guide/migration.md#watch-the-workflow){ .md-button }
+
+<figure class="gt-product" markdown>
+
+![Migration review with the original SAS routing step pinned beside the annotated dbt draft](assets/images/gravetrail-migration-review.png)
+
+<figcaption>The review finding asks an engineer to confirm which branch receives a missing order amount.</figcaption>
 </figure>
 
 ## Begin with the question in front of you

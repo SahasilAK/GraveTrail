@@ -24,24 +24,25 @@ See [AI project analysis](AI_ANALYSIS.md) for the build flow and limits.
 
 ## Find your way around
 
-The sidebar keeps your active workspace above three navigation groups. Use **New
+The sidebar keeps your active workspace above its navigation groups. Use **New
 workspace** to open a creation dialog. Changing pages never starts an analysis or an AI request.
 
 | Group | Destination | What belongs here |
 | --- | --- | --- |
-| Workspace | Overview | Builder, import and SQL example starting cards. Active workspaces show next actions, health and recent runs |
+| Workspace | Overview | Builder, import, SQL example and Migration starting cards. Active workspaces show next actions, health and recent runs |
 | Workspace | Sources | ZIP/folder/host import; Inventory, original file details and exports |
 | Workspace | Analysis | Run selected/all files, rebuild, validation; Diagnostics and optional AI review; History and run comparison |
 | Workspace | Lineage builder | Reusable schemas, canvas catalog/diagram, column links and joins, trace colors, saved designs and editable handoff |
 | Explore | Lineage | Graph or full-width Tree; source evidence, paths and graph/source exports |
 | Explore | Columns | Lineage graph by default, transformation logic and original evidence. Direct references is the second view |
-| Explore | Engineering tools | Code search, data dictionary and downstream impact |
+| Engineering | Engineering tools | Code search, data dictionary and downstream impact |
+| Engineering | Migration | [Convert retained sources into dbt for Databricks](user-guide/migration.md), review drafts and prepare a handoff |
 | Administration | Workspace settings | Parsing, Resources and Appearance, including all eleven themes |
 | Administration | Connections & AI | Provider profiles, session credentials, routing and Privacy |
 | Administration | Data management | Storage & transfers, Backups & integrity, Cleanup & recovery, History & staging |
 | Administration | Automation & access | Agent permissions, response budgets, client configuration and local connection test |
 
-![Active Overview with the next action and counts for source files, assets, dependencies and diagnostics](assets/images/gravetrail-workspace-dashboard.png)
+![Active Overview showing lineage metrics and the Open Migration card under Workspace tools](assets/images/gravetrail-workspace-dashboard.png)
 
 Selections persist between related exploration views when valid. Workspace and
 source revision changes discard stale source previews and cleanup plans. Unsaved

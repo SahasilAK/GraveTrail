@@ -1,9 +1,9 @@
 # Migrate to dbt on Databricks
 
-Open **Engineering → Migration** to create a workspace project from retained sources. **Create
-migration** on Analysis pins the latest committed analysis. **Migrate selection** on Lineage
-starts from the selected asset and includes known upstream producers. **Create migration** in
-Lineage Builder pins the current design and starts a scaffold.
+Choose **Open Migration** on Overview or **Engineering → Migration** to create a workspace project
+from retained sources. **Create migration** on Analysis pins the latest committed analysis.
+**Migrate selection** on Lineage starts from the selected asset and includes known upstream
+producers. **Create migration** in Lineage Builder pins the current design and starts a scaffold.
 
 The same workflow is available through [the CLI](../CLI_GUIDE.md#static-dbt-migration) and
 [MCP](../MCP_INTEGRATION.md#migration-tools).
