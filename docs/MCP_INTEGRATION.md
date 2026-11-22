@@ -110,7 +110,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `export_ai_result` | `record_id`, `workspace_id` | `options` |
 | `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `include_evidence`, `include_source_text`, `max_paths`, `options` |
 | `export_graph` | `asset`, `workspace_id` | `background`, `direction`, `format`, `legend`, `options`, `scale`, `title` |
-| `export_migration_bundle` | `project_id`, `revision_id`, `workspace_id` | `image_format`, `pilot`, `reviewed`, `workbook` |
+| `export_migration_bundle` | `project_id`, `revision_id`, `workspace_id` | `image_format`, `include_sources`, `pilot`, `reviewed`, `workbook` |
 | `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` |
 | `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` |
 | `export_results` | `asset`, `workspace_id` | `direction`, `format`, `options` |
@@ -175,6 +175,7 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `preview_diagnostic_review` | `diagnostic_id`, `workspace_id` | `first`, `last`, `options` |
 | `preview_history_archive` | `workspace_id` | `batch_size`, `keep_imports`, `keep_runs`, `options` |
 | `preview_migration_ai` | `models`, `profile_id`, `project_id`, `purpose`, `revision_id`, `workspace_id` | `dependencies`, `message`, `offset`, `options` |
+| `preview_migration_stage` | `profile_id`, `project_id`, `revision_id`, `source_id`, `stage`, `workspace_id` | `feedback`, `offset`, `options`, `static_reference` |
 | `preview_migration_edit` | `arguments`, `project_id`, `revision_id`, `workspace_id` | `options` |
 | `preview_migration_project` | `name`, `workspace_id` | `options`, `setup` |
 | `preview_project_analysis` | `workspace_id` | `file_ids`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id` | Shared static/AI analysis service |
@@ -183,11 +184,12 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options`; `expected_request` |
 | `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options`; `expected_request` |
 | `request_migration_ai` | `expected_pin`, `models`, `profile_id`, `project_id`, `purpose`, `revision_id`, `workspace_id` | `dependencies`, `message`, `options` |
+| `run_migration_stage` | `expected_pin`, `profile_id`, `project_id`, `revision_id`, `source_id`, `stage`, `workspace_id` | `feedback`, `options`, `static_reference` |
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
 | `start_lineage_analysis` | `workspace_id` | `file_ids`, `force`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id`, `retry_unknown` | Shared static/AI analysis service |
-| `start_migration_conversion` | `expected_revision`, `project_id`, `workspace_id` | `reconvert` |
+| `start_migration_conversion` | `expected_revision`, `project_id`, `workspace_id` | `plan_only`, `reconvert` |
 | `test_local_agent_access` | `workspace_id` | `options` |
 | `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
 | `update_application_logging` | `level` | `options` |
@@ -367,6 +369,15 @@ and current workspace write, source and privacy permissions. AI suggestions go t
 same patch preview and apply flow as manual edits. Set `options.max_chars` within the workspace's
 cap if the reply needs more room. With AI history enabled, inspect saved replies with `view: "ai_responses"`.
 
+For guided AI migration, use `plan_only: true` with `start_migration_conversion`. Read the source
+IDs with `inspect_migration_revision` and `view: "workflow"`. Each file goes through `convert`,
+`validate`, and `optimize`. Call `preview_migration_stage` for each disclosure, then pass its
+pin to `run_migration_stage`. Use `static_reference` during conversion to include a static draft.
+Use `update_migration_revision` with `skip_optimization` and `source_id` to continue directly to
+review. Inspect the workflow with the source ID in `item` to see the staged diff and apply pin.
+Use `apply_source_draft` with `source_id` and `expected_pin` to apply it. The export's
+`include_sources` option adds the full retained text separately from dbt models.
+
 Run dbt and comparison checks in your controlled environment. Import external evidence through
 `update_migration_revision`. Pass inline evidence as UTF-8 text or use an approved path under a
 configured import root. Streamable HTTP requests have a 64 KiB body cap. Each evidence import
@@ -378,6 +389,8 @@ separately. See the [Migration user guide](user-guide/migration.md) for the hand
 | `resolve_scope` | `region_id`, `reason`, optional `external` relation with `catalog`, `schema`, `identifier`, `owner`, and `columns` |
 | `set_contract` | `model`, `inputs`, `behavior`, `prerequisites`, optional `relations` |
 | `apply` | `expected_pin` and either `proposal` or `proposal_path` |
+| `apply_source_draft` | `source_id`, `expected_pin` from the workflow inspection |
+| `skip_optimization` | `source_id` |
 | `revise_schemas` | `settings` containing `types`, `input_types`, or `source_mappings` |
 | `bulk_mappings` | `csv` or `path`, using the `source_mappings_template` view |
 | `import_schema` | `group` (model or physical source ID) and either `filename` with `content`, or `path`. Optional `types` map supplements the imported columns. |

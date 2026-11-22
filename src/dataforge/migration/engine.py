@@ -353,7 +353,7 @@ def _preceding_writer(writes, position):
 
 
 def _inputs(query, sql, source, producers, target, physical, materialization, project, staged=None, *,
-            local_writes=None, position=0):
+            local_writes=None, position=0, emit=True):
     kind = source["kind"]
     if kind == "dbt":
         _, tables, template_refs, config = inspect_sql(sql, source.get("dialect") or target.dialect)
@@ -366,7 +366,7 @@ def _inputs(query, sql, source, producers, target, physical, materialization, pr
             else:
                 bindings.append("physical:" + relation(table))
         # Same-target models keep their original bytes and template calls.
-        return sql, sorted(set(bindings)), (config or {}).get("materialized", materialization)
+        return sql if emit else "", sorted(set(bindings)), (config or {}).get("materialized", materialization)
     bindings = []
     templates = {}
     table_scopes = [(node, scope) for scope in traverse_scope(query)
@@ -424,6 +424,8 @@ def _inputs(query, sql, source, producers, target, physical, materialization, pr
         bindings.append(linked)
     if MARKER in sql:
         raise ValueError("Reserved migration parser token")
+    if not emit:
+        return "", sorted(set(bindings)), materialization
     rendered = target.emit_sql(query)
     rendered = re.sub(rf"{MARKER}\d+__", lambda match: templates[match[0]], rendered)
     return rendered + "\n", sorted(set(bindings)), materialization
@@ -468,7 +470,7 @@ def _manual_binding(logical, kind, producers, physical, local_writes, position):
     return None
 
 
-def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, checkpoint=None):
+def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, checkpoint=None, drafts=True):
     """Cover every source range and plan every known output before qualifying any model."""
     target = warehouse(snapshot)
     metadata = _dbt_metadata(snapshot)
@@ -556,7 +558,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                     outputs[model]["critical"] = True
     region_by_id = {row["id"]: row for row in regions}
     if progress:
-        progress(.5, "Lowering inventoried transformation outputs")
+        progress(.5, "Mapping inventoried transformation outputs")
     declared_outputs = snapshot.get("known_outputs", {})
     regions_by_source = defaultdict(list)
     for region in regions:
@@ -604,6 +606,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             pending.clear()
 
     generated_bytes = 0
+    bound = set()
     staged_by_source = defaultdict(dict)
     for model, query in candidates.items():
         if cancelled():
@@ -645,7 +648,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                 position = None if query.meta.get("migration_view_definition") else region["start"]
                 rendered, dependencies, materialization = _inputs(
                     query, raw, source, producers, target, bindings, output["materialization"], metadata["project"], staged,
-                    local_writes=local_writes[source["id"]], position=position)
+                    local_writes=local_writes[source["id"]], position=position, emit=drafts)
             size = len(rendered.encode())
             if size > MAX_ARTIFACT or generated_bytes + size > MAX_PROJECT:
                 raise ValueError("Generated model exceeds the artifact budget")
@@ -654,7 +657,9 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             for key, binding in bindings.items():
                 if binding.get("prior_version") or key not in physical:
                     physical[key] = binding
-            if not output.get("sas_order"):
+            if not output.get("sas_order") or dependencies:
+                bound.add(model)
+            if drafts and not output.get("sas_order"):
                 files[model] = {"sql": rendered, "origin": "static", "hash": digest(rendered)}
                 generated_bytes += size
             if (temporary_relation(output["name"]) and materialization == "ephemeral" and not output["hard"]
@@ -676,7 +681,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
     table_by_id = {s["id"].removeprefix("builder-"): s for s in sources.values() if s["kind"] == "builder"}
     builder_columns = dict(snapshot.get("builder_columns", {}))
     for model, output in outputs.items():
-        if model in files or output.get("sas_order") and output["inputs"]:
+        if model in bound:
             continue
         region = region_by_id[output["region"]]
         source = sources[region["source"]]
@@ -1049,6 +1054,16 @@ def validate(snapshot, plan, files, reviews=None):
             finding("semantics", note, model)
         if file["origin"] != "static":
             finding("engineer_review", "Compare this edit against every mapped source obligation.", model)
+        source_id = regions[output["region"]]["source"]
+        ai_review = snapshot.get("ai_source_reviews", {}).get(source_id, {})
+        if model in ai_review.get("files", {}):
+            if ai_review["files"][model] != file["hash"]:
+                finding("ai_source_review_stale", "Compare the edited SQL against the original source again.", model)
+            for region_id, observation in ai_review["coverage"].items():
+                region = regions.get(region_id)
+                if (region and (output["region"] == region_id or not region["outputs"])
+                        and observation["status"] != "accounted"):
+                    finding("ai_source_review", observation["detail"], model, region=region_id)
         if output.get("manual") and not output.get("critical"):
             finding("manual_semantics", output["manual"], model)
         if output.get("contract"):

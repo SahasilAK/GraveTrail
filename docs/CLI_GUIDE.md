@@ -117,11 +117,13 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `migration ai-preview` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--model` **required**; `--purpose` **required**; `--message`; `--dependencies`, `--no-dependencies`; `--offset`; `--help` |
 | `migration ai-request` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--model` **required**; `--purpose` **required**; `--expected-pin` **required**; `--message`; `--dependencies`, `--no-dependencies`; `--help` |
 | `migration change` | `PROJECT_ID`, `OPERATION`, `ARGUMENTS` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
-| `migration convert` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--expected-revision`, `--revision` **required**; `--reconvert`, `--no-reconvert`; `--background`, `--no-background`; `--help` |
+| `migration convert` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--expected-revision`, `--revision` **required**; `--reconvert`, `--no-reconvert`; `--plan-only`, `--no-plan-only`; `--background`, `--no-background`; `--help` |
 | `migration create` | `NAME`, `SETUP` | `--workspace`, `-w` **required**; `--expected-pin` **required**; `--help` |
 | `migration edit-preview` | `PROJECT_ID`, `ARGUMENTS` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
-| `migration export` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--reviewed`, `--no-reviewed`; `--image-format`; `--workbook`, `--no-workbook`; `--pilot`; `--destination`; `--help` |
+| `migration export` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--reviewed`, `--no-reviewed`; `--image-format`; `--workbook`, `--no-workbook`; `--pilot`; `--destination`; `--include-sources`, `--no-include-sources`; `--help` |
 | `migration inspect` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision`; `--view`; `--item`; `--anchor`; `--offset`; `--limit`; `--cursor`; `--help` |
+| `migration stage-preview` | `PROJECT_ID`, `SOURCE_ID`, `STAGE` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--feedback`; `--static-reference`, `--no-static-reference`; `--offset`; `--help` |
+| `migration stage-run` | `PROJECT_ID`, `SOURCE_ID`, `STAGE` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--expected-pin` **required**; `--feedback`; `--static-reference`, `--no-static-reference`; `--help` |
 | `migration list` | — | `--workspace`, `-w` **required**; `--help` |
 | `migration preview` | `NAME`, `SETUP` | `--workspace`, `-w` **required**; `--help` |
 | `migration targets` | — | `--workspace`, `-w` **required**; `--help` |
@@ -434,8 +436,17 @@ Review the full disclosure, following its offset continuation if needed. Send th
 through `migration ai-request --expected-pin` with launch network, write, origin and credential
 grants. Workspace source and provider privacy settings also apply.
 
+For the guided workflow, use `migration convert --plan-only` when starting the project. Run
+`migration inspect --view workflow` for source IDs. For each source, preview and run the stages
+`convert`, `validate`, and `optimize` using `migration stage-preview` and `migration stage-run`.
+Pass the same options and the preview's `--expected-pin` for each request. `--static-reference`
+adds an offline draft during conversion. Use `change skip_optimization` with `source_id` to
+continue without optimization. Inspect `--view workflow --item SOURCE_ID` for the saved diff
+and its pin. Apply it with `change apply_source_draft` and JSON containing `source_id` and
+`expected_pin`. Use `--feedback` on a new conversion pass to iterate on the staged draft.
+
 Use `migration export PROJECT_ID -w ID --revision REVISION --destination project.zip` for a
 checksummed ZIP at a new local path. Add `--reviewed`, repeatable `--pilot MODEL`,
-`--image-format svg|png`, or `--workbook`. Source evidence needs source access at creation and
+`--image-format svg|png`, `--workbook`, or `--include-sources`. Source evidence needs source access at creation and
 download. Conversion and inspection are static. Run warehouse and dbt checks externally and
 import their evidence against the exact handoff revision.

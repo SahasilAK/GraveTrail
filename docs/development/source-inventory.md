@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **416 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **417 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -38,7 +38,7 @@ python scripts/docs/inventory.py --check
 | [Graphs, columns and exports](#graphs-columns-and-exports) | 9 |
 | [AI and provider services](#ai-and-provider-services) | 31 |
 | [dbt](#dbt) | 14 |
-| [Migration](#migration) | 9 |
+| [Migration](#migration) | 10 |
 | [CLI and MCP automation](#cli-and-mcp-automation) | 14 |
 | [Streamlit UI](#streamlit-ui) | 42 |
 | [Prompts and response schemas](#prompts-and-response-schemas) | 20 |
@@ -179,14 +179,15 @@ python scripts/docs/inventory.py --check
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
 | `src/dataforge/migration/__init__.py` **new** | Static migration workspace. | — |
-| `src/dataforge/migration/assistance.py` **new** | Explicit provider disclosure, bounded request journals and approved conversion lessons. | `PROTOCOL`, `MAX_REQUESTS`, `MAX_RESERVED_TOKENS`, `MAX_ATTEMPTS`, `MAX_CONTEXT`, `PURPOSES`, `PROVIDER_SYSTEM`, `Response`, `Lesson`, `save_lesson`, `revoke_lesson`, `lessons`, `prepare`, `dispatch`, `responses`, `expire_responses`, `attempts`, `record_job`, `start_job`, `latest_job` |
+| `src/dataforge/migration/assistance.py` **new** | Explicit provider disclosure, bounded request journals and approved conversion lessons. | `PROTOCOL`, `MAX_REQUESTS`, `MAX_RESERVED_TOKENS`, `MAX_ATTEMPTS`, `MAX_CONTEXT`, `PURPOSES`, `PROVIDER_SYSTEM`, `Response`, `RegionAssessment`, `ValidationResponse`, `ConversionResponse`, `Lesson`, `save_lesson`, `revoke_lesson`, `lessons`, `prepare`, `dispatch`, `responses`, `expire_responses`, `attempts`, `record_job`, `start_job`, `latest_job` |
 | `src/dataforge/migration/engine.py` **new** | Plan source regions, emit dbt candidates and inspect the resulting SQL independently. | `NAME`, `RESERVED_PATH`, `TEMPLATE`, `CALL`, `CONFIG`, `CONFIG_ARG`, `MARKER`, `MAX_ARTIFACT`, `MAX_PROJECT`, `VERSION`, `DIALECT_ERRORS`, `UNSAFE_FUNCTIONS`, `QUALIFIED`, `digest`, `fingerprint`, `slug`, `unsafe_query`, `output_name`, `dbt_config`, `inspect_sql`, `query_tables`, `SourceBindingError`, `source_relation`, `convert`, `validate` |
 | `src/dataforge/migration/exports.py` **new** | A revision-pinned dbt handoff with offline evidence and quarantined drafts. | `lineage_graph`, `build_bundle` |
 | `src/dataforge/migration/inspection.py` **new** | Reviewable code artifacts and immutable source anchors. | `artifacts`, `source_path`, `source_location`, `annotated`, `commented_source` |
-| `src/dataforge/migration/service.py` **new** | Workspace-owned snapshots, optimistic revisions and scoped review records. | `TABLES`, `SCHEMA`, `latest_run`, `freeze`, `preview`, `projects`, `evidence`, `review_line_range`, `create_project`, `load`, `history`, `convert`, `report`, `resolve_scope`, `set_contract`, `ordered_sas_proposal`, `propose`, `diffs`, `candidate`, `apply`, `read_source_mappings`, `revise_schemas`, `configure_validation`, `import_validation`, `validation_runs`, `import_reconciliation`, `reconciliation_runs`, `pilot_scope`, `record_review`, `restore_revision`, `bundle`, `review_comments`, `add_review_comment`, `resolve_review_comment` |
+| `src/dataforge/migration/service.py` **new** | Workspace-owned snapshots, optimistic revisions and scoped review records. | `TABLES`, `SCHEMA`, `latest_run`, `freeze`, `preview`, `projects`, `evidence`, `review_line_range`, `create_project`, `load`, `history`, `convert`, `report`, `resolve_scope`, `set_contract`, `ordered_sas_proposal`, `propose`, `diffs`, `candidate`, `apply`, `record_source_review`, `read_source_mappings`, `revise_schemas`, `configure_validation`, `import_validation`, `validation_runs`, `import_reconciliation`, `reconciliation_runs`, `pilot_scope`, `record_review`, `restore_revision`, `bundle`, `review_comments`, `add_review_comment`, `resolve_review_comment` |
 | `src/dataforge/migration/sources.py` **new** | Bounded lexical inventory and conservative SQL/SAS/dbt source lowering. | `SAS_COLUMN`, `SAS_NAME`, `SAS_STRING`, `SAS_TRIVIA`, `SAS_TOKEN`, `SAS_INLINE`, `SAS_RUNTIME`, `SAS_LET`, `SAS_LET_VALUE`, `MUTATIONS`, `SECRET_FILE`, `SCRIPT_BLOCK`, `SQL_BATCH_SEPARATOR`, `SQL_TEMP_INTO`, `SQL_IDENTIFIER`, `SCRIPT_WRITE`, `spans`, `sql_regions`, `relation`, `temporary_relation`, `script_writes`, `sql_unit`, `grouping_key_errors`, `ungrouped_columns`, `declaration`, `sas_units`, `sas_ordered_query`, `project_yaml`, `dbt_model_name` |
 | `src/dataforge/migration/targets.py` **new** | The dbt format registry and SQL warehouse boundary. | `Warehouse`, `FORMATS`, `LEGACY_DATABRICKS`, `WAREHOUSES`, `warehouse` |
 | `src/dataforge/migration/validation.py` **new** | Engineer-confirmed checks and inert external evidence for an exported revision. | `REVISION_ENV`, `MAX_ARTIFACT_BYTES`, `COMMANDS`, `RESULTS`, `RECONCILIATION_FIELDS`, `SNAPSHOT_FIELD`, `REPLAY_STAGE`, `KEY_COUNTS`, `KEYED_CHECKS`, `approved_rules`, `data_tests`, `reconciliation_plan`, `reconciliation_template`, `reconciliation_summary`, `import_summary` |
+| `src/dataforge/migration/workflow.py` **new** | File-scoped AI conversion, source comparison and optimization checkpoints. | `STAGES`, `PURPOSE`, `INSTRUCTIONS`, `sources`, `state`, `preview`, `run`, `skip_optimization`, `review`, `apply` |
 
 ## CLI and MCP automation
 
@@ -240,7 +241,7 @@ python scripts/docs/inventory.py --check
 | [`ui/pages/explorer.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/explorer.py) | No module docstring; inspect the linked source. | — |
 | `ui/pages/lineage_builder.py` **new** | Create schema catalogs and author column-level lineage. | `commit`, `table_form` |
 | [`ui/pages/management.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/management.py) | No module docstring; inspect the linked source. | — |
-| `ui/pages/migration.py` **new** | Migration setup, engineering review and handoff. | `setup`, `table_page`, `job_status`, `patch_panel`, `numbered_excerpt`, `artifact_inspector`, `review`, `schemas`, `reconciliation_view`, `validation_view`, `chat`, `knowledge`, `project_view` |
+| `ui/pages/migration.py` **new** | Migration setup, engineering review and handoff. | `setup`, `table_page`, `job_status`, `patch_panel`, `numbered_excerpt`, `artifact_inspector`, `review`, `schemas`, `reconciliation_view`, `validation_view`, `chat`, `knowledge`, `conversion_workflow`, `project_view` |
 | [`ui/pages/settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/settings.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/tools.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/tools.py) | No module docstring; inspect the linked source. | — |
 | [`ui/pages/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/pages/transformations.py) | Compatibility route for existing transformation-lineage bookmarks. | — |
@@ -560,7 +561,7 @@ python scripts/docs/inventory.py --check
 | `tests/test_local_credentials.py` **new** | No module docstring; inspect the linked source. | 5 test functions; helpers/constants: `FakeBackend`, `vault`, `profile`, `saved_profile` |
 | [`tests/test_logging.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_logging.py) | No module docstring; inspect the linked source. | 1 test functions |
 | `tests/test_migration.py` **new** | No module docstring; inspect the linked source. | 26 test functions |
-| `tests/test_migration_agent.py` **new** | CLI and MCP migration parity across one pinned workspace and revision. | 2 test functions |
+| `tests/test_migration_agent.py` **new** | CLI and MCP migration parity across one pinned workspace and revision. | 3 test functions |
 | `tests/test_migration_reconvert.py` **new** | No module docstring; inspect the linked source. | 1 test functions |
 | `tests/test_migration_sas.py` **new** | No module docstring; inspect the linked source. | 4 test functions |
 | [`tests/test_model_capabilities.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_model_capabilities.py) | Provider metadata is capacity evidence, never a spend authorization. | 2 test functions |

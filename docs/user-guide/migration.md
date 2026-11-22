@@ -17,7 +17,7 @@ The same workflow is available through [the CLI](../CLI_GUIDE.md#static-dbt-migr
   <a href="../../assets/images/gravetrail-migration-walkthrough.mp4">Download the migration walkthrough</a>
 </video>
 
-<figcaption>Screen recording with on-screen captions. Follow synthetic orders through static conversion, a SAS review finding, lineage, external validation setup and a scoped dbt pilot.</figcaption>
+<figcaption>Screen recording of the offline static workflow. Follow synthetic orders through a SAS review finding, migrated lineage, external validation setup and a scoped dbt pilot.</figcaption>
 </figure>
 
 [Follow along with the same example](#try-a-small-migration).
@@ -25,8 +25,31 @@ The same workflow is available through [the CLI](../CLI_GUIDE.md#static-dbt-migr
 ## Set up a project
 
 Choose dbt and Databricks, confirm the target catalog and schema, and preview the migration.
-Read admission, planned outputs and findings before creating the project. **Run static conversion**
-creates a revision with model candidates. One source file can contribute several models.
+Read admission, planned outputs and findings before creating the project. Choose **Prepare AI
+conversion** to map the pinned source files and dependencies. Choose a file and a configured
+provider. A source file can contribute several models in the same request.
+
+## Run the five migration stages
+
+1. **Convert.** Preview the redacted disclosure, then choose **Start AI conversion**. The request
+   reads one retained file and addresses every mapped output from it. You can include a locally
+   generated static reference up front or approve it for a retry when the model asks for one.
+   A missing output stays in the source ledger.
+2. **Validate against source.** Preview and run the comparison. Read the AI assessment for each
+   source region and the separate static SQL, dependency and schema checks. A comparison can flag
+   omissions or uncertainty. Runtime equivalence stays unverified.
+3. **Optimize.** Preview optional improvements to the staged SQL. Protected projections,
+   dependencies, materialization and review comments must survive the edit. Skip optimization if
+   the draft needs engineer input first.
+4. **Review and feedback.** Inspect the combined diff and use **Revise the draft with AI feedback**
+   to start another pass. Apply the reviewed diff to save the file's draft, then record engineer
+   decisions in **Review**. The project keeps staged SQL and comparison findings even with provider
+   chat history disabled. Changes to relevant inputs can require a fresh pass.
+5. **Export.** Choose a draft, reviewed or pilot ZIP. Add a lineage image, a mapping workbook or
+   full retained source files. Full source text uses inert `.txt` paths outside the dbt model tree.
+
+**Offline static conversion** remains available in the expansion panel on a new project.
+The recording uses this path.
 
 <figure class="gt-product" markdown>
 ![Migration setup with dbt and Databricks selected and the SAS and SQL source files retained](../assets/images/gravetrail-migration-setup.png)
@@ -201,8 +224,8 @@ data accepted_orders held_orders;
 run;
 ```
 
-1. Choose Databricks and retain both files. Preview the four outputs, create the project, and run
-   static conversion.
+1. Choose Databricks and retain both files. Preview the four outputs and create the project.
+   To follow the recording, expand **Offline static conversion** and choose **Run static conversion**.
 2. In **Review**, inspect `review/accepted_orders.sql.txt` and open **Show pinned source evidence**.
    Find the note about which branch receives a missing amount.
 3. In **Lineage**, find the generated edge from `stg_orders` to `daily_order_totals`.

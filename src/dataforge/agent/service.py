@@ -55,7 +55,8 @@ MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', '
                      'database_inspect', 'backups_list'}
 APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
 WRITES |= {'theme_apply', 'logging_update'} | PROJECT_WRITES | MIGRATION_WRITES
-LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge', 'migration_ai_request'}
+LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge', 'migration_ai_request',
+                'migration_stage_request'}
 
 
 class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperations, ArtifactOperations,

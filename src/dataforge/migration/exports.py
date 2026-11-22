@@ -63,7 +63,8 @@ def _mapping_workbook(mappings, assumptions):
     return output.getvalue()
 
 
-def build_bundle(project, revision, details, reviewed, image_format=None, workbook=False, *, read_evidence=None, pilot=None):
+def build_bundle(project, revision, details, reviewed, image_format=None, workbook=False, *,
+                 read_evidence=None, read_source=None, pilot=None):
     if reviewed and pilot is None and not details["eligible"]:
         raise ValueError("Resolve all required outputs, structural findings and outstanding reviews first")
     stale_rules = details.get("validation_warnings", {}).keys()
@@ -133,6 +134,22 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
     physical = defaultdict(list)
     redact = current_connections().redact
     inventory = artifacts(project, revision, details)
+    if read_source:
+        for source in sources.values():
+            if "decoded_hash" in source:
+                write("migration/original-sources/" + source["path"] + ".txt", redact(read_source(source["id"])))
+    ai_reviews = {source_id: review for source_id, review in revision["settings"].get("ai_source_reviews", {}).items()
+                  if source_id in sources}
+    if pilot is not None:
+        ai_reviews = {source_id: {
+            "files": {model: digest for model, digest in review["files"].items() if model in plan["outputs"]},
+            "coverage": {region: {"status": value["status"]} for region, value in review["coverage"].items()
+                         if region in regions},
+            "checks": [row for row in review["checks"] if row["model"] in plan["outputs"]],
+            "optimized_files": [model for model in review["optimized_files"] if model in plan["outputs"]],
+        } for source_id, review in ai_reviews.items()}
+    if ai_reviews:
+        write("migration/ai-source-review.json", _json(current_connections().sanitize(ai_reviews)))
 
     def write_evidence(entry, prefix=""):
         region = entry["region"]

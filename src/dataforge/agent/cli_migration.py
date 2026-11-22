@@ -7,7 +7,7 @@ from typing import Annotated, Any, get_args
 import typer
 
 from dataforge.agent.contracts import AgentError
-from dataforge.agent.migration import MigrationChange, MigrationPurpose, MigrationView
+from dataforge.agent.migration import MigrationChange, MigrationPurpose, MigrationStage, MigrationView
 from dataforge.settings_service import read_json_file
 
 Workspace = Annotated[str, typer.Option('--workspace', '-w', help='Exact workspace ID.')]
@@ -22,6 +22,7 @@ Models = Annotated[list[str], typer.Option('--model', help='Exact output model I
 View = StrEnum('View', get_args(MigrationView))
 Change = StrEnum('Change', get_args(MigrationChange))
 Purpose = StrEnum('Purpose', get_args(MigrationPurpose))
+Stage = StrEnum('Stage', get_args(MigrationStage))
 ViewOption = Annotated[View, typer.Option('--view', metavar='VIEW', help='Available views are ' + ', '.join(View) + '.')]
 ChangeArgument = Annotated[Change, typer.Argument(metavar='OPERATION', show_choices=False,
                                                   help='Available operations are ' + ', '.join(Change) + '.')]
@@ -99,10 +100,11 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
                 expected_revision: Annotated[str, typer.Option('--expected-revision', '--revision',
                                                                help='Current revision ID required for conversion.')],
                 reconvert: Annotated[bool, typer.Option(help='Regenerate an already converted project.')] = False,
+                plan_only: Annotated[bool, typer.Option(help='Prepare an AI source plan without static drafts.')] = False,
                 background: Annotated[bool, typer.Option(help='Return a job ID. Poll with jobs status --wait.')] = False) -> None:
         """Run static conversion against the project's confirmed revision."""
         invoke(ctx, 'migration_convert', workspace, background=background, project_id=project_id,
-               expected_revision=expected_revision, reconvert=reconvert)
+               expected_revision=expected_revision, reconvert=reconvert, plan_only=plan_only)
 
     @migration.command('change')
     def change(ctx: typer.Context, project_id: str, operation: ChangeArgument, arguments: ArgumentsFile,
@@ -146,13 +148,32 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
                profile_id=profile, models=model, purpose=purpose.value, message=message, dependencies=dependencies,
                expected_pin=expected_pin)
 
+    @migration.command('stage-preview')
+    def stage_preview(ctx: typer.Context, project_id: str, source_id: str, stage: Stage,
+                      workspace: Workspace, revision: Revision, profile: Profile, feedback: str = '',
+                      static_reference: bool = False,
+                      offset: Annotated[int, typer.Option(min=0, help='Resume disclosure from next_offset.')] = 0) -> None:
+        """Preview the approved disclosure for one source file and stage."""
+        invoke(ctx, 'migration_stage_preview', workspace, project_id=project_id, revision_id=revision, profile_id=profile,
+               source_id=source_id, stage=stage.value, feedback=feedback, static_reference=static_reference, offset=offset)
+
+    @migration.command('stage-run')
+    def stage_run(ctx: typer.Context, project_id: str, source_id: str, stage: Stage,
+                  workspace: Workspace, revision: Revision, profile: Profile, expected_pin: Pin,
+                  feedback: str = '', static_reference: bool = False) -> None:
+        """Run a confirmed file-scoped stage and save its candidate evidence."""
+        invoke(ctx, 'migration_stage_request', workspace, project_id=project_id, revision_id=revision, profile_id=profile,
+               source_id=source_id, stage=stage.value, feedback=feedback, static_reference=static_reference,
+               expected_pin=expected_pin)
+
     @migration.command('export')
     def export(ctx: typer.Context, project_id: str, workspace: Workspace, revision: Revision,
                reviewed: Annotated[bool, typer.Option(help='Require reviewed handoff checks.')] = False,
                image_format: ImageFormat | None = None, workbook: bool = False,
                pilot: Annotated[list[str] | None, typer.Option(help='Reviewed pilot model ID. Repeat for multiple.')] = None,
-               destination: Annotated[Path | None, typer.Option(help='Download to a new local ZIP file.')] = None) -> None:
+               destination: Annotated[Path | None, typer.Option(help='Download to a new local ZIP file.')] = None,
+               include_sources: Annotated[bool, typer.Option(help='Include full retained sources as inert text.')] = False) -> None:
         """Create a revision-pinned draft, reviewed, or pilot dbt bundle."""
         invoke(ctx, 'migration_export', workspace, project_id=project_id, revision_id=revision,
                reviewed=reviewed or bool(pilot), image_format=image_format.value if image_format else None,
-               workbook=workbook, pilot=pilot or None, download_to=destination)
+               workbook=workbook, pilot=pilot or None, include_sources=include_sources, download_to=destination)

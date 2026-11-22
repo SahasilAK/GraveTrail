@@ -197,8 +197,8 @@ def _admission_report(value):
     return {key: report.get(key) for key in ("discovered", "accepted", "skipped", "duplicates", "skip_reasons")}
 
 
-def preview(snapshot):
-    plan, files = engine.convert(snapshot)
+def preview(snapshot, *, drafts=True):
+    plan, files = engine.convert(snapshot, drafts=drafts)
     return plan, engine.validate(snapshot, plan, files)
 
 
@@ -330,17 +330,20 @@ def _publish(store, workspace, project_id, base, revision):
                   [revision["id"], workspace, project_id])
 
 
-def convert(store, workspace, project_id, expected_revision, cancelled=lambda: False, progress=None, *, reconvert=False):
+def convert(store, workspace, project_id, expected_revision, cancelled=lambda: False, progress=None, *,
+            reconvert=False, plan_only=False):
     """Publish a static draft from pinned sources, even after initial conversion when requested."""
     project, base = load(store, workspace, project_id, expected_revision)
     if project["revision"] != expected_revision:
         raise ValueError("Migration changed. Refresh before conversion.")
+    if plan_only and reconvert:
+        raise ValueError("Start an AI plan from a new migration project.")
     if base["plan"] is not None and not reconvert:
         return base
     snapshot = _stored_snapshot(store, workspace, project)
     if cancelled():
         raise InterruptedError()
-    prefix = f"{base['id']}.{engine.VERSION}."
+    prefix = f"{base['id']}.{engine.VERSION}." + ("inventory." if plan_only else "")
     cached = store.rows("""SELECT body FROM migration_activity WHERE workspace_id=? AND project_id=?
                           AND kind='checkpoint' AND starts_with(activity_id, ?)""", [workspace, project_id, prefix])
     resumed = {model: value for row in cached for model, value in _read(row["body"]).items()}
@@ -356,10 +359,10 @@ def convert(store, workspace, project_id, expected_revision, cancelled=lambda: F
 
     if resumed and progress:
         progress(.25, f"Resuming {len(resumed):,} saved model conversions")
-    plan, files = engine.convert(snapshot, cancelled, progress, resumed=resumed, checkpoint=checkpoint)
+    plan, files = engine.convert(snapshot, cancelled, progress, resumed=resumed, checkpoint=checkpoint, drafts=not plan_only)
     if progress:
         progress(.85, "Saving planned outputs and immutable source mappings")
-    revision = {"id": uuid.uuid4().hex, "parent": base["id"], "settings": {}, "plan": plan,
+    revision = {"id": uuid.uuid4().hex, "parent": base["id"], "settings": {"ai_workflow": True} if plan_only else {}, "plan": plan,
                 "files": files, "reviews": {}}
     with store.transaction():
         if cancelled():
@@ -553,7 +556,7 @@ def candidate(base, proposal):
     return {**base, "files": files}
 
 
-def apply(store, workspace, project_id, proposal):
+def apply(store, workspace, project_id, proposal, *, ai_review=None):
     with store.transaction():
         project, base = load(store, workspace, project_id)
         revision = candidate(base, proposal)
@@ -565,9 +568,23 @@ def apply(store, workspace, project_id, proposal):
         if any(row["code"] in mechanical and (row["model"] in proposal["edits"]
                or (row["model"], row["code"], row["message"]) not in previous) for row in details["findings"]):
             raise ValueError("The proposal has unresolved SQL or dependency checks. Correct it before applying.")
+        if ai_review:
+            reviews = {**base["settings"].get("ai_source_reviews", {}), **ai_review}
+            revision["settings"] = {**base["settings"], "ai_source_reviews": reviews}
         revision.update(id=uuid.uuid4().hex, parent=base["id"], proposal=proposal["id"])
         _publish(store, workspace, project_id, base["id"], revision)
     return revision
+
+
+def record_source_review(store, workspace, project_id, revision_id, source_id, receipt):
+    """Save a staged source assessment when there is no new SQL to apply."""
+    with store.transaction():
+        _, base = load(store, workspace, project_id, revision_id)
+        reviews = {**base["settings"].get("ai_source_reviews", {}), source_id: receipt}
+        revision = {**base, "id": uuid.uuid4().hex, "parent": base["id"],
+                    "settings": {**base["settings"], "ai_source_reviews": reviews}}
+        _publish(store, workspace, project_id, revision_id, revision)
+        return revision
 
 
 def read_source_mappings(body):
@@ -753,7 +770,8 @@ def restore_revision(store, workspace, project_id, expected_revision, revision_i
     return revision
 
 
-def bundle(store, workspace, project_id, revision_id, reviewed=False, *, image_format=None, workbook=False, pilot=None):
+def bundle(store, workspace, project_id, revision_id, reviewed=False, *,
+           image_format=None, workbook=False, pilot=None, include_sources=False):
     from dataforge.migration.exports import build_bundle
 
     project, revision = load(store, workspace, project_id, revision_id)
@@ -774,7 +792,8 @@ def bundle(store, workspace, project_id, revision_id, reviewed=False, *, image_f
     if pilot is not None and not reviewed:
         raise ValueError("Pilot exports require reviewed handoff checks")
     return build_bundle(project, revision, details, reviewed,
-                        image_format=image_format, workbook=workbook, read_evidence=read, pilot=scope)
+                        image_format=image_format, workbook=workbook, read_evidence=read,
+                        read_source=original if include_sources else None, pilot=scope)
 
 
 def review_comments(store, workspace, project_id):

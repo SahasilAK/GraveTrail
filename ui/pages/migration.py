@@ -8,7 +8,7 @@ from dataforge.agent.jobs import TERMINAL
 from dataforge.configuration import VisualizationSettings
 from dataforge.exports import report_csv
 from dataforge.lineage_builder import load_builder
-from dataforge.migration import assistance, engine, service, validation
+from dataforge.migration import assistance, engine, service, validation, workflow
 from dataforge.migration.exports import lineage_graph
 from dataforge.migration.inspection import annotated, artifacts, source_location
 from dataforge.migration.targets import FORMATS, WAREHOUSES
@@ -72,14 +72,15 @@ def setup(store, workspace, prefix, entry):
                 st.session_state.pop(prefix + "preflight", None)
                 st.session_state.pop(prefix + "entry", None)
                 st.rerun()
-            plan, details = service.preview(snapshot)
+            plan, details = service.preview(snapshot, drafts=False)
             st.session_state[prefix + "preflight"] = {
                 "pin": pin, "outputs": [{"model": key, "output": row["name"], "inputs": ", ".join(row["inputs"]),
                                         "excluded": bool(row.get("excluded"))} for key, row in plan["outputs"].items()],
                 "sources": [{"source": row["path"], "SHA-256": row["hash"],
                              "admission": row.get("skip", row.get("freshness", "Retained"))}
                             for row in snapshot["sources"]],
-                "findings": details["findings"], "admission": snapshot.get("upload_report", []),
+                "findings": [finding for finding in details["findings"] if finding["code"] not in {"missing_output", "upstream"}],
+                "admission": snapshot.get("upload_report", []),
             }
             if create:
                 st.warning("Scope or settings changed. Review the updated preflight before creating the project.")
@@ -140,7 +141,7 @@ def job_status(store, workspace, project_id):
         st.error(error)
 
 
-def patch_panel(store, workspace, project, base, proposal):
+def patch_panel(store, workspace, project, base, proposal, *, apply=None):
     st.text(proposal["rationale"])
     if proposal["base"] != base["id"]:
         st.caption("This proposal belongs to an earlier revision.")
@@ -166,7 +167,10 @@ def patch_panel(store, workspace, project, base, proposal):
     if findings:
         table_page("Proposed revision findings", findings, proposal["id"] + "findings")
     if st.button("Apply reviewed diff", key=proposal["id"], type="primary"):
-        service.apply(store, workspace, project["id"], proposal)
+        if apply:
+            apply()
+        else:
+            service.apply(store, workspace, project["id"], proposal)
         st.rerun()
 
 
@@ -694,6 +698,121 @@ def knowledge(store, workspace, project, base, key):
             st.rerun()
 
 
+def conversion_workflow(store, workspace, project, base, key):
+    entries = workflow.sources(project, base)
+    receipts = base["settings"].get("ai_source_reviews", {})
+    st.subheader("AI conversion by source file")
+    st.caption("One conversion request reads one retained file and drafts every mapped output. "
+               "Review each provider disclosure before sending it. Code is saved as a draft until you apply its diff.")
+    table_page("Source files", [
+        {"Source file": entry["path"], "dbt outputs": ", ".join(entry["models"]),
+         "Status": ("Draft applied" if receipts[source]["files"] else "Findings saved") if source in receipts
+         else "Available" if entry["models"] and entry["retained"] else "Inspect the source ledger"}
+        for source, entry in entries.items()
+    ], key + "workflow_sources")
+    available = [source for source, entry in entries.items() if entry["models"] and entry["retained"]]
+    if not available:
+        st.info("No retained file has a mapped output. Check Scope for unresolved sources.")
+        return
+    source = st.selectbox("Source file", available, format_func=lambda value: entries[value]["path"],
+                          key=key + "workflow_file")
+    current = workflow.state(store, workspace, project, base, source)
+    stages = current["stages"]
+    labels = {"convert": "1. Convert", "validate": "2. Validate against source", "optimize": "3. Optimize",
+              "review": "4. Review and feedback"}
+    if current["applied"]:
+        st.success("The source review is saved. Record engineer decisions in Review, then open Export.")
+        return
+    if "convert" in stages:
+        st.caption("1. Conversion draft")
+        st.text(stages["convert"]["answer"])
+        if stages["convert"]["missing_outputs"]:
+            st.warning("Unresolved outputs: " + ", ".join(stages["convert"]["missing_outputs"]))
+    if "validate" in stages:
+        st.caption("2. AI source comparison · runtime equivalence unverified")
+        st.text(stages["validate"]["answer"])
+        regions = {region["id"]: region for region in current["entry"]["regions"]}
+        table_page("Source comparison by region", [
+            {"Lines": f"{regions[region]['start_line']}–{regions[region]['end_line']}",
+             "Assessment": value["status"], "Detail": value["detail"]}
+            for region, value in stages["validate"]["coverage"].items()
+        ], key + source + "coverage")
+        with st.expander("Independent static checks"):
+            table_page("Draft checks", stages["validate"]["checks"], key + source + "checks")
+    stage = current["next"]
+    retry_with_reference = False
+    if stage == "validate" and stages["convert"].get("needs_static_reference"):
+        st.info("The model requested a static reference. You can preview and approve a retry or validate this draft.")
+        retry_with_reference = st.toggle("Retry conversion with a static reference", key=key + source + "static_retry")
+        if retry_with_reference:
+            stage = "convert"
+    if "optimize" in stages:
+        result = stages["optimize"]
+        st.caption("3. Optimization")
+        st.text("Skipped by engineer." if result.get("skipped") else result["answer"])
+    st.subheader(labels[stage])
+    if stage == "review":
+        proposal, _, review_pin = workflow.review(store, workspace, project["id"], base["id"], source)
+        if proposal:
+            patch_panel(store, workspace, project, base, proposal, apply=lambda: workflow.apply(
+                store, workspace, project["id"], base["id"], source, review_pin))
+        else:
+            st.warning("No new SQL is available to apply. The unresolved source remains in the ledger and draft export.")
+            if st.button("Save source comparison findings", key=key + source + "save_findings"):
+                workflow.apply(store, workspace, project["id"], base["id"], source, review_pin)
+                st.rerun()
+        if not st.toggle("Revise the draft with AI feedback", key=key + source + "feedback_toggle"):
+            return
+        stage = "convert"
+    elif stage == "optimize" and st.button("Continue to review without optimization", key=key + source + "skip"):
+        workflow.skip_optimization(store, workspace, project["id"], base["id"], source)
+        st.rerun()
+    profiles = {row["profile_id"]: row["name"] for row in store.rows(
+        "SELECT profile_id,name FROM llm_profiles WHERE workspace_id=? ORDER BY name", [workspace])}
+    if not profiles:
+        st.info("Configure a model provider to start AI conversion.")
+        st.page_link("ui/pages/connections.py", label="Connections & AI")
+        return
+    stage_key = key + source + stage
+    provider = st.selectbox("Provider", list(profiles), format_func=profiles.get, key=key + "workflow_provider")
+    feedback = st.text_area("Engineer feedback", max_chars=3000, key=stage_key + "feedback") if stage == "convert" else ""
+    reference = retry_with_reference or (
+        stage == "convert" and st.checkbox("Include a static conversion as reference", key=stage_key + "reference"))
+    preview_key = stage_key + "preview"
+    request = {"feedback": feedback, "static_reference": reference}
+
+    def prepare():
+        return workflow.preview(store, workspace, project["id"], base["id"], provider, source, stage, **request)
+
+    if st.button("Preview provider disclosure", key=stage_key + "prepare"):
+        st.session_state.pop(preview_key, None)
+        st.session_state[preview_key] = prepare()
+    if disclosed := st.session_state.get(preview_key):
+        st.text("Recipient: " + disclosed["recipient"] + " · " + disclosed["profile"].model)
+        st.caption(f"{disclosed['tokens']:,} estimated input and reserved output tokens")
+        with st.expander("Exact redacted request data"):
+            st.json(disclosed["body"], expanded=False)
+        start = {"convert": "Start AI conversion", "validate": "Run source validation", "optimize": "Run optimization"}[stage]
+        if st.button(start, type="primary", key=stage_key + "send"):
+            pin = prepare()["pin"]
+            if pin != disclosed["pin"]:
+                st.warning("The recipient or disclosure changed. Preview the request again.")
+                return
+            st.session_state.pop(preview_key, None)
+
+            def work(progress, cancelled):
+                progress(.2, labels[stage] + " · " + entries[source]["path"])
+                try:
+                    workflow.run(store, workspace, project["id"], base["id"], provider, source, stage, pin,
+                                 cancelled=cancelled, **request)
+                    return {"status": "completed", "source": source, "stage": stage}
+                except ValueError as exc:
+                    return {"status": "failed", "error": str(exc)[:600]}
+
+            assistance.start_job(store, workspace, project["id"], analysis_jobs(str(store.home)), work)
+            st.rerun()
+
+
 def project_view(store, workspace, project_id):
     project, base = service.load(store, workspace, project_id)
     st.header(project["name"])
@@ -701,11 +820,12 @@ def project_view(store, workspace, project_id):
                f"Revision {base['id'][:8]} · Runtime equivalence unverified")
     job_status(store, workspace, project_id)
 
-    def start_conversion(*, reconvert=False):
+    def start_conversion(*, reconvert=False, plan_only=False):
         def work(progress, cancelled):
-            progress(.15, "Converting retained sources")
+            progress(.15, "Inventorying retained sources" if plan_only else "Converting retained sources")
             try:
-                result = service.convert(store, workspace, project_id, base["id"], cancelled, progress, reconvert=reconvert)
+                result = service.convert(store, workspace, project_id, base["id"], cancelled, progress,
+                                         reconvert=reconvert, plan_only=plan_only)
                 return {"revision": result["id"]}
             except ValueError as exc:
                 return {"status": "failed", "error": str(exc)[:600]}
@@ -713,9 +833,12 @@ def project_view(store, workspace, project_id):
         st.rerun()
 
     if base["plan"] is None:
-        st.info("The input snapshot is ready. Run static conversion to produce candidate models and review findings.")
-        if st.button("Run static conversion", type="primary"):
-            start_conversion()
+        st.info("Start with AI conversion. GraveTrail inventories the pinned files and prepares the first provider disclosure.")
+        if st.button("Prepare AI conversion", type="primary"):
+            start_conversion(plan_only=True)
+        with st.expander("Offline static conversion"):
+            if st.button("Run static conversion"):
+                start_conversion()
         return
     details = service.report(project, base)
     st.caption(f"{sum(details['coverage'].values()):,} regions accounted for · "
@@ -726,9 +849,13 @@ def project_view(store, workspace, project_id):
     st.caption(f"{active.count('statically_qualified'):,} statically qualified models · "
                f"{active.count('engineer_accepted'):,} engineer-accepted models")
     key = f"migration_{workspace}_{project_id}_{base['id']}_"
-    view = section("Migration view", ["Scope", "Schemas & mappings", "Review", "AI assistance", "Lineage",
-                                      "Validation", "Export", "Knowledge"], "migration_view_" + project_id)
-    if view == "Scope":
+    views = ["Scope", "Schemas & mappings", "Review", "AI assistance", "Lineage", "Validation", "Export", "Knowledge"]
+    if base["settings"].get("ai_workflow"):
+        views.insert(0, "AI conversion")
+    view = section("Migration view", views, "migration_view_" + project_id)
+    if view == "AI conversion":
+        conversion_workflow(store, workspace, project, base, key)
+    elif view == "Scope":
         table_page("Source ledger", base["plan"]["regions"], key + "regions")
         st.caption("Coverage by decoded source characters")
         st.json(details["characters"])
@@ -780,6 +907,8 @@ def project_view(store, workspace, project_id):
     elif view == "Validation":
         validation_view(store, workspace, project, base, details, key)
     elif view == "Export":
+        if base["settings"].get("ai_workflow"):
+            st.subheader("5. Export handoff")
         mode = st.radio("Bundle", ["Draft bundle", "Reviewed handoff", "Pilot handoff"])
         reviewed = mode != "Draft bundle"
         pilot = None
@@ -796,14 +925,17 @@ def project_view(store, workspace, project_id):
                     pilot_ready = True
                 except ValueError as exc:
                     st.info(str(exc))
-        image = st.selectbox("Graph image", [None, "svg", "png"], format_func=lambda value: value.upper() if value else "None")
+        image = st.selectbox("Graph image", [None, "svg", "png"], index=1 if base["settings"].get("ai_workflow") else 0,
+                             format_func=lambda value: value.upper() if value else "None")
         workbook = st.checkbox("Include mapping and type workbook")
+        include_sources = st.checkbox("Include full retained source files as text",
+                                      help="Includes all retained text from each packaged source file, including unselected sections.")
         if mode == "Reviewed handoff" and not details["eligible"]:
             st.info("Resolve required outputs, structural findings and outstanding reviews for a reviewed handoff.")
         if st.button("Prepare dbt bundle", disabled=not pilot_ready or (pilot is None and reviewed and not details["eligible"])):
             with st.spinner("Preparing revision-pinned bundle…"):
                 data = service.bundle(store, workspace, project_id, base["id"], reviewed,
-                                      image_format=image, workbook=workbook, pilot=pilot)
+                                      image_format=image, workbook=workbook, pilot=pilot, include_sources=include_sources)
             st.download_button("Download dbt project", data, f"{engine.slug(project['name'])}-{base['id'][:8]}.zip",
                                mime="application/zip", on_click="ignore")
     elif view == "Knowledge":

@@ -6,6 +6,12 @@ The CLI and MCP adapters call the same services through the workspace agent poli
 downloads recheck source access. Provider dispatch additionally requires launch authorization and
 the exact disclosure pin. Setup, edits, validation and export remain revision-bound.
 
+The guided AI run inventories source regions and dependency bindings without emitting static drafts.
+Each provider conversion covers one retained file and its mapped dbt models. Source comparison
+requires an assessment for each included nontrivial region and saves separate static check results.
+The project checkpoints conversion, comparison and optimization before an engineer applies the
+combined diff. A static draft can be generated as request evidence when the engineer includes it.
+
 `dataforge.migration.engine` plans outputs and source obligations before writing candidates.
 Source-specific rules live in `sources.py`. SQLGlot parses and generates SQL with explicit dialects.
 The emitter replaces recognized AST table references with literal dbt references. Independent
@@ -61,5 +67,5 @@ build and model-test observations are distinct from engineer acceptance and lega
 Reconciliation uploads bind aggregate and keyed metrics to the revision, plan fingerprint, and run
 stage. Incremental comparisons record initial-load and repeat-run results. Activity rows store
 bounded numeric evidence and computed outcomes. A partial upload leaves coverage incomplete.
-Pilot exports take dependency closure from the fully validated project graph and write only the
-included models and their prerequisites.
+Pilot exports take dependency closure from the fully validated project graph. Source comparisons
+follow the packaged model scope. Full source text is an opt-in artifact stored outside the model tree.

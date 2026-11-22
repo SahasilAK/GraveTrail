@@ -15,7 +15,13 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions, compact
-from dataforge.agent.migration import MigrationChange, MigrationPurpose, MigrationSetup, MigrationView
+from dataforge.agent.migration import (
+    MigrationChange,
+    MigrationPurpose,
+    MigrationSetup,
+    MigrationStage,
+    MigrationView,
+)
 from dataforge.agent.service import AgentService
 from dataforge.connections import current_connections
 
@@ -615,10 +621,10 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
 
     @server.tool(annotations=write)
     async def start_migration_conversion(workspace_id: str, project_id: MigrationID, expected_revision: MigrationID,
-                                         reconvert: bool = False) -> CallToolResult:
-        """Queue static conversion from the pinned source snapshot. Poll get_job_status with the returned job ID."""
+                                         reconvert: bool = False, plan_only: bool = False) -> CallToolResult:
+        """Queue conversion or prepare an AI-only source plan. Poll get_job_status with the returned job ID."""
         return await call('migration_convert', workspace_id, project_id=project_id, expected_revision=expected_revision,
-                          reconvert=reconvert)
+                          reconvert=reconvert, plan_only=plan_only)
 
     @server.tool(annotations=read)
     async def preview_migration_edit(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
@@ -658,10 +664,32 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
     async def export_migration_bundle(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
                                       reviewed: bool = False, image_format: Literal['svg', 'png'] | None = None,
                                       workbook: bool = False,
-                                      pilot: Annotated[list[MigrationID], Field(min_length=1, max_length=500)] | None = None) -> CallToolResult:
+                                      pilot: Annotated[list[MigrationID], Field(min_length=1, max_length=500)] | None = None,
+                                      include_sources: bool = False) -> CallToolResult:
         """Create a revision-pinned draft or reviewed dbt ZIP. Read the managed artifact using get_export."""
         return await call('migration_export', workspace_id, project_id=project_id, revision_id=revision_id,
-                          reviewed=reviewed, image_format=image_format, workbook=workbook, pilot=pilot)
+                          reviewed=reviewed, image_format=image_format, workbook=workbook, pilot=pilot,
+                          include_sources=include_sources)
+
+    @server.tool(annotations=read)
+    async def preview_migration_stage(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                      profile_id: MigrationID, source_id: MigrationID, stage: MigrationStage,
+                                      feedback: MigrationMessage = '', static_reference: bool = False,
+                                      offset: MigrationOffset = 0, options: QueryOptions | None = None) -> CallToolResult:
+        """Review the exact disclosure and budget for one file in a guided migration stage."""
+        return await call('migration_stage_preview', workspace_id, options, project_id=project_id, revision_id=revision_id,
+                          profile_id=profile_id, source_id=source_id, stage=stage, feedback=feedback,
+                          static_reference=static_reference, offset=offset)
+
+    @server.tool(annotations=network)
+    async def run_migration_stage(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
+                                  profile_id: MigrationID, source_id: MigrationID, stage: MigrationStage,
+                                  expected_pin: MigrationID, feedback: MigrationMessage = '',
+                                  static_reference: bool = False, options: QueryOptions | None = None) -> CallToolResult:
+        """Send an approved file-scoped stage request and save the result for review."""
+        return await call('migration_stage_request', workspace_id, options, project_id=project_id, revision_id=revision_id,
+                          profile_id=profile_id, source_id=source_id, stage=stage, expected_pin=expected_pin,
+                          feedback=feedback, static_reference=static_reference)
 
     @server.resource("gravetrail://workspaces")
     @server.resource("dataforge://workspaces")

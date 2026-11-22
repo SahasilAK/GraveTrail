@@ -20,6 +20,7 @@ from dataforge.agent.service import AgentService
 from dataforge.cli import app
 from dataforge.ingestion import Importer
 from dataforge.llm import Profile
+from dataforge.migration import assistance, service
 from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
 from dataforge.store import Store
 
@@ -135,3 +136,107 @@ def test_migration_ai_requires_exact_disclosure_and_launch_grants(tmp_path):
             reply = agent.call("migration_ai_request", w, **args, expected_pin=pin)
             assert len(requests) == 1 and reply["answer"] == "A literal ID" and "proposal" not in reply
             assert agent.call("migration_inspect", w, project_id=project["id"], view="ai_responses")["total"] == 0
+
+
+def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_path):
+    original = ("CREATE VIEW staged AS WITH t AS (SELECT 1 AS id) SELECT id FROM t;\n"
+                "CREATE VIEW result AS SELECT id FROM staged;\n")
+    staged = "WITH t AS (SELECT 1 AS id) SELECT id FROM t"
+    result = "SELECT id FROM {{ ref('staged') }}"
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace("Guided AI")
+        store.set_setting(w, "agent_access", {"max_chars": 100_000})
+        Importer(store, w).files([("flow.sql", original.encode())], {".sql"})
+        profile = Profile(provider="LM Studio", base_url="http://localhost:1234/v1", model="migration",
+                          source_limit_policy="token_capacity", max_tokens=2048)
+        profile = profile.model_copy(update={"model_capabilities": bind_capabilities(
+            ModelCapabilities(context_tokens=32_000, output_tokens=2048, source="manual"), profile)})
+        store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["local", w, "Local", profile.model_dump_json()])
+        policy = AccessPolicy(allow_write=True, workspaces=(w,), allow_llm=True, allowed_llm_origins=(profile.base_url,))
+        with closing(AgentService(store, policy)) as agent:
+            plan = agent.call("migration_preview", w, name="Guided", setup={})
+            project = agent.call("migration_create", w, name="Guided", setup={}, expected_pin=plan["pin"])
+            pid = project["id"]
+            job = agent.call("migration_convert", w, project_id=pid, expected_revision=project["revision"], plan_only=True)
+            agent.jobs.wait(job["job_id"], w)
+            base = agent.job_status(w, job["job_id"])["result"]["revision_id"]
+            assert service.load(store, w, pid)[1]["files"] == {}
+            files = agent.call("migration_inspect", w, project_id=pid, view="workflow")["items"]
+            assert len(files) == 1 and files[0]["models"] == ["staged", "result"]
+            source = files[0]["source_id"]
+            scope = {"project_id": pid, "revision_id": base, "profile_id": "local", "source_id": source}
+            disclosures = []
+            response = {}
+
+            def transport(request):
+                disclosures.append(json.loads(json.loads(request.content)["messages"][-1]["content"]))
+                return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(response)},
+                                                             "finish_reason": "stop"}]})
+
+            agent.provider_transport = httpx.MockTransport(transport)
+
+            def preview(stage, **kwargs):
+                return agent.call("migration_stage_preview", w, {"max_chars": 100_000},
+                                  **scope, stage=stage, **kwargs)
+
+            def run(stage, pin, **kwargs):
+                return agent.call("migration_stage_request", w, **scope, stage=stage, expected_pin=pin, **kwargs)
+
+            with pytest.raises(AgentError):
+                preview("validate")
+            pure = preview("convert")
+            assert "static_reference" not in pure["body"]
+            assert preview("convert", static_reference=True)["body"]["static_reference"]["staged"]
+            parts = pure["body"]["source_file"]["regions"]
+            assert "".join(region["original"] for region in parts) == original
+            anchors = {output["model"]: output["span"]["id"] for output in pure["body"]["outputs"]}
+            response.update(answer="Two models translated", citations=list(anchors.values()),
+                            edits={"staged": staged, "result": result})
+            with pytest.raises(AgentError):
+                run("convert", pure["pin"], feedback="Different disclosure")
+            assert not disclosures
+            run("convert", pure["pin"])
+            assert len(disclosures) == 1
+            assert service.load(store, w, pid)[1]["files"] == {}
+
+            validation = preview("validate")
+            assert {item["generated"] for item in validation["body"]["outputs"]} == {staged, result}
+            response.update(answer="Check the source row contract", edits={}, coverage={
+                anchors["staged"]: {"status": "accounted", "detail": "The literal ID is carried through the CTE."}
+            })
+            with pytest.raises(AgentError):
+                run("validate", validation["pin"])
+            response["coverage"][anchors["result"]] = {"status": "uncertain", "detail": "Confirm the final output grain."}
+            run("validate", validation["pin"])
+
+            optimization = preview("optimize")
+            response.pop("coverage")
+            response.update(answer="Replace the literal", edits={"staged": staged.replace("1 AS id", "2 AS id")})
+            with pytest.raises(AgentError):
+                run("optimize", optimization["pin"])
+            response.update(answer="Keep the validated SQL", edits={})
+            run("optimize", optimization["pin"])
+            reviewed = agent.call("migration_inspect", w, {"max_chars": 100_000}, project_id=pid,
+                                  view="workflow", item=source)
+            assert reviewed["assessment"]["checks"]
+            assert set(reviewed["diffs"]) == {"staged", "result"}
+            assert agent.call("migration_inspect", w, {"max_chars": 100_000}, project_id=pid,
+                              view="workflow", item=source)["proposal"]["id"] == reviewed["proposal"]["id"]
+            arguments = {"source_id": source, "expected_pin": reviewed["pin"]}
+            changed = agent.call("migration_change", w, project_id=pid, revision_id=base,
+                                 operation="apply_source_draft", arguments=arguments)["revision_id"]
+            with pytest.raises(AgentError):
+                agent.call("migration_change", w, project_id=pid, revision_id=base,
+                           operation="apply_source_draft", arguments=arguments)
+            current, revision = service.load(store, w, pid)
+            assert revision["id"] == changed and set(revision["files"]) == {"staged", "result"}
+            assert set(service.report(current, revision)["tiers"].values()) <= {"needs_investigation", "blocked"}
+            assert assistance.responses(store, w, pid) == []
+            assert any(row["message"] == "Confirm the final output grain."
+                       for row in service.report(current, revision)["findings"])
+            with zipfile.ZipFile(BytesIO(service.bundle(
+                    store, w, pid, changed, image_format="svg", include_sources=True))) as bundle:
+                assert bundle.read("migration/original-sources/flow.sql.txt").decode() == original
+                assert "migration/lineage.svg" in bundle.namelist()
+                assert "migration/ai-source-review.json" in bundle.namelist()
+                assert b"Confirm the final output grain." in bundle.read("review/result.sql.txt")

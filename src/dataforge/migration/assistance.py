@@ -53,6 +53,13 @@ Each file name already names the dbt output. Its SQL body is a bare SELECT or UN
 Never include SELECT INTO, CREATE TABLE, CREATE VIEW, INSERT, or the output name as a write target.
 Optimization needs separate rationale and unmeasured benefit. Do not add DISTINCT, change key/filter/join
 semantics, or introduce incremental/partition settings as a performance shortcut.
+For a guided run, source_file contains the retained file in ordered regions. Read all regions,
+including declarations and control flow shared by multiple outputs. Respect the stage instructions.
+For validation, compare the draft with the original and report each required region in coverage,
+even if the draft has no SQL for it. Use gap for missing or different behavior, uncertain for
+behavior you cannot establish, and accounted only when you can cite concrete matching behavior.
+If a guided conversion needs a static reference to continue, set needs_static_reference to true
+and explain what it would help resolve. The engineer can approve a follow-up disclosure.
 """.strip()
 
 
@@ -63,11 +70,34 @@ class Response(BaseModel):
     edits: dict[str, str | None] = Field(max_length=50)
 
 
+class RegionAssessment(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    status: Literal["accounted", "gap", "uncertain"]
+    detail: str = Field(min_length=1, max_length=1000)
+
+
+class ValidationResponse(Response):
+    coverage: dict[str, RegionAssessment]
+
+
+class ConversionResponse(Response):
+    needs_static_reference: bool = False
+
+
+def _response_type(source_file):
+    if "validate_regions" in source_file:
+        return ValidationResponse
+    return ConversionResponse if source_file.get("stage") == "convert" else Response
+
+
 def _response_format(body):
     """Constrain LM Studio's grammar to the exact disclosed edit and citation scope."""
-    schema = Response.model_json_schema()
+    file = body.get("source_file", {})
+    review_regions = file.get("validate_regions")
+    schema = _response_type(file).model_json_schema()
     schema["properties"]["citations"]["items"] = {
-        "type": "string", "enum": sorted({row["span"]["id"] for row in body["outputs"]}),
+        "type": "string", "enum": sorted({row["span"]["id"] for row in body["outputs"]}
+                                         | {row["id"] for row in file.get("regions", ())}),
     }
     allowed = [row["model"] for row in body["outputs"] if row["editable"]] if body["purpose"] not in {
         "explain", "critique"
@@ -80,6 +110,11 @@ def _response_format(body):
     }
     if conversion:
         schema["properties"]["edits"]["required"] = allowed
+    if review_regions is not None:
+        schema["properties"]["coverage"] = {
+            "type": "object", "properties": {key: {"$ref": "#/$defs/RegionAssessment"} for key in review_regions},
+            "required": review_regions, "additionalProperties": False,
+        }
     return {"type": "json_schema", "json_schema": {"name": "migration_response", "strict": True, "schema": schema}}
 
 
@@ -203,7 +238,7 @@ def _allowed(store, workspace, profile):
 
 
 def prepare(store, workspace, project_id, revision_id, profile_id, models, purpose, message,
-            *, dependencies=False):
+            *, dependencies=False, source_file=None, candidate=None, static_drafts=None):
     """Return exact redacted disclosure and provider request sizing without any network access."""
     if purpose not in PURPOSES or not 1 <= len(models) <= 50 or len(message) > 4000:
         raise ValueError("Choose a valid purpose, one to fifty outputs and a bounded message")
@@ -212,6 +247,7 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
     project, revision = service.load(store, workspace, project_id, revision_id)
     if project["revision"] != revision_id or revision["plan"] is None:
         raise ValueError("Select the current converted revision")
+    revision = candidate if candidate is not None else revision
     plan = revision["plan"]
     selected = list(dict.fromkeys(models))
     context_models = set(selected)
@@ -233,16 +269,21 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
     region_by_id = {row["id"]: row for row in plan["regions"]}
     source_by_id = {row["id"]: row for row in project["snapshot"]["sources"]}
     scoped = []
-    characters = 0
+    characters = sum(len(row["original"]) for row in source_file["regions"]) if source_file else 0
+    characters += sum(len(sql) for sql in (static_drafts or {}).values())
+    too_large = ("This source file and its complete context exceed the disclosure limit. "
+                 "Narrow the source file before starting another migration.") if source_file else (
+        "The complete disclosure is too large. Choose a smaller scope.")
     for model in sorted(context_models):
         output = plan["outputs"][model]
         region = region_by_id[output["region"]]
         source = source_by_id[region["source"]]
         generated = revision["files"].get(model, {}).get("sql", "")
-        characters += region["end"] - region["start"] + len(generated)
+        inline = source_file is None or region["source"] != source_file["id"]
+        characters += (region["end"] - region["start"] if inline else 0) + len(generated)
         if characters > MAX_CONTEXT:
-            raise ValueError("Full selected context exceeds the migration disclosure limit. Choose fewer outputs.")
-        original = service.evidence(store, workspace, project_id, region)
+            raise ValueError(too_large)
+        original = service.evidence(store, workspace, project_id, region) if inline else ""
         scoped.append({"model": model, "kind": source["kind"], "dialect": source.get("dialect", ""),
                        "path": source["path"], "span": region, "original": original, "generated": generated,
                        "file_hash": revision["files"].get(model, {}).get("hash"), "editable": model in selected,
@@ -262,6 +303,10 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
             "dependency_interfaces": {key: details["source_schemas"].get(key, details["schemas"].get(key, {}))
                                       for key in sorted(all_inputs)},
             "undisclosed_dependencies": sorted(all_inputs - context_models - plan["physical"].keys())}
+    if source_file is not None:
+        body["source_file"] = source_file
+    if static_drafts is not None:
+        body["static_reference"] = static_drafts
     with connection_scope(manager):
         secret = manager.resolve(profile.key_env) if profile.key_env else ""
         if profile.key_env and not secret:
@@ -269,7 +314,7 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
         body = manager.sanitize(body, (secret,))
     user = json.dumps(body, ensure_ascii=False)
     if len(user.encode()) > MAX_CONTEXT:
-        raise ValueError("The complete disclosure is too large. Choose a smaller scope.")
+        raise ValueError(too_large)
     bounded = profile.model_copy(update={"retries": 0, "unknown_retries": 0, "max_tokens": min(profile.max_tokens, 8192),
                                          "wait_until_stopped": False, "timeout": min(profile.timeout, 120),
                                          "read_timeout": min(profile.read_timeout or profile.timeout, 120)})
@@ -287,9 +332,10 @@ def prepare(store, workspace, project_id, revision_id, profile_id, models, purpo
 
 
 def dispatch(store, workspace, project_id, revision_id, profile_id, models, purpose, message, expected_pin,
-             *, dependencies=False, cancelled=lambda: False, transport=None, authorize=None):
+             *, dependencies=False, cancelled=lambda: False, transport=None, authorize=None,
+             source_file=None, candidate=None, static_drafts=None):
     prepared = prepare(store, workspace, project_id, revision_id, profile_id, models, purpose, message,
-                       dependencies=dependencies)
+                       dependencies=dependencies, source_file=source_file, candidate=candidate, static_drafts=static_drafts)
     if prepared["pin"] != expected_pin:
         raise ValueError("The disclosure, lesson, source or recipient changed. Preview it again.")
     profile = prepared["profile"]
@@ -350,9 +396,12 @@ def dispatch(store, workspace, project_id, revision_id, profile_id, models, purp
         if cancelled():
             raise InterruptedError()
         journal["usage"] = {key: value for key, value in usage.items() if isinstance(value, int)}
-        response = Response.model_validate(response_object(manager.redact(raw)))
+        review_regions = (source_file or {}).get("validate_regions")
+        response_type = _response_type(source_file or {})
+        response = response_type.model_validate(response_object(manager.redact(raw)))
         scoped = prepared["body"]["outputs"]
-        if set(response.citations) - {row["span"]["id"] for row in scoped}:
+        source_regions = {row["id"] for row in (source_file or {}).get("regions", ())}
+        if set(response.citations) - ({row["span"]["id"] for row in scoped} | source_regions):
             raise ValueError("Provider cited evidence outside the disclosure")
         if set(response.edits) - set(models):
             raise ValueError("Provider returned edits outside the disclosed scope")
@@ -367,9 +416,16 @@ def dispatch(store, workspace, project_id, revision_id, profile_id, models, purp
         project, revision = service.load(store, workspace, project_id, revision_id)
         if project["revision"] != revision_id:
             raise ValueError("The migration changed while awaiting the provider")
+        revision = candidate if candidate is not None else revision
         result = {"revision": revision_id, "scope": list(models), "purpose": purpose, "answer": response.answer,
                   "citations": response.citations, "missing_outputs": sorted(set(models) - set(edits))
                   if purpose == "convert" else []}
+        if isinstance(response, ValidationResponse):
+            if set(response.coverage) != set(review_regions):
+                raise ValueError("Validation must account for every required source region")
+            result["coverage"] = {key: value.model_dump() for key, value in response.coverage.items()}
+        if isinstance(response, ConversionResponse):
+            result["needs_static_reference"] = response.needs_static_reference
         edits = {model: sql for model, sql in edits.items()
                  if revision["files"].get(model, {}).get("sql", "").strip() != sql.strip()}
         if edits:
@@ -403,11 +459,16 @@ def _check_optimization(revision, edits, dialect):
         except engine.DIALECT_ERRORS:
             raise ValueError("Optimization requires valid relational SQL") from None
         # This conservative first pass permits formatting/CTE discussion without silently changing row semantics.
-        kinds = (exp.Distinct, exp.Join, exp.Where, exp.Group, exp.Having, exp.Union, exp.Limit, exp.Order)
+        kinds = (exp.From, exp.CTE, exp.Distinct, exp.Join, exp.Where, exp.Group, exp.Having,
+                 exp.Qualify, exp.Union, exp.Limit, exp.Offset, exp.Order)
         old_shapes = [node.sql() for node in before.walk() if isinstance(node, kinds)]
         new_shapes = [node.sql() for node in after.walk() if isinstance(node, kinds)]
+        old_projections = [[node.sql() for node in select.selects] for select in before.find_all(exp.Select)]
+        new_projections = [[node.sql() for node in select.selects] for select in after.find_all(exp.Select)]
+        old_comments = {comment.strip() for node in before.walk() for comment in node.comments or ()}
+        new_comments = {comment.strip() for node in after.walk() for comment in node.comments or ()}
         if (old_shapes != new_shapes or refs_before != refs_after or config_before != config_after
-                or [node.sql() for node in before.selects] != [node.sql() for node in after.selects]):
+                or old_projections != new_projections or old_comments - new_comments):
             raise ValueError("Optimization changed protected projections, refs, materialization or row semantics")
 
 

@@ -15,28 +15,30 @@ from dataforge.artifacts import write_artifact
 from dataforge.connections import connection_scope, current_connections
 from dataforge.exports import report_csv
 from dataforge.lineage_builder import load_builder
-from dataforge.migration import assistance, engine, inspection, service, validation
+from dataforge.migration import assistance, engine, inspection, service, validation, workflow
 from dataforge.migration.targets import FORMATS, LEGACY_DATABRICKS, WAREHOUSES
 from dataforge.provider_service import authorize_provider, get_profile
 from dataforge.schema_imports import MAX_IMPORT_BYTES, import_schema
 
 READS = {"migration_targets", "migration_list", "migration_preview", "migration_inspect", "migration_edit_preview",
-         "migration_ai_preview"}
-WRITES = {"migration_create", "migration_convert", "migration_change", "migration_ai_request", "migration_export"}
+         "migration_ai_preview", "migration_stage_preview"}
+WRITES = {"migration_create", "migration_convert", "migration_change", "migration_ai_request", "migration_export",
+          "migration_stage_request"}
 SOURCE_ACTIONS = (READS | WRITES) - {"migration_targets", "migration_list", "migration_inspect"}
 
 MigrationView = Literal[
     "summary", "sources", "models", "regions", "findings", "checks", "mappings", "schemas", "lineage",
     "column_lineage", "original_lineage", "history", "reviews", "comments", "lessons", "ai_attempts", "ai_responses",
     "validation_runs", "reconciliation_runs", "reconciliation_plan", "reconciliation_template",
-    "source_mappings_template", "pilot", "artifact",
+    "source_mappings_template", "pilot", "artifact", "workflow",
 ]
 MigrationChange = Literal[
     "resolve_scope", "set_contract", "apply", "revise_schemas", "bulk_mappings", "import_schema", "configure_validation",
     "import_validation", "import_reconciliation", "record_review", "restore", "add_comment", "resolve_comment",
-    "save_lesson", "revoke_lesson",
+    "save_lesson", "revoke_lesson", "apply_source_draft", "skip_optimization",
 ]
 MigrationPurpose = Literal["convert", "explain", "critique", "propose", "optimize"]
+MigrationStage = Literal["convert", "validate", "optimize"]
 
 
 class MigrationSetup(BaseModel):
@@ -156,15 +158,16 @@ class MigrationOperations:
             raise AgentError("conflict", "Migration revision changed. Inspect the current revision and retry")
         return project, base
 
-    def _migration_convert(self, w, opts, project_id, expected_revision, reconvert=False):
+    def _migration_convert(self, w, opts, project_id, expected_revision, reconvert=False, plan_only=False):
         self._migration_current(w, project_id, expected_revision)
         job_id = assistance.start_job(self.store, w, project_id, self.jobs,
             lambda progress, cancelled: self._run_migration_conversion(
-                w, project_id, expected_revision, reconvert, progress=progress, cancelled=cancelled),
+                w, project_id, expected_revision, reconvert, plan_only, progress=progress, cancelled=cancelled),
             access=self._workspace(w, write=True, source=True).model_dump(), operation="migration_convert")
         return {"job_id": job_id, "status": "queued"}
 
-    def _run_migration_conversion(self, w, project_id, expected_revision, reconvert=False, *, progress=None, cancelled=None):
+    def _run_migration_conversion(self, w, project_id, expected_revision, reconvert=False, plan_only=False, *,
+                                  progress=None, cancelled=None):
         self._workspace(w, write=True, source=True)
         next_check = time.monotonic() + .5
 
@@ -177,7 +180,7 @@ class MigrationOperations:
             return cancelled() if cancelled else False
 
         base = service.convert(self.store, w, project_id, expected_revision, cancelled=revoked_or_cancelled,
-                               progress=progress, reconvert=reconvert)
+                               progress=progress, reconvert=reconvert, plan_only=plan_only)
         return {"project_id": project_id, "revision_id": base["id"], "converter_version": base["plan"]["version"]}
 
     def _migration_inspect(self, w, opts, project_id, revision_id=None, view="summary", item=None, anchor=None, offset=0):
@@ -203,7 +206,18 @@ class MigrationOperations:
             return page(redact(project["snapshot"]["sources"]), opts, identity, **metadata)
         if not plan:
             raise AgentError("conflict", "Convert the pinned sources before inspecting this view")
-        if view == "regions":
+        if view == "workflow":
+            if item:
+                checkpoint = workflow.state(self.store, w, project, base, item)
+                body = {"source": item, "workflow": checkpoint}
+                if checkpoint["next"] == "review" and not checkpoint["applied"]:
+                    proposal, assessment, pin = workflow.review(self.store, w, project_id, base["id"], item)
+                    body.update(proposal=proposal, assessment=assessment, pin=pin,
+                                diffs=dict(service.diffs(base, proposal)) if proposal else {})
+                return _payload_reply(opts, body, offset, **metadata)
+            rows = [{"source_id": key, "path": entry["path"], "models": entry["models"], "retained": entry["retained"]}
+                    for key, entry in workflow.sources(project, base).items()]
+        elif view == "regions":
             rows = plan["regions"]
         elif view == "reviews":
             rows = [{"model": model, **row} for model, row in base["reviews"].items()]
@@ -381,13 +395,16 @@ class MigrationOperations:
         _, base = self._migration_current(w, project_id, revision_id)
         mutations = {"resolve_scope": service.resolve_scope, "set_contract": service.set_contract,
                      "revise_schemas": service.revise_schemas, "configure_validation": service.configure_validation,
-                     "record_review": service.record_review}
+                     "record_review": service.record_review, "apply_source_draft": workflow.apply}
         activity = {"add_comment": service.add_review_comment, "save_lesson": assistance.save_lesson}
         if operation in mutations:
             result = mutations[operation](*params, **args)
         elif operation in activity:
             item = activity[operation](*params, **args)
             return {"revision_id": revision_id, "status": "recorded", **({"lesson_id": item} if item else {})}
+        elif operation == "skip_optimization":
+            workflow.skip_optimization(*params, **args)
+            return {"revision_id": revision_id, "status": "skipped"}
         elif operation == "apply":
             proposal = self._migration_proposal(args)
             if args.get("expected_pin") != engine.fingerprint([w, project_id, proposal]):
@@ -416,9 +433,10 @@ class MigrationOperations:
             raise AgentError("invalid_argument", "Choose a supported migration change")
         return {"project_id": project_id, "revision_id": result["id"], "parent": result["parent"]}
 
-    def _migration_export(self, w, opts, project_id, revision_id, reviewed=False, image_format=None, workbook=False, pilot=None):
+    def _migration_export(self, w, opts, project_id, revision_id, reviewed=False, image_format=None, workbook=False,
+                          pilot=None, include_sources=False):
         data = service.bundle(self.store, w, project_id, revision_id, reviewed,
-                              image_format=image_format, workbook=workbook, pilot=pilot)
+                              image_format=image_format, workbook=workbook, pilot=pilot, include_sources=include_sources)
         return write_artifact(self.store, w, "migration", "zip", data, True,
                               {"project_id": project_id, "revision_id": revision_id}, source_required=True)
 
@@ -453,3 +471,24 @@ class MigrationOperations:
         return {"revision_id": revision_id, "status": "completed", "reply_exceeds_budget": True,
                 "history_enabled": bool(self.store.setting(w, "llm_history", False)),
                 "message": "Use saved AI responses when history is enabled, or increase max_chars before a new request."}
+
+    def _migration_stage_preview(self, w, opts, project_id, revision_id, profile_id, source_id, stage,
+                                 feedback="", static_reference=False, offset=0):
+        with connection_scope(self._migration_provider(w, profile_id, send=False)):
+            prepared = workflow.preview(self.store, w, project_id, revision_id, profile_id, source_id, stage,
+                                        feedback=feedback, static_reference=static_reference)
+        body = {key: prepared[key] for key in ("recipient", "request", "body", "tokens", "scope", "rules")}
+        return _payload_reply(opts, body, offset, pin=prepared["pin"], revision_id=revision_id,
+                              project_id=project_id, source_id=source_id, stage=stage)
+
+    def _migration_stage_request(self, w, opts, project_id, revision_id, profile_id, source_id, stage, expected_pin,
+                                 feedback="", static_reference=False):
+        def authorize(profile):
+            self._workspace(w, write=True, source=True)
+            authorize_provider(self.store, self.policy, w, profile)
+
+        with connection_scope(self._migration_provider(w, profile_id, send=True)):
+            workflow.run(self.store, w, project_id, revision_id, profile_id, source_id, stage, expected_pin,
+                         feedback=feedback, static_reference=static_reference, transport=self.provider_transport,
+                         authorize=authorize)
+        return {"revision_id": revision_id, "source_id": source_id, "stage": stage, "status": "completed"}
