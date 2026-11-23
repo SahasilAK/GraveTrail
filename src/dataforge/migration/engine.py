@@ -5,7 +5,8 @@ import hashlib
 import json
 import re
 from bisect import bisect_left, bisect_right
-from collections import defaultdict
+from collections import Counter, defaultdict
+from decimal import Decimal, InvalidOperation
 from pathlib import PurePosixPath
 
 import networkx as nx
@@ -23,12 +24,15 @@ from dataforge.migration.sources import (
     dbt_model_name,
     declaration,
     grouping_key_errors,
+    guarded_table_drop,
     project_yaml,
     relation,
+    sas_inline_evidence,
     sas_units,
     script_writes,
     sql_regions,
     sql_unit,
+    sqlite_literal_table,
     temporary_relation,
     ungrouped_columns,
 )
@@ -37,6 +41,8 @@ from dataforge.parsers.sas import parse_sas
 from dataforge.parsers.sql import parse_sql
 
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]{0,127}\Z")
+SIMPLE_SQL_NAME = r'(?:[a-z_][a-z_0-9]*|"[a-z_][a-z_0-9]*")'
+SIMPLE_SQL_RELATION = re.compile(rf"{SIMPLE_SQL_NAME}(?:\.{SIMPLE_SQL_NAME}){{0,2}}\Z")
 RESERVED_PATH = re.compile(r"CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]", re.I)
 TEMPLATE = re.compile(r"{{\s*(.*?)\s*}}", re.S)
 CALL = re.compile(r"""(ref|source)\(\s*(['"])([A-Za-z_][\w]{0,127})\2(?:\s*,\s*(['"])([A-Za-z_][\w]{0,127})\4)?\s*\)""")
@@ -45,7 +51,8 @@ CONFIG_ARG = re.compile(r"""\s*(materialized|alias)\s*=\s*(['"])([A-Za-z_][A-Za-
 MARKER = "__migration_ref_"
 MAX_ARTIFACT = 1024 * 1024
 MAX_PROJECT = 100 * MAX_ARTIFACT
-VERSION = 8
+MAX_REGIONS = 20_000
+VERSION = 10
 DIALECT_ERRORS = (SqlglotError, ValueError, RecursionError, TypeError, KeyError, AttributeError)
 UNSAFE_FUNCTIONS = frozenset({"java_method", "reflect", "read_files", "read_csv", "read_parquet", "http_get"})
 
@@ -64,6 +71,38 @@ def digest(value):
 
 def fingerprint(value):
     return digest(json.dumps(value, sort_keys=True, ensure_ascii=False, default=str))
+
+
+def source_review_context(plan, settings):
+    return fingerprint([plan, {key: value for key, value in settings.items()
+                               if key not in {"ai_source_reviews", "validation_rules"}}])
+
+
+def related_models(plan, models):
+    related = set(models)
+    pending = list(related)
+    while pending:
+        for parent in plan["outputs"].get(pending.pop(), {}).get("inputs", ()):
+            if parent in plan["outputs"] and parent not in related:
+                related.add(parent)
+                pending.append(parent)
+    return related
+
+
+def source_review_key(context, plan, files, models):
+    return fingerprint([context, {model: files.get(model, {}).get("hash") for model in related_models(plan, models)}])
+
+
+def source_review_status(revision):
+    receipts = revision["settings"].get("ai_source_reviews", {})
+    if not receipts:
+        return {}
+    plan = revision["plan"]
+    context = source_review_context(plan, revision["settings"])
+    return {source: "stale" if not receipt.get("key") or receipt["key"] != source_review_key(
+        context, plan, revision["files"], receipt.get("models", receipt["files"]))
+        else "unresolved" if not receipt["files"] or receipt["unresolved_outputs"] else "applied"
+        for source, receipt in receipts.items()}
 
 
 def slug(value):
@@ -85,6 +124,95 @@ def output_name(query):
     return ""  # Expressions without stable aliases require review.
 
 
+SQL_ROW_OPERATIONS = {
+    "row filters": exp.Where, "join conditions": exp.Join, "grouping": exp.Group,
+    "group filters": exp.Having, "window expressions": exp.Window, "row limits": exp.Limit,
+    "duplicate elimination": exp.Distinct,
+}
+
+SQL_COMPARISONS = {exp.EQ: "=", exp.NEQ: "!=", exp.GT: ">", exp.GTE: ">=", exp.LT: "<", exp.LTE: "<="}
+
+
+def _conjuncts(expression):
+    expression = expression.unnest()
+    return expression.flatten() if isinstance(expression, exp.And) else (expression,)
+
+
+def _sql_predicate_facts(query):
+    facts = []
+    for clause in query.find_all(exp.Where, exp.Having, exp.Qualify):
+        for test in _conjuncts(clause.this):
+            negated = isinstance(test, exp.Not)
+            test = test.this.unnest() if negated else test
+            operator = SQL_COMPARISONS.get(type(test))
+            if not operator:
+                continue
+            column, literal = test.this, test.expression
+            if isinstance(literal, exp.Column):
+                column, literal = literal, column
+                operator = operator.translate(str.maketrans("<>", "><"))
+            if isinstance(column, exp.Column) and (
+                isinstance(literal, (exp.Literal, exp.Boolean)) or
+                isinstance(literal, exp.Neg) and isinstance(literal.this, exp.Literal)
+            ):
+                facts.append(fingerprint([column.name.casefold(), operator, literal.sql(), negated]))
+    return sorted(facts)
+
+
+def _sql_join_facts(query):
+    facts = []
+    for join in query.find_all(exp.Join):
+        condition = join.args.get("on")
+        if not isinstance(join.this, exp.Table) or condition is None:
+            continue
+        keys = sorted(sorted((item.this.name.casefold(), item.expression.name.casefold()))
+                      for item in _conjuncts(condition) if isinstance(item, exp.EQ)
+                      and isinstance(item.this, exp.Column) and isinstance(item.expression, exp.Column))
+        if keys:
+            facts.append(fingerprint([join.side or join.kind or "INNER", keys]))
+    return sorted(facts)
+
+
+def _sql_ranking_facts(query):
+    facts = []
+    for window in query.find_all(exp.Window):
+        if not isinstance(window.this, (exp.RowNumber, exp.Rank, exp.DenseRank)):
+            continue
+        partition = window.args.get("partition_by", ())
+        order = window.args.get("order")
+        order_by = order.expressions if order else []
+        if (all(isinstance(column, exp.Column) and not column.is_star for column in partition)
+                and all(isinstance(item.this, exp.Column) and not item.this.is_star for item in order_by)):
+            facts.append(fingerprint([window.this.key, sorted(column.name.casefold() for column in partition),
+                                      [(item.this.name.casefold(), bool(item.args.get("desc"))) for item in order_by]]))
+    return sorted(facts)
+
+
+def _sql_query_evidence(query, target):
+    """Record checkable SQL behavior without claiming that similar ASTs are equivalent."""
+    operations = sorted(name for name, kind in SQL_ROW_OPERATIONS.items() if query.find(kind))
+    filters = sorted({column.name.casefold() for where in query.find_all(exp.Where, exp.Having, exp.Qualify)
+                      for column in where.find_all(exp.Column)})
+    union_all = sum(node.args.get("distinct") is False for node in query.find_all(exp.Union))
+    literal_tables = []
+    for values in query.find_all(exp.Values):
+        rows = values.expressions
+        if rows and all(isinstance(row, exp.Tuple) and all(
+            isinstance(cell, (exp.Literal, exp.Null, exp.Boolean, exp.Neg)) and not cell.find(exp.Column)
+            for cell in row.expressions) for row in rows):
+            literal_tables.append(fingerprint(sorted(row.sql() for row in rows)))
+    casts = {}
+    if isinstance(query, exp.Select):
+        for item in query.selects:
+            if isinstance(item, exp.Alias) and isinstance(item.this, exp.Cast):
+                if mapped := target.map_type(item.this.to.sql(dialect=target.dialect)):
+                    casts[item.alias.casefold()] = mapped
+    return {"operations": operations, "filter_columns": filters, "union_all": union_all,
+            "literal_tables": sorted(literal_tables), "casts": casts,
+            "predicate values or operators": _sql_predicate_facts(query), "join types or keys": _sql_join_facts(query),
+            "ranking keys or sort direction": _sql_ranking_facts(query)}
+
+
 def dbt_config(values):
     if not isinstance(values, dict) or set(values) - {"materialized", "alias", "enabled", "tags"}:
         raise ValueError("Review unsupported dbt configuration.")
@@ -100,7 +228,7 @@ def dbt_config(values):
     return values
 
 
-def inspect_sql(text, dialect):
+def inspect_sql(text, dialect, *, wrappers=(), guarded_drop=None):
     """Decode only application-allowlisted template calls into inert parser tokens."""
     if MARKER in text:
         raise ValueError("Reserved migration parser token")
@@ -136,11 +264,24 @@ def inspect_sql(text, dialect):
         kinds = [token.token_type for token in sqlglot.tokenize(sql, read=dialect)]
         if any(a == TokenType.COMMA and b in closing for a, b in zip(kinds, [*kinds[1:], TokenType.SEMICOLON])):
             raise ValueError("Trailing comma in Databricks query")
+    paired = None
+    if guarded_drop:
+        statements = [(start, end) for start, end, _ in sql_regions(sql, dialect) if sql[start:end].strip()]
+        if len(statements) == 2 and guarded_table_drop(sql[:statements[0][1]], dialect) == guarded_drop:
+            paired = guarded_drop
+            sql = sql[statements[1][0]:]
     query, name, kind, gap = sql_unit(sql, dialect)
-    if query is None or name or gap:
+    if query is None or gap or (paired and name != paired) or (name and (name, kind) not in wrappers):
         raise ValueError("Expected one read-only SELECT or UNION query")
     if any(not select.expressions for select in query.find_all(exp.Select)):
         raise ValueError("Every SELECT needs a projection")
+    if dialect == "databricks":
+        for window in query.find_all(exp.Window):
+            parent = window.parent
+            while parent is not None and not isinstance(parent, exp.Select):
+                if isinstance(parent, (exp.Where, exp.Join, exp.Group, exp.Having)):
+                    raise ValueError("Window filters need QUALIFY or an outer query in Databricks")
+                parent = parent.parent
     tables = query_tables(query)
     seen = {table.name for table in tables}
     if refs.keys() - seen or any(table.name in refs and len(table.parts) != 1 for table in tables):
@@ -169,6 +310,112 @@ def query_tables(query):
     if not tables and list(query.find_all(exp.Table)) and not list(query.find_all(exp.CTE)):
         raise ValueError("Unresolved SQL table expression")
     return tables
+
+
+def _replace_input(table, columns, token):
+    temporary = temporary_relation(relation(table))
+    unaliased = not table.alias
+    name = exp.to_identifier(table.name, quoted=table.this.quoted) if temporary else table.this.copy()
+    for column in columns:
+        qualifier = column.args.get("table")
+        if temporary and qualifier is not None and qualifier.name.lstrip("#").casefold() == table.alias_or_name.casefold():
+            column.set("table", exp.to_identifier(table.alias_or_name, quoted=name.quoted))
+        if (column.table == table.alias_or_name and (column.db or column.catalog)
+                and (not column.db or column.db == table.db)
+                and (not column.catalog or column.catalog == table.catalog)):
+            column.set("db", None)
+            column.set("catalog", None)
+    table.set("catalog", None)
+    table.set("db", None)
+    table.set("this", exp.to_identifier(token))
+    if unaliased:
+        table.set("alias", exp.TableAlias(this=name))
+
+
+def normalize_proposal(sql, target, wrappers, bindings, *, guarded_drop=None):
+    """Remove a matching simple wrapper and bind only exact, unambiguous planned inputs."""
+    try:
+        try:
+            query, _, refs, config = inspect_sql(sql, target.dialect)
+            changed = False
+        except DIALECT_ERRORS:
+            query, _, refs, config = inspect_sql(sql, target.dialect, wrappers=wrappers, guarded_drop=guarded_drop)
+            changed = True
+        if unsafe_query(query):
+            return sql
+        templates = {marker: "{{ " + kind + "(" + ", ".join(repr(arg) for arg in (name, other) if arg) + ") }}"
+                     for marker, (kind, name, other) in refs.items()}
+        for scope in traverse_scope(query):
+            for table, source in _scope_inputs(scope).values():
+                if not isinstance(source, exp.Table) or table.name in refs:
+                    continue
+                if call := bindings.get(relation(table)):
+                    token = f"{MARKER}{len(templates)}__"
+                    templates[token] = call
+                    _replace_input(table, scope.columns, token)
+                    changed = True
+        if not changed:
+            return sql
+        rendered = target.emit_sql(query)
+        rendered = re.sub(rf"{MARKER}\d+__", lambda match: templates[match[0]], rendered)
+        if config:
+            rendered = "{{ config(" + ", ".join(f"{key}={value!r}" for key, value in config.items()) + ") }}\n" + rendered
+        inspect_sql(rendered, target.dialect)
+        return rendered + "\n"
+    except DIALECT_ERRORS:
+        return sql
+
+
+def inline_reference(evidence, target):
+    """Render the supported literal SAS layout as an optional typed reference."""
+    columns = evidence["columns"]
+    rows = []
+    for row in evidence["rows"]:
+        values = [exp.cast(exp.Literal.number(value) if kind == "DOUBLE" else exp.Literal.string(value),
+                           kind, dialect=target.dialect) for value, kind in zip(row, columns.values())]
+        rows.append(exp.Tuple(expressions=values))
+    alias = exp.TableAlias(this=exp.to_identifier("seed_rows"), columns=[exp.to_identifier(name) for name in columns])
+    return target.emit_sql(exp.select(*columns).from_(exp.Values(expressions=rows, alias=alias))) + "\n"
+
+
+def _matches_inline_rows(query, evidence):
+    source = query.args.get("from_")
+    values = source.this if source else None
+    columns = evidence["columns"]
+    if (not isinstance(query, exp.Select) or not isinstance(values, exp.Values)
+            or any(value for key, value in query.args.items() if key not in {"from_", "expressions"})
+            or list(values.alias_column_names) != list(columns)
+            or any(not isinstance(item, exp.Column) or item.name != name
+                   for item, name in zip(query.selects, columns, strict=False))
+            or len(query.selects) != len(columns)):
+        return False
+    actual = []
+    try:
+        for row in values.expressions:
+            if len(row.expressions) != len(columns):
+                return False
+            cells = []
+            for value, kind in zip(row.expressions, columns.values()):
+                if isinstance(value, exp.Cast):
+                    if value.to.sql(dialect="databricks").upper() != kind:
+                        return False
+                    value = value.this
+                elif kind != "STRING":
+                    return False
+                if not isinstance(value, exp.Literal):
+                    if kind != "DOUBLE" or not isinstance(value, exp.Neg) or not isinstance(value.this, exp.Literal):
+                        return False
+                    value = exp.Literal.number("-" + value.this.this)
+                if value.is_string != (kind != "DOUBLE"):
+                    return False
+                cells.append(Decimal(value.this) if kind == "DOUBLE" else value.this.replace("T", " ", 1)
+                             if kind == "TIMESTAMP_NTZ" else value.this)
+            actual.append(tuple(cells))
+    except InvalidOperation:
+        return False
+    expected = [tuple(Decimal(value) if kind == "DOUBLE" else value
+                      for value, kind in zip(row, columns.values())) for row in evidence["rows"]]
+    return Counter(actual) == Counter(expected)
 
 
 def _physical_input(parts, logical, physical):
@@ -261,6 +508,65 @@ def _dbt_columns(entry, key, metadata):
         metadata["columns"].setdefault(key, {})[name] = column.get("data_type", "")
 
 
+def _paired_sql(text, following, dialect):
+    """Recognize adjacent operations that describe one relational dbt output."""
+    if dropped := guarded_table_drop(text, dialect):
+        query, name, materialization, gap = sql_unit(following, dialect, guarded_drop=dropped)
+        if (query is not None and name == dropped and materialization in {"table", "ephemeral"}
+                and not unsafe_query(query)
+                and not any(table.name.casefold() == dropped.rsplit(".", 1)[-1].strip('"').casefold()
+                            for table in query_tables(query))):
+            note = "Confirm that dbt replacement preserves the original guarded DROP and CREATE lifecycle."
+            if materialization == "table":
+                query.meta["migration_guarded_drop"] = dropped
+            return query, name, materialization, " ".join(filter(None, (gap, note)))
+    if dialect == "sqlite" and re.search(r"\bcreate\s+table\b", text, re.I) and re.search(r"\binsert\s+into\b", following, re.I):
+        create, insert = (sqlglot.parse(statement, read=dialect) for statement in (text, following))
+        if len(create) == len(insert) == 1 and (seed := sqlite_literal_table(create[0], insert[0])):
+            query, name = seed
+            return query, name, "table", ("Review SQLite initialization and source key/null constraints. "
+                                          "This dbt output represents the declared literal rows and column types.")
+    return None
+
+
+def _inventory_sql(source, declarations):
+    text, dialect = source["text"], source.get("dialect", "")
+    spans = iter(sql_regions(text, dialect))
+    current = next(spans, None)
+    while current:
+        (start, end, compound), current = current, next(spans, None)
+        if current and not (compound or current[2]):
+            try:
+                if pair := _paired_sql(text[start:end], text[current[0]:current[1]], dialect):
+                    query, name, materialization, gap = pair
+                    yield source, start, current[1], query, [name], gap, materialization, ""
+                    current = next(spans, None)
+                    continue
+            except DIALECT_ERRORS:
+                pass  # Retain both original statements independently.
+        raw = text[start:end]
+        if dialect == "tsql" and (batch := SQL_BATCH_SEPARATOR.fullmatch(raw)):
+            gap = "Account for repeated T-SQL batch execution and writes." if batch["repeat"] else ""
+            yield source, start, end, None, [], gap, None, "" if gap else "preserved"
+            continue
+        if compound:
+            yield (source, start, end, None, script_writes(raw, dialect),
+                   "Review the procedural block, execution ordering and any dynamic outputs as a whole.", None, "")
+            continue
+        try:
+            if fact := declaration(raw, dialect):
+                declarations[fact[0]].append(fact[1])
+                yield source, start, end, None, [], "", None, "preserved"
+                continue
+            query, name, materialization, gap = sql_unit(raw, dialect, merge_draft=True)
+            if query is not None and materialization == "view":
+                query.meta["migration_view_definition"] = True
+        except DIALECT_ERRORS:
+            query, name, materialization, gap = None, None, None, "Recover opaque SQL and identify affected outputs."
+        names = [name] if name else script_writes(raw, dialect) if gap else []
+        yield source, start, end, query, names, gap, materialization, ""
+
+
 def _inventory(snapshot, metadata, declarations):
     for source in snapshot["sources"]:
         text = source.get("text", "")
@@ -271,28 +577,7 @@ def _inventory(snapshot, metadata, declarations):
             for start, end, query, names, gap, materialization in sas_units(text):
                 yield source, start, end, query, names, gap, materialization, ""
         elif kind == "sql":
-            for start, end, compound in sql_regions(text, dialect):
-                if dialect == "tsql" and (batch := SQL_BATCH_SEPARATOR.fullmatch(text[start:end])):
-                    gap = "Account for repeated T-SQL batch execution and writes." if batch["repeat"] else ""
-                    yield source, start, end, None, [], gap, None, "" if gap else "preserved"
-                    continue
-                if compound:
-                    yield (source, start, end, None, script_writes(text[start:end], dialect),
-                           "Review the procedural block, execution ordering and any dynamic outputs as a whole.", None, "")
-                    continue
-                try:
-                    fact = declaration(text[start:end], dialect)
-                    if fact:
-                        declarations[fact[0]].append(fact[1])
-                        yield source, start, end, None, [], "", None, "preserved"
-                        continue
-                    query, name, materialization, gap = sql_unit(text[start:end], dialect, merge_draft=True)
-                    if query is not None and materialization == "view":
-                        query.meta["migration_view_definition"] = True
-                except DIALECT_ERRORS:
-                    query, name, materialization, gap = None, None, None, "Recover opaque SQL and identify affected outputs."
-                names = [name] if name else script_writes(text[start:end], dialect) if gap else []
-                yield source, start, end, query, names, gap, materialization, ""
+            yield from _inventory_sql(source, declarations)
         elif kind == "dbt" and source.get("role") == "model" and path.lower().endswith(".sql"):
             name = dbt_model_name(path)
             try:
@@ -342,7 +627,10 @@ class SourceBindingError(ValueError):
 
 
 def source_relation(name, kind):
-    """Match analyzed SAS WORK names to one-level source spelling."""
+    """Match analyzed names to statically identified source outputs."""
+    if kind == "sql" and '"' in name and SIMPLE_SQL_RELATION.fullmatch(name):
+        # Analysis can omit redundant quoting on lowercase SQL identifiers.
+        return name.replace('"', "")
     key = name.casefold()
     return "work." + key if kind == "sas" and "." not in key else key
 
@@ -350,6 +638,18 @@ def source_relation(name, kind):
 def _preceding_writer(writes, position):
     index = bisect_left(writes, position, key=lambda writer: writer[0])
     return writes[index - 1][1] if index else None
+
+
+def _possible_producer(name, logical, kind):
+    if kind == "sql" and ('"' in name or '"' in logical):
+        name, logical = source_relation(name, kind), source_relation(logical, kind)
+    declared, referenced = name.casefold().split("."), logical.casefold().split(".")
+    if declared[-1] != referenced[-1]:
+        return False
+    if kind == "sql" and all(NAME.fullmatch(part) for part in declared + referenced):
+        common = min(len(declared), len(referenced))
+        return declared[-common:] == referenced[-common:]
+    return True
 
 
 def _inputs(query, sql, source, producers, target, physical, materialization, project, staged=None, *,
@@ -369,58 +669,50 @@ def _inputs(query, sql, source, producers, target, physical, materialization, pr
         return sql if emit else "", sorted(set(bindings)), (config or {}).get("materialized", materialization)
     bindings = []
     templates = {}
+    dialect = source.get("dialect", "")
     table_scopes = [(node, scope) for scope in traverse_scope(query)
                     for node, source_node in _scope_inputs(scope).values() if isinstance(source_node, exp.Table)
-                    or (isinstance(node, exp.Table) and temporary_relation(relation(node)))]
+                    or (isinstance(node, exp.Table) and temporary_relation(relation(node), dialect))]
     for table, scope in table_scopes:
         logical = relation(table)
+        if dialect == "sqlite" and not table.db:
+            temp_name = f"temp.{logical}"
+            temp_writes = (local_writes or {}).get(temp_name, ())
+            if temp_writes and (position is None or _preceding_writer(temp_writes, position)):
+                logical = temp_name
         identity = source_relation(logical, kind)
         work = kind == "sas" and identity.startswith("work.")
-        temporary = temporary_relation(logical)
+        temporary = temporary_relation(logical, dialect)
         linked = (staged or {}).get(logical) if temporary else producers.get(logical)
         writes = (local_writes or {}).get(identity if work else logical, ())
         prior_version = False
         if temporary and not linked:
+            writer = "CREATE TEMP TABLE" if dialect == "sqlite" else "SELECT INTO"
             raise SourceBindingError(
-                "A temporary input needs exactly one preceding SELECT INTO writer in this T-SQL script. "
+                f"A temporary input needs exactly one preceding {writer} writer in this script. "
                 "Resolve its session lifetime, control flow and other writes before conversion.")
+        if temporary and dialect == "sqlite" and position is None:
+            raise SourceBindingError("A persistent SQLite view cannot use a script-local temporary input.")
         if work:
             linked = _preceding_writer(writes, position)
             if not linked:
                 raise SourceBindingError(
                     f"SAS input {logical} needs an earlier WORK writer in the same session. "
                     "Confirm the job order and select the actual inputs in a conversion contract.")
-        elif kind == "sql" and writes and position is not None:
+        elif kind == "sql" and not temporary and writes and position is not None:
             linked = _preceding_writer(writes, position)
             prior_version = not linked
         if linked:
             call = "{{ ref('" + linked + "') }}"
         else:
-            if not prior_version and any(name.casefold() == logical.casefold()
-                    or name.split(".")[-1].casefold() == logical.split(".")[-1].casefold() for name in producers):
+            if not prior_version and any(_possible_producer(name, logical, kind) for name in producers):
                 raise ValueError("A possible transformation producer needs an exact relation mapping")
             linked, call = _physical_input([p.name for p in table.parts], logical, physical)
             if prior_version:
                 physical[linked].update(prior_version=True, assumed_location=True)
         token = f"{MARKER}{len(templates)}__"
         templates[token] = call
-        # Preserve the implicit table alias when replacing a name with dbt metadata.
-        unaliased = not table.alias
-        name = exp.to_identifier(table.name, quoted=table.this.quoted) if temporary else table.this.copy()
-        for column in scope.columns:
-            qualifier = column.args.get("table")
-            if temporary and qualifier is not None and qualifier.name.lstrip("#").casefold() == table.alias_or_name.casefold():
-                column.set("table", exp.to_identifier(table.alias_or_name, quoted=name.quoted))
-            if (column.table == table.alias_or_name and (column.db or column.catalog)
-                    and (not column.db or column.db == table.db)
-                    and (not column.catalog or column.catalog == table.catalog)):
-                column.set("db", None)
-                column.set("catalog", None)
-        table.set("catalog", None)
-        table.set("db", None)
-        table.set("this", exp.to_identifier(token))
-        if unaliased:
-            table.set("alias", exp.TableAlias(this=name))
+        _replace_input(table, scope.columns, token)
         bindings.append(linked)
     if MARKER in sql:
         raise ValueError("Reserved migration parser token")
@@ -445,12 +737,64 @@ def _manual_inputs(raw, source, output, producers, physical, local_writes, posit
     inputs = set()
     for op in parsed.operations:
         if any(ref.name.casefold() == name.casefold() for ref in op.targets):
+            if kind == "sas":
+                names = [row["target_column"] for row in sorted(op.derivations, key=lambda row: row["ordinal"])
+                         if not row.get("scope") and row["target_table"].casefold() == name.casefold()]
+                if names and all(names) and len(names) == len(set(names)):
+                    output.setdefault("expected_columns", names)
+                    if op.method == "sas-proc-sql":
+                        output["ordered_projection"] = True
+                if names and all(row["category"] == "inline_data" for row in op.derivations):
+                    if inline := sas_inline_evidence(raw, names):
+                        output["sas_inline"] = inline
+                        output["ordered_projection"] = True
+                        output["critical"] = False
+                        output["manual"] = "Verify the literal seed rows, SAS informats and target date and numeric types."
+                if op.kind == "DATA":
+                    passthrough = next((row for row in op.derivations if row.get("sas_passthrough")
+                                        and not row.get("scope") and row["target_table"].casefold() == name.casefold()), None)
+                    if passthrough and len(op.sources) == 1:
+                        output["sas_passthrough"] = {"exclude": passthrough.get("sas_exclude", []),
+                                                     "computed": [column for column in names if column]}
+                    filters = sorted({dep["column"] for row in op.derivations for dep in row.get("inputs", [])
+                                      if dep["role"] == "row_filter" and NAME.fullmatch(dep["column"])})
+                    if filters:
+                        output["sas_row_filter_columns"] = filters
+                    assignments = {row["target_column"]: row["expression"] for row in op.derivations
+                                   if row.get("scope") == "data-step" and row["status"] == "verified"
+                                   and row["target_column"] in names and len(row["expression"]) <= 512
+                                   and re.match(r"\s*\w+\s*=\s*\w+\s*\(", row["expression"])}
+                    if assignments:
+                        output["sas_computed_columns"] = assignments
             for ref in op.sources:
+                if (kind == "sas" and op.kind == "PROC IMPORT" and ref.kind == "file"
+                        and ref.name.lower().endswith(".csv") and re.search(r"\bdbms\s*=\s*csv\b", code, re.I)):
+                    filename = ref.name.removeprefix("file:")
+                    identifier = "ingested_" + slug(PurePosixPath(filename).stem)
+                    key, _ = _physical_input([identifier], ref.name, physical)
+                    physical[key]["input_file"] = filename
+                    output["manual"] = "Map the ingested CSV and confirm its schema, header, parsing and replacement behavior."
+                    inputs.add(key)
+                    continue
                 if ref.name.casefold() != name.casefold() and not temporary_relation(ref.name):
                     key = _manual_binding(ref.name, kind, producers, physical, local_writes, position)
                     if key:
                         inputs.add(key)
     return inputs
+
+
+def expected_columns(plan, model, visited=()):
+    """Use a complete planned input layout for one-to-one SAS DATA-step passthrough."""
+    output = plan["outputs"].get(model, {})
+    if columns := output.get("expected_columns"):
+        return columns
+    passthrough = output.get("sas_passthrough")
+    inputs = output.get("inputs", [])
+    if passthrough and len(inputs) == 1 and model not in visited and len(visited) < 50:
+        parent = expected_columns(plan, inputs[0], (*visited, model))
+        if parent:
+            return [column for column in parent if column not in passthrough["exclude"]] + passthrough["computed"]
+    return []
 
 
 def _manual_binding(logical, kind, producers, physical, local_writes, position):
@@ -486,8 +830,8 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
     for source, start, end, query, names, gap, materialization, disposition in _inventory(snapshot, metadata, declarations):
         if cancelled():
             raise InterruptedError()
-        if len(regions) >= 10_000:
-            raise ValueError("Scope exceeds 10,000 source regions. Split the migration into smaller batches.")
+        if len(regions) >= MAX_REGIONS:
+            raise ValueError(f"Scope exceeds {MAX_REGIONS:,} source regions. Split the migration into smaller batches.")
         region_id = f"r{len(regions) + 1}"
         if source["id"] != source_index:
             source_index = source["id"]
@@ -516,7 +860,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             plain = name.split(".")[-1].strip('"')
             identity = source_relation(name, source["kind"])
             work = source["kind"] == "sas" and identity.startswith("work.")
-            temporary = source["kind"] == "sql" and temporary_relation(name)
+            temporary = source["kind"] == "sql" and temporary_relation(name, source.get("dialect", ""))
             key = (source["id"], identity) if temporary or work else identity if source["kind"] == "dbt" else name
             # A later identified writer cannot be silently dropped; give it its own conversion obligation.
             existing = bool(writers[key])
@@ -527,7 +871,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             writers[key].append(model)
             if not temporary and not work:
                 producers.setdefault(key, model)
-            if not temporary and (work or source["kind"] == "sql"):
+            if work or source["kind"] == "sql" and (not temporary or source.get("dialect") == "sqlite"):
                 local_writes[source["id"]][identity if work else name].append((start, model))
             region["outputs"].append(model)
             outputs[model] = {
@@ -542,6 +886,15 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
                 outputs[model]["excluded"] = True
             if query is not None:
                 candidates[model] = query[name] if isinstance(query, dict) else query
+                if source["kind"] in {"sas", "sql"}:
+                    columns = [output_name(item) for item in candidates[model].selects]
+                    if columns and all(column and column != "*" for column in columns) and len(columns) == len(set(columns)):
+                        outputs[model]["expected_columns"] = columns
+                if source["kind"] == "sql" and isinstance(query, (exp.Select, exp.Union)) and not query.meta.get("migration_merge_keys"):
+                    outputs[model]["sql_evidence"] = _sql_query_evidence(query, target)
+                    outputs[model]["ordered_projection"] = True
+                    if dropped := query.meta.get("migration_guarded_drop"):
+                        outputs[model]["guarded_drop"] = dropped
                 if isinstance(query, dict):
                     outputs[model].update(manual=gap, critical=True)
                 elif keys := query.meta.get("migration_merge_keys"):
@@ -565,13 +918,18 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
         regions_by_source[region["source"]].append(region)
     mapped = {(r["source"], source_relation(outputs[model]["name"], outputs[model]["kind"]))
               for r in regions for model in r["outputs"]}
+    # SQLite lineage can spell CREATE TEMP TABLE output without its implicit temp schema.
+    local_aliases = {(r["source"], outputs[model]["name"].removeprefix("temp."))
+                     for r in regions for model in r["outputs"]
+                     if sources[r["source"]].get("dialect") == "sqlite" and r["source"] not in opaque_sql
+                     and outputs[model]["name"].startswith("temp.") and outputs[model]["materialization"] == "ephemeral"}
     for file_id, names in declared_outputs.items():
         for name in dict.fromkeys(names):
             if file_id not in sources:
                 continue
             source = sources[file_id]
             identity = source_relation(name, source["kind"])
-            if (file_id, identity) in mapped:
+            if (file_id, identity) in mapped or (file_id, identity) in local_aliases:
                 continue
             mapped.add((file_id, identity))
             # A parsed output may still be missing from an otherwise clean converter ledger.
@@ -584,7 +942,7 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             outputs[model] = {"name": name, "region": region["id"], "kind": source["kind"], "inputs": [],
                               "materialization": "table", "hard": [], "review": [],
                               "manual": "Locate this analyzed output in its retained source.", "critical": True}
-            if not temporary_relation(name) and not (source["kind"] == "sas" and identity.startswith("work.")):
+            if not temporary_relation(name, source.get("dialect", "")) and not (source["kind"] == "sas" and identity.startswith("work.")):
                 producers.setdefault(name.casefold(), model)
     for models in writers.values():
         if len(models) > 1:
@@ -662,10 +1020,10 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             if drafts and not output.get("sas_order"):
                 files[model] = {"sql": rendered, "origin": "static", "hash": digest(rendered)}
                 generated_bytes += size
-            if (temporary_relation(output["name"]) and materialization == "ephemeral" and not output["hard"]
+            if (temporary_relation(output["name"], dialect) and materialization == "ephemeral" and not output["hard"]
                     and source["id"] not in opaque_sql and len(writers[source["id"], output["name"]]) == 1):
                 staged[output["name"]] = model
-            elif temporary_relation(output["name"]):
+            elif temporary_relation(output["name"], dialect):
                 output["hard"].append("Resolve temporary table writes and control flow in the source script.")
         except SourceBindingError as exc:
             output.update(manual=str(exc), critical=True)
@@ -717,7 +1075,9 @@ def convert(snapshot, cancelled=lambda: False, progress=None, *, resumed=None, c
             chosen = source.get("selected", True)
             name = source_relation(row["name"], row["kind"])
             work = row["kind"] == "sas" and name.startswith("work.")
-            if (selected and name in wanted[row["kind"]] and (chosen or not work)) or (not selected and chosen):
+            sqlite_local = name.startswith("temp.") and (source["id"], name[5:]) in local_aliases
+            match = name in wanted[row["kind"]] or sqlite_local and name[5:] in wanted[row["kind"]]
+            if (selected and match and (chosen or not (work or sqlite_local))) or (not selected and chosen):
                 active.add(model)
         queue = list(active)
         while queue:
@@ -1000,10 +1360,15 @@ def validate(snapshot, plan, files, reviews=None):
         finding("unmatched_selection", "Find the producer of the selected analyzed asset before handoff.", hard=True)
     elif snapshot.get("selected_outputs"):
         seen = defaultdict(set)
+        source_dialects = {source["id"]: source.get("dialect") for source in snapshot["sources"]}
         for output in outputs.values():
             if not output.get("excluded"):
                 kind = output["kind"]
-                seen[kind, source_relation(output["name"], kind)].add(regions[output["region"]]["source"])
+                src = regions[output["region"]]["source"]
+                name = source_relation(output["name"], kind)
+                seen[kind, name].add(src)
+                if output["materialization"] == "ephemeral" and source_dialects[src] == "sqlite" and name.startswith("temp."):
+                    seen[kind, name[5:]].add(src)
         kinds = {kind for kind, _ in seen}
         paths = {source["id"]: source["path"] for source in snapshot["sources"]}
         for name in snapshot["selected_outputs"]:
@@ -1039,6 +1404,12 @@ def validate(snapshot, plan, files, reviews=None):
                 finding("legacy_source_order", "Reconvert from pinned sources to confirm the relation read before its later write.",
                         model, hard=True)
         file = files.get(model)
+        source_id = regions[output["region"]]["source"]
+        ai_review = snapshot.get("ai_source_reviews", {}).get(source_id, {})
+        withheld = ai_review.get("withheld_drafts", {}).get(model)
+        if withheld and withheld["before"] == (file and file["hash"]):
+            for reason in withheld["reasons"]:
+                finding("ai_draft_unapplied", reason, model, hard=True)
         if not file:
             finding("missing_output", output.get("manual", "Provide the required output file."), model, hard=True)
             check(model, "required_output", "fail")
@@ -1054,16 +1425,17 @@ def validate(snapshot, plan, files, reviews=None):
             finding("semantics", note, model)
         if file["origin"] != "static":
             finding("engineer_review", "Compare this edit against every mapped source obligation.", model)
-        source_id = regions[output["region"]]["source"]
-        ai_review = snapshot.get("ai_source_reviews", {}).get(source_id, {})
-        if model in ai_review.get("files", {}):
-            if ai_review["files"][model] != file["hash"]:
-                finding("ai_source_review_stale", "Compare the edited SQL against the original source again.", model)
+        if source_id in snapshot.get("stale_ai_source_reviews", ()) or (
+            model in ai_review.get("files", {}) and ai_review["files"][model] != file["hash"]
+        ):
+            finding("ai_source_review_stale", "Compare this draft against the original source and current dependencies again.", model)
+        elif model in ai_review.get("files", {}):
             for region_id, observation in ai_review["coverage"].items():
                 region = regions.get(region_id)
                 if (region and (output["region"] == region_id or not region["outputs"])
-                        and observation["status"] != "accounted"):
-                    finding("ai_source_review", observation["detail"], model, region=region_id)
+                        and observation.get("ai_status", observation["status"]) != "accounted"):
+                    finding("ai_source_review", observation.get("ai_detail", observation["detail"]),
+                            model, region=region_id)
         if output.get("manual") and not output.get("critical"):
             finding("manual_semantics", output["manual"], model)
         if output.get("contract"):
@@ -1078,6 +1450,8 @@ def validate(snapshot, plan, files, reviews=None):
             message = {
                 "Every SELECT needs a projection": "Supply output expressions for each empty SELECT.",
                 "Trailing comma in Databricks query": "Remove the trailing comma from the Databricks query.",
+                "Window filters need QUALIFY or an outer query in Databricks":
+                    "Compute the window in a SELECT, then filter it with QUALIFY or an outer query.",
                 "Model contains a side effect": "Remove write operations from the model body.",
             }.get(str(exc), "Use a single target SELECT and literal ref/source/config calls.")
             errors = getattr(exc, "errors", ())
@@ -1087,6 +1461,62 @@ def validate(snapshot, plan, files, reviews=None):
             continue
         check(model, "target_sql_and_templates", "pass")
         parsed[model] = (query, tables, refs, config)
+        if file["origin"] == "ai":
+            source_columns = expected_columns(plan, model)
+            projected = []
+            for item in query.selects:
+                if item.is_star and output.get("sas_passthrough") and len(output["inputs"]) == 1:
+                    star = item.this if isinstance(item, exp.Column) else item
+                    excluded = {name.name.casefold() for name in star.args.get("except_") or []}
+                    projected.extend(name for name in expected_columns(plan, output["inputs"][0])
+                                     if name.casefold() not in excluded)
+                else:
+                    projected.append(output_name(item))
+            actual_names = [name.casefold() for name in projected]
+            source_names = [name.casefold() for name in source_columns]
+            if not output.get("ordered_projection"):
+                actual_names.sort()
+                source_names.sort()
+            if source_columns and actual_names != source_names:
+                finding("changed_projection", "Preserve the original output columns: "
+                        + ", ".join(source_columns) + ".", model, hard=True)
+            if evidence := output.get("sql_evidence"):
+                observed = _sql_query_evidence(query, target)
+                missing = set(evidence["operations"]) - set(observed["operations"])
+                if {"row filters", "group filters"} & missing and query.find(exp.Qualify):
+                    missing.difference_update(("row filters", "group filters"))
+                if not set(evidence["filter_columns"]) <= set(observed["filter_columns"]):
+                    missing.add("filter columns")
+                if observed["union_all"] < evidence["union_all"]:
+                    missing.add("UNION ALL branches")
+                if Counter(evidence["literal_tables"]) - Counter(observed["literal_tables"]):
+                    missing.add("literal VALUES rows")
+                if evidence["casts"].items() - observed["casts"].items():
+                    missing.add("declared projection casts")
+                for behavior in ("predicate values or operators", "join types or keys", "ranking keys or sort direction"):
+                    if Counter(evidence.get(behavior, ())) - Counter(observed[behavior]):
+                        missing.add(behavior)
+                if missing:
+                    finding("sql_source_behavior", "Preserve original SQL behavior for "
+                            + ", ".join(sorted(missing)) + ", or explain the rewrite in engineer review.", model, hard=True)
+            if (inline := output.get("sas_inline")) and not _matches_inline_rows(query, inline):
+                finding("sas_inline_rows", "Preserve every original DATALINES literal in a single VALUES model.",
+                        model, hard=True)
+            if required_filters := output.get("sas_row_filter_columns"):
+                observed_filters = {column.name.casefold() for condition in query.find_all(exp.Where)
+                                    for column in condition.find_all(exp.Column)}
+                if not set(required_filters) <= observed_filters:
+                    finding("sas_missing_filter", "Preserve the SAS DATA step row filter using: "
+                            + ", ".join(required_filters) + ".", model, hard=True)
+            if assignments := output.get("sas_computed_columns"):
+                calculated = {item.alias.casefold() for select in query.find_all(exp.Select)
+                              for item in select.selects if isinstance(item, exp.Alias)
+                              and not isinstance(item.this, (exp.Column, exp.Literal))}
+                if missing := sorted(assignments.keys() - calculated):
+                    finding("sas_missing_assignment", "Preserve the SAS assignment as an output expression for: "
+                            + ", ".join(missing) + ".", model, hard=True)
+        if file["origin"] == "ai" and config and config.get("materialized", output["materialization"]) != output["materialization"]:
+            finding("changed_materialization", "Keep the model's planned materialization. Change it in the migration plan.", model, hard=True)
         actual = set()
         for table in tables:
             call = refs.get(table.name)
@@ -1096,8 +1526,10 @@ def validate(snapshot, plan, files, reviews=None):
                 finding("unmapped_table", "Map direct relation references through a declared dbt source.", model, hard=True, line=line)
             elif call[0] == "ref":
                 dependency = _binding(call, plan.get("project"))
-                if dependency not in outputs or outputs[dependency].get("excluded") or dependency not in files:
-                    finding("broken_ref", f"Provide the required dbt model {dependency}.", model, hard=True, line=line)
+                if dependency not in outputs or outputs[dependency].get("excluded"):
+                    finding("broken_ref", f"Resolve the unplanned dbt model reference {dependency}.", model, hard=True, line=line)
+                elif dependency not in files:
+                    finding("pending_ref", f"Convert and review the planned upstream model {dependency}.", model, hard=True, line=line)
             else:
                 dependency = f"source:{call[1]}.{call[2]}"
                 if dependency not in physical:
@@ -1122,7 +1554,7 @@ def validate(snapshot, plan, files, reviews=None):
             finding("changed_dependencies", f"Reconcile expected inputs {sorted(expected)} with generated inputs {sorted(actual)}.",
                     model, hard=True)
         check(model, "dependencies", "fail" if any(row["severity"] == "blocker" and row["code"] in {
-            "broken_ref", "broken_source", "unmapped_table", "changed_dependencies", "source_mapping"}
+            "broken_ref", "pending_ref", "broken_source", "unmapped_table", "changed_dependencies", "source_mapping"}
             for row in by_model[model]) else "pass")
     components = list(nx.strongly_connected_components(graph))
     for component in components:
@@ -1188,6 +1620,17 @@ def validate(snapshot, plan, files, reviews=None):
             finding("target_aggregation", f"Expression {expression.sql()} is outside the grouping and aggregate expressions. "
                     "Preserve the intended row grain when revising this SELECT.", model, hard=True,
                     line=anchor.meta.get("line"))
+        sas_order = outputs[model].get("sas_order", {})
+        if sas_order.get("kind") == "nodupkey":
+            for window in query.find_all(exp.Window):
+                if not isinstance(window.this, exp.RowNumber):
+                    continue
+                partition = window.args.get("partition_by") or ()
+                if (len(partition) != len(sas_order["keys"]) or not all(isinstance(key, exp.Column) for key in partition)
+                        or {key.name.casefold() for key in partition} != set(sas_order["keys"])):
+                    finding("sas_partition", "Partition SAS NODUPKEY by the full BY tuple: "
+                            + ", ".join(sas_order["keys"]) + ".", model, hard=True,
+                            line=window.this.meta.get("line"))
         set_layouts = [(operation.this.unnest().selects, operation.expression.unnest().selects)
                        for operation in query.find_all(exp.SetOperation)]
         if any(not branch or any(projection.is_star for projection in branch)
@@ -1198,6 +1641,9 @@ def validate(snapshot, plan, files, reviews=None):
         if isinstance(query.unnest(), exp.SetOperation) and any(fact["provenance"] == "assumed_string" for fact in layout.values()):
             finding("set_types", "Confirm compatible output types across all set-operation branches.", model)
         if stack := outputs[model].get("sas_stack"):
+            unions = list(query.find_all(exp.Union))
+            if not unions or any(union.args.get("distinct") is not False for union in unions):
+                finding("sas_stack_operation", "Preserve SAS SET concatenation and duplicates with UNION ALL.", model, hard=True)
             inputs = outputs[model]["inputs"]
             facts_by_input = [{name.casefold(): fact["target_type"] for name, fact in schemas.get(parent, {}).items()
                                if fact["provenance"] != "assumed_string"} for parent in inputs]

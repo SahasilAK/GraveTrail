@@ -13,7 +13,7 @@ from dataforge.graph import LineageGraph
 from dataforge.graph_images import render_graph_image
 from dataforge.ingestion import safe_relative
 from dataforge.migration import validation
-from dataforge.migration.engine import MAX_PROJECT, digest, slug
+from dataforge.migration.engine import MAX_PROJECT, digest, slug, source_review_status
 from dataforge.migration.inspection import annotated, artifacts, commented_source, source_path
 from dataforge.migration.targets import warehouse
 
@@ -72,6 +72,7 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
         raise ValueError("Update stale confirmed checks in Validation before preparing a reviewed handoff")
     target = warehouse(project["snapshot"])
     plan = revision["plan"]
+    review_status = source_review_status(revision)
     if pilot is not None:
         models, inputs = pilot
         outputs = {key: value for key, value in plan["outputs"].items() if key in models}
@@ -138,10 +139,12 @@ def build_bundle(project, revision, details, reviewed, image_format=None, workbo
         for source in sources.values():
             if "decoded_hash" in source:
                 write("migration/original-sources/" + source["path"] + ".txt", redact(read_source(source["id"])))
-    ai_reviews = {source_id: review for source_id, review in revision["settings"].get("ai_source_reviews", {}).items()
+    ai_reviews = {source_id: {**review, "status": review_status[source_id]}
+                  for source_id, review in revision["settings"].get("ai_source_reviews", {}).items()
                   if source_id in sources}
     if pilot is not None:
         ai_reviews = {source_id: {
+            "status": review["status"],
             "files": {model: digest for model, digest in review["files"].items() if model in plan["outputs"]},
             "coverage": {region: {"status": value["status"]} for region, value in review["coverage"].items()
                          if region in regions},

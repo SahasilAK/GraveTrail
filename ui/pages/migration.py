@@ -636,10 +636,9 @@ def chat(store, workspace, project, base, details, key):
                     st.rerun()
     activity = assistance.attempts(store, workspace, project["id"])
     if activity:
-        st.caption(f"Run budget · {len(activity)} / {assistance.MAX_REQUESTS} requests · "
-                   f"{sum(row['reserved'] for row in activity):,} / {assistance.MAX_RESERVED_TOKENS:,} reserved tokens.")
+        st.caption(f"{len(activity)} AI attempts recorded")
         if any(row["status"] in {"unknown", "reserved"} for row in activity):
-            st.warning("An interrupted or unknown request still counts against the budget. Retry requires a fresh disclosure preview.")
+            st.warning("An interrupted or unknown request may have reached the provider. Preview again to retry.")
     responses = assistance.responses(store, workspace, project["id"])
     temporary = st.session_state.get(session_reply, {}).get("response")
     if temporary and temporary["revision"] == base["id"]:
@@ -700,13 +699,15 @@ def knowledge(store, workspace, project, base, key):
 
 def conversion_workflow(store, workspace, project, base, key):
     entries = workflow.sources(project, base)
-    receipts = base["settings"].get("ai_source_reviews", {})
+    status = engine.source_review_status(base)
+    resume = workflow.resume_source(store, workspace, project, base)
+    status_labels = {"applied": "Draft applied", "unresolved": "Outputs need work", "stale": "Review needs refresh"}
     st.subheader("AI conversion by source file")
-    st.caption("One conversion request reads one retained file and drafts every mapped output. "
+    st.caption("Work through one retained source file at a time. Large files are processed in saved parts. "
                "Review each provider disclosure before sending it. Code is saved as a draft until you apply its diff.")
     table_page("Source files", [
         {"Source file": entry["path"], "dbt outputs": ", ".join(entry["models"]),
-         "Status": ("Draft applied" if receipts[source]["files"] else "Findings saved") if source in receipts
+         "Status": "In progress" if source == resume else status_labels[status[source]] if source in status
          else "Available" if entry["models"] and entry["retained"] else "Inspect the source ledger"}
         for source, entry in entries.items()
     ], key + "workflow_sources")
@@ -714,7 +715,8 @@ def conversion_workflow(store, workspace, project, base, key):
     if not available:
         st.info("No retained file has a mapped output. Check Scope for unresolved sources.")
         return
-    source = st.selectbox("Source file", available, format_func=lambda value: entries[value]["path"],
+    source = st.selectbox("Source file", available, index=available.index(resume) if resume in available else 0,
+                          format_func=lambda value: entries[value]["path"],
                           key=key + "workflow_file")
     current = workflow.state(store, workspace, project, base, source)
     stages = current["stages"]
@@ -723,36 +725,65 @@ def conversion_workflow(store, workspace, project, base, key):
     if current["applied"]:
         st.success("The source review is saved. Record engineer decisions in Review, then open Export.")
         return
+    if current["assessment_status"] == "stale":
+        st.warning("The saved source comparison is out of date. Compare this file against its current dependencies.")
+    elif current["assessment_status"] == "unresolved":
+        st.warning("Unresolved outputs: " + ", ".join(current["assessment"]["unresolved_outputs"]))
+    if partial := stages.get("_part"):
+        st.info(f"Saved {partial['done']} items for {labels[partial['stage']]}. Preview the next part to resume.")
+    findings = []
     if "convert" in stages:
         st.caption("1. Conversion draft")
-        st.text(stages["convert"]["answer"])
+        with st.expander("Provider conversion summary"):
+            st.text(stages["convert"]["answer"])
         if stages["convert"]["missing_outputs"]:
             st.warning("Unresolved outputs: " + ", ".join(stages["convert"]["missing_outputs"]))
+        if normalized := stages["convert"].get("normalized_models"):
+            st.caption("Normalized dbt syntax: " + ", ".join(normalized))
+        if recovered := stages["convert"].get("reference_recovered"):
+            st.info("Used the static reference for drafts that failed checks: " + ", ".join(recovered))
+        findings = [row for row in stages["convert"].get("findings", ()) if row["code"] in workflow.STATIC_GAPS]
+        if findings:
+            with st.expander("Conversion gaps from static checks"):
+                table_page("Conversion findings", findings, key + source + "conversion_findings")
     if "validate" in stages:
-        st.caption("2. AI source comparison · runtime equivalence unverified")
-        st.text(stages["validate"]["answer"])
+        st.caption("2. Source comparison · runtime equivalence unverified")
         regions = {region["id"]: region for region in current["entry"]["regions"]}
         table_page("Source comparison by region", [
             {"Lines": f"{regions[region]['start_line']}–{regions[region]['end_line']}",
              "Assessment": value["status"], "Detail": value["detail"]}
             for region, value in stages["validate"]["coverage"].items()
         ], key + source + "coverage")
+        with st.expander("Provider explanation"):
+            st.text(stages["validate"]["answer"])
         with st.expander("Independent static checks"):
             table_page("Draft checks", stages["validate"]["checks"], key + source + "checks")
     stage = current["next"]
     retry_with_reference = False
-    if stage == "validate" and stages["convert"].get("needs_static_reference"):
-        st.info("The model requested a static reference. You can preview and approve a retry or validate this draft.")
+    if stage == "validate" and (findings or stages["convert"].get("needs_static_reference")):
+        st.info("You can preview a retry with a static reference or continue to validate this draft.")
         retry_with_reference = st.toggle("Retry conversion with a static reference", key=key + source + "static_retry")
         if retry_with_reference:
             stage = "convert"
+    if stage == "validate" and findings and st.toggle("Revise the draft before validation", key=key + source + "retry"):
+        stage = "convert"
     if "optimize" in stages:
         result = stages["optimize"]
         st.caption("3. Optimization")
-        st.text("Skipped by engineer." if result.get("skipped") else result["answer"])
+        if result.get("rejected"):
+            st.warning("Rejected optimization parts kept their validated SQL. " + result["answer"])
+        else:
+            st.text("Skipped by engineer." if result.get("skipped") else result["answer"])
     st.subheader(labels[stage])
     if stage == "review":
-        proposal, _, review_pin = workflow.review(store, workspace, project["id"], base["id"], source)
+        proposal, receipt, review_pin = workflow.review(store, workspace, project["id"], base["id"], source)
+        if withheld := receipt.get("withheld_drafts"):
+            st.warning("These outputs stay unresolved and are excluded from the diff: " + ", ".join(withheld))
+            with st.expander("Withheld draft findings"):
+                table_page("Blocked SQL findings", [
+                    {"Model": model, "Finding": reason}
+                    for model, entry in withheld.items() for reason in entry["reasons"]
+                ], key + source + "withheld")
         if proposal:
             patch_panel(store, workspace, project, base, proposal, apply=lambda: workflow.apply(
                 store, workspace, project["id"], base["id"], source, review_pin))
@@ -776,8 +807,9 @@ def conversion_workflow(store, workspace, project, base, key):
     stage_key = key + source + stage
     provider = st.selectbox("Provider", list(profiles), format_func=profiles.get, key=key + "workflow_provider")
     feedback = st.text_area("Engineer feedback", max_chars=3000, key=stage_key + "feedback") if stage == "convert" else ""
-    reference = retry_with_reference or (
-        stage == "convert" and st.checkbox("Include a static conversion as reference", key=stage_key + "reference"))
+    reference = retry_with_reference or (stage == "convert" and st.checkbox(
+        "Include a static conversion as reference", key=stage_key + "reference",
+        help="The selected static draft can recover missing or invalid AI output. The resulting diff still requires review."))
     preview_key = stage_key + "preview"
     request = {"feedback": feedback, "static_reference": reference}
 
@@ -788,11 +820,21 @@ def conversion_workflow(store, workspace, project, base, key):
         st.session_state.pop(preview_key, None)
         st.session_state[preview_key] = prepare()
     if disclosed := st.session_state.get(preview_key):
-        st.text("Recipient: " + disclosed["recipient"] + " · " + disclosed["profile"].model)
-        st.caption(f"{disclosed['tokens']:,} estimated input and reserved output tokens")
+        part = disclosed["body"]["source_file"]["part"]
+        if part["total"] > part["through"] or part["from"] > 1:
+            st.caption(f"Items {part['from']}–{part['through']} of {part['total']} in this stage")
+        if reason := disclosed.get("local_reason"):
+            st.warning(reason)
+        else:
+            st.text("Recipient: " + disclosed["recipient"] + " · " + disclosed["profile"].model)
+            st.caption(f"{disclosed['tokens']:,} estimated input and reserved output tokens")
         with st.expander("Exact redacted request data"):
             st.json(disclosed["body"], expanded=False)
         start = {"convert": "Start AI conversion", "validate": "Run source validation", "optimize": "Run optimization"}[stage]
+        if reason:
+            start = "Record this part for review"
+        elif part["from"] > 1:
+            start = "Send next part"
         if st.button(start, type="primary", key=stage_key + "send"):
             pin = prepare()["pin"]
             if pin != disclosed["pin"]:

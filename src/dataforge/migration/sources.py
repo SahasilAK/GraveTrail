@@ -1,5 +1,8 @@
 """Bounded lexical inventory and conservative SQL/SAS/dbt source lowering."""
 import re
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from math import isfinite
 from pathlib import PurePosixPath
 
 import sqlglot
@@ -11,6 +14,7 @@ from sqlglot.tokens import TokenType
 
 from dataforge.dbt.yaml import read_yaml
 from dataforge.parsers.sas import resolve_macros, strip_comments
+from dataforge.parsers.sas_sql import sas_sql_dialect
 from dataforge.parsers.sas_transformations import _dataset, _names, _renames, without_dataset_options
 
 SAS_COLUMN = r"[A-Za-z_][A-Za-z_0-9]*"
@@ -96,8 +100,97 @@ def relation(table):
     return ".".join(parts)
 
 
-def temporary_relation(name):
-    return name.rsplit(".", 1)[-1].lstrip('"').startswith("#")
+def temporary_relation(name, dialect=""):
+    return name.rsplit(".", 1)[-1].lstrip('"').startswith("#") or (
+        dialect == "sqlite" and bool(re.fullmatch(r"temp\.[a-z_]\w*", name)))
+
+
+def guarded_table_drop(text, dialect):
+    """Recognize only a single DROP TABLE IF EXISTS with no lifecycle options."""
+    if not re.search(r"\bdrop\s+table\s+if\s+exists\b", text, re.I):
+        return None
+    trees = [tree for tree in sqlglot.parse(text, read=dialect or None) if tree is not None]
+    if len(trees) != 1 or not isinstance(tree := trees[0], exp.Drop) or tree.kind != "TABLE" or not tree.args.get("exists"):
+        return None
+    if any(value for key, value in tree.args.items() if key not in {"this", "tables", "kind", "exists"}):
+        return None
+    tables = tree.args.get("tables") or [tree.this]
+    return relation(tables[0]) if len(tables) == 1 else None
+
+
+def sqlite_literal_table(create, insert):
+    """Lower an exact SQLite initialization pair to a typed, read-only literal query."""
+    if (not isinstance(create, exp.Create) or create.kind != "TABLE" or not isinstance(create.this, exp.Schema)
+            or any(value for key, value in create.args.items() if key not in {"this", "kind"})
+            or not isinstance(insert, exp.Insert) or not isinstance(values := insert.expression, exp.Values)
+            or any(value for key, value in insert.args.items() if key not in {"this", "expression"})):
+        return None
+    name = relation(create.this.this)
+    subject = insert.this.this if isinstance(insert.this, exp.Schema) else insert.this
+    if relation(subject) != name or temporary_relation(name, "sqlite"):
+        return None
+    columns, required, keys = {}, set(), set()
+    affinity = {"INT": "BIGINT", "INTEGER": "BIGINT", "TEXT": "STRING", "FLOAT": "DOUBLE",
+                "REAL": "DOUBLE", "DOUBLE": "DOUBLE", "DOUBLE PRECISION": "DOUBLE"}
+    for field in create.this.expressions:
+        if (not isinstance(field, exp.ColumnDef) or not re.fullmatch(r"[A-Za-z_]\w*", field.name)
+                or field.name.casefold() in columns or not isinstance(field.kind, exp.DataType)
+                or not (target := affinity.get(field.kind.sql(dialect="sqlite")))):
+            return None
+        column = field.name.casefold()
+        columns[column] = (field.name, target)
+        for constraint in field.constraints:
+            if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint) and not any(constraint.kind.args.values()):
+                keys.add(column)
+            elif not isinstance(constraint.kind, exp.NotNullColumnConstraint) or constraint.kind.args:
+                return None
+            required.add(column)
+    if not columns or len(keys) > 1:
+        return None
+    supplied = ([field.name.casefold() for field in insert.this.expressions]
+                if isinstance(insert.this, exp.Schema) else list(columns))
+    if len(supplied) != len(columns) or set(supplied) != columns.keys() or not values.expressions:
+        return None
+    ordered_indices = [supplied.index(column) for column in columns]
+    seen_keys = set()
+    rows = []
+    for row in values.expressions:
+        if not isinstance(row, exp.Tuple) or len(row.expressions) != len(columns):
+            return None
+        cells = []
+        for column, index in zip(columns, ordered_indices, strict=True):
+            cell = row.expressions[index]
+            _, target = columns[column]
+            if isinstance(cell, exp.Null) and column not in required:
+                cells.append(cell.copy())
+                continue
+            literal = cell.this if isinstance(cell, exp.Neg) else cell
+            if not isinstance(literal, exp.Literal) or literal.is_string != (target == "STRING"):
+                return None
+            value = literal.this
+            if target == "BIGINT":
+                if not value.isascii() or not value.isdecimal() or len(value) > 19:
+                    return None
+                value = int(value) * (-1 if isinstance(cell, exp.Neg) else 1)
+                if not -(2**63) <= value < 2**63:
+                    return None
+            elif target == "DOUBLE":
+                value = float(value) * (-1 if isinstance(cell, exp.Neg) else 1)
+                if not isfinite(value):
+                    return None
+            elif isinstance(cell, exp.Neg):
+                return None
+            if column in keys:
+                if value in seen_keys:
+                    return None
+                seen_keys.add(value)
+            cells.append(cell.copy())
+        rows.append(exp.Tuple(expressions=cells))
+    aliases = [exp.to_identifier(column) for column, _ in columns.values()]
+    query = exp.select(*(exp.alias_(exp.cast(exp.column(column), target, dialect="databricks"), column)
+                         for column, target in columns.values())).from_(
+        exp.Values(expressions=rows, alias=exp.TableAlias(this=exp.to_identifier("seed_rows"), columns=aliases)))
+    return query, name
 
 
 def script_writes(text, dialect, *, inspect_literal=True):
@@ -192,7 +285,7 @@ def _merge_projection(tree):
     return projection
 
 
-def sql_unit(text, dialect, *, merge_draft=False):
+def sql_unit(text, dialect, *, merge_draft=False, guarded_drop=None):
     """Return a read-only relational query, its logical output, and any wrapper gap."""
     trees = [tree for tree in sqlglot.parse(text, read=dialect or None) if tree is not None]
     if not trees or all(isinstance(tree, exp.Semicolon) for tree in trees):
@@ -206,6 +299,16 @@ def sql_unit(text, dialect, *, merge_draft=False):
         kind = (tree.kind or "").lower()
         query = tree.expression
         allowed = {"this", "kind", "expression", "replace"}
+        if (temporary_relation(f"temp.{name}", dialect)
+                and isinstance(properties := tree.args.get("properties"), exp.Properties)
+                and len(properties.expressions) == 1
+                and isinstance(properties.expressions[0], exp.TemporaryProperty)
+                and kind == "table"):
+            name = f"temp.{name}"
+            if (guarded_drop == name and isinstance(query, (exp.Select, exp.Union))
+                    and not any(value for key, value in tree.args.items() if key not in allowed | {"properties"})):
+                return query, name, "ephemeral", "Confirm the SQLite temporary table's script-local snapshot semantics."
+            return None, name, None, "Establish SQLite temporary result lifetime and ordering before migration."
         if (kind in {"table", "view"} and isinstance(query, (exp.Select, exp.Union))
                 and not any(value for key, value in tree.args.items() if key not in allowed)
                 and isinstance(tree.this, exp.Table)):
@@ -350,6 +453,64 @@ def sas_units(text):
         cursor = region[1]
     if cursor < len(text):
         yield cursor, len(text), None, [], "", None
+
+
+def sas_inline_evidence(text, names):
+    """Recognize a bounded literal DATALINES layout with explicit delimiter and informats."""
+    inline = re.search(r"(?im)^\s*(datalines|cards)\s*;[ \t]*\r?\n(.*?)^[ \t]*;[ \t]*\r?$", text, re.S)
+    if not inline:
+        return None
+    header = strip_comments(text[:inline.start()])
+    infile = re.search(r"""\binfile\s+datalines\s+dlm\s*=\s*(['"])([|,])\1\s+dsd\s+truncover\s*;""", header, re.I)
+    input_list = re.search(r"\binput\s+([^;]+);", header, re.I)
+    if not infile or not input_list:
+        return None
+    field = rf"({SAS_COLUMN})(?:\s+:([\w$]+\.))?"
+    if not re.fullmatch(rf"{field}(?:\s+{field})*\s*", input_list[1].strip()):
+        return None
+    fields = re.findall(field, input_list[1], re.I)
+    if [name.casefold() for name, _ in fields] != names:
+        return None
+    lengths = {name.casefold(): value for clause in re.findall(r"\blength\s+([^;]+);", header, re.I)
+               for name, value in re.findall(rf"({SAS_COLUMN})\s+(\$?\d+)", clause)}
+    types = []
+    widths = []
+    for name, informat in fields:
+        kind = {"": "DOUBLE", "yymmdd10.": "DATE", "datetime19.": "TIMESTAMP_NTZ"}.get(informat.casefold())
+        declared = lengths.get(name.casefold())
+        if not kind and re.fullmatch(r"\$[1-9]\d*\.", informat):
+            kind = "STRING"
+        if not kind or declared and (declared.startswith("$") != (kind == "STRING")
+                                     or kind != "STRING" and declared != "8"):
+            return None
+        types.append(kind)
+        widths.append(min(int(informat[1:-1]), int(declared[1:])) if kind == "STRING" and declared
+                      else int(informat[1:-1]) if kind == "STRING" else None)
+    rows = []
+    try:
+        for line in inline[2].splitlines():
+            parts = line.split(infile[2])
+            if len(parts) != len(names) or any(not cell or any(ch in cell for ch in "'\"\\") for cell in parts):
+                return None
+            row = []
+            for value, kind, width in zip(parts, types, widths):
+                if width is not None and len(value.encode("utf-8")) > width:
+                    return None
+                if kind == "DOUBLE":
+                    if not re.fullmatch(r"[+-]?\d+(?:\.\d+)?", value) or len(value) > 32:
+                        return None
+                    value = str(Decimal(value))
+                elif kind == "DATE":
+                    value = date.fromisoformat(value).isoformat()
+                elif kind == "TIMESTAMP_NTZ":
+                    value = datetime.strptime(value, "%d%b%Y:%H:%M:%S").isoformat(sep=" ")
+                row.append(value)
+            rows.append(row)
+            if len(rows) > 32:
+                return None
+    except (ValueError, InvalidOperation):
+        return None
+    return {"columns": dict(zip(names, types)), "rows": rows} if rows else None
 
 
 def _sas_statements(text):
@@ -512,7 +673,36 @@ def _sas_step(block, gap):
 
 def _sas_sql(clean, start, end):
     try:
-        query, name, kind, gap = sql_unit(clean, "")
+        diagnostics = []
+        query, name, kind, gap = sql_unit(clean, sas_sql_dialect("", diagnostics))
+        if query is not None:
+            if diagnostics:
+                return start, end, None, [name] if name else [], "Resolve SAS literals or CALCULATED expressions.", kind
+            typed_dates = False
+            for node in list(query.find_all(exp.Var)):
+                if node.meta.get("sas_literal"):
+                    literal = re.fullmatch(r"""(['"])(\d{1,2}[A-Za-z]{3}\d{4})\1d""", node.name, re.I)
+                    if not literal:
+                        return start, end, None, [name] if name else [], "Resolve unsupported SAS typed literals.", kind
+                    calendar_date = datetime.strptime(literal[2], "%d%b%Y").date().isoformat()
+                    node.replace(exp.cast(exp.Literal.string(calendar_date), "DATE"))
+                    typed_dates = True
+                    continue
+                if not node.meta.get("sas_calculated"):
+                    continue
+                select = node.find_ancestor(exp.Select)
+                projection = next((item.this for item in select.expressions if isinstance(item, exp.Alias)
+                                   and item.alias.casefold() == node.name.casefold()), None)
+                if projection is None or any(item.meta.get("sas_calculated") for item in projection.find_all(exp.Var)):
+                    return start, end, None, [name] if name else [], "Resolve nested SAS CALCULATED expressions.", kind
+                node.replace(exp.Paren(this=projection.copy()))
+            for function in list(query.find_all(exp.Anonymous)):
+                if function.meta.get("sas_runtime"):
+                    if not isinstance(function.parent, exp.Alias):
+                        return start, end, None, [name] if name else [], "Resolve SAS runtime clock arithmetic.", kind
+                    function.replace(exp.CurrentTimestamp())
+            if typed_dates or re.search(r"\b(?:format|length)\s*=|\bcalculated\b|\bdatetime\s*\(", clean, re.I):
+                gap = "Confirm SAS date types, projection formats, lengths, calculated values and runtime clock semantics."
     except (SqlglotError, ValueError, RecursionError):
         query, name, kind, gap = None, None, None, "Resolve unsupported SAS SQL expressions."
     if query is not None and not isinstance(query, exp.Select):

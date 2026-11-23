@@ -676,7 +676,7 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
                                       profile_id: MigrationID, source_id: MigrationID, stage: MigrationStage,
                                       feedback: MigrationMessage = '', static_reference: bool = False,
                                       offset: MigrationOffset = 0, options: QueryOptions | None = None) -> CallToolResult:
-        """Review the exact disclosure and budget for one file in a guided migration stage."""
+        """Preview the next saved file-stage part and its exact provider disclosure."""
         return await call('migration_stage_preview', workspace_id, options, project_id=project_id, revision_id=revision_id,
                           profile_id=profile_id, source_id=source_id, stage=stage, feedback=feedback,
                           static_reference=static_reference, offset=offset)

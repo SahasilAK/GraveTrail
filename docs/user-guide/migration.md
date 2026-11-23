@@ -27,24 +27,36 @@ The same workflow is available through [the CLI](../CLI_GUIDE.md#static-dbt-migr
 Choose dbt and Databricks, confirm the target catalog and schema, and preview the migration.
 Read admission, planned outputs and findings before creating the project. Choose **Prepare AI
 conversion** to map the pinned source files and dependencies. Choose a file and a configured
-provider. A source file can contribute several models in the same request.
+provider. A source file can contribute several models. Migration previews one part at a time when
+the whole file or stage exceeds the provider's limits.
 
 ## Run the five migration stages
 
 1. **Convert.** Preview the redacted disclosure, then choose **Start AI conversion**. The request
-   reads one retained file and addresses every mapped output from it. You can include a locally
-   generated static reference up front or approve it for a retry when the model asks for one.
-   A missing output stays in the source ledger.
+   works through the retained file's mapped outputs. For large files, approve and send each part.
+   Completed parts are saved. After an interruption, preview the next part to resume. If the provider
+   truncates a response, the next preview offers a smaller part. An indivisible part that exceeds
+   the limit stays linked to the original source as an unresolved review item. You can include a locally
+   generated static reference up front or approve it for a retry. When selected, a checked
+   static reference can recover a missing or invalid AI draft. The app marks those models
+   and includes them in the reviewed diff. A remaining missing output stays in the source ledger.
+   SAS conversion uses statically known columns and input bindings. A literal CSV import needs
+   a confirmed staged relation. Supported inline data has an optional typed reference; other
+   file I/O and runtime macro bindings remain review items.
 2. **Validate against source.** Preview and run the comparison. Read the AI assessment for each
-   source region and the separate static SQL, dependency and schema checks. A comparison can flag
-   omissions or uncertainty. Runtime equivalence stays unverified.
+   source region and the separate static SQL, dependency and schema checks. A failed check can
+   lower an AI assessment. A planned upstream model can remain pending while you save a downstream
+   draft. Reviewed handoff still requires the complete dependency chain. Runtime equivalence stays unverified.
 3. **Optimize.** Preview optional improvements to the staged SQL. Protected projections,
-   dependencies, materialization and review comments must survive the edit. Skip optimization if
-   the draft needs engineer input first.
+   dependencies, materialization and review comments must survive the edit. A rejected optimization
+   leaves the validated draft ready for review. Skip optimization if the draft needs engineer input first.
 4. **Review and feedback.** Inspect the combined diff and use **Revise the draft with AI feedback**
    to start another pass. Apply the reviewed diff to save the file's draft, then record engineer
    decisions in **Review**. The project keeps staged SQL and comparison findings even with provider
-   chat history disabled. Changes to relevant inputs can require a fresh pass.
+   chat history disabled. An upstream change marks the saved comparison stale. A file with remaining
+   outputs keeps its retry controls. Previously applied sibling drafts remain available.
+   Drafts that fail mechanical checks are listed as unresolved outside the applied diff. The
+   verified siblings can still be saved together.
 5. **Export.** Choose a draft, reviewed or pilot ZIP. Add a lineage image, a mapping workbook or
    full retained source files. Full source text uses inert `.txt` paths outside the dbt model tree.
 
@@ -69,7 +81,7 @@ Reconvert it before making a reviewed handoff for the affected models.
 
 | Input | Initial conversion coverage |
 | --- | --- |
-| SQL | Candidates for relational queries, CTAS, views and statically named SELECT INTO results. T-SQL `SELECT INTO #temp` can become an ephemeral model if there is exactly one writer before its readers in the same script. Plain single or composite equality-key `MERGE` with unconditional same-column update and insert branches gets a SELECT draft. Confirm non-null unique keys and Delta materialization before review. Conditional mutations, repeated batches and uncertain temporary lifetimes require manual conversion. |
+| SQL | Candidates for relational queries, CTAS, views and statically named SELECT INTO results. An adjacent `DROP TABLE IF EXISTS` and CTAS for the same table can map to one replacement model with a lifecycle finding. T-SQL `SELECT INTO #temp` and paired SQLite temporary-table writes can become ephemeral models when one writer precedes the readers in the same script. Plain single or composite equality-key `MERGE` with unconditional same-column update and insert branches gets a SELECT draft. Confirm non-null unique keys and Delta materialization before review. Conditional mutations, repeated batches and uncertain temporary lifetimes require manual conversion. |
 | SAS | Candidates for simple PROC SQL and DATA steps with literal `KEEP`, `DROP` and `RENAME`. Simple remerges get a window draft that keeps the detail rows. Literal `%LET` substitutions can be analyzed statically. A plain multi-input `SET` with an explicit `KEEP` gets a `UNION ALL` draft with input layout checks. Simple two-output IF/ELSE splits keep shared and per-output `KEEP` and `DROP` settings. Common BY-group running totals and `PROC SORT NODUPKEY` can get order-confirmed drafts. SAS match `MERGE`, dynamic macro execution, I/O and other stateful code remain review obligations with retained evidence. |
 | dbt | Compatible Databricks SQL models can keep their exact bytes. The converter preserves literal references, supported materializations and aliases, and basic source/model metadata. Unsupported configuration, external packages, versioned models, tests, snapshots, macros and Python resources need review before bringing them into the active project. |
 | Builder | Snapshotted tables, columns and relationships. Supply grain, projections, filters and join intent before implementing a model. |
@@ -77,6 +89,17 @@ Reconvert it before making a reviewed handoff for the affected models.
 The ledger covers retained source offsets and records exclusions, missing outputs and opaque
 regions. The original analysis and the independently extracted migrated lineage have separate
 views. A dependency match cannot establish equivalence.
+
+Choose SQLite as the source dialect for SQLite scripts. Migration can draft typed literal rows
+from a supported adjacent `CREATE TABLE` and `INSERT ... VALUES` pair. Check the original keys and
+null constraints in Review. Attached databases and recursive or otherwise stateful loads retain
+their source lines and require an engineer decision.
+
+SQL drafts are checked for known output column order, explicit output casts, literal VALUES rows,
+simple predicate values and operators, join types and keys, and ranking keys and sort directions.
+The checks also flag missing operations such as grouping, joins and windows. Use Review to
+inspect differences and document an equivalent rewrite. Runtime equivalence remains unverified.
+Reconvert an older plan to record the additional SQL checks against its pinned source.
 
 When SQL materializes a result before a later write to its input, map the version read at that
 statement under **Schemas & mappings**. A SAS `WORK` input can bind to an earlier writer in the
@@ -119,7 +142,8 @@ schema and table columns, preview the upload, then apply. Keep source keys uncha
   optional upstream models, against a configured provider. External requests require the workspace
   to allow external requests and full source disclosure. Large scopes must be narrowed explicitly.
   With AI history disabled, unapplied replies and proposals are available in the current session.
-  The request budget ledger and explicitly applied revisions are saved.
+  Request attempts and explicitly applied revisions are saved. The project has no cumulative AI
+  request or token quota. Provider context limits, disclosure settings and provider rate limits still apply.
   In structured conversion requests, each selected model requires a SQL draft or an explicit
   unresolved result. The inspector and reviewed handoff still rely on the app's validation and
   engineer decisions.

@@ -153,7 +153,7 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
                       workspace: Workspace, revision: Revision, profile: Profile, feedback: str = '',
                       static_reference: bool = False,
                       offset: Annotated[int, typer.Option(min=0, help='Resume disclosure from next_offset.')] = 0) -> None:
-        """Preview the approved disclosure for one source file and stage."""
+        """Preview the next disclosure for a source file and stage."""
         invoke(ctx, 'migration_stage_preview', workspace, project_id=project_id, revision_id=revision, profile_id=profile,
                source_id=source_id, stage=stage.value, feedback=feedback, static_reference=static_reference, offset=offset)
 

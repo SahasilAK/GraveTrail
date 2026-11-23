@@ -217,6 +217,7 @@ class MigrationOperations:
                 return _payload_reply(opts, body, offset, **metadata)
             rows = [{"source_id": key, "path": entry["path"], "models": entry["models"], "retained": entry["retained"]}
                     for key, entry in workflow.sources(project, base).items()]
+            metadata["resume_source"] = workflow.resume_source(self.store, w, project, base)
         elif view == "regions":
             rows = plan["regions"]
         elif view == "reviews":
@@ -454,6 +455,8 @@ class MigrationOperations:
             prepared = assistance.prepare(self.store, w, project_id, revision_id, profile_id, models, purpose, message,
                                           dependencies=dependencies)
         body = {key: prepared[key] for key in ("recipient", "request", "body", "tokens", "scope", "rules")}
+        if reason := prepared.get("local_reason"):
+            body["local_reason"] = reason
         return _payload_reply(opts, body, offset, pin=prepared["pin"], revision_id=revision_id, project_id=project_id)
 
     def _migration_ai_request(self, w, opts, project_id, revision_id, profile_id, models, purpose, message, expected_pin,
@@ -488,7 +491,9 @@ class MigrationOperations:
             authorize_provider(self.store, self.policy, w, profile)
 
         with connection_scope(self._migration_provider(w, profile_id, send=True)):
-            workflow.run(self.store, w, project_id, revision_id, profile_id, source_id, stage, expected_pin,
-                         feedback=feedback, static_reference=static_reference, transport=self.provider_transport,
-                         authorize=authorize)
-        return {"revision_id": revision_id, "source_id": source_id, "stage": stage, "status": "completed"}
+            result = workflow.run(self.store, w, project_id, revision_id, profile_id, source_id, stage, expected_pin,
+                                  feedback=feedback, static_reference=static_reference, transport=self.provider_transport,
+                                  authorize=authorize)
+        return {"revision_id": revision_id, "source_id": source_id, "stage": stage,
+                "status": result.get("status") or ("rejected" if result.get("rejected") else "completed"),
+                **{key: result[key] for key in ("part", "next_size") if key in result}}

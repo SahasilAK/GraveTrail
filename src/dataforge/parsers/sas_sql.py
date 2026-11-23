@@ -37,17 +37,9 @@ def _valid_typed_literal(value: str, suffix: str) -> bool:
     return bool(re.fullmatch(r'(?:[01]?\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?', value))
 
 
-def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
-    """Parse one SAS PROC SQL statement with SAS projection attributes enabled.
-
-    Args:
-        statement: PROC SQL source statement.
-        sql_dialect: SQLGlot dialect name used for SQL syntax.
-
-    Returns:
-        SQL parse result with SAS-specific alias diagnostics included."""
+def sas_sql_dialect(sql_dialect: str, diagnostics: list[Diagnostic]) -> Dialect:
+    """Enable SAS projection attributes on one SQLGlot dialect instance."""
     dialect = Dialect.get_or_raise(sql_dialect)
-    diagnostics = []
 
     class SASParser(dialect.parser_class):
         """Dialect parser override for SAS FORMAT, LENGTH, and CALCULATED syntax."""
@@ -194,6 +186,12 @@ def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
 
     # Instance-local parser customization leaves SQL files and the dialect registry untouched.
     dialect.parser_class = SASParser
-    result = parse_sql(statement, dialect)
+    return dialect
+
+
+def parse_proc_sql(statement: str, sql_dialect: str = '') -> ParseResult:
+    """Parse one SAS PROC SQL statement with SAS projection attributes enabled."""
+    diagnostics = []
+    result = parse_sql(statement, sas_sql_dialect(sql_dialect, diagnostics))
     result.diagnostics.extend(diagnostics)
     return result

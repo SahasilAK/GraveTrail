@@ -20,7 +20,7 @@ from dataforge.agent.service import AgentService
 from dataforge.cli import app
 from dataforge.ingestion import Importer
 from dataforge.llm import Profile
-from dataforge.migration import assistance, service
+from dataforge.migration import assistance, engine, service, workflow
 from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
 from dataforge.store import Store
 
@@ -138,11 +138,11 @@ def test_migration_ai_requires_exact_disclosure_and_launch_grants(tmp_path):
             assert agent.call("migration_inspect", w, project_id=project["id"], view="ai_responses")["total"] == 0
 
 
-def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_path):
+@pytest.mark.parametrize("optimization_finish", ["stop", "length"])
+def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_path, optimization_finish):
     original = ("CREATE VIEW staged AS WITH t AS (SELECT 1 AS id) SELECT id FROM t;\n"
                 "CREATE VIEW result AS SELECT id FROM staged;\n")
     staged = "WITH t AS (SELECT 1 AS id) SELECT id FROM t"
-    result = "SELECT id FROM {{ ref('staged') }}"
     with closing(Store(tmp_path)) as store:
         w = store.create_workspace("Guided AI")
         store.set_setting(w, "agent_access", {"max_chars": 100_000})
@@ -169,9 +169,10 @@ def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_pat
             response = {}
 
             def transport(request):
-                disclosures.append(json.loads(json.loads(request.content)["messages"][-1]["content"]))
+                disclosure = json.loads(json.loads(request.content)["messages"][-1]["content"])
+                disclosures.append(disclosure)
                 return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(response)},
-                                                             "finish_reason": "stop"}]})
+                    "finish_reason": optimization_finish if disclosure["source_file"]["stage"] == "optimize" else "stop"}]})
 
             agent.provider_transport = httpx.MockTransport(transport)
 
@@ -190,8 +191,9 @@ def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_pat
             parts = pure["body"]["source_file"]["regions"]
             assert "".join(region["original"] for region in parts) == original
             anchors = {output["model"]: output["span"]["id"] for output in pure["body"]["outputs"]}
-            response.update(answer="Two models translated", citations=list(anchors.values()),
-                            edits={"staged": staged, "result": result})
+            response.update(answer="Two models translated", citations=[],
+                            edits={"staged": f"CREATE VIEW staged AS {staged};",
+                                   "result": "CREATE VIEW result AS SELECT id FROM staged;"})
             with pytest.raises(AgentError):
                 run("convert", pure["pin"], feedback="Different disclosure")
             assert not disclosures
@@ -200,7 +202,22 @@ def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_pat
             assert service.load(store, w, pid)[1]["files"] == {}
 
             validation = preview("validate")
-            assert {item["generated"] for item in validation["body"]["outputs"]} == {staged, result}
+            drafts = {item["model"]: item["generated"] for item in validation["body"]["outputs"]}
+            assert all(drafts.values()) and "{{ ref('staged') }}" in drafts["result"]
+            assert all("CREATE VIEW" not in sql for sql in drafts.values())
+            correction = preview("convert", feedback="Keep the same behavior.")
+            response["edits"] = drafts
+            run("convert", correction["pin"], feedback="Keep the same behavior.")
+            validation = preview("validate")
+            assert {item["model"]: item["generated"] for item in validation["body"]["outputs"]} == drafts
+            recovery = preview("convert", static_reference=True)
+            response["edits"] = {"staged": drafts["staged"], "result": "SELECT id FROM {{ ref('result') }}"}
+            run("convert", recovery["pin"], static_reference=True)
+            checkpoint = agent.call("migration_inspect", w, {"max_chars": 100_000}, project_id=pid,
+                                    view="workflow", item=source)["workflow"]
+            assert checkpoint["stages"]["convert"]["reference_recovered"] == ["result"]
+            validation = preview("validate")
+            assert {item["model"]: item["generated"] for item in validation["body"]["outputs"]} == drafts
             response.update(answer="Check the source row contract", edits={}, coverage={
                 anchors["staged"]: {"status": "accounted", "detail": "The literal ID is carried through the CTE."}
             })
@@ -211,14 +228,21 @@ def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_pat
 
             optimization = preview("optimize")
             response.pop("coverage")
-            response.update(answer="Replace the literal", edits={"staged": staged.replace("1 AS id", "2 AS id")})
-            with pytest.raises(AgentError):
-                run("optimize", optimization["pin"])
-            response.update(answer="Keep the validated SQL", edits={})
-            run("optimize", optimization["pin"])
+            response.update(answer="Replace the literal", edits={"staged": drafts["staged"].replace("1 AS id", "2 AS id")})
+            outcome = run("optimize", optimization["pin"])
+            if optimization_finish == "length":
+                assert outcome["status"] == "resize" and outcome["next_size"] == 1
+                first = preview("optimize")
+                assert first["body"]["source_file"]["part"]["from"] == 1
+                assert run("optimize", first["pin"])["status"] == "partial"
+                optimization = preview("optimize")
+                assert optimization["body"]["source_file"]["part"]["from"] == 2
+                outcome = run("optimize", optimization["pin"])
+            assert outcome["status"] == "rejected"
             reviewed = agent.call("migration_inspect", w, {"max_chars": 100_000}, project_id=pid,
                                   view="workflow", item=source)
-            assert reviewed["assessment"]["checks"]
+            assert reviewed["assessment"]["checks"] and not reviewed["assessment"]["optimized"]
+            assert reviewed["proposal"]["edits"]["staged"]["sql"] == drafts["staged"]
             assert set(reviewed["diffs"]) == {"staged", "result"}
             assert agent.call("migration_inspect", w, {"max_chars": 100_000}, project_id=pid,
                               view="workflow", item=source)["proposal"]["id"] == reviewed["proposal"]["id"]
@@ -234,9 +258,95 @@ def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_pat
             assert assistance.responses(store, w, pid) == []
             assert any(row["message"] == "Confirm the final output grain."
                        for row in service.report(current, revision)["findings"])
+            lesson_id = assistance.save_lesson(store, w, pid, changed, {
+                "kind": "sql", "pattern": "WITH t AS", "guidance": "Preserve the local CTE.",
+                "example": staged, "counterexample": "SELECT id FROM t", "owner": "engineer",
+            }, "staged")
+            scope["revision_id"] = changed
+            assert [rule["id"] for rule in preview("convert")["body"]["lessons"]] == [lesson_id]
             with zipfile.ZipFile(BytesIO(service.bundle(
                     store, w, pid, changed, image_format="svg", include_sources=True))) as bundle:
                 assert bundle.read("migration/original-sources/flow.sql.txt").decode() == original
                 assert "migration/lineage.svg" in bundle.namelist()
                 assert "migration/ai-source-review.json" in bundle.namelist()
                 assert b"Confirm the final output grain." in bundle.read("review/result.sql.txt")
+
+
+def test_large_source_resumes_after_restart_and_keeps_unresolved_parts_reviewable(tmp_path):
+    large = "\n".join(f"CREATE VIEW m{i:02d} AS SELECT id FROM seed;" for i in range(51))
+    large += "\nCREATE VIEW oversized AS SELECT 1 AS id /* " + ("source context " * 2_000) + "*/;"
+    bodies = {"parent": "CREATE VIEW seed AS SELECT 1 AS id;", "large": large}
+    snapshot = {"warehouse": "databricks", "catalog": "main", "schema": "migration", "sources": [
+        {"id": key, "path": key + ".sql", "kind": "sql", "text": sql, "hash": engine.digest(sql)}
+        for key, sql in bodies.items()]}
+    profile = Profile(provider="LM Studio", base_url="http://localhost:1234/v1", model="migration",
+                      source_limit_policy="explicit", source_disclosure_chars=10_000, max_tokens=2048)
+    profile = profile.model_copy(update={"model_capabilities": bind_capabilities(
+        ModelCapabilities(context_tokens=64_000, output_tokens=2048, source="manual"), profile)})
+    calls = []
+
+    def complete(request):
+        payload = json.loads(json.loads(request.content)["messages"][-1]["content"])
+        file = payload["source_file"]
+        calls.append((file["stage"], file["part"]["from"]))
+        response = {"answer": "Part checked.", "citations": [], "edits": {}}
+        if file["stage"] == "convert":
+            assert all(output["model"] != "oversized" for output in payload["outputs"])
+            response["edits"] = {row["model"]: "SELECT id FROM {{ ref('seed') }}" for row in payload["outputs"]}
+        else:
+            response["coverage"] = {region: {"status": "accounted", "detail": "Original ref and column are present."}
+                                    for region in file["validate_regions"]}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(response)}, "finish_reason": "stop"}]})
+
+    transport = httpx.MockTransport(complete)
+    with closing(Store(tmp_path)) as store:
+        w = store.create_workspace("Large migration")
+        store.execute("INSERT INTO llm_profiles VALUES (?,?,?,?)", ["local", w, "Local", profile.model_dump_json()])
+        project = service.create_project(store, w, "Large", snapshot)
+        pid = project["id"]
+        planned = service.convert(store, w, pid, project["revision"], plan_only=True)
+        base = service.apply(store, w, pid, service.propose(planned, {"seed": "SELECT 1 AS id"}, "Preserve seed"))
+        args = (w, pid, base["id"], "local", "large")
+        first = workflow.preview(store, *args, "convert")
+        assert 0 < len(first["scope"]) <= 50
+        assert workflow.run(store, *args, "convert", first["pin"], transport=transport)["status"] == "partial"
+        pending = workflow.preview(store, *args, "convert")
+
+    def timeout(request):
+        raise httpx.ReadTimeout("simulated interruption", request=request)
+
+    with closing(Store(tmp_path)) as store:
+        current, _ = service.load(store, w, pid)
+        assert workflow.resume_source(store, w, current, base) == "large"
+        resumed = workflow.preview(store, *args, "convert")
+        assert resumed["pin"] == pending["pin"]
+        assert resumed["body"]["source_file"]["part"]["from"] == len(first["scope"]) + 1
+        with pytest.raises(ValueError, match="attempt was recorded"):
+            workflow.run(store, *args, "convert", resumed["pin"], transport=httpx.MockTransport(timeout))
+        for stage in ("convert", "validate"):
+            for _ in range(12):
+                preview = workflow.preview(store, *args, stage)
+                result = workflow.run(store, *args, stage, preview["pin"], transport=transport)
+                if result.get("status") != "partial":
+                    break
+            else:
+                pytest.fail("A completed part did not advance the saved stage")
+        assert calls.count(("convert", 1)) == 1
+        assert set(service.load(store, w, pid)[1]["files"]) == {"seed"}
+        workflow.skip_optimization(store, w, pid, base["id"], "large")
+        proposal, receipt, pin = workflow.review(store, w, pid, base["id"], "large")
+        assert len(proposal["edits"]) == 51 and receipt["unresolved_outputs"] == ["oversized"]
+        assert len(receipt["coverage"]) == 52
+        assert any(item["status"] == "gap" and "disclosure limit" in item.get("ai_detail", "")
+                   for item in receipt["coverage"].values())
+        revision = workflow.apply(store, w, pid, base["id"], "large", pin)
+        pending = workflow.preview(store, w, pid, revision["id"], "local", "large", "convert")
+        assert pending["scope"] == ["oversized"] and pending["request"] is None
+        assert engine.source_review_status(revision) == {"large": "unresolved"}
+        findings_only = {**revision, "settings": {**revision["settings"], "ai_source_reviews": {
+            "large": {**receipt, "files": {}}}}}
+        assert engine.source_review_status(findings_only) == {"large": "unresolved"}
+        changed = service.apply(store, w, pid, service.propose(revision, {"seed": "SELECT 2 AS id"}, "Update seed"))
+        current, _ = service.load(store, w, pid)
+        state = workflow.state(store, w, current, changed, "large")
+        assert state["assessment_status"] == "stale" and not state["applied"] and state["next"] == "convert"

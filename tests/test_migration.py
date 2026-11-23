@@ -3,6 +3,7 @@ import json
 import zipfile
 from contextlib import closing
 from io import BytesIO, StringIO
+from pathlib import Path
 
 import pytest
 import yaml
@@ -11,6 +12,128 @@ from dataforge.database_maintenance import backup, restore_backup
 from dataforge.migration import engine, service
 from dataforge.migration.targets import LEGACY_DATABRICKS, WAREHOUSES
 from dataforge.store import Store
+
+
+def test_sas_workspace_samples_preserve_csv_binding_and_typed_seed_rows():
+    data = Path(__file__).parent
+    with zipfile.ZipFile(data / "sample_data/dataforge_sas_lineage_test_project.zip") as archive:
+        seed = archive.read(next(path for path in archive.namelist() if path.endswith("001_customers.sas"))).decode()
+        report = archive.read(next(path for path in archive.namelist() if path.endswith("081_executive_summary.sas"))).decode()
+    with zipfile.ZipFile(data / "sample_data/banking_legacy_sas_2201_lineage_stress_test.zip") as archive:
+        aml = archive.read("01_source_seed/aml/01_seed_01.sas").decode()
+        extraction = archive.read("02_extract/aml/extract_01.sas").decode()
+        mart = archive.read("05_marts/wealth_management/mart_08.sas").decode()
+    imports = (data / "fixtures/scenario/01_import.sas").read_text(encoding="utf-8")
+    snapshot = {"warehouse": "databricks", "catalog": "main", "schema": "migration",
+                "sources": [{"id": name, "path": name + ".sas", "kind": "sas", "text": sql, "hash": engine.digest(sql)}
+                            for name, sql in (("seed", seed), ("import", imports), ("report", report),
+                                              ("aml", aml), ("extraction", extraction), ("mart", mart))]}
+    plan, files = engine.convert(snapshot, drafts=False)
+    assert not files
+    staged = plan["outputs"]["customers_stage"]
+    imported = plan["physical"][staged["inputs"][0]]
+    assert imported["input_file"] == "input/customers.csv" and imported["assumed_location"]
+    model, output = next((model, row) for model, row in plan["outputs"].items() if row.get("sas_inline"))
+    literals = output["sas_inline"]
+    assert len(literals["rows"]) == 4
+    assert literals["columns"]["event_date"] == "DATE" and literals["columns"]["updated_at"] == "TIMESTAMP_NTZ"
+    sql = engine.inline_reference(literals, WAREHOUSES["databricks"])
+    for candidate, missing in [(sql, set()), (sql.replace("49.25", "999.25"), {"sas_inline_rows"}),
+                               (sql.replace("  event_date,", "  event_date AS renamed,", 1),
+                                {"changed_projection", "sas_inline_rows"})]:
+        assert candidate != sql or not missing
+        report = engine.validate(snapshot, plan, {model: {"sql": candidate, "hash": engine.digest(candidate), "origin": "ai"}})
+        assert {row["code"] for row in report["findings"] if row["model"] == model} & {
+            "changed_projection", "sas_inline_rows"} == missing
+    _, references = engine.convert(snapshot)
+    assert "calculated" not in references["executive_summary"]["sql"].casefold()
+    assert "reporting_tier" in references["executive_summary"]["sql"]
+    assert "CAST('2025-01-01' AS DATE)" in references["wealth_management_mart_08"]["sql"]
+    skipped = "SELECT balance_amt FROM {{ ref('x_aml_01') }} WHERE ROUND(balance_amt, 2) IS NOT NULL"
+    findings = engine.validate(snapshot, plan, {"aml_extract_01": {
+        "sql": skipped, "hash": engine.digest(skipped), "origin": "ai"}})["findings"]
+    assert {"sas_missing_assignment", "changed_projection"} <= {
+        row["code"] for row in findings if row["model"] == "aml_extract_01"}
+
+
+def test_sqlite_banking_sample_keeps_literal_loads_and_script_local_dependencies():
+    archive_path = Path(__file__).parent / "sample_data/banking_sql_compact_10_file_lineage_test.zip"
+    with zipfile.ZipFile(archive_path) as archive:
+        sources = [{"id": path, "path": path, "kind": "sql", "dialect": "sqlite",
+                    "hash": engine.digest(body), "text": body.decode()}
+                   for path in archive.namelist() if path.endswith(".sql") for body in [archive.read(path)]]
+    stage = next(source["id"] for source in sources if source["path"].endswith("build_transaction_behavior.sql"))
+    snapshot = {"warehouse": "databricks", "catalog": "main", "schema": "migration", "sources": sources,
+                "known_outputs": {stage: ["work_transaction_flags"]}}
+    plan, files = engine.convert(snapshot)
+    outputs = plan["outputs"]
+    for source in sources:
+        assert "".join(source["text"][row["start"]:row["end"]]
+                       for row in plan["regions"] if row["source"] == source["id"]) == source["text"]
+    assert outputs["branches"]["expected_columns"] == ["branch_id", "branch_name", "region", "risk_region_weight"]
+    assert "'Harbor Central'" in files["branches"]["sql"] and "AS DOUBLE" in files["branches"]["sql"]
+    assert outputs["transaction_behavior"]["hard"] == []
+    assert "work_transaction_flags" in outputs["transaction_behavior"]["inputs"]
+    assert outputs["work_transaction_flags"]["materialization"] == "ephemeral"
+    assert [name for name in outputs if "work_transaction_flags" in name] == ["work_transaction_flags"]
+    assert "transactions" not in files  # Recursive insert and attached source setup still need review.
+    dropped = "DROP TABLE IF EXISTS raw.x; CREATE TABLE raw.x AS SELECT id FROM raw.x;"
+    isolated = "DROP TABLE IF EXISTS temp.x; CREATE TEMP TABLE x AS SELECT 1 AS id; DROP TABLE temp.x; SELECT id FROM x;"
+    for sql in (dropped, isolated):
+        original = {"id": "isolation", "path": "isolation.sql", "text": sql, "hash": engine.digest(sql),
+                    "kind": "sql", "dialect": "sqlite"}
+        scoped = {**snapshot, "sources": [original]}
+        inventory, drafts = engine.convert(scoped)
+        assert any(output.get("critical") for output in inventory["outputs"].values())
+        assert not engine.validate(scoped, inventory, drafts)["active"]
+        if sql == isolated:
+            assert any("temporary input" in (output.get("manual") or "") for output in inventory["outputs"].values())
+
+
+def test_sql_ai_drafts_cannot_drop_literal_rows_casts_or_filters():
+    code = ("DROP TABLE IF EXISTS legacy.flow; CREATE TABLE legacy.flow AS "
+            "WITH inputs AS (SELECT id, val FROM VALUES (1, 'a'), (1, 'a'), (2, 'b') AS t(id, val)) "
+            "SELECT CAST(id AS BIGINT) AS id, val FROM inputs WHERE id > 1;")
+    snapshot = {"warehouse": "databricks", "catalog": "main", "schema": "migration",
+                "sources": [{"id": "flow", "path": "flow.sql", "text": code, "hash": engine.digest(code),
+                             "kind": "sql", "dialect": "databricks"}]}
+    plan, static = engine.convert(snapshot)
+    target = WAREHOUSES["databricks"]
+    output = plan["outputs"]["flow"]
+    sql = engine.normalize_proposal(code, target, {("legacy.flow", "table")}, {},
+                                    guarded_drop=output["guarded_drop"])
+    assert "DROP TABLE" not in sql and "CREATE TABLE" not in sql
+    unrelated = code.replace("DROP TABLE IF EXISTS legacy.flow", "DROP TABLE IF EXISTS legacy.other")
+    assert engine.normalize_proposal(unrelated, target, {("legacy.flow", "table")}, {},
+                                     guarded_drop=output["guarded_drop"]) == unrelated
+    assert "CAST" in static["flow"]["sql"] and "WHERE" in sql
+
+    def behavior(value):
+        report = engine.validate(snapshot, plan, {"flow": {"sql": value, "hash": engine.digest(value), "origin": "ai"}})
+        return next((row["message"] for row in report["findings"] if row["code"] == "sql_source_behavior"), "")
+
+    assert not behavior(sql)
+    assert "literal VALUES rows" in behavior(sql.replace("(1, 'a')", "(1, 'z')", 1))
+    assert "declared projection casts" in behavior(sql.replace("CAST(id AS BIGINT)", "id"))
+    assert "row filters" in behavior(sql.split("WHERE")[0])
+    assert "predicate values or operators" in behavior(sql.replace("id > 1", "id > 2"))
+
+    ranked = ("CREATE TABLE legacy.ranked AS SELECT a.id, ROW_NUMBER() OVER "
+              "(PARTITION BY a.id ORDER BY a.score DESC) AS rank_no "
+              "FROM legacy.left_rows a LEFT JOIN legacy.right_rows b ON a.id = b.id;")
+    snapshot["sources"][0].update(text=ranked, hash=engine.digest(ranked))
+    plan, files = engine.convert(snapshot)
+    sql = files["ranked"]["sql"]
+    for original, changed, expected in [
+        ("LEFT JOIN", "INNER JOIN", "join types or keys"),
+        ("a.id = b.id", "a.id = b.score", "join types or keys"),
+        ("a.score DESC", "a.score ASC", "ranking keys or sort direction"),
+    ]:
+        assert original in sql
+        draft = sql.replace(original, changed)
+        findings = engine.validate(snapshot, plan, {"ranked": {
+            "sql": draft, "hash": engine.digest(draft), "origin": "ai"}})["findings"]
+        assert any(row["code"] == "sql_source_behavior" and expected in row["message"] for row in findings)
 
 
 @pytest.mark.parametrize(("path", "code", "outputs"), [
@@ -182,7 +305,7 @@ def test_provider_preview_and_unknown_outcome_recovery(tmp_path, monkeypatch):
         assert secret not in request.content.decode()
         raise httpx.ReadTimeout("simulated", request=request)
 
-    with pytest.raises(ValueError, match="reservation"):
+    with pytest.raises(ValueError, match="attempt was recorded"):
         assistance.dispatch(*args, prepared["pin"], transport=httpx.MockTransport(timeout))
     journal = assistance.attempts(store, workspace, project["id"])
     assert len(journal) == 1 and journal[0]["status"] == "unknown"
@@ -213,6 +336,11 @@ def test_provider_preview_and_unknown_outcome_recovery(tmp_path, monkeypatch):
     store.set_setting(workspace, "llm_history", False)
     assert not assistance.responses(store, workspace, project["id"])
     assert len(assistance.attempts(store, workspace, project["id"])) == 3
+    for index in range(40):
+        assistance._insert(store, workspace, project["id"], f"older-attempt-{index}", "attempt", "completed",
+                           {"fingerprint": prepared["pin"], "reserved": 50_000, "profile_id": "profile"})
+    assert assistance.dispatch(store, *args[1:], prepared["pin"],
+                               transport=httpx.MockTransport(complete))["missing_outputs"] == ["b"]
     store.close()
 
 @pytest.mark.parametrize(("query", "expected"), [
@@ -359,6 +487,9 @@ def test_sas_set_stack_requires_compatible_types_from_every_input():
                 "warehouse": "databricks", "catalog": "main", "schema": "migration"}
     plan, files = engine.convert(snapshot)
     assert "UNION ALL" in files["stacked"]["sql"]
+    distinct = files["stacked"]["sql"].replace("UNION ALL", "UNION")
+    bad = {"stacked": {"sql": distinct, "origin": "ai", "hash": engine.digest(distinct)}}
+    assert any(item["code"] == "sas_stack_operation" for item in engine.validate(snapshot, plan, bad)["findings"])
     first, second = plan["outputs"]["stacked"]["inputs"]
     for row in plan["physical"].values():
         row["assumed_location"] = False
@@ -415,7 +546,7 @@ def test_tsql_staging_requires_a_unique_earlier_writer_in_the_same_script():
 
 def test_ordered_sas_requires_evidence_and_keeps_the_draft_revision_checked(tmp_path):
     code = ("data totals; set raw.orders; by account day; if first.account then total=0; total + amount; "
-            "keep account day amount total; run;\nproc sort data=raw.orders out=survivors nodupkey; by account; run;\n"
+            "keep account day amount total; run;\nproc sort data=raw.orders out=survivors nodupkey; by account descending day; run;\n"
             "data merged; merge raw.orders raw.status; by account; run;")
     with closing(Store(tmp_path)) as store:
         workspace = store.create_workspace("Ordered SAS")
@@ -441,6 +572,13 @@ def test_ordered_sas_requires_evidence_and_keeps_the_draft_revision_checked(tmp_
                     service.ordered_sas_proposal(project, contracted, model, ["event_id"])
             proposal = service.ordered_sas_proposal(project, contracted, model, order)
             assert fragment in list(service.diffs(contracted, proposal))[0][1]
+            if model == "survivors":
+                binding = plan["physical"][inputs[0]]
+                query = (f"SELECT * FROM {{{{ source('{binding['group']}', '{binding['name']}') }}}} "
+                         "QUALIFY ROW_NUMBER() OVER (PARTITION BY account ORDER BY day DESC) = 1")
+                incomplete = service.candidate(contracted, service.propose(
+                    contracted, {model: query}, "Synthetic partial BY tuple", origin="ai"))
+                assert any(item["code"] == "sas_partition" for item in service.report(project, incomplete)["findings"])
             assert model not in service.load(store, workspace, pid)[1]["files"]
             base = service.apply(store, workspace, pid, proposal)
             with pytest.raises(ValueError, match="stale"):
@@ -477,10 +615,38 @@ def test_opaque_sql_preserves_independent_conversion_without_lowering_procedure_
     assert sum(row["end"] - row["start"] for row in plan["regions"]) == len(code)
 
 
-@pytest.mark.parametrize("sql", ["SELECT FROM {{ ref('upstream') }}", "WITH p AS (SELECT) SELECT 1 AS id"])
-def test_target_sql_rejects_empty_select_projections(sql):
-    with pytest.raises(ValueError, match="projection"):
+@pytest.mark.parametrize(("sql", "reason"), [
+    ("SELECT FROM {{ ref('upstream') }}", "projection"),
+    ("WITH p AS (SELECT) SELECT 1 AS id", "projection"),
+    ("SELECT id FROM {{ ref('upstream') }} WHERE ROW_NUMBER() OVER (ORDER BY id) = 1", "QUALIFY"),
+])
+def test_target_sql_rejects_invalid_project_models(sql, reason):
+    with pytest.raises(ValueError, match=reason):
         engine.inspect_sql(sql, "databricks")
+
+
+def test_downstream_draft_can_wait_for_known_upstream_but_rejects_unplanned_ref(tmp_path):
+    sql = "CREATE VIEW upstream AS SELECT 1 AS id; CREATE VIEW downstream AS SELECT id FROM upstream;"
+    with closing(Store(tmp_path)) as store:
+        workspace = store.create_workspace("Pending migration dependencies")
+        project = service.create_project(store, workspace, "Chain", {
+            "warehouse": "databricks", "catalog": "main", "schema": "migration",
+            "sources": [{"id": "flow", "path": "flow.sql", "kind": "sql", "text": sql, "hash": engine.digest(sql)}],
+        })
+        pid = project["id"]
+        base = service.convert(store, workspace, pid, project["revision"], plan_only=True)
+        wrong = service.propose(base, {"downstream": "SELECT id FROM {{ ref('unplanned') }}"}, "Unknown input", origin="ai")
+        with pytest.raises(ValueError, match="unresolved SQL"):
+            service.apply(store, workspace, pid, wrong)
+        planned = service.propose(base, {"downstream": "SELECT id FROM {{ ref('upstream') }}"}, "Planned input", origin="ai")
+        draft = service.apply(store, workspace, pid, planned)
+        project, _ = service.load(store, workspace, pid)
+        report = service.report(project, draft)
+        assert any(row["code"] == "pending_ref" and row["model"] == "downstream" for row in report["findings"])
+        assert "downstream" in draft["files"] and not report["eligible"]
+        upstream = service.propose(draft, {"upstream": "SELECT 1 AS id"}, "Verified literal")
+        complete = service.apply(store, workspace, pid, upstream)
+        assert not any(row["code"] == "pending_ref" for row in service.report(project, complete)["findings"])
 
 
 @pytest.mark.parametrize("query", [
@@ -806,6 +972,23 @@ def test_materialized_sql_reads_the_relation_version_at_its_statement():
         else:
             assert plan["outputs"]["report"]["inputs"] == ["state"]
             assert report["active"]["report"] == "statically_qualified"
+    # Exact SQL schemas distinguish the input from same-leaf producers. A bare input still needs a mapping.
+    code = (Path(__file__).parent / "fixtures/scenario/03_orders.sql").read_text(encoding="utf-8")
+    for query, ambiguous in [(code, False), (code.replace("raw.orders", "orders"), True)]:
+        snapshot["sources"][0].update(text=query, hash=engine.digest(query))
+        plan, files = engine.convert(snapshot)
+        assert bool(plan["outputs"]["orders"]["hard"]) == ambiguous
+        view, = [row for row in plan["outputs"].values() if row["name"] == "mart.orders"]
+        assert view["inputs"] == ["orders"]
+        if not ambiguous:
+            key, = plan["outputs"]["orders"]["inputs"]
+            assert plan["physical"][key]["relation"] == "raw.orders"
+            assert "{{ source(" in files["orders"]["sql"]
+    code = "CREATE TABLE `vendor.orders` AS SELECT order_id FROM `raw.orders`;"
+    snapshot["sources"][0].update(text=code, hash=engine.digest(code), dialect="bigquery")
+    snapshot["known_outputs"] = {"s": ["vendor.orders"]}
+    plan, files = engine.convert(snapshot)
+    assert set(plan["outputs"]) == set(files) == {"orders"}
 
 
 def test_sas_selection_uses_work_identity_and_requires_same_session():

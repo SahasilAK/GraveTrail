@@ -23,6 +23,12 @@ from dataforge.migration.targets import warehouse
 from dataforge.services import PARSER_VERSION, source_dialect
 
 TABLES = ("migration_activity", "migration_revisions", "migration_sources", "migration_projects")
+MECHANICAL_FINDINGS = {
+    "unsafe_sql", "broken_ref", "broken_source", "unmapped_table", "changed_projection", "sql_source_behavior", "sas_inline_rows",
+    "sas_missing_filter", "sas_missing_assignment",
+    "changed_dependencies", "changed_materialization", "artifact_integrity", "cycle", "missing_column",
+    "set_layout", "target_collision", "merge_key", "incremental_config", "target_aggregation",
+}
 SCHEMA = """
 CREATE TABLE migration_projects(
     workspace_id VARCHAR, project_id VARCHAR, name VARCHAR, revision_id VARCHAR, snapshot VARCHAR,
@@ -376,7 +382,8 @@ def convert(store, workspace, project_id, expected_revision, cancelled=lambda: F
 def report(project, revision):
     if revision["plan"] is None:
         raise ValueError("Run conversion first")
-    snapshot = {**project["snapshot"], **revision["settings"]}
+    snapshot = {**project["snapshot"], **revision["settings"], "stale_ai_source_reviews": {
+        source for source, status in engine.source_review_status(revision).items() if status == "stale"}}
     details = engine.validate(snapshot, revision["plan"], revision["files"], revision["reviews"])
     validation_warnings = {}
     for model, rules in revision["settings"].get("validation_rules", {}).items():
@@ -509,10 +516,14 @@ def ordered_sas_proposal(project, base, model, order):
     return propose(base, {model: "-- " + review + "\n" + sql}, review, scopes=[model])
 
 
-def propose(base, replacements, rationale, *, origin="manual", scopes=None, rules=None):
+def propose(base, replacements, rationale, *, origin="manual", scopes=None, rules=None, source_id=None):
     """Construct a patch with hashes already bound to the disclosed base and output allowlist."""
-    if base["plan"] is None or not replacements or len(replacements) > 50:
+    if base["plan"] is None or not replacements or source_id is None and len(replacements) > 50:
         raise ValueError("Choose one to fifty planned outputs")
+    if source_id is not None:
+        scopes = {model for region in base["plan"]["regions"] if region["source"] == source_id for model in region["outputs"]}
+        if sum(len(sql.encode()) for sql in replacements.values() if isinstance(sql, str)) > engine.MAX_PROJECT:
+            raise ValueError("The combined source proposal exceeds the project artifact size limit")
     if origin not in {"manual", "ai", "optimization"} or not 1 <= len(rationale.strip()) <= 4_000:
         raise ValueError("Provide a bounded rationale for the proposed edits")
     allowed = set(scopes) if scopes is not None else set(base["plan"]["outputs"])
@@ -542,11 +553,12 @@ def diffs(base, proposal):
                             fromfile=f"before/{model}.sql", tofile=f"after/{model}.sql"))
 
 
-def candidate(base, proposal):
+def candidate(base, proposal, *, source_id=None):
     if proposal["base"] != base["id"]:
         raise ValueError("Proposal is stale. Review it against the current migration revision.")
     replacements = {model: row["sql"] for model, row in proposal["edits"].items()}
-    checked = propose(base, replacements, proposal["rationale"], origin=proposal["origin"], rules=proposal["rules"])
+    checked = propose(base, replacements, proposal["rationale"], origin=proposal["origin"], rules=proposal["rules"],
+                      source_id=source_id)
     if checked["edits"] != proposal["edits"]:
         raise ValueError("One or more file hashes changed. The whole edit was rejected.")
     files = dict(base["files"])
@@ -559,13 +571,10 @@ def candidate(base, proposal):
 def apply(store, workspace, project_id, proposal, *, ai_review=None):
     with store.transaction():
         project, base = load(store, workspace, project_id)
-        revision = candidate(base, proposal)
+        revision = candidate(base, proposal, source_id=next(iter(ai_review)) if ai_review else None)
         details = report(project, revision)
-        mechanical = {"unsafe_sql", "broken_ref", "broken_source", "unmapped_table",
-                      "changed_dependencies", "artifact_integrity", "cycle", "missing_column", "set_layout",
-                      "target_collision", "merge_key", "incremental_config", "target_aggregation"}
         previous = {(row["model"], row["code"], row["message"]) for row in report(project, base)["findings"]}
-        if any(row["code"] in mechanical and (row["model"] in proposal["edits"]
+        if any(row["code"] in MECHANICAL_FINDINGS and (row["model"] in proposal["edits"]
                or (row["model"], row["code"], row["message"]) not in previous) for row in details["findings"]):
             raise ValueError("The proposal has unresolved SQL or dependency checks. Correct it before applying.")
         if ai_review:
