@@ -13,19 +13,30 @@ from dataforge.agent.contracts import AgentError, QueryOptions, compact
 from dataforge.cleanup import checked_path
 from dataforge.configuration import VisualizationSettings
 from dataforge.excel_exports import XLSX_MIME
-from dataforge.exports import graph_data, graph_html, path_rows, report_csv, report_html, source_bundle
+from dataforge.exports import (
+    column_trace_csv,
+    graph_data,
+    graph_html,
+    path_rows,
+    report_csv,
+    report_html,
+    source_bundle,
+)
 from dataforge.graph import LineageGraph
 from dataforge.reporting import code_matches, data_dictionary
-from dataforge.services import column_report
+from dataforge.services import column_report, filter_column_report, source_inventory_rows
 from dataforge.store import Store
+from dataforge.transformations import final_column_names, table_column_links, trace_columns
 
 READS = {'artifact_read', 'paths', 'steps', 'graph_view'}
 WRITES = {'artifact_create'}
 FORMATS = {'graph': {'html', 'json', 'svg', 'png'}, 'paths': {'csv', 'json', 'xlsx'}, 'source-bundle': {'zip'},
            'original-source': {'raw'}, 'inventory': {'csv', 'json'}, 'code-search': {'csv', 'json'},
            'dictionary': {'csv', 'json', 'html'}, 'columns': {'csv', 'json', 'html'},
+           'column-lineage': {'csv', 'json'}, 'lineage-steps': {'csv', 'json'},
            'impact': {'csv', 'json', 'html'}, 'run-comparison': {'json'}, 'ai-result': {'json'}}
-SOURCE_KINDS = {'graph', 'paths', 'source-bundle', 'original-source', 'code-search', 'columns', 'impact', 'ai-result'}
+SOURCE_KINDS = {'graph', 'paths', 'source-bundle', 'original-source', 'code-search', 'columns', 'column-lineage',
+                'lineage-steps', 'impact', 'ai-result'}
 MAX_BYTES = 64 * 1024 * 1024
 
 
@@ -34,6 +45,9 @@ class Selection(BaseModel):
 
     model_config = ConfigDict(extra='forbid', strict=True)
     asset: str = Field(default='', max_length=1024)
+    all_assets: bool = False
+    column: str = Field(default='', max_length=1024)
+    status: Literal['all', 'verified', 'inferred', 'unresolved'] = 'all'
     direction: Literal['upstream', 'downstream', 'combined'] = 'upstream'
     file_id: str = Field(default='', max_length=64)
     content_hash: str = Field(default='', max_length=64)
@@ -77,7 +91,9 @@ def write_artifact(
     if sum(1 for _ in directory.iterdir()) >= 2000:
         raise AgentError('resource_limit', 'Managed artifact limit reached')
     aid = uuid.uuid4().hex
-    mime = {'json': 'application/json', 'html': 'text/html', 'csv': 'text/csv', 'zip': 'application/zip', 'raw': 'application/octet-stream', 'xlsx': XLSX_MIME, 'svg': 'image/svg+xml', 'png': 'image/png'}[format]
+    mime = {'json': 'application/json', 'html': 'text/html', 'csv': 'text/csv', 'zip': 'application/zip',
+            'raw': 'application/octet-stream', 'xlsx': XLSX_MIME, 'svg': 'image/svg+xml', 'png': 'image/png',
+            'yaml': 'application/yaml', 'sql': 'text/plain'}[format]
     metadata = {'artifact_id': aid, 'schema_version': 1, 'workspace_id': workspace,
         'home_id': hashlib.sha256(str(store.home).encode()).hexdigest(), 'kind': kind, 'format': format,
         'mime_type': mime, 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(),
@@ -101,8 +117,13 @@ def write_artifact(
 class ArtifactOperations:
     """Build authorized graph, report, source, and AI-result artifacts."""
 
-    def _artifact_graph(self, w: str, opts: QueryOptions, asset: str, direction: str) -> tuple[str, LineageGraph]:
-        """Return an exact selected asset ID and its focused, bounded graph."""
+    def _artifact_graph(self, w: str, opts: QueryOptions, asset: str, direction: str,
+                        *, all_assets: bool = False) -> tuple[str, LineageGraph]:
+        """Return the filtered workspace graph or a bounded focus around an exact asset."""
+        if all_assets:
+            if asset:
+                raise AgentError('validation_failed', 'Choose an exact asset or all assets')
+            return '', self._graph(w, opts, '')
         selected = self._asset(w, asset)['asset_id']
         graph = self._graph(w, opts, selected)
         focused = graph.focus(selected, direction, opts.max_depth, opts.max_items)
@@ -125,10 +146,11 @@ class ArtifactOperations:
             + (['unresolved'] if report.get('boundaries') else []),
             direction=direction, selected_asset=selected, ordering='logical dependencies; not runtime execution')
 
-    def _steps(self, w: str, opts: QueryOptions, asset: str, direction: str = 'upstream') -> dict[str, Any]:
+    def _steps(self, w: str, opts: QueryOptions, asset: str = '', direction: str = 'upstream',
+               all_assets: bool = False) -> dict[str, Any]:
         """Return ordered evidence rows for the focused lineage graph."""
-        _, graph = self._artifact_graph(w, opts, asset, direction)
-        return self._page(w, opts, ['steps', asset, direction], graph.lineage_rows(), analysis_current=self._current(w),
+        _, graph = self._artifact_graph(w, opts, asset, direction, all_assets=all_assets)
+        return self._page(w, opts, ['steps', asset, direction, all_assets], graph.lineage_rows(), analysis_current=self._current(w),
             boundaries=(['graph_limit_or_depth'] if graph.truncated else []) +
             (['unresolved'] if graph.unresolved_edges else []), ordering='logical dependencies; not runtime execution')
 
@@ -136,17 +158,21 @@ class ArtifactOperations:
         self,
         w: str,
         opts: QueryOptions,
-        asset: str,
+        asset: str = '',
         direction: str = 'upstream',
         view: str = 'nodes',
         node_id: str = '',
         edge_id: str = '',
+        all_assets: bool = False,
     ) -> dict[str, Any]:
-        """Return a paginated node, edge, or tree view of an authorized graph."""
-        if view not in {'nodes', 'edges', 'tree'} or direction not in {'upstream', 'downstream', 'combined'}:
-            raise AgentError('validation_failed', 'Use nodes, edges or tree view and a supported direction')
-        selected, graph = self._artifact_graph(w, opts, asset, direction)
+        """Return a paginated graph view, including the visible table-column projection."""
+        if view not in {'nodes', 'edges', 'tree', 'columns', 'column-links'} or direction not in {'upstream', 'downstream', 'combined'}:
+            raise AgentError('validation_failed', 'Use nodes, edges, tree, columns or column-links and a supported direction')
+        if all_assets and view == 'tree':
+            raise AgentError('validation_failed', 'Choose an exact asset to explore its dependency tree')
+        selected, graph = self._artifact_graph(w, opts, asset, direction, all_assets=all_assets)
         data = graph_data(graph, VisualizationSettings.from_store(self.store, w))
+        boundaries = (['graph_limit_or_depth'] if graph.truncated else []) + (['unresolved'] if data['boundaries'] else [])
         if view == 'nodes':
             rows = [{k: v for k, v in n.items() if k != 'metadata'} for n in data['nodes'] if not node_id or n['asset_id'] == node_id]
         elif view == 'edges':
@@ -162,16 +188,35 @@ class ArtifactOperations:
                     self._workspace(w, source=True)
                     row['evidence'] = evidence
                 rows.append(row)
-        else:
+        elif view == 'tree':
             import networkx as nx
             traversal = graph.graph.reverse(copy=False) if direction == 'upstream' else (graph.graph.to_undirected(as_view=True) if direction == 'combined' else graph.graph)
             levels = nx.single_source_shortest_path_length(traversal, selected, cutoff=opts.max_depth)
             rows = [{'asset_id': n, 'name': graph.nodes[n]['name'], 'level': level,
                      'neighbors': sorted(traversal.neighbors(n)), 'boundary': 'depth' if level == opts.max_depth else ''}
                     for n, level in sorted(levels.items(), key=lambda x: (x[1], x[0]))]
-        return self._page(w, opts, ['graph_view', asset, direction, view, node_id, edge_id], rows,
-            analysis_current=self._current(w), boundaries=(['graph_limit_or_depth'] if graph.truncated else [])
-            + (['unresolved'] if data.get('boundaries') else []),
+        else:
+            columns = final_column_names(self.store, w, graph.nodes)
+            if view == 'columns':
+                rows = [{'asset_id': aid, 'name': graph.nodes[aid]['name'], 'declared': entry['declared'], 'column': name}
+                        for aid, entry in columns.items() if not node_id or node_id == aid
+                        for name in entry['names'] or [None]]
+            else:
+                rows = []
+                for edge, links in zip(data['edges'], table_column_links(self.store, w, graph, columns)):
+                    source, target = edge['source'], edge['target']
+                    if node_id and node_id not in {source, target}:
+                        continue
+                    if edge_id and not any(e['edge_id'] == edge_id for e in edge['evidence']):
+                        continue
+                    rows.extend({'source_asset_id': source, 'target_asset_id': target,
+                                 'source_name': graph.nodes[source]['name'], 'target_name': graph.nodes[target]['name'],
+                                 **link} for link in links)
+            if len(rows) > opts.max_items:
+                rows = rows[:opts.max_items]
+                boundaries.append('projection_limit')
+        return self._page(w, opts, ['graph_view', asset, direction, view, node_id, edge_id, all_assets], rows,
+            analysis_current=self._current(w), boundaries=boundaries,
             selected_asset=selected, appearance=data['appearance'])
 
     def _artifact_create(
@@ -188,6 +233,8 @@ class ArtifactOperations:
         if format not in FORMATS.get(kind, set()):
             raise AgentError('validation_failed', 'Unsupported artifact kind/format combination')
         selection = Selection.model_validate(selection)
+        if selection.all_assets and (selection.asset or selection.file_ids or kind not in {'graph', 'source-bundle', 'lineage-steps'}):
+            raise AgentError('validation_failed', 'Choose an exact asset or use all assets for graph, step or source bundle export')
         source_required = kind in SOURCE_KINDS
         if source_required:
             self._workspace(w, write=True, source=True)
@@ -221,8 +268,9 @@ class ArtifactOperations:
             return {**artifact, **summary, 'filename': f'lineage-{w[:8]}.xlsx'}
         versions, complete = {}, self._current(w)
         rows = []
-        if kind in {'graph', 'impact'}:
-            _, graph = self._artifact_graph(w, opts, selection.asset, selection.direction if kind == 'graph' else 'downstream')
+        if kind in {'graph', 'impact', 'lineage-steps'}:
+            direction = 'downstream' if kind == 'impact' else selection.direction
+            _, graph = self._artifact_graph(w, opts, selection.asset, direction, all_assets=selection.all_assets)
             complete &= not graph.truncated and not graph.unresolved_edges
             rows = graph.lineage_rows()
             versions = {e['file_id']: e.get('source_hash', '') for _, _, a in graph.graph.edges(data=True) for e in a['evidence']}
@@ -230,6 +278,8 @@ class ArtifactOperations:
             if kind == 'graph':
                 appearance = VisualizationSettings.from_store(self.store, w)
                 data = (graph_html(graph, appearance) if format == 'html' else compact(graph_data(graph, appearance))).encode()
+            elif kind == 'lineage-steps':
+                data = (report_csv(rows) if format == 'csv' else compact(rows)).encode()
         elif kind == 'paths':
             target = self._asset(w, selection.asset)['asset_id']
             graph = self._graph(w, opts, target)
@@ -243,8 +293,8 @@ class ArtifactOperations:
                 data = compact(report).encode()
         elif kind in {'original-source', 'source-bundle'}:
             file_ids = [selection.file_id] if kind == 'original-source' else selection.file_ids
-            if not file_ids and selection.asset:
-                _, graph = self._artifact_graph(w, opts, selection.asset, selection.direction)
+            if not file_ids and (selection.asset or selection.all_assets):
+                _, graph = self._artifact_graph(w, opts, selection.asset, selection.direction, all_assets=selection.all_assets)
                 file_ids = sorted({e['file_id'] for _, _, a in graph.graph.edges(data=True) for e in a['evidence']})
                 for _, _, attrs in graph.graph.edges(data=True):
                     for evidence in attrs['evidence']:
@@ -268,11 +318,22 @@ class ArtifactOperations:
             data = self.store.original(file_ids[0], versions[file_ids[0]]) if kind == 'original-source' else source_bundle(self.store, file_ids, versions)
             complete = complete if selection.asset else True
         elif kind == 'inventory':
-            rows = [{k: f[k] for k in ('file_id', 'relative_path', 'extension', 'file_size', 'encoding', 'content_hash', 'parsing_status')} for f in self.store.files(w)]
+            rows = source_inventory_rows(self.store, w, selection.query)
         elif kind == 'dictionary':
             rows = data_dictionary(self.store, w, selection.query)
         elif kind == 'columns':
-            rows = column_report(self.store, w, self._asset(w, selection.asset)['asset_id'])
+            rows = filter_column_report(column_report(self.store, w, self._asset(w, selection.asset)['asset_id']),
+                                        selection.query)
+        elif kind == 'column-lineage':
+            if not selection.column or selection.direction == 'combined':
+                raise AgentError('validation_failed', 'Specify a column and an upstream or downstream direction')
+            target = self._asset(w, selection.asset)['asset_id']
+            trace = trace_columns(self.store, w, target, selection.column, direction=selection.direction,
+                                  depth=opts.max_depth, limit=opts.max_items, status=selection.status, include_source=False)
+            complete &= trace['complete']
+            versions = {row['evidence']['file_id']: row['evidence']['source_hash'] for row in trace['derivations']
+                        if row.get('evidence', {}).get('file_id') and row['evidence'].get('source_hash')}
+            data = (column_trace_csv(trace) if format == 'csv' else compact(trace)).encode()
         elif kind == 'code-search':
             rows = code_matches(self.store, w, selection.query, opts.max_items + 1)
         elif kind == 'run-comparison':
@@ -280,7 +341,8 @@ class ArtifactOperations:
         else:
             detailed = opts.model_copy(update={'detail_level': 'detailed'})
             data = compact(self._ai_result(w, detailed, selection.record_id)).encode()
-        if kind not in {'graph', 'original-source', 'source-bundle', 'run-comparison', 'ai-result'} and not (kind == 'paths' and format == 'json'):
+        if kind not in {'graph', 'original-source', 'source-bundle', 'run-comparison', 'ai-result', 'column-lineage',
+                        'lineage-steps'} and not (kind == 'paths' and format == 'json'):
             complete &= len(rows) <= opts.max_items
             rows = rows[:opts.max_items]
             data = (compact(rows) if format == 'json' else report_csv(rows) if format == 'csv' else report_html(rows)).encode()

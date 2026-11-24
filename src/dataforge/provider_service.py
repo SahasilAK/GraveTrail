@@ -2,25 +2,35 @@
 import json
 import time
 import uuid
+from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 from urllib.parse import urlsplit
 
+import duckdb
 from pydantic import BaseModel, ConfigDict, Field
 
 from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions
+from dataforge.ai_budget import profile_recommendations
 from dataforge.configuration import LLMResourceSettings
 from dataforge.connections import RuntimeConnections, connection_scope
-from dataforge.credentials import CredentialError, NativeCredentials, credential_source, owns_reference
+from dataforge.credentials import (
+    CredentialError,
+    NativeCredentials,
+    credential_reference,
+    credential_source,
+    owns_reference,
+)
 from dataforge.llm import ROUTABLE_TASKS as TASKS
 from dataforge.llm import Adapter, Profile, ProviderError, is_local, response_object
 from dataforge.llm_resources import request_slot
-from dataforge.model_capabilities import bind_capabilities, runtime_profile
+from dataforge.model_capabilities import ModelCapabilities, bind_capabilities, runtime_profile
 from dataforge.settings_service import check_revision, revision
 from dataforge.store import Store
 
 READS = {'providers_list', 'provider_get', 'routing_get', 'runtime_status'}
 WRITES = {'provider_save', 'provider_remove', 'routing_update', 'runtime_connect', 'runtime_clear',
-          'provider_models', 'provider_test'}
+          'provider_models', 'provider_test', 'provider_model_details', 'provider_saved_key', 'provider_reset_limits'}
 
 
 def origin(url: str) -> tuple[str, str, int]:
@@ -45,6 +55,11 @@ class Routing(BaseModel):
     fallback_profiles: list[str] = Field(default_factory=list, max_length=20)
 
 
+class DraftProvider(Profile):
+    """Provider connection settings without a model requirement for discovery."""
+    model: str = Field(default='', min_length=1, max_length=250)
+
+
 def get_profile(store: Store, workspace: str, profile_id: str) -> Profile:
     """Load and validate one provider profile belonging to a workspace.
 
@@ -63,6 +78,18 @@ def get_profile(store: Store, workspace: str, profile_id: str) -> Profile:
     if not rows:
         raise AgentError('not_found', 'Provider profile does not exist in this workspace')
     return Profile.model_validate_json(rows[0]['config'])
+
+
+def provider_target(store: Store, workspace: str, profile_id: str, draft_profile: dict[str, Any] | None) -> Profile:
+    """Resolve a saved or draft provider. Drafts accept only approved named environment references."""
+    if bool(profile_id) == (draft_profile is not None):
+        raise AgentError('invalid_argument', 'Supply one saved profile ID or one draft profile')
+    if draft_profile is None:
+        return get_profile(store, workspace, profile_id)
+    profile = DraftProvider.model_validate(draft_profile, strict=True)
+    if profile.saved_key_ref or credential_source(profile.key_env) != 'environment':
+        raise AgentError('credential_unavailable', 'Use a saved profile ID for a native or session reference')
+    return profile
 
 
 def save_profile(store: Store, policy: AccessPolicy, workspace: str,
@@ -90,7 +117,10 @@ def save_profile(store: Store, policy: AccessPolicy, workspace: str,
             if 'timeout' not in values and 'read_timeout' not in values:
                 defaults['read_timeout'] = 300
             profile = {**defaults, **values}
+    manual = profile.get('model_capabilities') if isinstance(profile, dict) else None
     profile = Profile.model_validate(profile, strict=True)
+    if isinstance(manual, dict) and manual.get('source') == 'manual' and not manual.get('identity'):
+        profile.model_capabilities = bind_capabilities(ModelCapabilities.model_validate(manual), profile)
     if profile.key_env and profile.key_env not in policy.allowed_credential_refs:
         raise AgentError('credential_unavailable', 'Approve this named credential reference at launch before saving')
     if profile.saved_key_ref and profile.saved_key_ref not in policy.allowed_credential_refs:
@@ -137,18 +167,42 @@ def save_routing(store: Store, policy: AccessPolicy, workspace: str,
         AgentError: If task assignments or profile references are invalid.
     """
     policy.require('config')
-    check_revision(store, workspace, expected_revision)
     routing = Routing.model_validate(values)
     if set(routing.task_models) - set(TASKS):
         raise AgentError('validation_failed', 'Routing supports documented manual and project AI tasks')
-    ids = {p['profile_id'] for p in store.rows('SELECT profile_id FROM llm_profiles WHERE workspace_id=?', [workspace])}
     refs = {routing.default_profile, *routing.task_models.values(), *routing.fallback_profiles} - {''}
-    if refs - ids or len(routing.fallback_profiles) != len(set(routing.fallback_profiles)):
-        raise AgentError('validation_failed', 'Routing references must be existing, unique workspace profiles')
     with store.transaction():
+        check_revision(store, workspace, expected_revision)
+        ids = {p['profile_id'] for p in store.rows('SELECT profile_id FROM llm_profiles WHERE workspace_id=?', [workspace])}
+        if refs - ids or len(routing.fallback_profiles) != len(set(routing.fallback_profiles)):
+            raise AgentError('validation_failed', 'Routing references must be existing, unique workspace profiles')
         for key, value in routing.model_dump().items():
             store.set_setting(workspace, key, value)
     return {'settings_revision': revision(store, workspace), 'routing': routing.model_dump()}
+
+
+def load_routing(store: Store, workspace: str) -> dict[str, Any]:
+    """Return persisted routing with the same defaults on each surface."""
+    return {key: store.setting(workspace, key, value) for key, value in Routing().model_dump().items()}
+
+
+def remove_profile(store: Store, policy: AccessPolicy, workspace: str, profile_id: str,
+                   expected_revision: str) -> dict[str, Any]:
+    """Remove a provider only after its routing references have been cleared."""
+    policy.require('config')
+    with store.transaction():
+        check_revision(store, workspace, expected_revision)
+        profile = get_profile(store, workspace, profile_id)
+        routing = load_routing(store, workspace)
+        if profile_id in {routing['default_profile'], *routing['task_models'].values(), *routing['fallback_profiles']}:
+            raise AgentError('conflict', 'Remove routing references before removing this profile')
+        saved_ref = profile.saved_key_ref or (profile.key_env if credential_source(profile.key_env) == 'saved' else '')
+        if saved_ref:
+            if saved_ref not in policy.allowed_credential_refs:
+                raise AgentError('credential_unavailable', 'Approve this saved reference at launch before deleting its profile')
+            NativeCredentials().delete(store.home, workspace, profile_id, profile)
+        store.execute('DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [workspace, profile_id])
+    return {'removed': profile_id, 'settings_revision': revision(store, workspace)}
 
 
 def authorize_provider(store: Store, policy: AccessPolicy, workspace: str, profile: Profile) -> None:
@@ -263,6 +317,51 @@ class ProviderOperations:
         """
         return save_profile(self.store, self.policy, w, profile, expected_revision, profile_id)
 
+    def _provider_reset_limits(self, w: str, opts: QueryOptions, profile_id: str,
+                               expected_revision: str) -> dict[str, Any]:
+        """Save the same automatic profile limits recommended by the provider settings UI."""
+        self.policy.require('config')
+        profile = get_profile(self.store, w, profile_id)
+        limits = {**profile_recommendations(profile.model_capabilities), 'context_mode': 'automatic',
+                  'output_mode': 'automatic'}
+        result = save_profile(self.store, self.policy, w, profile.model_copy(update=limits), expected_revision, profile_id)
+        return {**result, 'limits': limits}
+
+    def _provider_saved_key(self, w: str, opts: QueryOptions, profile_id: str, expected_revision: str,
+                            prompt: Callable[[], str] | None = None, confirmation: str = '') -> dict[str, Any]:
+        """Save, replace, or delete a native credential in an explicitly local CLI invocation."""
+        self.policy.require('admin')
+        check_revision(self.store, w, expected_revision)
+        profile = get_profile(self.store, w, profile_id)
+        old_ref = profile.saved_key_ref or (profile.key_env if credential_source(profile.key_env) == 'saved' else '')
+        if old_ref and old_ref not in self.policy.allowed_credential_refs:
+            raise AgentError('credential_unavailable', 'Approve the existing saved reference at launch before changing it')
+
+        if prompt is None:
+            if confirmation != 'DELETE SAVED KEY':
+                raise AgentError('validation_failed', 'Type DELETE SAVED KEY to confirm local deletion')
+            if not old_ref:
+                return {'profile_id': profile_id, 'reference': '', 'settings_revision': expected_revision}
+            updated = profile.model_copy(update={'key_env': credential_reference(self.store.home, w, profile_id, profile),
+                                                 'saved_key_ref': ''})
+            policy = replace(self.policy, allowed_credential_refs=(*self.policy.allowed_credential_refs, updated.key_env))
+            result = save_profile(self.store, policy, w, updated, expected_revision, profile_id)
+            return {**result, 'reference': ''}
+
+        vault = NativeCredentials()
+        reference = vault.save(self.store.home, w, profile_id, profile, prompt())
+        updated = profile.model_copy(update={'key_env': reference, 'saved_key_ref': reference})
+        policy = replace(self.policy, allowed_credential_refs=(*self.policy.allowed_credential_refs, reference))
+        try:
+            result = save_profile(self.store, policy, w, updated, expected_revision, profile_id)
+        except (ValueError, AgentError, OSError, duckdb.Error):
+            try:
+                vault.delete(self.store.home, w, profile_id, updated)
+            except CredentialError:
+                raise CredentialError(f'Save failed. Remove the new GraveTrail entry {reference} in OS settings.') from None
+            raise
+        return {**result, 'reference': reference}
+
     def _provider_remove(self, w: str, opts: QueryOptions, profile_id: str,
                          expected_revision: str) -> dict[str, Any]:
         """Remove an unused profile and clear any process-local credentials.
@@ -279,23 +378,12 @@ class ProviderOperations:
         Raises:
             AgentError: If routing still references the profile.
         """
-        self.policy.require('config')
-        check_revision(self.store, w, expected_revision)
-        profile = get_profile(self.store, w, profile_id)
-        route = self._routing_get(w, opts)['routing']
-        if profile_id in {route['default_profile'], *route['task_models'].values(), *route['fallback_profiles']}:
-            raise AgentError('conflict', 'Remove routing references before removing this profile')
-        saved_ref = profile.saved_key_ref or (profile.key_env if credential_source(profile.key_env) == 'saved' else '')
-        if saved_ref:
-            if saved_ref not in self.policy.allowed_credential_refs:
-                raise AgentError('credential_unavailable', 'Approve this saved reference at launch before deleting its profile')
-            NativeCredentials().delete(self.store.home, w, profile_id, profile)
-        self.store.execute('DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?', [w, profile_id])
+        result = remove_profile(self.store, self.policy, w, profile_id, expected_revision)
         manager = self.runtime_connections.pop((w, profile_id), None)
         self.runtime_profiles.pop((w, profile_id), None)
         if manager:
             manager.clear()
-        return {'removed': profile_id, 'settings_revision': revision(self.store, w)}
+        return result
 
     def _routing_get(self, w: str, opts: QueryOptions) -> dict[str, Any]:
         """Return workspace routing settings and supported task names.
@@ -307,7 +395,7 @@ class ProviderOperations:
         Returns:
             Routing settings, supported task names, and the settings revision.
         """
-        return {'routing': {key: self.store.setting(w, key, value) for key, value in Routing().model_dump().items()},
+        return {'routing': load_routing(self.store, w),
                 'tasks': TASKS, 'settings_revision': revision(self.store, w)}
 
     def _routing_update(self, w: str, opts: QueryOptions, values: Routing | dict[str, Any],
@@ -396,15 +484,17 @@ class ProviderOperations:
             self.runtime_profiles[(w, profile_id)] = runtime_profile(profile)
         return self._runtime_status(w, opts, profile_id)
 
-    def _provider_operation(self, w: str, opts: QueryOptions, profile_id: str,
-                            operation: str) -> dict[str, Any]:
-        """Run model discovery or a provider connection check under request limits.
+    def _provider_operation(self, w: str, opts: QueryOptions, profile_id: str, operation: str,
+                            model: str = '', draft_profile: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Run model discovery, inspection, or a connection check under request limits.
 
         Args:
             w: Workspace identifier owning the provider profile.
             opts: Validated operation options.
             profile_id: Provider profile identifier to use.
-            operation: Provider action, either model discovery or a connection check.
+            operation: Provider discovery, inspection, or connection test action.
+            model: Model identifier to inspect, defaulting to the saved model.
+            draft_profile: Optional unsaved endpoint settings replacing the profile ID.
 
         Returns:
             Sanitized operation result with its duration.
@@ -412,9 +502,13 @@ class ProviderOperations:
         Raises:
             AgentError: If authorization fails, request capacity is unavailable, or the provider operation fails.
         """
-        profile = get_profile(self.store, w, profile_id)
+        profile = provider_target(self.store, w, profile_id, draft_profile)
         authorize_provider(self.store, self.policy, w, profile)
-        recipient_profile = profile
+        selected_model = model or profile.model
+        if operation != 'models' and (not selected_model.strip() or len(selected_model) > 250
+                                      or any(ord(char) < 32 for char in selected_model)):
+            raise AgentError('invalid_argument', 'Use a model identifier of 1 to 250 characters')
+        recipient_profile = profile.model_copy(update={'model': selected_model})
         manager = (self._runtime_manager(w, profile_id, profile) or RuntimeConnections()).for_workspace(
             self.store.home, w).for_profile(profile_id, profile)
         if manager.registered('DATAFORGE_RUNTIME_CREDENTIAL'):
@@ -434,6 +528,10 @@ class ProviderOperations:
                     result = self._page(w, opts, ['models', profile_id], models)
                     result['selected_model_capabilities'] = next((bind_capabilities(item.capabilities, recipient_profile).model_dump()
                         for item in catalog if item.id == profile.model), None)
+                elif operation == 'details':
+                    descriptor = adapter.model_details(recipient_profile.model)
+                    result = {'model': {'id': descriptor.id,
+                                        'capabilities': bind_capabilities(descriptor.capabilities, recipient_profile).model_dump()}}
                 else:
                     response, usage = adapter.complete('Return a JSON object with key "status".', 'Return {"status":"connected"}.')
                     if response_object(response).get('status') != 'connected':
@@ -448,28 +546,37 @@ class ProviderOperations:
             if (w, profile_id) not in self.runtime_connections:
                 manager.clear()
 
-    def _provider_models(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+    def _provider_models(self, w: str, opts: QueryOptions, profile_id: str = '',
+                         draft_profile: dict[str, Any] | None = None) -> dict[str, Any]:
         """List models through the authorized provider operation path.
 
         Args:
             w: Workspace identifier owning the profile.
             opts: Validated pagination options.
             profile_id: Provider profile identifier.
+            draft_profile: Optional unsaved endpoint settings replacing the profile ID.
 
         Returns:
             Paginated model identifiers.
         """
-        return self._provider_operation(w, opts, profile_id, 'models')
+        return self._provider_operation(w, opts, profile_id, 'models', draft_profile=draft_profile)
 
-    def _provider_test(self, w: str, opts: QueryOptions, profile_id: str) -> dict[str, Any]:
+    def _provider_model_details(self, w: str, opts: QueryOptions, profile_id: str = '', model: str = '',
+                                draft_profile: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Inspect one model through the authorized provider operation path."""
+        return self._provider_operation(w, opts, profile_id, 'details', model, draft_profile)
+
+    def _provider_test(self, w: str, opts: QueryOptions, profile_id: str = '',
+                       draft_profile: dict[str, Any] | None = None) -> dict[str, Any]:
         """Check provider connectivity through the authorized operation path.
 
         Args:
             w: Workspace identifier owning the profile.
             opts: Validated operation options.
             profile_id: Provider profile identifier.
+            draft_profile: Optional unsaved endpoint settings replacing the profile ID.
 
         Returns:
             Connection status and provider usage metadata.
         """
-        return self._provider_operation(w, opts, profile_id, 'test')
+        return self._provider_operation(w, opts, profile_id, 'test', draft_profile=draft_profile)

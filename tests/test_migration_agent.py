@@ -29,7 +29,7 @@ def test_cli_migration_is_reviewable_and_exportable_over_mcp(tmp_path, monkeypat
     home = tmp_path / "home"
     with closing(Store(home)) as store:
         w = store.create_workspace("Migration parity")
-        Importer(store, w).files([("pipeline.sql", b"CREATE VIEW first AS SELECT 1 AS id; CREATE VIEW second AS SELECT id FROM first;")],
+        Importer(store, w).files([("pipeline.sql", b"CREATE VIEW first AS SELECT 1 AS id;\nCREATE VIEW second AS\nSELECT id FROM first;")],
                                  {".sql"})
     setup = tmp_path / "setup.json"
     setup.write_text(json.dumps({"schema": "review"}), encoding="utf-8")
@@ -71,6 +71,15 @@ def test_cli_migration_is_reviewable_and_exportable_over_mcp(tmp_path, monkeypat
                             assert [(row["source"], row["target"]) for row in edges["items"]] == [("first", "second")]
                             artifact = await call("inspect_migration_revision", **scope, view="artifact", item="second", anchor="source")
                             assert "CREATE VIEW second" in artifact["text"]
+                            excerpt = await call("inspect_migration_revision", **scope, view="artifact", item="second",
+                                                 anchor="source", line=3)
+                            assert excerpt["line"] == 3 and excerpt["text"] == "SELECT id FROM first;"
+                            note = await call("update_migration_revision", **scope, operation="add_comment", arguments={
+                                "artifact": "second", "anchor": "source", "line": 3,
+                                "author": "Engineer", "message": "Check this input."})
+                            resolved = await call("update_migration_revision", **scope, operation="resolve_comment",
+                                                  arguments={"comment_id": note["comment_id"]})
+                            assert resolved["status"] == "resolved"
                             patch = await call("preview_migration_edit", **scope, arguments={
                                 "replacements": {"first": "SELECT 2 AS id"}, "rationale": "Use the confirmed ID"})
                             assert "+SELECT 2 AS id" in patch["diffs"]["first"]
@@ -197,7 +206,14 @@ def test_file_guided_ai_migration_keeps_both_outputs_and_requires_review(tmp_pat
             with pytest.raises(AgentError):
                 run("convert", pure["pin"], feedback="Different disclosure")
             assert not disclosures
-            run("convert", pure["pin"])
+            if optimization_finish == "stop":
+                job = asyncio.run(create_server(agent).call_tool("run_migration_stage", {
+                    **scope, "workspace_id": w, "stage": "convert", "expected_pin": pure["pin"], "background": True
+                })).structuredContent
+                agent.jobs.wait(job["job_id"], w)
+                assert agent.job_status(w, job["job_id"])["result"]["status"] == "completed"
+            else:
+                run("convert", pure["pin"])
             assert len(disclosures) == 1
             assert service.load(store, w, pid)[1]["files"] == {}
 

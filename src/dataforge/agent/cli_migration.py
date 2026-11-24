@@ -85,6 +85,8 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
                 item: Annotated[str | None, typer.Option(help='Exact item ID or comma-separated pilot models.')] = None,
                 anchor: ArtifactAnchor | None = None,
                 offset: Annotated[int, typer.Option(min=0, help='Character offset for an artifact excerpt.')] = 0,
+                line: Annotated[int | None, typer.Option(min=1, help='Start at this line in the selected anchor.')] = None,
+                finding: Annotated[str | None, typer.Option(help='Jump to the selected finding in the artifact.')] = None,
                 limit: Annotated[int | None, typer.Option(min=1, max=500, help='Override the global page size.')] = None,
                 cursor: Annotated[str | None, typer.Option(help='Resume from next_cursor for this view.')] = None) -> None:
         """Inspect a revision, page through reports, or read an anchored artifact excerpt."""
@@ -93,7 +95,8 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
         if cursor is not None:
             ctx.obj['options']['cursor'] = cursor
         invoke(ctx, 'migration_inspect', workspace, project_id=project_id, revision_id=revision,
-               view=view.value, item=item, anchor=anchor.value if anchor else None, offset=offset)
+               view=view.value, item=item, anchor=anchor.value if anchor else None, offset=offset,
+               line=line, finding=finding)
 
     @migration.command('convert')
     def convert(ctx: typer.Context, project_id: str, workspace: Workspace,
@@ -124,7 +127,7 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
         """Preview manual replacements, SAS ordering, or an existing AI proposal.
 
         Provide replacements and rationale (optionally scopes), model and order, or proposal
-        or proposal_path under an allowed root.
+        or proposal_path under an allowed root. Use mapping_csv or mapping_path for a mapping preview.
         """
         invoke(ctx, 'migration_edit_preview', workspace, project_id=project_id, revision_id=revision,
                arguments=load_object(ctx, arguments))
@@ -160,9 +163,10 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
     @migration.command('stage-run')
     def stage_run(ctx: typer.Context, project_id: str, source_id: str, stage: Stage,
                   workspace: Workspace, revision: Revision, profile: Profile, expected_pin: Pin,
-                  feedback: str = '', static_reference: bool = False) -> None:
+                  feedback: str = '', static_reference: bool = False,
+                  background: Annotated[bool, typer.Option(help='Queue a cancellable stage job.')] = False) -> None:
         """Run a confirmed file-scoped stage and save its candidate evidence."""
-        invoke(ctx, 'migration_stage_request', workspace, project_id=project_id, revision_id=revision, profile_id=profile,
+        invoke(ctx, 'migration_stage_request', workspace, background=background, project_id=project_id, revision_id=revision, profile_id=profile,
                source_id=source_id, stage=stage.value, feedback=feedback, static_reference=static_reference,
                expected_pin=expected_pin)
 

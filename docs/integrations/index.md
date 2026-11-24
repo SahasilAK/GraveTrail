@@ -15,7 +15,7 @@ uses configured profiles and explicit privacy permissions.
 
 There is no standalone REST API. MCP's HTTP transport exposes MCP, not an unrestricted
 web API. The [capability matrix](../CLI_MCP_CAPABILITIES.md) records implemented routes
-and explicit policy restrictions, including read-only MCP maintenance and UI-only cleanup.
+and explicit policy restrictions, including read-only MCP maintenance and local-admin cleanup.
 
 ## Query before reading source
 

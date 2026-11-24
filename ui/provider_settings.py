@@ -21,10 +21,10 @@ from dataforge.credentials import (
     credential_reference,
     credential_source,
 )
-from dataforge.llm import PROVIDERS, TASKS, Adapter, Profile, is_local, response_object
+from dataforge.llm import PROVIDERS, ROUTABLE_TASKS, Adapter, Profile, is_local, response_object
 from dataforge.llm_resources import request_slot
 from dataforge.model_capabilities import ModelCapabilities, bind_capabilities
-from dataforge.provider_service import save_profile, save_routing
+from dataforge.provider_service import load_routing, remove_profile, save_profile, save_routing
 from dataforge.settings_service import revision
 from dataforge.store import Store
 
@@ -400,29 +400,37 @@ def render(store: Store, workspace: str) -> None:
             st.error("Profile configuration is invalid. Check the endpoint, model and environment variable name.")
     if existing and st.button("Remove profile"):
         try:
-            NativeCredentials().delete(store.home, workspace, selection, Profile.model_validate_json(existing['config']))
-            manager.disconnect(config.get('key_env', ''))
-            store.execute("DELETE FROM llm_profiles WHERE workspace_id=? AND profile_id=?", [workspace, selection])
+            stored = Profile.model_validate_json(existing['config'])
+            refs = tuple(ref for ref in (stored.key_env, stored.saved_key_ref) if ref)
+            policy = AccessPolicy(allow_write=True, allow_config_write=True, allowed_credential_refs=refs)
+            remove_profile(store, policy, workspace, selection, revision(store, workspace))
+            manager.disconnect(stored.key_env)
             st.rerun()
-        except CredentialError as exc:
+        except (AgentError, CredentialError) as exc:
             st.error(str(exc))
     if names:
         st.subheader("Task-specific model routing")
         with st.form("task_routing"):
             ids = list(names)
+            routing = load_routing(store, workspace)
+            options = ["", *ids]
             default_id = store.setting(workspace, "default_profile", ids[0])
-            default = st.selectbox("Default profile", ids, index=ids.index(default_id) if default_id in ids else 0, format_func=names.get)
-            assignments = store.setting(workspace, "task_models", {})
+            default = st.selectbox("Default profile", options, index=options.index(default_id) if default_id in ids else 0,
+                                   format_func=lambda key: names.get(key, "No default profile"))
+            assignments = routing["task_models"]
             selected = {}
-            for task in TASKS:
+            for task in ROUTABLE_TASKS:
                 value = assignments.get(task, "")
-                selected[task] = st.selectbox(task.replace("_", " ").capitalize(), ["", *ids],
-                    index=(["", *ids].index(value) if value in ids else 0), format_func=lambda k: names.get(k, "Use default"))
+                selected[task] = st.selectbox(task.replace("_", " ").capitalize(), options,
+                    index=options.index(value) if value in ids else 0, format_func=lambda k: names.get(k, "Use default"))
             fallbacks = st.multiselect("Ordered fallback profiles", ids,
-                default=[x for x in store.setting(workspace, "fallback_profiles", []) if x in ids], format_func=names.get)
+                default=[x for x in routing["fallback_profiles"] if x in ids], format_func=names.get)
             st.caption("Fallback applies only to transient failures and profiles on the same recipient host. Malformed/unsupported output is quarantined.")
             if st.form_submit_button("Save model routing"):
-                save_routing(store, AccessPolicy(allow_write=True, allow_config_write=True), workspace,
-                    {'default_profile': default, 'task_models': selected, 'fallback_profiles': fallbacks}, revision(store, workspace))
-                st.success("Task routing saved")
+                try:
+                    save_routing(store, AccessPolicy(allow_write=True, allow_config_write=True), workspace,
+                        {'default_profile': default, 'task_models': selected, 'fallback_profiles': fallbacks}, revision(store, workspace))
+                    st.success("Task routing saved")
+                except AgentError as exc:
+                    st.error(str(exc))
     st.caption("Databricks Model Serving uses the serving endpoint API. Genie is a separate query agent and is not treated as a chat model. Codex/ChatGPT sign-in is not used as an application API credential.")

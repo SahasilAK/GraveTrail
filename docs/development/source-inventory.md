@@ -12,7 +12,7 @@ Files introduced by the documentation overhaul are labeled **new** until a publi
 Summaries come from module docstrings (trimmed to 240 characters) or resource types, so the linked implementation
 and focused tests remain the authority for exact behavior.
 
-This inventory covers **417 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
+This inventory covers **422 files**: all Git-tracked and nonignored additions under `src/`, `ui/`,
 `scripts/`, `tests/`, `prompts/`, `.github/` and `.streamlit/`, plus the explicitly listed root entry point,
 dependency, container and repository configuration files. It includes fixture inputs and sample archives.
 It excludes `KNOWLEDGE.md` context maps, documentation pages, planning/context folders, generated artifacts,
@@ -34,12 +34,12 @@ python scripts/docs/inventory.py --check
 | --- | ---: |
 | [Entry points and package](#entry-points-and-package) | 5 |
 | [Static parsing and identity](#static-parsing-and-identity) | 13 |
-| [Storage and configuration](#storage-and-configuration) | 18 |
+| [Storage and configuration](#storage-and-configuration) | 20 |
 | [Graphs, columns and exports](#graphs-columns-and-exports) | 9 |
 | [AI and provider services](#ai-and-provider-services) | 31 |
 | [dbt](#dbt) | 14 |
 | [Migration](#migration) | 10 |
-| [CLI and MCP automation](#cli-and-mcp-automation) | 14 |
+| [CLI and MCP automation](#cli-and-mcp-automation) | 16 |
 | [Streamlit UI](#streamlit-ui) | 42 |
 | [Prompts and response schemas](#prompts-and-response-schemas) | 20 |
 | [Verification and release tooling](#verification-and-release-tooling) | 10 |
@@ -50,7 +50,7 @@ python scripts/docs/inventory.py --check
 | [Test support and fixtures](#test-support-and-fixtures) | 68 |
 | [Tests: AI and providers](#tests-ai-and-providers) | 45 |
 | [Tests: dbt](#tests-dbt) | 12 |
-| [Tests: automation](#tests-automation) | 12 |
+| [Tests: automation](#tests-automation) | 13 |
 | [Tests: parsing, graph and storage](#tests-parsing-graph-and-storage) | 32 |
 | [Tests: UI, packaging and repository](#tests-ui-packaging-and-repository) | 30 |
 
@@ -61,7 +61,7 @@ python scripts/docs/inventory.py --check
 | [`app.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/app.py) | Run with: streamlit run app.py | `new_workspace` |
 | [`src/dataforge/__init__.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/__init__.py) | GraveTrail: evidence-backed local data engineering analysis. | — |
 | [`src/dataforge/build.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/build.py) | Host-platform release builds with locked dependencies and integrity manifests. | `build_environment`, `write_manifest`, `verify_artifacts`, `build_python`, `build_docker`, `build_executable`, `main` |
-| [`src/dataforge/cli.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/cli.py) | GraveTrail automation CLI; does not import or start Streamlit. | `app`, `configure`, `emit`, `capabilities`, `fail`, `invoke`, `cli_job_status`, `workspaces`, `create_workspace`, `workspace_summary`, `ingest`, `build`, `preview_build`, `project_report`, `cancel_analysis_job`, `upstream`, `downstream`, `search_assets`, `columns`, `transformation_columns`, `column_lineage`, `files`, `source`, `search_source`, `issues`, `impact`, `job_status`, `export`, `result`, `batch`, `mcp`, `cleanup_inspect`, `maintenance_inspect`, `maintenance_backup`, `maintenance_checkpoint`, `maintenance_restore`, `ui` |
+| [`src/dataforge/cli.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/cli.py) | GraveTrail automation CLI; does not import or start Streamlit. | `app`, `configure`, `emit`, `capabilities`, `fail`, `invoke`, `cli_job_status`, `workspaces`, `create_workspace`, `workspace_summary`, `workspace_example`, `ingest`, `build`, `preview_build`, `project_report`, `cancel_analysis_job`, `upstream`, `downstream`, `search_assets`, `columns`, `transformation_columns`, `column_lineage`, `files`, `source`, `search_source`, `issues`, `impact`, `job_status`, `export`, `result`, `batch`, `mcp`, `cleanup_inspect`, `maintenance_inspect`, `maintenance_backup`, `maintenance_checkpoint`, `maintenance_restore`, `ui` |
 | [`src/dataforge/launcher.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/launcher.py) | Launch the same Streamlit app from a checkout, wheel or frozen bundle. | `windows_instance`, `application_root`, `default_home`, `prepare_runtime`, `main` |
 
 ## Static parsing and identity
@@ -80,12 +80,14 @@ python scripts/docs/inventory.py --check
 | `src/dataforge/parsers/sql_databricks_relations.py` **new** | Bind Databricks LATERAL VIEW and PIVOT outputs to their original SQL AST. | `GeneratorBinding`, `PivotOutput`, `PivotBinding`, `generator_bindings`, `visible_generators`, `pivot_bindings`, `pivot_group_names`, `usage_scope_mapping` |
 | [`src/dataforge/parsers/sql_transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/parsers/sql_transformations.py) | Conservative, scope-preserving SQL transformation facts with original evidence. | `identifier`, `relation`, `is_recursive_self_reference`, `extract_transformations` |
 | [`src/dataforge/schemas.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/schemas.py) | Reconcile explicit DDL without assuming runtime order or discovering a database schema. | `sas_stack_columns`, `query_output_layouts`, `collect_query_layouts`, `collect_schemas` |
-| [`src/dataforge/services.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/services.py) | Inventory-to-lineage analysis, transactional materialization and direct usage reports. | `PARSER_VERSION`, `analysis_is_current`, `export_lineage_excel`, `analyze`, `explicit_source_dialect`, `source_dialect`, `set_source_dialect`, `prepare_analysis_results`, `retained_publication_results`, `publish_analysis_results`, `column_report`, `column_usage_coverage`, `column_names`, `compare_runs`, `restore_manual_ai_results` |
+| [`src/dataforge/services.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/services.py) | Inventory-to-lineage analysis, transactional materialization and direct usage reports. | `PARSER_VERSION`, `run_sql_example`, `analysis_is_current`, `export_lineage_excel`, `analyze`, `explicit_source_dialect`, `source_dialect`, `set_source_dialect`, `source_inventory_rows`, `prepare_analysis_results`, `retained_publication_results`, `publish_analysis_results`, `column_report`, `filter_column_report`, `column_usage_coverage`, `column_names`, `compare_runs`, `restore_manual_ai_results` |
 
 ## Storage and configuration
 
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
+| `src/dataforge/builder_images.py` **new** | Fitted offline exports of authored table cards and column relationships. | `export_builder_graph` |
+| `src/dataforge/builder_rendering.py` **new** | Offline SVG authoring canvas; the same renderer powers HTML presentations. | `builder_node_colors`, `COLUMN_BODY`, `BODY`, `CSS`, `COLUMN_JS`, `TRACE_JS`, `JS`, `builder_html` |
 | [`src/dataforge/cleanup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/cleanup.py) | Previewed, dependency-aware runtime cleanup. No caller-supplied SQL or paths. | `GRAPH`, `WORKSPACE_TABLES`, `CATEGORIES`, `checked_path`, `assert_idle`, `maintenance_guard`, `cleanup_plan`, `apply_cleanup` |
 | `src/dataforge/column_evidence.py` **new** | Validated, lazy source resolution for the local column lineage inspector. | `load_column_evidence` |
 | `src/dataforge/column_graph.py` **new** | Pure, bounded column-trace scenes for the local interactive graph. | `build_column_scene` |
@@ -111,10 +113,10 @@ python scripts/docs/inventory.py --check
 | --- | --- | --- |
 | [`src/dataforge/artifacts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/artifacts.py) | Managed, version-bound artifacts with bounded binary retrieval and read-time authorization. | `READS`, `WRITES`, `FORMATS`, `SOURCE_KINDS`, `MAX_BYTES`, `Selection`, `write_artifact`, `ArtifactOperations` |
 | [`src/dataforge/excel_exports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/excel_exports.py) | Bounded, literal-text XLSX reports over the shared ordered path contract. | `XLSX_MIME`, `STEP_COLUMNS`, `MAX_RELATIONSHIPS`, `MAX_EVIDENCE`, `MAX_TEXT_BYTES`, `MAX_WORKBOOK_BYTES`, `MAX_SECONDS`, `STEP_HEADERS`, `EVIDENCE_HEADERS`, `COVERAGE`, `lineage_xlsx` |
-| [`src/dataforge/exports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/exports.py) | Portable reports and an offline, dependency-free interactive SVG graph. | `path_rows`, `COPY_JS`, `GRAPH_CSS`, `SVG_PAN_JS`, `GRAPH_JS`, `GRAPH_BODY`, `graph_data`, `graph_html`, `report_csv`, `report_html`, `source_bundle` |
+| [`src/dataforge/exports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/exports.py) | Portable reports and an offline, dependency-free interactive SVG graph. | `path_rows`, `COPY_JS`, `GRAPH_CSS`, `SVG_PAN_JS`, `GRAPH_JS`, `GRAPH_BODY`, `graph_data`, `graph_html`, `report_csv`, `column_trace_csv`, `report_html`, `source_bundle` |
 | [`src/dataforge/graph.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/graph.py) | Cycle-safe traversal and evidence-preserving temporary contraction. | `LineageGraph` |
 | [`src/dataforge/graph_image_service.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/graph_image_service.py) | Snapshot and disclose the same filtered graph for UI and automation images. | `export_graph_image` |
-| [`src/dataforge/graph_images.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/graph_images.py) | Inert, fitted graph images from the browser's scene. No source text or resources. | `SVG_NS`, `RENDER_SLOTS`, `ImageOptions`, `png_available`, `safe_image_filename`, `render_graph_image` |
+| [`src/dataforge/graph_images.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/graph_images.py) | Inert, fitted graph images from the browser's scene. No source text or resources. | `SVG_NS`, `RENDER_SLOTS`, `ImageOptions`, `png_available`, `safe_image_filename`, `render_graph_image`, `render_svg_png` |
 | [`src/dataforge/image_worker.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/image_worker.py) | Private disposable raster worker. Input is constructed internally, never uploaded SVG. | `main` |
 | [`src/dataforge/reporting.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/reporting.py) | Shared stored-fact inventory, history, dictionary, schema and health reports. | `READS`, `data_dictionary`, `workspace_health`, `validate_lineage_evidence`, `code_matches`, `ReportOperations` |
 | [`src/dataforge/transformations.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/transformations.py) | Scoped static column derivations and bounded traversal, shared by every interface. | `ROW_ROLES`, `IN_PLACE`, `TRANSPOSE_SCOPE`, `CONTROL_ROLES`, `STATUSES`, `INSERT_MAPPING_GAPS`, `materialize_columns`, `column_catalog`, `final_column_names`, `table_column_links`, `trace_columns` |
@@ -133,7 +135,7 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/ai_context.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_context.py) | Offline immutable project context; no provider calls or parser answer injection. | `SourceSnapshot`, `plan_file_parts`, `PreparedAnalysis`, `prepare_analysis`, `inventory_revision`, `AIExecutionContext` |
 | [`src/dataforge/ai_context_index.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_context_index.py) | AI-only, run-local definition lookup rebuilt from pinned source and results. | `IDENTIFIER`, `referenced_asset_names`, `ContextIndex`, `ContextSelection`, `build_context_index`, `context_for_part`, `restore_part_context`, `CompletionWork`, `plan_context_completion` |
 | [`src/dataforge/ai_extraction_recovery.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_extraction_recovery.py) | Small extraction-specific helpers; durable state lives in the existing run journal. | `recovery_wait`, `validation_failure`, `response_metadata`, `split_truncated_part` |
-| [`src/dataforge/ai_inspection.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_inspection.py) | Bounded, redacted transport artifacts separate from progress/checkpoint rows. | `MAX_ARTIFACT_BYTES`, `MAX_RUN_BYTES`, `RETENTION_SECONDS`, `KINDS`, `INSPECTION_SCHEMA`, `cleanup_payloads`, `capture_payload`, `load_replayable_response`, `inspection_items`, `inspection_payload` |
+| [`src/dataforge/ai_inspection.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_inspection.py) | Bounded, redacted transport artifacts separate from progress/checkpoint rows. | `MAX_ARTIFACT_BYTES`, `MAX_RUN_BYTES`, `RETENTION_SECONDS`, `KINDS`, `INSPECTION_SCHEMA`, `cleanup_payloads`, `capture_payload`, `load_replayable_response`, `inspection_items`, `inspection_payload`, `inspection_diagnostics` |
 | [`src/dataforge/ai_linking.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_linking.py) | Deterministic linking over validated checkpoints, with explicit ambiguous writers. | `build_operation_graph`, `UpstreamSlice`, `upstream_operations`, `LinkedAnalysis`, `link_file_extractions`, `to_publication_results`, `link_stored_facts` |
 | [`src/dataforge/ai_pipeline_store.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_pipeline_store.py) | Coordinator-owned durable requests; no provider credentials or copied source. | `PIPELINE_SCHEMA`, `save_request`, `begin_attempt`, `finish_attempt`, `attempt_totals`, `reported_totals`, `recover_pipeline`, `batch_attempts` |
 | [`src/dataforge/ai_rate_limits.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/ai_rate_limits.py) | Provider feedback is advisory; request slots, token quotas and capacity differ. | `normalize_rate_limits`, `retry_delay` |
@@ -151,7 +153,7 @@ python scripts/docs/inventory.py --check
 | [`src/dataforge/llm_resources.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/llm_resources.py) | Process-local request admission and offline, original-coordinate context chunks. | `block_requests_for_maintenance`, `has_active_requests`, `request_slot`, `context_chunks` |
 | [`src/dataforge/model_capabilities.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/model_capabilities.py) | Allowlisted provider capacity metadata, separate from disclosure and usage limits. | `IDENTITY_FIELDS`, `CAPABILITY_MAX_AGE`, `ModelCapabilities`, `ModelDescriptor`, `capability_identity`, `bind_capabilities`, `execution_profile`, `runtime_profile`, `normalize_model`, `merge_descriptors` |
 | [`src/dataforge/project_analysis.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/project_analysis.py) | Permission-gated project build adapters; all engines share analysis_service. | `READS`, `WRITES`, `ProjectAnalysisOperations` |
-| [`src/dataforge/provider_service.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/provider_service.py) | Profile/routing operations with launch-bound references and recipient origins. | `READS`, `WRITES`, `origin`, `Routing`, `get_profile`, `save_profile`, `save_routing`, `authorize_provider`, `ProviderOperations` |
+| [`src/dataforge/provider_service.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/provider_service.py) | Profile/routing operations with launch-bound references and recipient origins. | `READS`, `WRITES`, `origin`, `Routing`, `DraftProvider`, `get_profile`, `provider_target`, `save_profile`, `save_routing`, `load_routing`, `remove_profile`, `authorize_provider`, `ProviderOperations` |
 | [`src/dataforge/tokenizer_assets/README.md`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/tokenizer_assets/README.md) | Repository configuration, packaging input or resource; inspect source for exact values. | — |
 | [`src/dataforge/tokenizer_assets/o200k_base.tiktoken`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/tokenizer_assets/o200k_base.tiktoken) | Bundled tokenizer rank data for offline token accounting. | — |
 
@@ -194,8 +196,10 @@ python scripts/docs/inventory.py --check
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
 | [`src/dataforge/agent/__init__.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/__init__.py) | Presentation-free automation interfaces; imported sources are always data. | — |
+| `src/dataforge/agent/builder.py` **new** | Authorized workspace operations for authored lineage documents and snapshots. | `READS`, `WRITES`, `SOURCE_ACTIONS`, `SCHEMA_FORMATS`, `DOCUMENT_FORMATS`, `SCHEMA_EXTENSIONS`, `MIB`, `BuilderOperations` |
 | [`src/dataforge/agent/capabilities.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/capabilities.py) | Versioned explicit UI parity catalog. Restrictions are not operational parity claims. | `INVENTORY`, `capability_catalog` |
 | [`src/dataforge/agent/cli_ai.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_ai.py) | Explicit provider and AI CLI commands. Credentials use hidden per-call input only. | `register` |
+| `src/dataforge/agent/cli_builder.py` **new** | CLI commands for authoring and exporting revision-bound Builder documents. | `register` |
 | [`src/dataforge/agent/cli_dbt.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_dbt.py) | Thin dbt catalog CLI adapters. | `register` |
 | `src/dataforge/agent/cli_migration.py` **new** | CLI adapters for revision-pinned migration workflows. | `ArtifactAnchor`, `ImageFormat`, `register` |
 | [`src/dataforge/agent/cli_reports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/src/dataforge/agent/cli_reports.py) | Thin CLI adapters for stored inventory, engineering and history reports. | `register`, `register_maintenance` |
@@ -220,7 +224,7 @@ python scripts/docs/inventory.py --check
 | [`ui/analysis_sections.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/analysis_sections.py) | Lazy diagnostic investigation and run history; source and AI stay explicit. | `render_diagnostics`, `render_history` |
 | [`ui/assistance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/assistance.py) | Focused, user-triggered AI assistance over imported source evidence. | `render` |
 | [`ui/assistance_result.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/ui/assistance_result.py) | Durable AI result presentation shared by manual and diagnostic-assisted review. | `render_budget`, `render_result` |
-| `ui/builder_canvas.py` **new** | Offline SVG authoring canvas; the same renderer powers HTML presentations. | `builder_node_colors`, `COLUMN_BODY`, `BODY`, `CSS`, `COLUMN_JS`, `TRACE_JS`, `JS`, `column_editor`, `canvas`, `builder_html` |
+| `ui/builder_canvas.py` **new** | Streamlit adapters for the shared authored lineage canvas. | `column_editor`, `canvas` |
 | `ui/column_graph.py` **new** | Source-free selectable SVG column graph. | `resolve_selection`, `column_graph_view` |
 | `ui/column_lineage.py` **new** | Shared lineage controls and selection-driven graph inspection. | `render_column_lineage` |
 | `ui/column_references.py` **new** | No module docstring; inspect the linked source. | `render_column_references` |
@@ -425,7 +429,7 @@ python scripts/docs/inventory.py --check
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
 | [`tests/test_ai_adaptive_context.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_adaptive_context.py) | Lossless file ranges and output pressure replace source/context products. | 1 test functions |
-| [`tests/test_ai_analysis_access.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_access.py) | No module docstring; inspect the linked source. | 3 test functions |
+| [`tests/test_ai_analysis_access.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_access.py) | No module docstring; inspect the linked source. | 4 test functions |
 | [`tests/test_ai_analysis_evaluation.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_evaluation.py) | The evaluator counts errors and abstentions; it cannot certify mocks as live quality. | 4 test functions; helpers/constants: `install_mock_benchmark` |
 | [`tests/test_ai_analysis_jobs.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_jobs.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_ai_analysis_lifecycle_followup.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_ai_analysis_lifecycle_followup.py) | No module docstring; inspect the linked source. | 1 test functions |
@@ -491,6 +495,7 @@ python scripts/docs/inventory.py --check
 
 | File | Responsibility / module summary | Declared names / checks |
 | --- | --- | --- |
+| `tests/test_agent_builder.py` **new** | No module docstring; inspect the linked source. | 2 test functions; helpers/constants: `cli`, `artifact_bytes` |
 | [`tests/test_agent_cli.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_agent_cli.py) | No module docstring; inspect the linked source. | 2 test functions |
 | [`tests/test_agent_mcp.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_agent_mcp.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_agent_service.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_agent_service.py) | No module docstring; inspect the linked source. | 5 test functions; helpers/constants: `engine` |
@@ -500,7 +505,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_parity_contracts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_contracts.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_parity_coverage.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_coverage.py) | No module docstring; inspect the linked source. | 2 test functions |
 | [`tests/test_parity_maintenance.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_maintenance.py) | No module docstring; inspect the linked source. | 2 test functions |
-| [`tests/test_parity_providers.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_providers.py) | No module docstring; inspect the linked source. | 2 test functions |
+| [`tests/test_parity_providers.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_providers.py) | No module docstring; inspect the linked source. | 3 test functions |
 | [`tests/test_parity_reports.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_reports.py) | No module docstring; inspect the linked source. | 1 test functions |
 | [`tests/test_parity_settings.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_parity_settings.py) | No module docstring; inspect the linked source. | 4 test functions |
 
@@ -558,7 +563,7 @@ python scripts/docs/inventory.py --check
 | [`tests/test_first_test_review_budget.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_first_test_review_budget.py) | The reported first_test selection must not carry an entire unrelated estate. | 1 test functions; helpers/constants: `ARCHIVE`, `REPORTED_FILE` |
 | [`tests/test_image_artifacts.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_image_artifacts.py) | Shared UI/CLI/MCP image scope, authorization and artifact contracts. | 5 test functions; helpers/constants: `workspace`, `read` |
 | [`tests/test_inventory_controls.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_inventory_controls.py) | No module docstring; inspect the linked source. | 1 test functions |
-| `tests/test_local_credentials.py` **new** | No module docstring; inspect the linked source. | 5 test functions; helpers/constants: `FakeBackend`, `vault`, `profile`, `saved_profile` |
+| `tests/test_local_credentials.py` **new** | No module docstring; inspect the linked source. | 6 test functions; helpers/constants: `FakeBackend`, `vault`, `profile`, `saved_profile` |
 | [`tests/test_logging.py`](https://github.com/SahasilAK/GraveTrail/blob/1864dc8887ac8342a8ef8b369cc8a2e8b5d2e414/tests/test_logging.py) | No module docstring; inspect the linked source. | 1 test functions |
 | `tests/test_migration.py` **new** | No module docstring; inspect the linked source. | 30 test functions |
 | `tests/test_migration_agent.py` **new** | CLI and MCP migration parity across one pinned workspace and revision. | 4 test functions |

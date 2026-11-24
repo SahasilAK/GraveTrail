@@ -106,10 +106,10 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `connect_runtime_reference` | `profile_id`, `workspace_id` | `options` |
 | `create_migration_project` | `expected_pin`, `name`, `workspace_id` | `setup` |
 | `create_workspace` | `name` | `description` |
-| `discover_provider_models` | `profile_id`, `workspace_id` | `options` |
+| `discover_provider_models` | `workspace_id` | `draft_profile`, `options`, `profile_id` |
 | `export_ai_result` | `record_id`, `workspace_id` | `options` |
 | `export_dependency_paths` | `asset`, `workspace_id` | `direction`, `format`, `include_evidence`, `include_source_text`, `max_paths`, `options` |
-| `export_graph` | `asset`, `workspace_id` | `background`, `direction`, `format`, `legend`, `options`, `scale`, `title` |
+| `export_graph` | `workspace_id` | `all_assets`, `asset`, `background`, `direction`, `format`, `legend`, `options`, `scale`, `title` |
 | `export_migration_bundle` | `project_id`, `revision_id`, `workspace_id` | `image_format`, `include_sources`, `pilot`, `reviewed`, `workbook` |
 | `export_original_source` | `file_id`, `workspace_id` | `content_hash`, `options` |
 | `export_report` | `format`, `kind`, `selection`, `workspace_id` | `options` |
@@ -126,37 +126,37 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `get_asset_schema` | `asset`, `workspace_id` | `options` |
 | `get_capabilities` | — | `options`, `workspace_id` |
 | `get_column_lineage` | `asset`, `column`, `workspace_id` | `direction`, `options`, `status` |
-| `get_column_usage` | `asset`, `workspace_id` | `column_query`, `file_id`, `group_by`, `options`, `usage_type` |
+| `get_column_usage` | `asset`, `workspace_id` | `column_query`, `file_id`, `group_by`, `options`, `usage_type`, `view` |
 | `get_data_dictionary` | `workspace_id` | `options`, `query` |
 | `get_dependency_paths` | `asset`, `workspace_id` | `direction`, `max_paths`, `options` |
 | `get_export` | `workspace_id` | `artifact_id`, `format`, `length`, `offset`, `options`, `result_id` |
-| `get_graph_data` | `asset`, `workspace_id` | `direction`, `edge_id`, `node_id`, `options`, `view` |
+| `get_graph_data` | `workspace_id` | `all_assets`, `asset`, `direction`, `edge_id`, `node_id`, `options`, `view` |
 | `get_ingestion_run` | `ingestion_id`, `workspace_id` | `options` |
 | `get_job_status` | `job_id`, `workspace_id` | `options` |
 | `get_lineage` | `asset`, `workspace_id` | `direction`, `options` |
 | `get_lineage_batch` | `assets`, `workspace_id` | `direction`, `options` |
-| `get_lineage_steps` | `asset`, `workspace_id` | `direction`, `options` |
+| `get_lineage_steps` | `workspace_id` | `all_assets`, `asset`, `direction`, `options` |
 | `get_model_routing` | `workspace_id` | `options` |
 | `get_project_analysis_report` | `workspace_id` | `options`, `run_id` |
 | `get_provider_profile` | `profile_id`, `workspace_id` | `options` |
 | `get_runtime_connection_status` | `profile_id`, `workspace_id` | `options` |
 | `get_runtime_info` | — | `options`, `workspace_id` |
 | `get_settings_schema` | `workspace_id` | `section` |
-| `get_source_evidence` | `workspace_id` | `end_line`, `file_id`, `full`, `operation_id`, `options`, `start_line`, `statement_id` |
+| `get_source_evidence` | `workspace_id` | `content_hash`, `end_line`, `file_id`, `full`, `operation_id`, `options`, `start_line`, `statement_id` |
 | `get_source_metadata` | `file_id`, `workspace_id` | `options` |
 | `get_transformation_columns` | `asset`, `workspace_id` | `options` |
 | `get_workspace_health` | `workspace_id` | `options` |
 | `get_workspace_settings` | `section`, `workspace_id` | — |
 | `get_workspace_summary` | `workspace_id` | — |
 | `import_workspace_configuration` | `configuration` | — |
-| `ingest_sources` | `extensions`, `path`, `workspace_id` | `source_kind`, `dbt_options`, `sql_dialect` |
+| `ingest_sources` | `extensions`, `path`, `workspace_id` | `dbt_options`, `files`, `source_kind`, `sql_dialect` |
 | `list_dbt_projects` | `workspace_id` | `options` |
 | `list_dbt_resources` | `workspace_id` | `project_id`, `resource_types`, `options` |
 | `get_dbt_resource` | `workspace_id`, `resource_id` | `options` |
 | `trace_dbt_dependencies` | `workspace_id`, `resource_id` | `direction`, `relationship_kinds`, `max_depth`, `options` |
 | `inspect_cleanup` | `workspace_id` | — |
 | `inspect_database_maintenance` | — | `options` |
-| `inspect_migration_revision` | `project_id`, `workspace_id` | `anchor`, `item`, `offset`, `options`, `revision_id`, `view` |
+| `inspect_migration_revision` | `project_id`, `workspace_id` | `anchor`, `finding`, `item`, `line`, `offset`, `options`, `revision_id`, `view` |
 | `list_ai_results` | `workspace_id` | `options` |
 | `list_analysis_runs` | `workspace_id` | `options` |
 | `list_history_archives` | `workspace_id` | `options` |
@@ -184,20 +184,37 @@ against actual SDK registrations by `tests/test_documentation.py`.
 | `request_ai_assistance` | `expected_hash`, `file_id`, `first`, `last`, `task`, `workspace_id` | `expected_job`, `options`; `expected_request` |
 | `request_diagnostic_review` | `diagnostic_id`, `expected_hash`, `first`, `last`, `workspace_id` | `expected_job`, `options`; `expected_request` |
 | `request_migration_ai` | `expected_pin`, `models`, `profile_id`, `project_id`, `purpose`, `revision_id`, `workspace_id` | `dependencies`, `message`, `options` |
-| `run_migration_stage` | `expected_pin`, `profile_id`, `project_id`, `revision_id`, `source_id`, `stage`, `workspace_id` | `feedback`, `options`, `static_reference` |
+| `run_migration_stage` | `expected_pin`, `profile_id`, `project_id`, `revision_id`, `source_id`, `stage`, `workspace_id` | `background`, `feedback`, `options`, `static_reference` |
 | `save_provider_profile` | `expected_revision`, `profile`, `workspace_id` | `options`, `profile_id` |
 | `search_assets` | `workspace_id` | `options`, `query` |
 | `search_source_code` | `workspace_id` | `include_matches`, `options`, `query` |
 | `start_lineage_analysis` | `workspace_id` | `file_ids`, `force`, `max_output_tokens_total`, `mode`, `output_share`, `input_token_limit`, `output_token_limit`, `resume_run_id`, `retry_unknown` | Shared static/AI analysis service |
 | `start_migration_conversion` | `expected_revision`, `project_id`, `workspace_id` | `plan_only`, `reconvert` |
 | `test_local_agent_access` | `workspace_id` | `options` |
-| `test_provider_connection` | `profile_id`, `workspace_id` | `options` |
+| `test_provider_connection` | `workspace_id` | `draft_profile`, `options`, `profile_id` |
 | `update_application_logging` | `level` | `options` |
 | `update_migration_revision` | `arguments`, `operation`, `project_id`, `revision_id`, `workspace_id` | — |
 | `update_model_routing` | `expected_revision`, `values`, `workspace_id` | `options` |
 | `update_workspace` | `description`, `expected_revision`, `name`, `workspace_id` | — |
 | `update_workspace_settings` | `expected_revision`, `section`, `values`, `workspace_id` | — |
 | `validate_stored_lineage` | `workspace_id` | `options` |
+| `apply_builder_document` | `expected_revision`, `workspace_id` | `document`, `path` |
+| `export_builder` | `workspace_id` | `format`, `kind`, `role`, `table_ids`, `work_id` |
+| `get_project_analysis_attempt_content` | `attempt_id`, `run_id`, `workspace_id` | `kind`, `length`, `offset`, `options` |
+| `import_builder_schemas` | `expected_pin`, `paths`, `workspace_id` | `dialect` |
+| `import_builder_snapshot` | `name`, `workspace_id` | `document`, `path` |
+| `inspect_builder` | `workspace_id` | `options`, `table_id`, `view`, `work_id` |
+| `inspect_provider_model` | `workspace_id` | `draft_profile`, `model`, `options`, `profile_id` |
+| `list_project_analysis_attempts` | `run_id`, `workspace_id` | `offset`, `options` |
+| `list_project_analysis_runs` | `workspace_id` | `options` |
+| `list_source_files` | `workspace_id` | `options`, `query` |
+| `load_builder_snapshot` | `expected_revision`, `work_id`, `workspace_id` | — |
+| `preview_builder_schema_import` | `paths`, `workspace_id` | `dialect`, `options` |
+| `preview_builder_table_deletion` | `table_ids`, `workspace_id` | `options` |
+| `reset_provider_profile_limits` | `expected_revision`, `profile_id`, `workspace_id` | `options` |
+| `save_builder_snapshot` | `expected_revision`, `workspace_id` | `clear`, `name`, `work_id` |
+| `start_sql_example` | `workspace_id` | — |
+| `update_source_dialect` | `file_id`, `workspace_id` | `sql_dialect` |
 <!-- mcp-tools:end -->
 
 `options` accepts `detail_level`, `limit`, `cursor`, `max_depth`, `max_items`,
@@ -279,7 +296,7 @@ artifact metadata, safe filename, revision, counts and warnings. Retrieve the wo
 with bounded `get_export(artifact_id=..., offset=..., length=...)` reads. See the
 [Excel workflow and limits](USER_GUIDE.md) for coverage, continuation and failure behavior.
 
-Maintenance is read-only: preview_history_archive, list_history_archives, preview_staging_cleanup, list_staging_recoveries; inspect_database_maintenance/list_runtime_backups require unrestricted --allow-application-config and expose metadata only. preview_cleanup includes shared cache/orphan/application metadata only with that explicit scope and returns requires_local_ui. No MCP cleanup/restore/checkpoint/backup/download mutation exists. Reading settings/recovery lists never starts automatic cleanup. HTTP remains workspace-scoped, so whole-home metadata is unavailable there.
+The history, staging and shared-storage maintenance tools are read-only. `inspect_database_maintenance` and `list_runtime_backups` require unrestricted `--allow-application-config` and return metadata only. `preview_cleanup` returns shared cache, orphan, and application metadata with that explicit scope and marks apply as `requires_local_admin`. Use the guarded local CLI for cleanup, restore, checkpoint, and backup operations. HTTP remains workspace-scoped.
 
 Application/setup tools: list_theme_presets, get_application_theme, apply_application_theme, get_application_logging, update_application_logging, get_runtime_info, get_agent_setup, test_local_agent_access. Application writes require unrestricted write/config/application startup authority; a workspace-scoped HTTP launch cannot perform them. Loaded Streamlit theme state is unavailable to this owner; no automatic restart/refresh. Setup reports credential-free examples and actual schemas; local handler self-test explicitly does not establish external connectivity.
 
@@ -322,6 +339,40 @@ with unresolved required work can resume to retry only those items; completed
 checkpoints and cumulative reservations are retained.
 
 Focused AI previews return budget diagnostics and `request_fingerprint`. Pass it as `expected_request` to either request tool to bind dispatch to that exact prepared selection/profile/context. Both request tools share source-backed resource proposals and explicit `merge_ai_claims` acceptance; advisory tasks cannot merge.
+
+## Source, graph and Builder tools
+
+`start_sql_example` loads the bundled SQL example into an empty source inventory and returns
+a job ID. Use `get_job_status` to retrieve the starting asset for exploration.
+`ingest_sources` accepts one file or a first file plus additional paths in `files`.
+Import paths must be under an approved root.
+
+Set `all_assets` on graph and lineage-step tools to inspect a whole workspace.
+For a whole-workspace source bundle, set it in the export selection. Use
+`export_report` with kind `column-lineage`, an asset, and a column for a trace artifact.
+`get_source_evidence` accepts a retained `content_hash` for historical source reads.
+Use `get_graph_data` with `view: "columns"` or `view: "column-links"` for the
+graph's column overlay. Use `get_column_usage` with `view: "used"` or
+`view: "unused"` for coverage-aware name lists.
+
+`list_project_analysis_runs` lists AI analysis runs. `list_project_analysis_attempts`
+lists planned and dispatched work. Use `get_project_analysis_attempt_content` to page
+through the retained input, output, decoded response, or diagnostics with source access.
+
+`inspect_builder` lists tables, columns, links, folders, or named work. Use the revision
+from inspection with `apply_builder_document` to save an edited document or
+`load_builder_snapshot` to restore a saved one. Use
+`preview_builder_schema_import` and its pin with `import_builder_schemas` for
+schema files under an approved import root. `export_builder` creates a managed
+document, diagram, or schema artifact. Retrieve it with `get_export`.
+Use `update_source_dialect` to update a retained SQL file's parsing override or remove
+the override by omitting the dialect.
+
+Tools for inspecting or testing providers accept a saved profile or an unsaved draft.
+They apply the same origin and credential-reference checks. Native credential persistence
+and destructive shared-storage cleanup use local-admin CLI commands.
+`reset_provider_profile_limits` applies recommendations to a saved profile without
+contacting the provider.
 
 ## Migration tools
 
@@ -373,6 +424,9 @@ For guided AI migration, use `plan_only: true` with `start_migration_conversion`
 IDs with `inspect_migration_revision` and `view: "workflow"`. Each file goes through `convert`,
 `validate`, and `optimize`. Call `preview_migration_stage` for each disclosure, then pass its
 pin to `run_migration_stage`. Use `static_reference` during conversion to include a static draft.
+Set `background: true` to get a cancellable job. Preview again after a partial stage result.
+Use `view: "lineage_comparison"` for missing and extra edges. The artifact view accepts a
+line or finding ID for focused evidence. `preview_migration_edit` also accepts `mapping_csv`.
 Use `update_migration_revision` with `skip_optimization` and `source_id` to continue directly to
 review. Inspect the workflow with the source ID in `item` to see the staged diff and apply pin.
 Use `apply_source_draft` with `source_id` and `expected_pin` to apply it. The export's

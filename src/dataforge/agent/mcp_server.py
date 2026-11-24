@@ -14,6 +14,7 @@ from pydantic import Field
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from dataforge.agent.builder import BuilderFormat, BuilderKind, BuilderRole, BuilderView
 from dataforge.agent.contracts import AccessPolicy, AgentError, QueryOptions, compact
 from dataforge.agent.migration import (
     MigrationChange,
@@ -24,6 +25,7 @@ from dataforge.agent.migration import (
 )
 from dataforge.agent.service import AgentService
 from dataforge.connections import current_connections
+from dataforge.lineage_builder import BuilderDocument
 
 MigrationName = Annotated[str, Field(min_length=1, max_length=160)]
 MigrationID = Annotated[str, Field(min_length=1, max_length=256)]
@@ -126,16 +128,91 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         """Get stored counts and analysis freshness."""
         return await call("summary", workspace_id)
 
+    @server.tool(annotations=read)
+    async def inspect_builder(workspace_id: str, view: BuilderView = 'tables', work_id: str = '',
+                              table_id: str = '', options: QueryOptions | None = None) -> CallToolResult:
+        """Page through tables, columns, links, folders or named works; return the revision for writes."""
+        return await call('builder_inspect', workspace_id, options, view=view, work_id=work_id, table_id=table_id)
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
+    async def apply_builder_document(workspace_id: str, expected_revision: int,
+                                     document: BuilderDocument | None = None, path: str = '') -> CallToolResult:
+        """Apply an editable Builder document or approved JSON file at the expected current revision."""
+        return await call('builder_apply', workspace_id, expected_revision=expected_revision,
+                          document=document.model_dump() if document is not None else None, path=path)
+
+    @server.tool(annotations=read)
+    async def preview_builder_schema_import(workspace_id: str, paths: list[str], dialect: str | None = None,
+                                            options: QueryOptions | None = None) -> CallToolResult:
+        """Preview declared schemas from approved files and return a confirmation pin."""
+        return await call('builder_schema_preview', workspace_id, options, paths=paths, dialect=dialect)
+
+    @server.tool(annotations=write)
+    async def import_builder_schemas(workspace_id: str, paths: list[str], expected_pin: str,
+                                      dialect: str | None = None) -> CallToolResult:
+        """Add the previewed schema batch to the workspace catalog without placing tables on the canvas."""
+        return await call('builder_schema_import', workspace_id, paths=paths, expected_pin=expected_pin, dialect=dialect)
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
+    async def save_builder_snapshot(workspace_id: str, expected_revision: int, name: str = '',
+                                     work_id: str = '', clear: bool = False) -> CallToolResult:
+        """Save a named work, update one by ID, or take a snapshot and clear the active canvas."""
+        return await call('builder_work_save', workspace_id, expected_revision=expected_revision, name=name,
+                          work_id=work_id, clear=clear)
+
+    @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=False))
+    async def load_builder_snapshot(workspace_id: str, work_id: str, expected_revision: int) -> CallToolResult:
+        """Load a named work while retaining other workspace schemas."""
+        return await call('builder_work_load', workspace_id, expected_revision=expected_revision, work_id=work_id)
+
+    @server.tool(annotations=write)
+    async def import_builder_snapshot(workspace_id: str, name: str, document: BuilderDocument | None = None,
+                                       path: str = '') -> CallToolResult:
+        """Import editable Builder JSON as a separate named work without changing the active document."""
+        return await call('builder_work_import', workspace_id, name=name,
+                          document=document.model_dump() if document is not None else None, path=path)
+
+    @server.tool(annotations=write)
+    async def export_builder(workspace_id: str, kind: BuilderKind = 'document', format: BuilderFormat = 'json',
+                             work_id: str = '', table_ids: list[str] | None = None,
+                             role: BuilderRole | None = None) -> CallToolResult:
+        """Write a Builder design or schema export. Retrieve its bytes through get_export."""
+        return await call('builder_export', workspace_id, kind=kind, format=format, work_id=work_id,
+                          table_ids=table_ids, role=role)
+
+    @server.tool(annotations=read)
+    async def preview_builder_table_deletion(workspace_id: str, table_ids: list[str],
+                                             options: QueryOptions | None = None) -> CallToolResult:
+        """Preview removal and report its revision. Apply through the local administrator CLI or UI."""
+        return await call('builder_delete_preview', workspace_id, options, table_ids=table_ids)
+
+    @server.tool(annotations=write)
+    async def update_source_dialect(workspace_id: str, file_id: str, sql_dialect: str | None = None) -> CallToolResult:
+        """Set one imported SQL file's dialect. Null uses workspace settings and empty means Generic SQL."""
+        return await call('source_dialect_update', workspace_id, file_id=file_id, sql_dialect=sql_dialect)
+
+    @server.tool(annotations=read)
+    async def list_source_files(workspace_id: str, query: str = '',
+                                options: QueryOptions | None = None) -> CallToolResult:
+        """List inventory file metadata and SQL dialects, filtered by path or parsing status."""
+        return await call('files', workspace_id, options, query=query)
+
+    @server.tool(annotations=write)
+    async def start_sql_example(workspace_id: str) -> CallToolResult:
+        """Queue static lineage analysis of the bundled SQL example in an empty workspace."""
+        return await call("workspace_example", workspace_id)
+
     @server.tool(annotations=write)
     async def ingest_sources(workspace_id: str, path: str, extensions: list[Literal["sql", "sas", "csv"]],
                              source_kind: Literal['files', 'dbt'] = 'files', dbt_options: dict | None = None,
-                             sql_dialect: str | None = None) -> CallToolResult:
-        """Start a directory/ZIP import and return its job_id.
+                             sql_dialect: str | None = None, files: list[str] | None = None) -> CallToolResult:
+        """Start a directory, ZIP or selected source-file import and return its job_id.
 
+        For selected files, path is the first file and files contains any additional files.
         sql_dialect is an optional SQLGlot key for SQL files. An empty string selects Generic SQL.
         """
         return await call("ingest", workspace_id, path=path, extensions=extensions,
-                          source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect)
+                          source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect, files=files)
 
     @server.tool(annotations=read)
     async def list_dbt_projects(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
@@ -217,9 +294,11 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call("batch", workspace_id, options, assets=assets, direction=direction)
 
     @server.tool(annotations=read)
-    async def get_column_usage(workspace_id: str, asset: str, column_query: str = "", usage_type: str = "", file_id: str = "", group_by: str = "none", options: QueryOptions | None = None) -> CallToolResult:
-        """Get persisted direct column usage with optional evidence."""
-        return await call("columns", workspace_id, options, asset=asset, column_query=column_query, usage_type=usage_type, file_id=file_id, group_by=group_by)
+    async def get_column_usage(workspace_id: str, asset: str, column_query: str = "", usage_type: str = "", file_id: str = "", group_by: str = "none",
+                               options: QueryOptions | None = None, view: Literal['references', 'used', 'unused'] = 'references') -> CallToolResult:
+        """Get direct references or unfiltered used/unused names. Unused requires declared schema and complete coverage."""
+        return await call("columns", workspace_id, options, asset=asset, column_query=column_query,
+                          usage_type=usage_type, file_id=file_id, group_by=group_by, view=view)
 
     @server.tool(annotations=read)
     async def get_transformation_columns(workspace_id: str, asset: str,
@@ -240,10 +319,10 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
     async def get_source_evidence(workspace_id: str, file_id: str | None = None, statement_id: str | None = None,
                             operation_id: str | None = None, start_line: int | None = None,
                             end_line: int | None = None, full: bool = False,
-                            options: QueryOptions | None = None) -> CallToolResult:
-        """Explicitly retrieve a statement, operation or bounded file lines; full code opt-in."""
+                            options: QueryOptions | None = None, content_hash: str = '') -> CallToolResult:
+        """Read a statement, operation or bounded current or retained file lines; full code opt-in."""
         return await call("source", workspace_id, options, file_id=file_id, statement_id=statement_id,
-                    operation_id=operation_id, start_line=start_line, end_line=end_line, full=full)
+                    operation_id=operation_id, start_line=start_line, end_line=end_line, full=full, content_hash=content_hash)
 
     @server.tool(annotations=read)
     async def search_source_code(workspace_id: str, query: str = "", include_matches: bool = False, options: QueryOptions | None = None) -> CallToolResult:
@@ -332,6 +411,13 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call('provider_save', workspace_id, options, profile=profile, expected_revision=expected_revision, profile_id=profile_id)
 
     @server.tool(annotations=write)
+    async def reset_provider_profile_limits(workspace_id: str, profile_id: str, expected_revision: str,
+                                            options: QueryOptions | None = None) -> CallToolResult:
+        """Save automatic output and context limits using the profile's model capacity. Runs offline."""
+        return await call('provider_reset_limits', workspace_id, options, profile_id=profile_id,
+                          expected_revision=expected_revision)
+
+    @server.tool(annotations=write)
     async def remove_provider_profile(workspace_id: str, profile_id: str, expected_revision: str, options: QueryOptions | None = None) -> CallToolResult:
         """remove provider profile; requires independent launch grants. Never supply raw credentials."""
         return await call('provider_remove', workspace_id, options, profile_id=profile_id, expected_revision=expected_revision)
@@ -362,14 +448,23 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call('runtime_clear', workspace_id, options, profile_id=profile_id)
 
     @server.tool(annotations=network)
-    async def discover_provider_models(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
-        """discover provider models; requires independent launch grants. Never supply raw credentials."""
-        return await call('provider_models', workspace_id, options, profile_id=profile_id)
+    async def discover_provider_models(workspace_id: str, profile_id: str = '', options: QueryOptions | None = None,
+                                       draft_profile: dict[str, Any] | None = None) -> CallToolResult:
+        """Discover models for one saved profile ID or an unsaved draft. Use approved named references only."""
+        return await call('provider_models', workspace_id, options, profile_id=profile_id, draft_profile=draft_profile)
 
     @server.tool(annotations=network)
-    async def test_provider_connection(workspace_id: str, profile_id: str, options: QueryOptions | None = None) -> CallToolResult:
-        """test provider connection; requires independent launch grants. Never supply raw credentials."""
-        return await call('provider_test', workspace_id, options, profile_id=profile_id)
+    async def inspect_provider_model(workspace_id: str, profile_id: str = '', model: Annotated[str, Field(max_length=250)] = '',
+                                     options: QueryOptions | None = None, draft_profile: dict[str, Any] | None = None) -> CallToolResult:
+        """Inspect one model's advertised capacity against a saved profile or an unsaved draft."""
+        return await call('provider_model_details', workspace_id, options, profile_id=profile_id, model=model,
+                          draft_profile=draft_profile)
+
+    @server.tool(annotations=network)
+    async def test_provider_connection(workspace_id: str, profile_id: str = '', options: QueryOptions | None = None,
+                                       draft_profile: dict[str, Any] | None = None) -> CallToolResult:
+        """Test the model in a saved profile or unsaved draft. Use approved named references only."""
+        return await call('provider_test', workspace_id, options, profile_id=profile_id, draft_profile=draft_profile)
 
     @server.tool(annotations=read)
     async def preview_ai_chunks(workspace_id: str, file_id: str, first: int, last: int, task: str, options: QueryOptions | None = None) -> CallToolResult:
@@ -472,22 +567,46 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call('paths', workspace_id, options, asset=asset, direction=direction, max_paths=max_paths)
 
     @server.tool(annotations=read)
-    async def get_lineage_steps(workspace_id: str, asset: str, direction: str = "upstream", options: QueryOptions | None = None) -> CallToolResult:
-        """get lineage steps; bounded logical dependencies, not runtime execution order."""
-        return await call('steps', workspace_id, options, asset=asset, direction=direction)
+    async def list_project_analysis_runs(workspace_id: str, options: QueryOptions | None = None) -> CallToolResult:
+        """List stored project AI analysis runs, including incomplete ones."""
+        return await call('analysis_runs', workspace_id, options)
 
     @server.tool(annotations=read)
-    async def get_graph_data(workspace_id: str, asset: str, direction: str = "upstream", view: str = "nodes", node_id: str = "", edge_id: str = "", options: QueryOptions | None = None) -> CallToolResult:
-        """get graph data; bounded logical dependencies, not runtime execution order."""
-        return await call('graph_view', workspace_id, options, asset=asset, direction=direction, view=view, node_id=node_id, edge_id=edge_id)
+    async def list_project_analysis_attempts(workspace_id: str, run_id: str, offset: int = 0,
+                                             options: QueryOptions | None = None) -> CallToolResult:
+        """Page through planned requests and physical attempts using next_offset."""
+        return await call('analysis_attempts', workspace_id, options, run_id=run_id, offset=offset)
+
+    @server.tool(annotations=read)
+    async def get_project_analysis_attempt_content(workspace_id: str, run_id: str, attempt_id: str,
+                                                   kind: Literal['input', 'output', 'decoded', 'diagnostics'] = 'output',
+                                                   offset: int = 0, length: int = 16000,
+                                                   options: QueryOptions | None = None) -> CallToolResult:
+        """Read a bounded page of retained project AI attempt content. Current source access is required."""
+        return await call('analysis_attempt_content', workspace_id, options, run_id=run_id, attempt_id=attempt_id,
+                          kind=kind, offset=offset, length=length)
+
+    @server.tool(annotations=read)
+    async def get_lineage_steps(workspace_id: str, asset: str = '', direction: str = "upstream", options: QueryOptions | None = None,
+                                all_assets: bool = False) -> CallToolResult:
+        """get lineage steps; bounded logical dependencies, not runtime execution order."""
+        return await call('steps', workspace_id, options, asset=asset, direction=direction, all_assets=all_assets)
+
+    @server.tool(annotations=read)
+    async def get_graph_data(workspace_id: str, asset: str = '', direction: str = "upstream", view: str = "nodes", node_id: str = "", edge_id: str = "",
+                             options: QueryOptions | None = None, all_assets: bool = False) -> CallToolResult:
+        """Read nodes, edges, tree, columns or column-links. Links are the visible table projection of stored dependencies."""
+        return await call('graph_view', workspace_id, options, asset=asset, direction=direction, view=view,
+                          node_id=node_id, edge_id=edge_id, all_assets=all_assets)
 
     @server.tool(annotations=write)
-    async def export_graph(workspace_id: str, asset: str, format: Literal['json', 'html', 'svg', 'png'] = 'html', direction: str = 'upstream', options: QueryOptions | None = None,
+    async def export_graph(workspace_id: str, asset: str = '', format: Literal['json', 'html', 'svg', 'png'] = 'html', direction: str = 'upstream', options: QueryOptions | None = None,
                            scale: Literal[1, 2] = 1, background: Literal['light', 'dark', 'transparent'] = 'light',
-                           title: str = 'GraveTrail lineage', legend: bool = True) -> CallToolResult:
+                           title: str = 'GraveTrail lineage', legend: bool = True, all_assets: bool = False) -> CallToolResult:
         """Create offline graph artifact. SVG/PNG fit the entire bounded filtered graph; get_export retrieves bytes. Source permission required."""
         return await call('artifact_create', workspace_id, options, kind='graph', format=format, selection={
-            'asset': asset, 'direction': direction, 'scale': scale, 'background': background, 'title': title, 'legend': legend})
+            'asset': asset, 'direction': direction, 'scale': scale, 'background': background, 'title': title,
+            'legend': legend, 'all_assets': all_assets})
 
     @server.tool(annotations=write)
     async def export_dependency_paths(workspace_id: str, asset: str, format: Literal['json', 'csv', 'xlsx'] = 'json', direction: str = 'upstream', max_paths: int = 50, options: QueryOptions | None = None,
@@ -508,7 +627,8 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
         return await call('artifact_create', workspace_id, options, kind='original-source', format='raw', selection={'file_id': file_id, 'content_hash': content_hash})
 
     @server.tool(annotations=write)
-    async def export_report(workspace_id: str, kind: Literal['inventory', 'dictionary', 'columns', 'impact', 'code-search', 'run-comparison'], format: Literal['json', 'csv', 'html'], selection: dict, options: QueryOptions | None = None) -> CallToolResult:
+    async def export_report(workspace_id: str, kind: Literal['inventory', 'dictionary', 'columns', 'column-lineage', 'lineage-steps', 'impact', 'code-search', 'run-comparison'],
+                            format: Literal['json', 'csv', 'html'], selection: dict, options: QueryOptions | None = None) -> CallToolResult:
         """Create a typed report artifact using the documented kind/format allowlist. No ZIP/HTML inline."""
         return await call('artifact_create', workspace_id, options, kind=kind, format=format, selection=selection)
 
@@ -614,10 +734,12 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
                                          view: MigrationView = 'summary',
                                          item: Annotated[str, Field(min_length=1, max_length=32_768)] | None = None,
                                          anchor: Literal['generated', 'source', 'annotated'] | None = None,
-                                         offset: MigrationOffset = 0, options: QueryOptions | None = None) -> CallToolResult:
+                                         offset: MigrationOffset = 0, options: QueryOptions | None = None,
+                                         line: Annotated[int, Field(ge=1)] | None = None,
+                                         finding: MigrationID | None = None) -> CallToolResult:
         """Inspect a pinned revision. Choose a model or artifact ID for focused views and follow the cursor or text offset."""
         return await call('migration_inspect', workspace_id, options, project_id=project_id, revision_id=revision_id,
-                          view=view, item=item, anchor=anchor, offset=offset)
+                          view=view, item=item, anchor=anchor, offset=offset, line=line, finding=finding)
 
     @server.tool(annotations=write)
     async def start_migration_conversion(workspace_id: str, project_id: MigrationID, expected_revision: MigrationID,
@@ -629,7 +751,7 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
     @server.tool(annotations=read)
     async def preview_migration_edit(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
                                      arguments: MigrationArguments, options: QueryOptions | None = None) -> CallToolResult:
-        """Preview and validate a patch offline. Supply replacements and rationale with optional scopes, model and order for SAS, or an existing proposal."""
+        """Preview a patch, ordered SAS draft, or source mappings offline. Supply mapping_csv to preview mappings."""
         return await call('migration_edit_preview', workspace_id, options, project_id=project_id, revision_id=revision_id,
                           arguments=arguments)
 
@@ -685,11 +807,12 @@ def create_server(service: AgentService, host: str = "127.0.0.1", port: int = 87
     async def run_migration_stage(workspace_id: str, project_id: MigrationID, revision_id: MigrationID,
                                   profile_id: MigrationID, source_id: MigrationID, stage: MigrationStage,
                                   expected_pin: MigrationID, feedback: MigrationMessage = '',
-                                  static_reference: bool = False, options: QueryOptions | None = None) -> CallToolResult:
-        """Send an approved file-scoped stage request and save the result for review."""
+                                  static_reference: bool = False, options: QueryOptions | None = None,
+                                  background: bool = False) -> CallToolResult:
+        """Send an approved stage part. Use background for a cancellable job and poll get_job_status."""
         return await call('migration_stage_request', workspace_id, options, project_id=project_id, revision_id=revision_id,
                           profile_id=profile_id, source_id=source_id, stage=stage, expected_pin=expected_pin,
-                          feedback=feedback, static_reference=static_reference)
+                          feedback=feedback, static_reference=static_reference, background=background)
 
     @server.resource("gravetrail://workspaces")
     @server.resource("dataforge://workspaces")

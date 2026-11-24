@@ -1,9 +1,12 @@
 """Lazy request/attempt inspection shared by active and historical run views."""
-import json
-
 import streamlit as st
 
-from dataforge.ai_inspection import MAX_ARTIFACT_BYTES, inspection_items, inspection_payload
+from dataforge.ai_inspection import (
+    MAX_ARTIFACT_BYTES,
+    inspection_diagnostics,
+    inspection_items,
+    inspection_payload,
+)
 
 
 def _artifact(store, workspace, run_id, ticket, kind, title, key):
@@ -56,12 +59,7 @@ def render_inspection(store, workspace, run_id):
                 st.caption('Actual dispatched provider body: prompts, source/context, model parameters and output allowance. Headers are never retained.')
             else:
                 st.caption('Captured provider response is separate from decoded/validated results. Pending or unknown outcomes may have no complete response. Content is displayed as data.')
-                request = store.rows('SELECT details FROM ai_analysis_requests WHERE workspace_id=? AND run_id=? AND batch_id=?',
-                    [workspace, run_id, item['request_id']])[0]
-                st.json({'part_outcome': json.loads(request['details']).get('outcome', 'Validation outcome not checkpointed')}, expanded=False)
-                details = store.rows('''SELECT status,details FROM ai_analysis_attempts
-                    WHERE workspace_id=? AND run_id=? AND attempt_id=?''', [workspace, run_id, ticket])[0]
-                st.json({'attempt_status': details['status'], 'diagnostics': json.loads(details['details'])}, expanded=False)
+                st.json(inspection_diagnostics(store, workspace, run_id, ticket), expanded=False)
             _artifact(store, workspace, run_id, ticket, kind, 'Attempt ' + kind + ' · ' + ticket,
                       key + '_' + ticket)
             if kind == 'output':

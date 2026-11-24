@@ -6,6 +6,7 @@ import html
 import io
 import json
 import zipfile
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 import networkx as nx
@@ -467,6 +468,19 @@ def report_csv(rows: list[dict[str, Any]]) -> str:
     for row in rows:
         writer.writerow({k: "'" + str(v) if str(v).startswith(("=", "+", "-", "@", "\t", "\r")) else v for k, v in row.items()})
     return stream.getvalue()
+
+
+def column_trace_csv(trace: dict[str, Any]) -> str:
+    """Serialize a bounded transformation trace with its coverage and paths."""
+    markers = {k: trace[k] for k in ('workspace_id', 'asset_id', 'column', 'direction', 'depth',
+                                     'state', 'truncated', 'complete', 'run_id')}
+    markers['coverage'] = json.dumps(trace['coverage'], default=str)
+    paths = defaultdict(list)
+    for path in trace['paths']:
+        paths[path['derivation_id']].append(path)
+    return report_csv([{**markers, 'paths': json.dumps(paths[step['derivation_id']], default=str),
+                        **{k: json.dumps(v, default=str) if isinstance(v, (dict, list)) else v
+                           for k, v in step.items()}} for step in trace['derivations']] or [markers])
 
 
 def report_html(rows: list[dict[str, Any]]) -> str:

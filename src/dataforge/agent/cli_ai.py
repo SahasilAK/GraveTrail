@@ -9,6 +9,7 @@ from dataforge.agent.contracts import AgentError
 from dataforge.settings_service import read_json_file
 
 Workspace = Annotated[str, typer.Option('--workspace', '-w')]
+DraftFile = Annotated[Path | None, typer.Option('--draft', help='Unsaved endpoint JSON using named references only.')]
 
 
 def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., Any]) -> None:
@@ -27,7 +28,7 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
     ai.add_typer(results, name='results')
     providers = typer.Typer(help='Profiles, approved runtime references and explicit outbound tests.')
     routing = typer.Typer(help='Default, five task routes and ordered fallbacks.')
-    credentials = typer.Typer(help='Status only; use --credential-prompt on a single operation for hidden input.')
+    credentials = typer.Typer(help='Runtime status and local-admin saved keys. Credential input is hidden.')
     app.add_typer(providers, name='providers')
     providers.add_typer(routing, name='routing')
     providers.add_typer(credentials, name='credentials')
@@ -200,6 +201,12 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
             return fail(ctx, AgentError('validation_failed', 'Expected bounded profile JSON without secret values'))
         invoke(ctx, 'provider_save', workspace, profile=profile, expected_revision=expected_revision, profile_id=profile_id)
 
+    @providers.command('reset-limits')
+    def reset_limits(ctx: typer.Context, profile_id: str, workspace: Workspace,
+                     expected_revision: str = typer.Option(...)) -> None:
+        """Save automatic output and context limits using the profile's model capacity."""
+        invoke(ctx, 'provider_reset_limits', workspace, profile_id=profile_id, expected_revision=expected_revision)
+
     @providers.command('remove')
     def remove(ctx: typer.Context, profile_id: str, workspace: Workspace, expected_revision: str = typer.Option(...)) -> None:
         """Remove a provider profile after checking its current revision.
@@ -223,29 +230,62 @@ def register(app: typer.Typer, invoke: Callable[..., Any], fail: Callable[..., A
         """
         invoke(ctx, 'runtime_status', workspace, profile_id=profile_id)
 
+    @credentials.command('save')
+    def save_key(ctx: typer.Context, profile_id: str, workspace: Workspace,
+                 expected_revision: str = typer.Option(...)) -> None:
+        """Save or replace this profile's native credential using hidden local input."""
+        invoke(ctx, 'provider_saved_key', workspace, profile_id=profile_id, expected_revision=expected_revision,
+               prompt=lambda: typer.prompt('Provider key to save on this device', hide_input=True, err=True))
+
+    @credentials.command('delete')
+    def delete_key(ctx: typer.Context, profile_id: str, workspace: Workspace,
+                   expected_revision: str = typer.Option(...), confirm: str = typer.Option(...)) -> None:
+        """Delete this profile's saved key from local storage. Confirm with DELETE SAVED KEY."""
+        invoke(ctx, 'provider_saved_key', workspace, profile_id=profile_id, expected_revision=expected_revision,
+               confirmation=confirm)
+
+    def preflight(ctx: typer.Context, action: str, workspace: str, profile_id: str,
+                  draft: Path | None, credential_prompt: bool, **options: Any) -> None:
+        try:
+            draft_profile = read_json_file(draft) if draft else None
+        except (ValueError, OSError, AgentError):
+            return fail(ctx, AgentError('validation_failed', 'Expected bounded draft JSON without secret values'))
+        invoke(ctx, action, workspace, profile_id=profile_id, draft_profile=draft_profile,
+               credential_prompt=credential_prompt, **options)
+
     @providers.command('models')
-    def models(ctx: typer.Context, profile_id: str, workspace: Workspace, credential_prompt: bool = False) -> None:
+    def models(ctx: typer.Context, workspace: Workspace, profile_id: str = typer.Argument(''),
+               draft: DraftFile = None, credential_prompt: bool = False) -> None:
         """Discover available models for a provider profile.
 
         Args:
             ctx: Typer command context.
-            profile_id: Provider profile identifier.
             workspace: Workspace identifier.
+            profile_id: Provider profile identifier when a draft is not supplied.
+            draft: JSON file with unsaved endpoint settings.
             credential_prompt: Whether to request hidden credentials for this call.
         """
-        invoke(ctx, 'provider_models', workspace, profile_id=profile_id, credential_prompt=credential_prompt)
+        preflight(ctx, 'provider_models', workspace, profile_id, draft, credential_prompt)
+
+    @providers.command('inspect-model')
+    def inspect_model(ctx: typer.Context, workspace: Workspace, profile_id: str = typer.Argument(''),
+                      draft: DraftFile = None, model: str = '', credential_prompt: bool = False) -> None:
+        """Inspect provider capacity for one model. Defaults to the saved model."""
+        preflight(ctx, 'provider_model_details', workspace, profile_id, draft, credential_prompt, model=model)
 
     @providers.command('test')
-    def test(ctx: typer.Context, profile_id: str, workspace: Workspace, credential_prompt: bool = False) -> None:
+    def test(ctx: typer.Context, workspace: Workspace, profile_id: str = typer.Argument(''),
+             draft: DraftFile = None, credential_prompt: bool = False) -> None:
         """Test an outbound provider connection using the selected profile.
 
         Args:
             ctx: Typer command context.
-            profile_id: Provider profile identifier.
             workspace: Workspace identifier.
+            profile_id: Provider profile identifier when a draft is not supplied.
+            draft: JSON file with unsaved endpoint settings and the model to test.
             credential_prompt: Whether to request hidden credentials for this operation.
         """
-        invoke(ctx, 'provider_test', workspace, profile_id=profile_id, credential_prompt=credential_prompt)
+        preflight(ctx, 'provider_test', workspace, profile_id, draft, credential_prompt)
 
     @routing.command('get')
     def get_routing(ctx: typer.Context, workspace: Workspace) -> None:

@@ -24,6 +24,29 @@ PARSER_VERSION = "25"
 log = logging.getLogger(__name__)
 
 
+def run_sql_example(store: Store, workspace: str, *, progress=None, cancelled=None):
+    """Import the bundled fixture into an empty inventory and build static lineage."""
+    from dataforge.ingestion import Importer, Limits
+    from dataforge.launcher import application_root
+
+    archive = application_root() / "tests/sample_data/dataforge_sql_lineage_test_project.zip"
+    limits = Limits(max_file_bytes=int(store.setting(workspace, "max_file_mb", 20)) * 1024 * 1024,
+                    max_files=int(store.setting(workspace, "max_files", 10000)))
+    with store.lock:
+        if store.files(workspace):
+            raise ValueError("Choose a workspace with no imported sources for the SQL example")
+        report = Importer(store, workspace, limits=limits).zip(archive.read_bytes(), {".sql"}, sql_dialect="")
+        if report.diagnostics or not report.accepted:
+            raise ValueError("The example import was incomplete. Review the workspace import limits.")
+        source_ids = [source["file_id"] for source in store.files(workspace)]
+    analyze(store, workspace, source_ids, progress=progress, cancelled=cancelled)
+    asset = next((row for row in store.assets(workspace) if row["name"] == "pub.all_kpis"), None)
+    if asset is None:
+        raise ValueError("Analysis did not find pub.all_kpis. Review the analysis diagnostics.")
+    return {"asset_id": asset["asset_id"], "asset_name": asset["name"], "direction": "upstream",
+            "max_depth": 30, "source_count": len(source_ids)}
+
+
 def analysis_is_current(store: Store, workspace: str) -> bool:
     """Require current publication semantics, files and settings for static and AI runs.
 
@@ -279,6 +302,24 @@ def set_source_dialect(store: Store, workspace: str, file_id: str, sql_dialect: 
             metadata['sql_dialect'] = sql_dialect
         store.execute("UPDATE source_files SET metadata=?,parsing_status='pending',error_details='' WHERE file_id=?",
                       [json.dumps(metadata), file_id])
+
+
+def source_inventory_rows(store: Store, workspace: str, query: str = '') -> list[dict[str, Any]]:
+    """Build filtered inventory metadata without returning original source text or previews."""
+    from dataforge.dbt.service import is_dbt
+
+    fields = ('file_id', 'relative_path', 'extension', 'parsing_status', 'line_count', 'content_hash', 'file_size', 'encoding')
+    config = ParsingSettings.from_store(store, workspace).model_dump()
+    needle = query.casefold()
+    items = []
+    for row in store.files(workspace):
+        if needle not in (row['relative_path'] + ' ' + row['parsing_status']).casefold():
+            continue
+        sql = row['extension'] == '.sql' and not is_dbt(row)
+        items.append({**{key: row[key] for key in fields},
+                      'sql_dialect': source_dialect(row, config) if sql else None,
+                      'sql_dialect_override': explicit_source_dialect(row) if sql else None})
+    return items
 
 
 def _source_choices(files: list[dict[str, Any]]) -> dict[tuple[str, str], str | None]:
@@ -553,6 +594,12 @@ def column_report(store: Store, workspace: str, asset_id: str) -> list[dict]:
         row["schema_source"] = "; ".join(f"{e['relative_path']}:{e['start_line']}–{e['end_line']}"
             for e in metadata.get("schema_evidence", [])) if "(schema expansion)" in row["context"] else ""
     return rows
+
+
+def filter_column_report(rows: list[dict], query: str) -> list[dict]:
+    """Match any comma-separated column-name substring, ignoring case."""
+    terms = [term.strip().casefold() for term in query.split(',') if term.strip()]
+    return [row for row in rows if not terms or any(term in row['column_name'].casefold() for term in terms)]
 
 
 def column_usage_coverage(store: Store, workspace: str, asset_id: str) -> dict[str, Any]:

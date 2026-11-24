@@ -1,12 +1,13 @@
 """Permission-gated project build adapters; all engines share analysis_service."""
-from dataforge.agent.contracts import AgentError
+from dataforge.agent.contracts import AgentError, compact
 from dataforge.ai_analysis_models import AnalysisRequest
+from dataforge.ai_inspection import inspection_diagnostics, inspection_items, inspection_payload
 from dataforge.analysis_service import analysis_report, preview_analysis, run_analysis
 from dataforge.connections import RuntimeConnections
 from dataforge.credentials import credential_source
 from dataforge.provider_service import authorize_provider
 
-READS = {'analysis_preview', 'analysis_report'}
+READS = {'analysis_preview', 'analysis_report', 'analysis_runs', 'analysis_attempts', 'analysis_attempt_content'}
 WRITES = {'job_cancel'}
 
 
@@ -76,9 +77,54 @@ class ProjectAnalysisOperations:
             run_id=report['run_id'], mode=report['mode'], status=report['status'], summary=report['summary'],
             unit_count=len(report['units']))
 
+    def _analysis_runs(self, w, opts):
+        rows = self.store.rows('''SELECT run_id,mode,status,created_at FROM ai_analysis_runs
+            WHERE workspace_id=? ORDER BY created_at DESC,run_id LIMIT ?''', [w, opts.max_items + 1])
+        return self._page(w, opts, ['analysis_runs'], rows[:opts.max_items],
+                          boundaries=['items'] if len(rows) > opts.max_items else [])
+
+    def _analysis_attempts(self, w, opts, run_id, offset=0):
+        if opts.cursor:
+            raise AgentError('invalid_argument', 'Use next_offset for project analysis attempts')
+        result = inspection_items(self.store, w, run_id, offset=offset, limit=min(opts.limit, 100))
+        items = result['items']
+        response = {'run_id': run_id, 'offset': offset, 'total': result['total']}
+        while True:
+            end = offset + len(items)
+            response.update(items=items, count=len(items), complete=end >= result['total'],
+                            next_offset=end if end < result['total'] else None)
+            if len(compact(response)) <= opts.max_chars:
+                return response
+            if len(items) <= 1:
+                raise AgentError('budget_too_small', 'An inspection item exceeds the response budget')
+            items = items[:-1]
+
+    def _analysis_attempt_content(self, w, opts, run_id, attempt_id, kind, offset=0, length=16000):
+        self._workspace(w, source=True)
+        if type(offset) is not int or offset < 0 or type(length) is not int or not 1 <= length <= 16000:
+            raise AgentError('invalid_argument', 'Use a nonnegative character offset and length 1–16000')
+        if kind == 'diagnostics':
+            text = compact(inspection_diagnostics(self.store, w, run_id, attempt_id))
+            payload = {'status': 'available', 'redacted': False, 'total_chars': len(text),
+                       'content': text[offset:offset + length]}
+        else:
+            payload = inspection_payload(self.store, w, run_id, attempt_id, kind, offset=offset, limit=length)
+        response = {**payload, 'run_id': run_id, 'attempt_id': attempt_id, 'kind': kind, 'offset': offset}
+        while True:
+            content = response['content']
+            end = offset + len(content or '')
+            response['has_more'] = content is not None and end < response['total_chars']
+            response['next_offset'] = end if response['has_more'] else None
+            if len(compact(response)) <= opts.max_chars:
+                return response
+            if content is None or len(content) <= 1:
+                raise AgentError('budget_too_small', 'Inspection metadata exceeds the response budget')
+            response['content'] = content[:len(content) // 2]
+
     def _job_cancel(self, w, opts, job_id):
         self._workspace(w, write=True)
         record = self.jobs.read(job_id, w)
-        if record['operation'] not in {'analyze', 'ai_analysis', 'migration', 'migration_convert'}:
+        if record['operation'] not in {'analyze', 'ai_analysis', 'migration', 'migration_convert',
+                                       'migration_stage_request', 'workspace_example'}:
             raise AgentError('invalid_argument', 'This job does not support cooperative cancellation')
         return self.jobs.cancel(job_id, w)

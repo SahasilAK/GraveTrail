@@ -6,11 +6,15 @@ from typing import Any
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
 from dataforge.agent.contracts import AccessPolicy, AgentError
 from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
+from dataforge.ai_budget import profile_recommendations
+from dataforge.cli import app
 from dataforge.llm import Profile
+from dataforge.model_capabilities import ModelCapabilities, capability_identity
 from dataforge.store import Store
 
 
@@ -137,3 +141,104 @@ def test_network_admission_is_immediate_and_does_not_block_settings(tmp_path: Pa
         release.set()
         service.close()
         store.close()
+
+
+def test_provider_preflight_and_automatic_limits_workflow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    origin = 'http://localhost:11434'
+    reference = 'DATAFORGE_DRAFT_KEY'
+    secret = 'draft-credential-canary'
+    monkeypatch.setenv(reference, secret)
+    store = Store(tmp_path)
+    workspace = store.create_workspace('provider setup')
+    service = AgentService(store, AccessPolicy(allow_write=True, allow_config_write=True, allow_llm=True,
+        allowed_llm_origins=(origin,), allowed_credential_refs=(reference,)))
+    draft = {'provider': 'Ollama', 'base_url': origin + '/', 'key_env': reference}
+    requests = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        requests.append(path)
+        assert request.headers['Authorization'] == f'Bearer {secret}'
+        if path == '/api/tags':
+            return httpx.Response(200, json={'models': [{'name': 'candidate'}]})
+        if path == '/api/show':
+            assert json.loads(request.content) == {'model': 'other'}
+            return httpx.Response(200, json={'model_info': {'family.context_length': 8192}, 'ignored': secret})
+        if path == '/api/ps':
+            return httpx.Response(200, json={'models': [{'name': 'other', 'context_length': 4096}]})
+        assert path == '/api/chat' and json.loads(request.content)['model'] == 'candidate'
+        return httpx.Response(200, json={'message': {'content': '{"status":"connected"}'}})
+
+    transport = httpx.MockTransport(respond)
+    service.provider_transport = transport
+    try:
+        server = create_server(service)
+        discovered = asyncio.run(server.call_tool('discover_provider_models', {
+            'workspace_id': workspace, 'draft_profile': draft,
+        }))
+        assert not discovered.isError and discovered.structuredContent['items'] == ['candidate']
+        tested = asyncio.run(server.call_tool('test_provider_connection', {
+            'workspace_id': workspace, 'draft_profile': {**draft, 'model': 'candidate'},
+        }))
+        assert not tested.isError and tested.structuredContent['connected']
+        denied = asyncio.run(server.call_tool('discover_provider_models', {
+            'workspace_id': workspace, 'draft_profile': {**draft, 'base_url': 'http://localhost:9876'},
+        }))
+        assert denied.isError and denied.structuredContent['error']['code'] == 'network_not_allowed'
+        listed = service.call('providers_list', workspace)
+        assert not listed['items'] and requests == ['/api/tags', '/api/chat']
+
+        saved = service.call('provider_save', workspace, expected_revision=listed['settings_revision'], profile={
+            **draft, 'model': 'candidate', 'max_tokens': 999,
+            'source_limit_policy': 'explicit', 'source_disclosure_chars': 1000,
+            'model_capabilities': {'source': 'manual', 'context_tokens': 8192, 'output_tokens': 1500},
+        })
+        profile_id = saved['profile_id']
+        args = {'workspace_id': workspace, 'profile_id': profile_id}
+        inspected = asyncio.run(server.call_tool('inspect_provider_model', {**args, 'model': 'other'}))
+        assert not inspected.isError and requests[-2:] == ['/api/show', '/api/ps']
+        descriptor = inspected.structuredContent['model']
+        normalized = Profile.model_validate({**draft, 'model': 'other'})
+        assert descriptor['id'] == 'other'
+        assert descriptor['capabilities']['context_tokens'] == 4096
+        assert descriptor['capabilities']['source'] == 'runtime'
+        assert descriptor['capabilities']['identity'] == capability_identity(normalized)
+        assert secret not in json.dumps(inspected.structuredContent)
+
+        reset_args = {**args, 'expected_revision': saved['settings_revision']}
+        reset = asyncio.run(server.call_tool('reset_provider_profile_limits', reset_args))
+        assert not reset.isError
+        stored = service.call('provider_get', workspace, profile_id=profile_id)['profile']
+        manual = ModelCapabilities.model_validate(stored['model_capabilities'])
+        assert stored['model'] == 'candidate' and stored['base_url'] == origin
+        assert manual.context_tokens == 8192 and manual.identity == capability_identity(stored)
+        recommended = profile_recommendations(manual)
+        assert {key: stored[key] for key in recommended} == recommended
+        assert stored['output_mode'] == stored['context_mode'] == 'automatic'
+        assert stored['source_limit_policy'] == 'explicit' and stored['source_disclosure_chars'] == 1000
+        stale = asyncio.run(server.call_tool('reset_provider_profile_limits', reset_args))
+        assert stale.isError and stale.structuredContent['error']['code'] == 'conflict'
+    finally:
+        service.close()
+        store.close()
+
+    original = AgentService.__init__
+
+    def with_transport(self, *args, **kwargs):
+        original(self, *args, **kwargs)
+        self.provider_transport = transport
+
+    monkeypatch.setattr(AgentService, '__init__', with_transport)
+    draft_file = tmp_path / 'draft.json'
+    draft_file.write_text(json.dumps({**draft, 'key_env': ''}), encoding='utf-8')
+    runner = CliRunner()
+    launch = ['--home', str(tmp_path), '--json', '--allow-write']
+    checked = runner.invoke(app, [*launch, '--allow-llm', '--allowed-llm-origin', origin,
+        'providers', 'models', '-w', workspace, '--draft', str(draft_file), '--credential-prompt'], input=secret + '\n')
+    assert checked.exit_code == 0 and secret not in checked.output, checked.output.replace(secret, '[redacted]')
+    assert json.loads(checked.stdout)['items'] == ['candidate']
+    updated = runner.invoke(app, [*launch, '--allow-config-write', '--allowed-credential-ref', reference,
+        'providers', 'reset-limits', profile_id, '-w', workspace,
+        '--expected-revision', reset.structuredContent['settings_revision']])
+    assert updated.exit_code == 0, updated.output
+    assert json.loads(updated.stdout)['settings_revision'] == reset.structuredContent['settings_revision']

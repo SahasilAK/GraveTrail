@@ -2,7 +2,7 @@ import json
 
 import streamlit as st
 
-from dataforge.services import column_names, column_report, column_usage_coverage
+from dataforge.services import column_names, column_report, column_usage_coverage, filter_column_report
 from ui.common import downloads, load_graph, source_viewer
 from ui.copy_names import copy_names
 
@@ -16,8 +16,7 @@ def render_column_references(store, workspace, asset):
     used, unused = column_names(rows, metadata, coverage_complete=coverage['complete'])
     wildcard = any(r["column_name"] == "*" for r in rows)
     needle = st.text_input("Filter columns", placeholder="Column name or comma-separated names")
-    terms = [term.strip().casefold() for term in needle.split(",") if term.strip()]
-    rows = [r for r in rows if not terms or any(term in r["column_name"].casefold() for term in terms)]
+    rows = filter_column_report(rows, needle)
     with st.container(horizontal=True):
         st.metric("Known direct columns", len({r["column_name"] for r in rows if r["column_name"] != "*"}), border=True)
         st.metric("Direct references", len(rows), border=True)
@@ -66,4 +65,4 @@ def render_column_references(store, workspace, asset):
         downloads(display, "column_usage")
         source_viewer(store, list(dict.fromkeys(r["file_id"] for r in rows)), "column_source", rows)
     else:
-        st.info("No direct references match the column filter." if terms else "No direct references established for this asset. Ambiguous columns and unsupported dynamic expressions appear in Analysis → Diagnostics.")
+        st.info("No direct references match the column filter." if needle.replace(',', '').strip() else "No direct references established for this asset. Ambiguous columns and unsupported dynamic expressions appear in Analysis → Diagnostics.")

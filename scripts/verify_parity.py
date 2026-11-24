@@ -12,6 +12,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from typer.testing import CliRunner
 
+from dataforge.agent.capabilities import INVENTORY
 from dataforge.agent.contracts import AccessPolicy
 from dataforge.agent.mcp_server import create_server
 from dataforge.agent.service import AgentService
@@ -58,11 +59,16 @@ def verify(home: Path) -> dict[str, Any]:
     for extension in ('sql', 'sas'):
         workspace = cli('workspace', 'create', 'Parity ' + extension.upper())['workspace_id']
         archive = root / f'dataforge_{extension}_lineage_test_project.zip'
-        imported = cli('ingest', str(archive), '-w', workspace, '--extensions', extension)
-        assert imported['result']['accepted'] == 86
-        cold = cli('lineage', 'build', '-w', workspace)
+        if extension == 'sql':
+            example = cli('workspace', 'example', '-w', workspace)
+            assert example['status'] == 'completed'
+            assert example['result']['source_count'] == 86 and example['result']['asset_name'] == 'pub.all_kpis'
+        else:
+            imported = cli('ingest', str(archive), '-w', workspace, '--extensions', extension)
+            assert imported['result']['accepted'] == 86
+            assert cli('lineage', 'build', '-w', workspace)['result']['analyzed'] == 86
         warm = cli('lineage', 'build', '-w', workspace)
-        assert cold['result']['analyzed'] == warm['result']['cached'] == 86
+        assert warm['result']['cached'] == 86
         store = Store(home)
         service = AgentService(store, AccessPolicy(allow_write=True, workspaces=(workspace,)))
         try:
@@ -108,14 +114,16 @@ def verify(home: Path) -> dict[str, Any]:
 
     async def stdio_check() -> None:
         """Verify capabilities through the application's MCP stdio transport."""
-        params = StdioServerParameters(command=sys.executable, args=['-m', 'dataforge.cli', '--home', str(home), 'mcp'])
+        code_root = Path(__file__).resolve().parents[1] / 'src'
+        params = StdioServerParameters(command=sys.executable, args=['-m', 'dataforge.cli', '--home', str(home), 'mcp'],
+                                       env={'PYTHONPATH': str(code_root)})
         async with stdio_client(params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools = await session.list_tools()
                 assert 'get_data_dictionary' in {t.name for t in tools.tools}
                 result = await session.call_tool('get_capabilities', {})
-                assert not result.isError and result.structuredContent['total'] == 46
+                assert not result.isError and result.structuredContent['total'] == len(INVENTORY), result.structuredContent
     asyncio.run(stdio_check())
     return results
 

@@ -119,7 +119,22 @@ def test_masked_ui_sets_actual_environment_without_persisting_secret(tmp_path: P
 
     from ui.common import get_store
 
-    get_store(str(tmp_path)).close()
+    store = get_store(str(tmp_path))
+    workspace = app.session_state["workspace"]
+    profile_id = store.rows("SELECT profile_id FROM llm_profiles WHERE workspace_id=?", [workspace])[0]["profile_id"]
+    store.set_setting(workspace, "task_models", {"project_lineage": profile_id})
+    app.run()
+    next(b for b in app.button if b.label == "Save model routing").click().run()
+    assert store.setting(workspace, "task_models")["project_lineage"] == profile_id
+    next(b for b in app.button if b.label == "Remove profile").click().run()
+    assert any("Remove routing references" in item.value for item in app.error)
+    assert store.rows("SELECT profile_id FROM llm_profiles WHERE workspace_id=?", [workspace])
+    next(box for box in app.selectbox if box.label == "Default profile").select("")
+    next(box for box in app.selectbox if box.label == "Project lineage").select("")
+    next(b for b in app.button if b.label == "Save model routing").click().run()
+    next(b for b in app.button if b.label == "Remove profile").click().run()
+    assert not app.exception and not store.rows("SELECT profile_id FROM llm_profiles WHERE workspace_id=?", [workspace])
+    store.close()
     assert all(b'dummy-sensitive-123' not in p.read_bytes() for p in tmp_path.rglob('*') if p.is_file())
 
 

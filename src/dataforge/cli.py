@@ -13,6 +13,7 @@ import duckdb
 import typer
 
 from dataforge.agent.cli_ai import register as register_ai
+from dataforge.agent.cli_builder import register as register_builder
 from dataforge.agent.cli_dbt import register as register_dbt
 from dataforge.agent.cli_migration import register as register_migration
 from dataforge.agent.cli_reports import register as register_reports
@@ -173,6 +174,46 @@ def fail(ctx: typer.Context, exc: AgentError) -> None:
     raise typer.Exit(code)
 
 
+def _download_attempt_text(service: AgentService, workspace_id: str, options: dict[str, Any],
+                           arguments: dict[str, Any], page: dict[str, Any], destination: Path) -> dict[str, Any]:
+    """Read the bounded retained text in order, then write the exact UTF-8 bytes exclusively."""
+    import hashlib
+
+    from dataforge.ai_inspection import MAX_ARTIFACT_BYTES
+
+    if page['offset']:
+        raise AgentError('invalid_argument', 'Download requires offset zero')
+    if page['content'] is None:
+        raise AgentError('not_found', page['status'])
+    total = page['total_chars']
+    captured_at = page.get('captured_at')
+    if total > MAX_ARTIFACT_BYTES:
+        raise AgentError('resource_limit', 'Attempt text exceeds 4 MiB; retrieve specific pages')
+    chunks = [page['content']]
+    while (offset := page['next_offset']) is not None:
+        page = service.call('analysis_attempt_content', workspace_id, options=options,
+                            **{**arguments, 'offset': offset, 'length': 16000})
+        if page['content'] is None or page['total_chars'] != total or page.get('captured_at') != captured_at:
+            raise AgentError('conflict', 'Attempt content changed during download')
+        chunks.append(page['content'])
+    text = ''.join(chunks)
+    if len(text) != total:
+        raise AgentError('conflict', 'Attempt content ended before the expected length')
+    data = text.encode('utf-8')
+    if len(data) > MAX_ARTIFACT_BYTES:
+        raise AgentError('resource_limit', 'Attempt text exceeds 4 MiB; retrieve specific pages')
+    created = False
+    try:
+        with destination.open('xb') as stream:
+            created = True
+            stream.write(data)
+    except OSError:
+        if created:
+            destination.unlink(missing_ok=True)
+        raise
+    return {'destination': str(destination), 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+
+
 def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bool=False, **arguments: Any) -> None:
     """Run an agent operation, manage resources, and render its result.
 
@@ -190,7 +231,9 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
     try:
         config = ctx.obj
         download_to = arguments.pop('download_to', None)
-        if download_to is not None and (download_to.exists() or download_to.is_symlink() or not download_to.parent.is_dir()):
+        attempt_text_destination = arguments.pop('attempt_text_destination', None)
+        destination = download_to or attempt_text_destination
+        if destination is not None and (destination.exists() or destination.is_symlink() or not destination.parent.is_dir()):
             raise AgentError('invalid_path', 'Output must be a new file in an existing directory')
         if action in {"job", 'job_cancel'}:
             if not config["policy"].permits(workspace_id):
@@ -206,7 +249,8 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                         settings = job_settings(config['home'], workspace_id, record)
                         if not config['policy'].allow_write or not settings.allow_write:
                             raise AgentError('forbidden', 'Cancellation requires explicit workspace write access')
-                        if record['operation'] not in {'analyze', 'ai_analysis', 'migration', 'migration_convert'}:
+                        if record['operation'] not in {'analyze', 'ai_analysis', 'migration', 'migration_convert',
+                                                       'migration_stage_request', 'workspace_example'}:
                             raise AgentError('invalid_argument', 'This job does not support cancellation')
                         result = jobs.cancel(job_id, workspace_id)
                         break
@@ -224,15 +268,15 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
             service = AgentService(store, config["policy"])
             if arguments.pop('credential_prompt', False):
                 from dataforge.connections import RuntimeConnections
-                from dataforge.provider_service import authorize_provider, get_profile
+                from dataforge.provider_service import authorize_provider, provider_target
                 profile_id = arguments.get('profile_id', '')
                 if action == 'ai_request':
                     profile_id = store.setting(workspace_id, 'task_models', {}).get(arguments['task']) or store.setting(workspace_id, 'default_profile', '')
-                profile = get_profile(store, workspace_id, profile_id)
                 service._workspace(workspace_id, write=True)
+                profile = provider_target(store, workspace_id, profile_id, arguments.get('draft_profile'))
                 authorize_provider(store, service.policy, workspace_id, profile)
                 manager = RuntimeConnections()
-                manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True))
+                manager.register('DATAFORGE_RUNTIME_CREDENTIAL', typer.prompt('Runtime credential (this invocation only)', hide_input=True, err=True))
                 service.runtime_connections[(workspace_id, profile_id)] = manager
                 from dataforge.model_capabilities import runtime_profile
                 service.runtime_profiles[(workspace_id, profile_id)] = runtime_profile(profile)
@@ -244,12 +288,14 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                 if action == 'migration_convert':
                     service._workspace(workspace_id, write=True, source=True)
                     service._migration_current(workspace_id, arguments['project_id'], arguments['expected_revision'])
+                if action == 'migration_stage_request':
+                    service._admit_migration_stage(workspace_id, **arguments, detached=True)
                 QueryOptions.model_validate(config["options"])
                 if action == "ingest":
-                    config["policy"].import_path(arguments["path"])
+                    service._ingest_paths(arguments['path'], arguments.get('files'), arguments.get('source_kind', 'files'))
                 record = service.jobs.create(workspace_id, action,
                     AgentSettings.from_store(store, workspace_id).model_dump())
-                if action == 'migration_convert':
+                if action in {'migration_convert', 'migration_stage_request'}:
                     from dataforge.migration.assistance import record_job
                     record_job(store, workspace_id, arguments['project_id'], record['job_id'])
                 # A detached worker opens DuckDB only after this CLI releases its connection.
@@ -266,29 +312,48 @@ def invoke(ctx: typer.Context, action: str, workspace_id: str="", background: bo
                 result = {"job_id": record["job_id"], "status": "queued"}
             else:
                 result = service.call(action, workspace_id, options=config["options"], **arguments)
+                if attempt_text_destination is not None:
+                    result = _download_attempt_text(service, workspace_id, config['options'], arguments,
+                                                    result, attempt_text_destination)
                 if download_to is not None:
                     import base64
                     import hashlib
                     artifact_id = result['artifact_id']
+                    expected_bytes, expected_hash = result['bytes'], result['sha256']
                     digest = hashlib.sha256()
                     offset = 0
-                    with download_to.open('xb') as stream:
-                        while True:
-                            chunk = service.call('artifact_read', workspace_id, options=config['options'], artifact_id=artifact_id, offset=offset)
-                            data = base64.b64decode(chunk['data'])
-                            stream.write(data)
-                            digest.update(data)
-                            offset = chunk['next_offset']
-                            if chunk['complete']:
-                                break
-                    if offset != chunk['bytes'] or digest.hexdigest() != chunk['sha256']:
-                        raise AgentError('conflict', 'Downloaded artifact checksum failed')
+                    created = verified = False
+                    try:
+                        with download_to.open('xb') as stream:
+                            created = True
+                            while True:
+                                chunk = service.call('artifact_read', workspace_id, options=config['options'],
+                                                     artifact_id=artifact_id, offset=offset)
+                                data = base64.b64decode(chunk['data'], validate=True)
+                                end = offset + len(data)
+                                if (chunk['bytes'] != expected_bytes or chunk['sha256'] != expected_hash
+                                        or chunk['offset'] != offset or chunk['next_offset'] != end
+                                        or end > expected_bytes or chunk['complete'] != (end == expected_bytes)
+                                        or not data and not chunk['complete']):
+                                    raise AgentError('conflict', 'Artifact changed during download')
+                                stream.write(data)
+                                digest.update(data)
+                                offset = end
+                                if chunk['complete']:
+                                    break
+                        if digest.hexdigest() != expected_hash:
+                            raise AgentError('conflict', 'Downloaded artifact checksum failed')
+                        verified = True
+                    finally:
+                        if created and not verified:
+                            download_to.unlink(missing_ok=True)
                     result = {'artifact_id': artifact_id, 'destination': str(download_to), 'bytes': offset,
                               'sha256': digest.hexdigest(), 'complete': chunk['artifact_complete']}
-                if action in {"ingest", "analyze", "migration_convert"}:
+                if action in {"ingest", "analyze", "migration_convert", "workspace_example"}:
                     service.jobs.wait(result["job_id"], workspace_id)
                     result = service.job_status(workspace_id, result["job_id"], config["options"])
-        emit(ctx, result, show_page_metadata=action.startswith('migration_'))
+        emit(ctx, result, show_page_metadata=action == 'analysis_attempts' or action.startswith('migration_')
+             or (action == 'columns' and arguments.get('view') in {'used', 'unused'}))
         if result.get("status") in {"failed", "interrupted"}:
             raise typer.Exit(6)
     except AgentError as exc:
@@ -368,21 +433,28 @@ def workspace_summary(ctx: typer.Context, workspace: Workspace) -> None:
     invoke(ctx, "summary", workspace)
 
 
+@workspace_app.command("example")
+def workspace_example(ctx: typer.Context, workspace: Workspace) -> None:
+    """Import and analyze the bundled SQL example in an empty workspace."""
+    invoke(ctx, "workspace_example", workspace)
+
+
 @app.command("ingest")
 def ingest(ctx: typer.Context, path: Path, workspace: Workspace, extensions: str = "sql,sas,csv", background: bool = False,
            source_kind: str = 'files', dbt_mode: str = 'source', artifact_path: list[str] = typer.Option(None),
            include_packages: bool = False,
+           file: Annotated[list[Path] | None, typer.Option('--file', help='Additional selected source file. Repeat as needed.')] = None,
            sql_dialect: str | None = typer.Option(None, help='SQLGlot dialect key for SQL files. Omit to inherit; use an empty value for Generic SQL.')) -> None:
-    """Import supported source files from a directory.
+    """Import a directory, ZIP archive or selected source files.
 
     Args:
         ctx: Typer command context.
-        path: Source directory to import.
+        path: Source directory, ZIP archive or first selected file.
         workspace: Workspace targeted by the command.
         extensions: Comma-separated file extensions to include.
         background: Whether to queue work as a background job."""
     invoke(ctx, "ingest", workspace, background, path=str(path.resolve()), extensions=extensions.split(","),
-        source_kind=source_kind, sql_dialect=sql_dialect,
+        source_kind=source_kind, sql_dialect=sql_dialect, files=[str(selected.resolve()) for selected in file or []],
         dbt_options={'mode': dbt_mode, 'artifact_paths': artifact_path or [],
                                             'include_packages': include_packages} if source_kind == 'dbt' else None)
 
@@ -470,19 +542,20 @@ def search_assets(ctx: typer.Context, workspace: Workspace, query: str = "") -> 
 
 @columns_app.command("usage")
 def columns(ctx: typer.Context, asset: str, workspace: Workspace, column_query: str = '',
-            usage_type: str = '', file_id: str = '', group_by: str = 'none') -> None:
+            usage_type: str = '', file_id: str = '', group_by: str = 'none', view: str = 'references') -> None:
     """Query source-column usage for an asset.
 
     Args:
         ctx: Typer command context.
         asset: Asset name or identifier.
         workspace: Workspace targeted by the command.
-        column_query: Optional column name filter.
+        column_query: Optional comma-separated column-name substrings.
         usage_type: Optional usage category filter.
         file_id: Optional source file identifier.
-        group_by: Grouping mode for usage results."""
+        group_by: Grouping mode for usage results.
+        view: references, used, or unused. Name lists use unfiltered coverage."""
     invoke(ctx, "columns", workspace, asset=asset, column_query=column_query,
-           usage_type=usage_type, file_id=file_id, group_by=group_by)
+           usage_type=usage_type, file_id=file_id, group_by=group_by, view=view)
 
 
 @columns_app.command("catalog")
@@ -525,7 +598,8 @@ def files(ctx: typer.Context, workspace: Workspace, query: str = "") -> None:
 
 @source_app.command("show")
 def source(ctx: typer.Context, workspace: Workspace, file_id: str = None, statement_id: str = None,
-           operation_id: str = None, start_line: int = None, end_line: int = None, full: bool = False) -> None:
+           operation_id: str = None, start_line: int = None, end_line: int = None, full: bool = False,
+           content_hash: str = '') -> None:
     """Retrieve source evidence by file, statement, or operation.
 
     Args:
@@ -536,9 +610,10 @@ def source(ctx: typer.Context, workspace: Workspace, file_id: str = None, statem
         operation_id: Optional operation identifier.
         start_line: Optional first source line.
         end_line: Optional last source line.
-        full: Whether to request the full source content."""
+        full: Whether to request the full source content.
+        content_hash: Optional exact retained version for the selected file."""
     invoke(ctx, "source", workspace, file_id=file_id, statement_id=statement_id, operation_id=operation_id,
-           start_line=start_line, end_line=end_line, full=full)
+           start_line=start_line, end_line=end_line, full=full, content_hash=content_hash)
 
 
 @source_app.command("search")
@@ -661,11 +736,12 @@ def cleanup_inspect(ctx: typer.Context, workspace: Workspace) -> None:
     invoke(ctx, 'cleanup_inspect', workspace)
 
 
-def _cleanup_command(category: str) -> Any:
+def _cleanup_command(category: str, *, shared: bool = False) -> Any:
     """Create a cleanup command bound to one cleanup category.
 
     Args:
         category: Cleanup category handled by the returned command.
+        shared: Whether the operation targets whole-home shared data.
 
     Returns:
         Typer command callback for previewing or applying that category."""
@@ -687,24 +763,37 @@ def _cleanup_command(category: str) -> Any:
         Raises:
             ValueError: If the supplied value violates the operation constraints."""
         if dry_run:
-            invoke(ctx, 'cleanup_preview', workspace, category=category, file_ids=file_id, run_id=run_id)
+            if shared:
+                invoke(ctx, 'cleanup_shared_preview', category=category)
+            else:
+                invoke(ctx, 'cleanup_preview', workspace, category=category, file_ids=file_id, run_id=run_id)
         else:
             import json
             try:
                 if preview is None or preview.stat().st_size > 8 * 1024 * 1024:
                     raise ValueError('A bounded saved preview is required')
                 plan = json.loads(preview.read_text(encoding='utf-8'))
-                if plan.get('category') != category:
+                if not isinstance(plan, dict) or plan.get('category') != category:
                     raise ValueError('Preview category does not match')
             except (OSError, ValueError):
                 fail(ctx, AgentError('invalid_argument', 'Provide a saved cleanup preview for this category'))
                 return
-            invoke(ctx, 'cleanup_apply', workspace, preview=plan, confirmation=confirm, backup_first=backup)
+            invoke(ctx, 'cleanup_shared_apply' if shared else 'cleanup_apply', workspace,
+                   preview=plan, confirmation=confirm, backup_first=backup)
+
+    if shared:
+        def shared_command(ctx: typer.Context, dry_run: bool = True, preview: Path = None,
+                           confirm: str = '', backup: bool = True) -> None:
+            """Preview shared cleanup. Apply locally with the saved plan, backup and exact confirmation."""
+            command(ctx, '', dry_run, preview, confirm, backup, None, None)
+        return shared_command
     return command
 
 
 for _category in ('sources', 'lineage', 'columns', 'ai', 'history', 'jobs', 'reset', 'workspace'):
     cleanup_app.command(_category)(_cleanup_command(_category))
+for _category in ('cache', 'orphans', 'application'):
+    cleanup_app.command(_category)(_cleanup_command(_category, shared=True))
 workspace_app.command('reset')(_cleanup_command('reset'))
 
 
@@ -793,6 +882,7 @@ register_application(app, invoke)
 register_ai(app, invoke, fail)
 register_reports(app, workspace_app, assets_app, lineage_app, source_app, exports_app, invoke)
 register_dbt(app, invoke)
+register_builder(app, source_app, invoke)
 register_migration(app, invoke, fail)
 register_maintenance(app, maintenance_app, invoke, fail)
 

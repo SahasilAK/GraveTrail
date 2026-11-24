@@ -3,10 +3,9 @@ from html import escape
 
 import streamlit as st
 
-from dataforge.ingestion import Importer, Limits
 from dataforge.lineage_builder import load_builder
-from dataforge.services import analyze
-from ui.common import ROOT, context, load_graph, title
+from dataforge.services import run_sql_example
+from ui.common import context, load_graph, title
 from ui.lineage_navigation import focus_asset
 
 
@@ -18,28 +17,15 @@ def _page_button(label, page, icon, *, width="content"):
 def _run_sql_example(store, workspace):
     try:
         with st.spinner("Importing and analyzing the SQL example…", show_time=True):
-            archive = ROOT / "tests/sample_data/dataforge_sql_lineage_test_project.zip"
-            limits = Limits(max_file_bytes=int(store.setting(workspace, "max_file_mb", 20)) * 1024 * 1024,
-                            max_files=int(store.setting(workspace, "max_files", 10000)))
-            with store.lock:
-                if store.files(workspace):
-                    st.rerun()
-                report = Importer(store, workspace, limits=limits).zip(archive.read_bytes(), {".sql"}, sql_dialect="")
-                if report.diagnostics or not report.accepted:
-                    raise ValueError("The example import was incomplete. Review the workspace import limits.")
-                sample_ids = [source["file_id"] for source in store.files(workspace)]
-            analyze(store, workspace, sample_ids)
-            asset = next((a for a in store.assets(workspace) if a["name"] == "pub.all_kpis"), None)
-            if asset is None:
-                raise ValueError("Analysis did not find pub.all_kpis. Review the analysis diagnostics.")
+            asset = run_sql_example(store, workspace)
     except Exception as exc:
         st.error(f"Could not open the SQL example: {exc}")
         if store.files(workspace):
             _page_button("Continue in Analysis", "ui/pages/analysis.py", ":material/play_circle:")
     else:
-        focus_asset(st.session_state, workspace, asset["asset_id"], asset["name"])
-        st.session_state[f"graph_direction_{workspace}"] = "upstream"
-        st.session_state[f"graph_depth_{workspace}"] = 30
+        focus_asset(st.session_state, workspace, asset["asset_id"], asset["asset_name"])
+        st.session_state[f"graph_direction_{workspace}"] = asset["direction"]
+        st.session_state[f"graph_depth_{workspace}"] = asset["max_depth"]
         st.switch_page("ui/pages/explorer.py")
 
 

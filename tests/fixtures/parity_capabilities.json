@@ -9,7 +9,7 @@
   },
   "P01": {
     "capability_id": "P01",
-    "description": "List/get/create/edit/remove provider profiles; name/provider/URL/model/reference/auth/timeout/retries/max_tokens/context_chars/temperature/structured/Azure API version",
+    "description": "List/get/create/edit/remove provider profiles, including request options, manual model capacity, automatic budget settings and source disclosure limits",
     "cli": [
       [
         "providers",
@@ -26,13 +26,18 @@
       [
         "providers",
         "remove"
+      ],
+      [
+        "providers",
+        "reset-limits"
       ]
     ],
     "mcp": [
       "list_provider_profiles",
       "get_provider_profile",
       "save_provider_profile",
-      "remove_provider_profile"
+      "remove_provider_profile",
+      "reset_provider_profile_limits"
     ],
     "scope": "workspace",
     "effects": [
@@ -49,12 +54,22 @@
   },
   "P02": {
     "capability_id": "P02",
-    "description": "Session connect/status/clear; reference compatibility and restart behavior",
+    "description": "Session connect/status/clear, named references and native saved-key management",
     "cli": [
       [
         "providers",
         "credentials",
         "status"
+      ],
+      [
+        "providers",
+        "credentials",
+        "save"
+      ],
+      [
+        "providers",
+        "credentials",
+        "delete"
       ],
       [
         "providers",
@@ -79,20 +94,25 @@
       "allow_write"
     ],
     "availability": "policy_restricted",
-    "restriction": "MCP binds only an approved named launch reference. Raw credentials use hidden per-invocation CLI input or a UI session; never tool arguments.",
+    "restriction": "MCP binds only an approved named launch reference. Saved-key management is UI or unrestricted local administrator CLI. Raw credentials use hidden CLI/UI input.",
     "slice": 3
   },
   "P03": {
     "capability_id": "P03",
-    "description": "Model discovery with sanitized results",
+    "description": "Model discovery and selected-model capacity inspection for saved or draft endpoints",
     "cli": [
       [
         "providers",
         "models"
+      ],
+      [
+        "providers",
+        "inspect-model"
       ]
     ],
     "mcp": [
-      "discover_provider_models"
+      "discover_provider_models",
+      "inspect_provider_model"
     ],
     "scope": "workspace",
     "effects": [
@@ -113,7 +133,7 @@
   },
   "P04": {
     "capability_id": "P04",
-    "description": "Actual model connection test and sanitized usage/failure",
+    "description": "Model connection test for saved or draft endpoints with sanitized usage and errors",
     "cli": [
       [
         "providers",
@@ -940,7 +960,7 @@
   },
   "V04": {
     "capability_id": "V04",
-    "description": "Interactive graph/tree/edge/node focus, expand/collapse, direct column usage and bounded column transformation lineage with roles, source evidence and coverage",
+    "description": "Focused or whole-workspace graph, rooted tree, visible table column links, direct references, used/unused names, and bounded column traces with roles, evidence and coverage",
     "cli": [
       [
         "lineage",
@@ -1089,21 +1109,30 @@
   },
   "R06": {
     "capability_id": "R06",
-    "description": "Step-wise lineage rows/logical dependency order with evidence; no inferred runtime order",
+    "description": "Step-wise lineage reports and CSV/JSON export for one asset or the whole workspace",
     "cli": [
       [
         "lineage",
         "steps"
+      ],
+      [
+        "export",
+        "report"
       ]
     ],
     "mcp": [
-      "get_lineage_steps"
+      "get_lineage_steps",
+      "export_report"
     ],
     "scope": "workspace",
     "effects": [
-      "read"
+      "read",
+      "local_write"
     ],
-    "required_permissions": [],
+    "required_permissions": [
+      "allow_write_for_export",
+      "source_permission_for_export"
+    ],
     "availability": "implemented",
     "restriction": "",
     "slice": 6
@@ -1139,7 +1168,7 @@
   },
   "E01": {
     "capability_id": "E01",
-    "description": "Offline graph HTML/JSON and fitted standalone SVG/PNG with shared appearance, coverage and bounded resolution",
+    "description": "Focused or whole-workspace graph HTML/JSON and fitted SVG/PNG with shared appearance and coverage",
     "cli": [
       [
         "export",
@@ -1163,7 +1192,7 @@
   },
   "E02": {
     "capability_id": "E02",
-    "description": "Relevant original source ZIP, selected original file download and historical evidence versions",
+    "description": "Relevant original source ZIP, original file download, and bounded current or retained source lines",
     "cli": [
       [
         "export",
@@ -1172,11 +1201,16 @@
       [
         "source",
         "download"
+      ],
+      [
+        "source",
+        "show"
       ]
     ],
     "mcp": [
       "export_source_bundle",
-      "export_original_source"
+      "export_original_source",
+      "get_source_evidence"
     ],
     "scope": "workspace",
     "effects": [
@@ -1184,7 +1218,8 @@
       "local_write"
     ],
     "required_permissions": [
-      "allow_write"
+      "allow_write_for_export",
+      "source_permission"
     ],
     "availability": "implemented",
     "restriction": "",
@@ -1192,7 +1227,7 @@
   },
   "E03": {
     "capability_id": "E03",
-    "description": "Inventory/dictionary/column/impact/code-search/run-comparison CSV/JSON/HTML reports matching available UI formats",
+    "description": "Data dictionary, filtered direct columns, column traces, inventory, impact, code search and run-comparison exports",
     "cli": [
       [
         "export",
@@ -1284,20 +1319,33 @@
         "inspect"
       ],
       [
-        "capabilities"
+        "cleanup",
+        "cache"
+      ],
+      [
+        "cleanup",
+        "orphans"
+      ],
+      [
+        "cleanup",
+        "application"
       ]
     ],
     "mcp": [
       "inspect_cleanup",
       "preview_cleanup"
     ],
-    "scope": "workspace",
+    "scope": "application",
     "effects": [
-      "read"
+      "read",
+      "local_write"
     ],
-    "required_permissions": [],
+    "required_permissions": [
+      "unrestricted_application_scope_for_writes_or_global_metadata",
+      "allow_admin_for_apply"
+    ],
     "availability": "policy_restricted",
-    "restriction": "Shared cache/orphan/application apply is UI-only. Authorized unrestricted previews expose estimates, never apply tokens or paths.",
+    "restriction": "Local administrator CLI or UI applies shared cleanup with confirmation and a full-home backup. MCP previews expose estimates only. Streamlit memory cache clearing requires the UI process.",
     "slice": 7
   },
   "C03": {
@@ -1457,7 +1505,7 @@
   },
   "I01": {
     "capability_id": "I01",
-    "description": "Browser ZIP/folder uploads and file inspection",
+    "description": "Import ZIP archives, folders or selected sources and inspect inventory by path or status",
     "cli": [
       [
         "ingest"
@@ -1477,7 +1525,7 @@
     ],
     "mcp": [
       "ingest_sources",
-      "search_source_code",
+      "list_source_files",
       "get_source_metadata",
       "export_original_source"
     ],
@@ -1487,7 +1535,9 @@
       "local_write"
     ],
     "required_permissions": [
-      "allow_write"
+      "allow_write_for_import_or_download",
+      "approved_import_root_for_import",
+      "source_permission_for_download"
     ],
     "availability": "implemented",
     "restriction": "",
@@ -1575,12 +1625,43 @@
   },
   "MIG03": {
     "capability_id": "MIG03",
-    "description": "Static conversion and reconversion jobs, revision history, lineage and bounded artifact inspection",
-    "cli": [["migration", "convert"], ["migration", "inspect"], ["jobs", "status"], ["jobs", "cancel"]],
-    "mcp": ["start_migration_conversion", "inspect_migration_revision", "get_job_status", "cancel_job"],
-    "scope": "workspace", "effects": ["read", "local_write"],
-    "required_permissions": ["allow_write_for_conversion_and_cancellation", "source_permission_for_conversion_and_evidence"],
-    "availability": "implemented", "restriction": "", "slice": 11
+    "description": "Conversion jobs, revision history, lineage comparison and line- or finding-anchored artifact inspection",
+    "cli": [
+      [
+        "migration",
+        "convert"
+      ],
+      [
+        "migration",
+        "inspect"
+      ],
+      [
+        "jobs",
+        "status"
+      ],
+      [
+        "jobs",
+        "cancel"
+      ]
+    ],
+    "mcp": [
+      "start_migration_conversion",
+      "inspect_migration_revision",
+      "get_job_status",
+      "cancel_job"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write_for_conversion_and_cancellation",
+      "source_permission_for_conversion_and_evidence"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 11
   },
   "MIG04": {
     "capability_id": "MIG04",
@@ -1593,12 +1674,63 @@
   },
   "MIG05": {
     "capability_id": "MIG05",
-    "description": "Offline AI disclosure, confirmed file or model requests, and staged draft review",
-    "cli": [["migration", "ai-preview"], ["migration", "ai-request"], ["migration", "stage-preview"], ["migration", "stage-run"], ["migration", "inspect"]],
-    "mcp": ["preview_migration_ai", "request_migration_ai", "preview_migration_stage", "run_migration_stage", "inspect_migration_revision"],
-    "scope": "workspace", "effects": ["read", "local_write", "network"],
-    "required_permissions": ["allow_write_for_request", "source_permission", "allow_llm_for_request", "allowed_llm_origin", "allowed_credential_ref_when_required", "workspace_privacy"],
-    "availability": "implemented", "restriction": "", "slice": 11
+    "description": "Offline AI disclosure, confirmed file or model requests, cancellable stage jobs and staged draft review",
+    "cli": [
+      [
+        "migration",
+        "ai-preview"
+      ],
+      [
+        "migration",
+        "ai-request"
+      ],
+      [
+        "migration",
+        "stage-preview"
+      ],
+      [
+        "migration",
+        "stage-run"
+      ],
+      [
+        "migration",
+        "inspect"
+      ],
+      [
+        "jobs",
+        "status"
+      ],
+      [
+        "jobs",
+        "cancel"
+      ]
+    ],
+    "mcp": [
+      "preview_migration_ai",
+      "request_migration_ai",
+      "preview_migration_stage",
+      "run_migration_stage",
+      "inspect_migration_revision",
+      "get_job_status",
+      "cancel_job"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write",
+      "network"
+    ],
+    "required_permissions": [
+      "allow_write_for_request",
+      "source_permission",
+      "allow_llm_for_request",
+      "allowed_llm_origin",
+      "allowed_credential_ref_when_required",
+      "workspace_privacy"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 11
   },
   "MIG06": {
     "capability_id": "MIG06",
@@ -1608,5 +1740,252 @@
     "scope": "workspace", "effects": ["read", "local_write"],
     "required_permissions": ["allow_write_for_export", "source_permission"],
     "availability": "implemented", "restriction": "", "slice": 11
+  },
+  "LINB01": {
+    "capability_id": "LINB01",
+    "description": "Inspect and revision-check authored tables, columns, relationships, layout and catalog folders",
+    "cli": [
+      [
+        "builder",
+        "inspect"
+      ],
+      [
+        "builder",
+        "apply"
+      ]
+    ],
+    "mcp": [
+      "inspect_builder",
+      "apply_builder_document"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "source_permission",
+      "allow_write_for_apply",
+      "approved_import_root_for_paths"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
+  },
+  "LINB02": {
+    "capability_id": "LINB02",
+    "description": "Preview and import declared table schemas from supported offline files",
+    "cli": [
+      [
+        "builder",
+        "preview-schemas"
+      ],
+      [
+        "builder",
+        "import-schemas"
+      ]
+    ],
+    "mcp": [
+      "preview_builder_schema_import",
+      "import_builder_schemas"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "source_permission",
+      "allow_write_for_import",
+      "approved_import_root"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
+  },
+  "LINB03": {
+    "capability_id": "LINB03",
+    "description": "Save, update, import, load and clear the active canvas with a named snapshot",
+    "cli": [
+      [
+        "builder",
+        "inspect"
+      ],
+      [
+        "builder",
+        "save-work"
+      ],
+      [
+        "builder",
+        "load-work"
+      ],
+      [
+        "builder",
+        "import-work"
+      ]
+    ],
+    "mcp": [
+      "inspect_builder",
+      "save_builder_snapshot",
+      "load_builder_snapshot",
+      "import_builder_snapshot"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "source_permission",
+      "allow_write_for_changes",
+      "approved_import_root_for_paths"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
+  },
+  "LINB04": {
+    "capability_id": "LINB04",
+    "description": "Export authored lineage diagrams and editable designs or select schemas by table and role",
+    "cli": [
+      [
+        "builder",
+        "export"
+      ],
+      [
+        "export",
+        "download"
+      ]
+    ],
+    "mcp": [
+      "export_builder",
+      "get_export"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "source_permission",
+      "allow_write_for_export"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
+  },
+  "LINB05": {
+    "capability_id": "LINB05",
+    "description": "Preview and permanently delete selected workspace Builder schemas while retaining saved works",
+    "cli": [
+      [
+        "builder",
+        "preview-delete-tables"
+      ],
+      [
+        "builder",
+        "delete-tables"
+      ]
+    ],
+    "mcp": [
+      "preview_builder_table_deletion"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "source_permission",
+      "unrestricted_local_admin_for_apply"
+    ],
+    "availability": "policy_restricted",
+    "restriction": "Permanent deletion requires revision-pinned local administrator confirmation.",
+    "slice": 12
+  },
+  "I02": {
+    "capability_id": "I02",
+    "description": "Set or clear a retained SQL source dialect override and mark changed evidence for reanalysis",
+    "cli": [
+      [
+        "source",
+        "dialect"
+      ],
+      [
+        "source",
+        "metadata"
+      ]
+    ],
+    "mcp": [
+      "update_source_dialect",
+      "get_source_metadata"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read",
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write_for_update"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
+  },
+  "W06": {
+    "capability_id": "W06",
+    "description": "Load and analyze the bundled SQL example in an empty workspace",
+    "cli": [
+      [
+        "workspace",
+        "example"
+      ]
+    ],
+    "mcp": [
+      "start_sql_example"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "local_write"
+    ],
+    "required_permissions": [
+      "allow_write"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
+  },
+  "A08": {
+    "capability_id": "A08",
+    "description": "Project AI run and attempt history, scoped retained input/output/decoded content and diagnostics",
+    "cli": [
+      [
+        "lineage",
+        "analysis-runs"
+      ],
+      [
+        "lineage",
+        "analysis-attempts"
+      ],
+      [
+        "lineage",
+        "analysis-attempt-content"
+      ]
+    ],
+    "mcp": [
+      "list_project_analysis_runs",
+      "list_project_analysis_attempts",
+      "get_project_analysis_attempt_content"
+    ],
+    "scope": "workspace",
+    "effects": [
+      "read"
+    ],
+    "required_permissions": [
+      "source_permission_for_content"
+    ],
+    "availability": "implemented",
+    "restriction": "",
+    "slice": 12
   }
 }

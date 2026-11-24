@@ -94,6 +94,52 @@ def saved_profile(store, vault):
     return w, p
 
 
+def test_cli_saves_replaces_and_deletes_owned_keys_with_hidden_local_input(tmp_path, vault):
+    from typer.testing import CliRunner
+
+    from dataforge.cli import app
+    from dataforge.settings_service import revision
+    from dataforge.store import Store
+
+    with closing(Store(tmp_path)) as store:
+        workspace = store.create_workspace('credentials')
+        store.execute('INSERT INTO llm_profiles VALUES (?,?,?,?)', ['p', workspace, 'p', profile('').model_dump_json()])
+        expected = revision(store, workspace)
+
+    runner = CliRunner()
+    args = ['--home', str(tmp_path), '--json', '--allow-write', '--allow-config-write']
+    command = ['providers', 'credentials', 'save', 'p', '-w', workspace, '--expected-revision', expected]
+    denied = runner.invoke(app, [*args, *command], input='first-saved-key\n')
+    assert json.loads(denied.stdout)['error']['code'] == 'requires_local_admin'
+    assert not vault.calls
+
+    args.append('--allow-admin')
+    saved = runner.invoke(app, [*args, *command], input='first-saved-key\n')
+    assert saved.exit_code == 0, saved.output
+    assert 'first-saved-key' not in saved.output
+    first = json.loads(saved.stdout)
+    saved_ref = first['reference']
+    assert saved_ref.startswith('DATAFORGE_SAVED_')
+    assert list(vault.values.values()) == ['first-saved-key']
+
+    replaced = runner.invoke(app, [*args, '--allowed-credential-ref', saved_ref, *command[:-1], first['settings_revision']],
+                             input='replacement-saved-key\n')
+    assert replaced.exit_code == 0, replaced.output
+    assert 'replacement-saved-key' not in replaced.output
+    second = json.loads(replaced.stdout)
+    assert list(vault.values.values()) == ['replacement-saved-key']
+
+    removed = runner.invoke(app, [*args, '--allowed-credential-ref', second['reference'], 'providers', 'credentials',
+                                  'delete', 'p', '-w', workspace, '--expected-revision', second['settings_revision'],
+                                  '--confirm', 'DELETE SAVED KEY'])
+    assert removed.exit_code == 0, removed.output
+    assert not vault.values
+    with closing(Store(tmp_path)) as store:
+        updated = Profile.model_validate_json(store.rows("SELECT config FROM llm_profiles WHERE profile_id='p'")[0]['config'])
+        assert updated.saved_key_ref == '' and updated.key_env.startswith('DATAFORGE_SESSION_')
+    assert b'replacement-saved-key' not in (tmp_path / 'dataforge.duckdb').read_bytes()
+
+
 def test_agent_grants_before_vault_reads_and_disconnect(tmp_path, vault):
     import httpx
 

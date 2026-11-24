@@ -229,6 +229,27 @@ class Importer:
         return self._import(discover(), extensions, str(path), progress, cancelled,
                             source_kind=source_kind, dbt_options=dbt_options, sql_dialect=sql_dialect, stage=stage)
 
+    def selected_files(self, files: list[Path], extensions: set[str], *, progress=None, cancelled=None,
+                       sql_dialect: str | None = None) -> ImportReport:
+        """Import only named regular files under one approved root, retaining relative paths."""
+        if not files or len(files) > self.limits.max_files:
+            raise ValueError('Import exceeds file count limit')
+        try:
+            root = Path(os.path.commonpath([file.parent for file in files]))
+        except ValueError:
+            raise ValueError('Select files under one approved root') from None
+        if not any(root.is_relative_to(allowed) for allowed in self.roots):
+            raise ValueError('Select files under one approved root')
+
+        def read(path: Path) -> bytes:
+            if path.is_symlink() or not path.resolve().is_relative_to(root) or not path.is_file():
+                raise ValueError('Only regular files inside the selected import root are imported')
+            with path.open('rb') as stream:
+                return stream.read(self.limits.max_file_bytes + 1)
+
+        return self._import(((path.relative_to(root).as_posix(), lambda path=path: read(path)) for path in files),
+                            extensions, 'Host files', progress, cancelled, sql_dialect=sql_dialect)
+
     def files(self, entries: Iterable[tuple[str, bytes]], extensions: set[str],
               progress: Callable[[ImportReport], Any] | None = None,
               cancelled: Callable[[], bool] | None = None, *, source_kind: str = 'files', dbt_options=None,

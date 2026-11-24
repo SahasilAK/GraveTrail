@@ -170,6 +170,13 @@ def render_graph_image(
         'mime_type': 'image/svg+xml' if format == 'svg' else 'image/png'}
     if format == 'svg':
         return svg, metadata
+    return render_svg_png(svg), metadata
+
+
+def render_svg_png(svg: bytes) -> bytes:
+    """Rasterize internally generated SVG through the existing bounded worker."""
+    if len(svg) > MAX_SVG_BYTES:
+        raise ValueError('SVG exceeds 4 MiB; narrow the graph')
     if not png_available():
         raise ValueError('PNG renderer unavailable; install resvg-py or download SVG instead')
     command = ([sys.executable, '--render-graph-image'] if getattr(sys, 'frozen', False) else
@@ -188,4 +195,4 @@ def render_graph_image(
         raise ValueError('PNG rendering failed; check the renderer installation or download SVG')
     if len(result.stdout) > MAX_PNG_BYTES:
         raise ValueError('PNG exceeds 16 MiB; reduce scale or narrow the graph')
-    return result.stdout, metadata
+    return result.stdout

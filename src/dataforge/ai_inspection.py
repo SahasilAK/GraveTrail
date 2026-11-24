@@ -167,3 +167,15 @@ def inspection_payload(store, workspace, run_id, attempt_id, kind, *, offset=0, 
     if row['captured_at'] < time() - age:
         return {**missing, 'status': 'Not retained: expired under workspace retention (at most 7 days)'}
     return {**row, 'has_more': offset + len(row['content'] or '') < (row['total_chars'] or 0)}
+
+
+def inspection_diagnostics(store, workspace, run_id, attempt_id):
+    """Read the persisted request outcome and diagnostic metadata for one attempt."""
+    rows = store.rows('''SELECT a.status,a.details,r.details AS request_details FROM ai_analysis_attempts a
+        JOIN ai_analysis_requests r ON r.workspace_id=a.workspace_id AND r.run_id=a.run_id AND r.batch_id=a.batch_id
+        WHERE a.workspace_id=? AND a.run_id=? AND a.attempt_id=?''', [workspace, run_id, attempt_id])
+    if not rows:
+        raise ValueError('Analysis attempt not found in this workspace and run')
+    row = rows[0]
+    return {'part_outcome': json.loads(row['request_details']).get('outcome', 'Validation outcome not checkpointed'),
+            'attempt_status': row['status'], 'diagnostics': json.loads(row['details'])}

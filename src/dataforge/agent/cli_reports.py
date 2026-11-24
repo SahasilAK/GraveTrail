@@ -152,7 +152,8 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
         invoke(ctx, 'paths', workspace, asset=asset, direction=direction, max_paths=max_paths)
 
     @lineage_app.command('steps')
-    def steps(ctx: typer.Context, asset: str, workspace: Workspace, direction: str = 'upstream') -> None:
+    def steps(ctx: typer.Context, workspace: Workspace, asset: str = typer.Argument(''), direction: str = 'upstream',
+              all_assets: bool = False) -> None:
         """List step-wise lineage rows for an asset.
 
         Args:
@@ -160,29 +161,50 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
             asset: Asset identifier or name.
             workspace: Workspace identifier.
             direction: Lineage traversal direction.
+            all_assets: Select the full filtered workspace graph.
         """
-        invoke(ctx, 'steps', workspace, asset=asset, direction=direction)
+        invoke(ctx, 'steps', workspace, asset=asset, direction=direction, all_assets=all_assets)
+
+    @lineage_app.command('analysis-runs')
+    def analysis_runs(ctx: typer.Context, workspace: Workspace) -> None:
+        """List retained project AI analysis runs, including incomplete runs."""
+        invoke(ctx, 'analysis_runs', workspace)
+
+    @lineage_app.command('analysis-attempts')
+    def analysis_attempts(ctx: typer.Context, run_id: str, workspace: Workspace, offset: int = 0) -> None:
+        """List planned requests and physical attempts for a project AI run."""
+        invoke(ctx, 'analysis_attempts', workspace, run_id=run_id, offset=offset)
+
+    @lineage_app.command('analysis-attempt-content')
+    def analysis_attempt_content(ctx: typer.Context, run_id: str, attempt_id: str, workspace: Workspace,
+                                 kind: str = 'output', offset: int = 0, length: int = 16000,
+                                 destination: Path | None = None) -> None:
+        """Read retained attempt text or download it to a new file from offset zero."""
+        invoke(ctx, 'analysis_attempt_content', workspace, run_id=run_id, attempt_id=attempt_id,
+               kind=kind, offset=offset, length=length, attempt_text_destination=destination)
 
     @lineage_app.command('graph')
-    def graph_view(ctx: typer.Context, asset: str, workspace: Workspace, direction: str = 'upstream',
-                   view: str = 'nodes', node_id: str = '', edge_id: str = '') -> None:
-        """Read a bounded lineage graph view or focused graph element.
+    def graph_view(ctx: typer.Context, workspace: Workspace, asset: str = typer.Argument(''), direction: str = 'upstream',
+                   view: str = 'nodes', node_id: str = '', edge_id: str = '', all_assets: bool = False) -> None:
+        """Read a graph view or the visible table projection of stored column dependencies.
 
         Args:
             ctx: Typer command context.
             asset: Asset identifier or name.
             workspace: Workspace identifier.
             direction: Lineage traversal direction.
-            view: Graph view mode.
+            view: nodes, edges, tree, columns, or column-links.
             node_id: Optional graph node identifier.
             edge_id: Optional graph edge identifier.
+            all_assets: Select the full filtered workspace graph.
         """
-        invoke(ctx, 'graph_view', workspace, asset=asset, direction=direction, view=view, node_id=node_id, edge_id=edge_id)
+        invoke(ctx, 'graph_view', workspace, asset=asset, direction=direction, view=view, node_id=node_id,
+               edge_id=edge_id, all_assets=all_assets)
 
     @exports_app.command('graph')
-    def graph_export(ctx: typer.Context, asset: str, workspace: Workspace, format: str = 'html', direction: str = 'upstream',
+    def graph_export(ctx: typer.Context, workspace: Workspace, asset: str = typer.Argument(''), format: str = 'html', direction: str = 'upstream',
                      scale: int = 1, background: str = 'light', title: str = 'GraveTrail lineage', legend: bool = True,
-                     output: Path = typer.Option(None, '--output')) -> None:
+                     output: Path = typer.Option(None, '--output'), all_assets: bool = False) -> None:
         """Export HTML/JSON or fitted SVG/PNG; output paths are created exclusively.
 
         Args:
@@ -196,9 +218,11 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
             title: Graph title shown in the export.
             legend: Whether to include the legend.
             output: Optional new local output path.
+            all_assets: Select the full filtered workspace graph.
         """
         invoke(ctx, 'artifact_create', workspace, kind='graph', format=format, selection={'asset': asset,
-            'direction': direction, 'scale': scale, 'background': background, 'title': title, 'legend': legend},
+            'direction': direction, 'scale': scale, 'background': background, 'title': title, 'legend': legend,
+            'all_assets': all_assets},
             download_to=output)
 
     @exports_app.command('paths')
@@ -221,7 +245,8 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
             'include_source_text': include_source_text})
 
     @exports_app.command('sources')
-    def source_export(ctx: typer.Context, workspace: Workspace, asset: str = '', file_id: list[str] = typer.Option(None), direction: str = 'upstream') -> None:
+    def source_export(ctx: typer.Context, workspace: Workspace, asset: str = '', file_id: list[str] = typer.Option(None),
+                      direction: str = 'upstream', all_assets: bool = False) -> None:
         """Create a ZIP bundle of source files relevant to the selected asset or files.
 
         Args:
@@ -230,8 +255,10 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
             asset: Asset identifier or name.
             file_id: Optional source file identifiers.
             direction: Lineage traversal direction.
+            all_assets: Select evidence supporting the full filtered workspace graph.
         """
-        invoke(ctx, 'artifact_create', workspace, kind='source-bundle', format='zip', selection={'asset': asset, 'file_ids': file_id or [], 'direction': direction})
+        invoke(ctx, 'artifact_create', workspace, kind='source-bundle', format='zip', selection={
+            'asset': asset, 'file_ids': file_id or [], 'direction': direction, 'all_assets': all_assets})
 
     @source_app.command('download')
     def source_download(ctx: typer.Context, file_id: str, destination: Path, workspace: Workspace, content_hash: str = '') -> None:
@@ -260,7 +287,8 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
 
     @exports_app.command('report')
     def report(ctx: typer.Context, workspace: Workspace, kind: str = typer.Option(...), format: str = 'json', asset: str = '',
-               query: str = '', before: str = '', after: str = '', record_id: str = '') -> None:
+               query: str = '', before: str = '', after: str = '', record_id: str = '', column: str = '',
+               direction: str = 'upstream', status: str = 'all', all_assets: bool = False) -> None:
         """Create a bounded report artifact from the selected report inputs.
 
         Args:
@@ -273,9 +301,14 @@ def register(app: typer.Typer, workspace_app: typer.Typer, assets_app: typer.Typ
             before: Identifier of the earlier run.
             after: Identifier of the later run.
             record_id: Saved AI result identifier.
+            column: Column name or exact column ID for a transformation trace.
+            direction: Lineage traversal direction.
+            status: Transformation resolution status filter.
+            all_assets: Select the full filtered workspace graph for lineage steps.
         """
         invoke(ctx, 'artifact_create', workspace, kind=kind, format=format,
-            selection={'asset': asset, 'query': query, 'before': before, 'after': after, 'record_id': record_id})
+            selection={'asset': asset, 'query': query, 'before': before, 'after': after, 'record_id': record_id,
+                       'column': column, 'direction': direction, 'status': status, 'all_assets': all_assets})
 
 
 def register_maintenance(app: typer.Typer, maintenance_app: typer.Typer,

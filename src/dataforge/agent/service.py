@@ -9,10 +9,15 @@ from collections import Counter
 from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
+from dataforge.agent.builder import READS as BUILDER_READS
+from dataforge.agent.builder import SOURCE_ACTIONS as BUILDER_SOURCE_ACTIONS
+from dataforge.agent.builder import WRITES as BUILDER_WRITES
+from dataforge.agent.builder import BuilderOperations
 from dataforge.agent.contracts import (
     AccessPolicy,
     AgentError,
@@ -48,19 +53,20 @@ from dataforge.provider_service import ProviderOperations
 from dataforge.reporting import READS as REPORT_READS
 from dataforge.reporting import ReportOperations
 
-WRITES = {"create_workspace", "ingest", "analyze", "export", "cleanup_apply",
+WRITES = {"create_workspace", "workspace_example", "ingest", "analyze", "export", "cleanup_apply",
           'settings_update', 'workspace_update', 'config_import', 'history_archive', 'history_restore',
           'staging_clean', 'staging_restore'} | PROVIDER_WRITES | AI_WRITES | ARTIFACT_WRITES
 MAINTENANCE_READS = {'history_preview', 'history_archives', 'staging_preview', 'staging_recoveries',
                      'database_inspect', 'backups_list'}
-APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info'}
-WRITES |= {'theme_apply', 'logging_update'} | PROJECT_WRITES | MIGRATION_WRITES
-LONG_ACTIONS = {'provider_models', 'provider_test', 'ai_request', 'review_request', 'ai_merge', 'migration_ai_request',
+APPLICATION_ACTIONS = {'theme_list', 'theme_get', 'theme_apply', 'logging_get', 'logging_update', 'runtime_info',
+                       'cleanup_shared_preview', 'cleanup_shared_apply'}
+WRITES |= {'theme_apply', 'logging_update', 'cleanup_shared_apply'} | PROJECT_WRITES | MIGRATION_WRITES | BUILDER_WRITES
+LONG_ACTIONS = {'provider_models', 'provider_model_details', 'provider_test', 'ai_request', 'review_request', 'ai_merge', 'migration_ai_request',
                 'migration_stage_request'}
 
 
 class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperations, ArtifactOperations,
-                   ProjectAnalysisOperations, MigrationOperations):
+                   ProjectAnalysisOperations, MigrationOperations, BuilderOperations):
     """Coordinate authorized automation requests over application services."""
 
     def __init__(self, store: Any, policy: AccessPolicy | None = None) -> None:
@@ -75,7 +81,6 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         self.runtime_profiles = {}
         self.provider_transport = None
         import os
-        from pathlib import Path
 
         from dataforge.launcher import application_root
         self.theme_config_path = Path(os.environ.get('DATAFORGE_THEME_CONFIG', str(application_root() / '.streamlit/config.toml')))
@@ -149,7 +154,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                           "ingest", "analyze", "job", "export", "result",
                           "cleanup_inspect", "cleanup_preview", "cleanup_apply", "capabilities",
                           'settings_schema', 'settings_get', 'settings_update', 'workspace_update',
-                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS | DBT_READS | MIGRATION_READS:
+                          'config_export', 'config_import', 'agent_setup', 'agent_self_test'} | APPLICATION_ACTIONS | WRITES | MAINTENANCE_READS | PROVIDER_READS | AI_READS | REPORT_READS | ARTIFACT_READS | PROJECT_READS | DBT_READS | MIGRATION_READS | BUILDER_READS:
             raise AgentError("invalid_argument", "Unknown operation")
         write = action in WRITES
         try:
@@ -178,7 +183,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                     if administrator:
                         self.policy.require('admin')
                     settings = self._workspace(workspace_id, write=write,
-                        source=action in {"source", "result"} | MIGRATION_SOURCE_ACTIONS
+                        source=action in {"source", "result"} | MIGRATION_SOURCE_ACTIONS | BUILDER_SOURCE_ACTIONS
                         or (options or {}).get("detail_level") == "detailed",
                         administrator=administrator)
                 values = {"detail_level": settings.default_detail, **(options or {})}
@@ -494,8 +499,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         return {'workspace_id': w, 'categories': {key: {'records': p['records'],
                 'logical_bytes_estimate': p['logical_bytes_estimate'], 'file_bytes': p['file_bytes']}
                 for key, p in plans.items()}, 'notes': next(iter(plans.values()))['notes'],
-                'restricted_categories': {'cache': 'requires_local_ui', 'orphans': 'requires_local_ui',
-                                          'application': 'requires_local_ui'}}
+                'restricted_categories': {category: 'requires_local_admin' for category in ('cache', 'orphans', 'application')}}
 
     def _cleanup_preview(self, w: str, opts: QueryOptions, category: str='lineage', file_ids: list[str] | None=None, run_id: str | None=None) -> dict[str, Any]:
         """Build a cleanup preview for workspace or authorized application data.
@@ -515,10 +519,10 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         from dataforge.cleanup import cleanup_plan
         if category in {'application', 'cache', 'orphans'}:
             if self.policy.workspaces is not None or not self.policy.allow_application_config:
-                raise AgentError('requires_local_ui', 'Shared cleanup inspection requires an unrestricted application-authorized launch; apply in Settings UI')
+                raise AgentError('requires_local_admin', 'Shared cleanup inspection requires an unrestricted application-authorized launch')
             plan = cleanup_plan(self.store, '', category)
             return {'category': category, 'records': plan['records'], 'logical_bytes_estimate': plan['logical_bytes_estimate'],
-                    'file_bytes': plan['file_bytes'], 'restriction': 'requires_local_ui', 'notes': plan['notes']}
+                    'file_bytes': plan['file_bytes'], 'restriction': 'requires_local_admin', 'notes': plan['notes']}
         return cleanup_plan(self.store, w, category, file_ids, run_id)
 
     def _cleanup_apply(self, w: str, opts: QueryOptions, preview: dict[str, Any], confirmation: str='', backup_first: bool=False) -> dict[str, Any]:
@@ -543,6 +547,28 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             raise AgentError('forbidden', 'Cleanup preview is outside the permitted workspace')
         if not backup_first:
             raise AgentError('validation_failed', 'General cleanup requires a full-home backup; pass the explicit backup option')
+        return apply_cleanup(self.store, preview, confirmation, backup_first,
+                             allowed_credential_refs=self.policy.allowed_credential_refs)
+
+    def _cleanup_shared_preview(self, w: str, opts: QueryOptions, category: str) -> dict[str, Any]:
+        """Return a full shared cleanup preview to an authorized local administrator."""
+        from dataforge.cleanup import cleanup_plan
+        self.policy.require('admin')
+        self.policy.require('application')
+        if category not in {'cache', 'orphans', 'application'}:
+            raise AgentError('invalid_argument', 'Choose cache, orphans or application cleanup')
+        return cleanup_plan(self.store, category=category)
+
+    def _cleanup_shared_apply(self, w: str, opts: QueryOptions, preview: dict[str, Any],
+                              confirmation: str, backup_first: bool) -> dict[str, Any]:
+        """Apply a revision-bound shared cleanup preview with a mandatory full-home backup."""
+        from dataforge.cleanup import apply_cleanup
+        self.policy.require('admin')
+        self.policy.require('application')
+        if preview.get('workspace_id') != '' or preview.get('category') not in {'cache', 'orphans', 'application'}:
+            raise AgentError('forbidden', 'Expected a shared cleanup preview')
+        if not backup_first:
+            raise AgentError('validation_failed', 'General cleanup requires a full-home backup')
         return apply_cleanup(self.store, preview, confirmation, backup_first,
                              allowed_credential_refs=self.policy.allowed_credential_refs)
 
@@ -883,7 +909,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         return self._page(w, opts, ["assets", query], items, analysis_current=self._current(w))
 
     def _files(self, w: str, opts: QueryOptions, query: str="") -> dict[str, Any]:
-        """Search source-file inventory metadata by relative path.
+        """Search source-file inventory metadata by relative path or parsing status.
 
         Args:
             w: Workspace identifier.
@@ -892,9 +918,9 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
 
         Returns:
             The operation response data for the requested use case."""
-        fields = ("file_id", "relative_path", "extension", "parsing_status", "line_count", "content_hash", "file_size", "encoding")
-        return self._page(w, opts, ["files", query], [{k: f[k] for k in fields}
-            for f in self.store.files(w) if query.casefold() in f["relative_path"].casefold()])
+        from dataforge.services import source_inventory_rows
+
+        return self._page(w, opts, ['files', query], source_inventory_rows(self.store, w, query))
 
     def _issues(self, w: str, opts: QueryOptions, severity: str="all") -> dict[str, Any]:
         """List workspace diagnostics filtered by severity.
@@ -1058,7 +1084,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         return {"workspace_id": w, "results": results, "processed": len(results), "requested": len(assets),
                 "complete": complete, "remaining_assets": assets[len(results):]}
 
-    def _columns(self, w: str, opts: QueryOptions, asset: str, column_query: str='', usage_type: str='', file_id: str='', group_by: str='none') -> dict[str, Any]:
+    def _columns(self, w: str, opts: QueryOptions, asset: str, column_query: str='', usage_type: str='', file_id: str='',
+                 group_by: str='none', view: str='references') -> dict[str, Any]:
         """List direct source-column usage with optional filtering and grouping.
 
         Args:
@@ -1069,19 +1096,35 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             usage_type: Usage-context filter.
             file_id: Source file identifier.
             group_by: Grouping mode for direct usage results.
+            view: Direct references, used names, or unused declared names.
 
         Returns:
             The operation response data for the requested use case.
 
         Raises:
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
-        from dataforge.services import column_report, column_usage_coverage
-        if group_by not in {'none', 'file', 'usage_type'} or any(len(value) > 1024 for value in (column_query, usage_type, file_id)):
+        from dataforge.services import (
+            column_names,
+            column_report,
+            column_usage_coverage,
+            filter_column_report,
+        )
+        if (view not in {'references', 'used', 'unused'} or group_by not in {'none', 'file', 'usage_type'}
+                or any(len(value) > 1024 for value in (column_query, usage_type, file_id))):
             raise AgentError('validation_failed', 'Invalid direct-column filter/grouping')
         selected = self._asset(w, asset)
-        rows = column_report(self.store, w, selected["asset_id"])
-        rows = [r for r in rows if column_query.casefold() in r['column_name'].casefold()
-                and (not usage_type or usage_type.casefold() in r['context'].casefold())
+        aid = selected['asset_id']
+        coverage = column_usage_coverage(self.store, w, aid)
+        rows = column_report(self.store, w, aid)
+        if view != 'references':
+            used, unused = column_names(rows, json.loads(selected['metadata']), coverage_complete=coverage['complete'])
+            names = used if view == 'used' else unused
+            return self._page(w, opts, ['column_usage_names', aid, view],
+                              [{'column_name': name} for name in names or []], asset_id=aid,
+                              view=view, names_available=names is not None, usage_coverage=coverage,
+                              analysis_current=self._current(w))
+        rows = filter_column_report(rows, column_query)
+        rows = [r for r in rows if (not usage_type or usage_type.casefold() in r['context'].casefold())
                 and (not file_id or r['file_id'] == file_id)]
         fields = ("column_name", "context", "status", "statement_id", "file_id")
         if opts.detail_level != "summary":
@@ -1096,7 +1139,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         return self._page(w, opts, ["columns", selected["asset_id"], column_query, usage_type, file_id, group_by], items,
                           asset_id=selected["asset_id"], unique_columns=len({r['column_name'] for r in rows}),
                           group_by=group_by, analysis_current=self._current(w),
-                          usage_coverage=column_usage_coverage(self.store, w, selected['asset_id']))
+                          usage_coverage=coverage)
 
     def _column_catalog(self, w: str, opts: QueryOptions, asset: str) -> dict[str, Any]:
         """Return a bounded catalog of stored column transformations.
@@ -1190,7 +1233,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         return {**row, "source_current": source["content_hash"] == row["source_hash"]}
 
     def _source(self, w: str, opts: QueryOptions, file_id: str | None=None, statement_id: str | None=None, operation_id: str | None=None,
-                start_line: int | None=None, end_line: int | None=None, full: bool=False) -> dict[str, Any]:
+                start_line: int | None=None, end_line: int | None=None, full: bool=False,
+                content_hash: str = '') -> dict[str, Any]:
         """Return bounded original source lines for one file, statement, or operation.
 
         Args:
@@ -1202,6 +1246,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             start_line: First source line number.
             end_line: Last source line number.
             full: Whether full source is requested.
+            content_hash: Optional exact retained version for a file selection.
 
         Returns:
             The operation response data for the requested use case.
@@ -1210,6 +1255,8 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
         if sum(bool(x) for x in (file_id, statement_id, operation_id)) != 1:
             raise AgentError("invalid_argument", "Specify exactly one file_id, statement_id or operation_id")
+        if content_hash and not file_id:
+            raise AgentError('invalid_argument', 'Select a file_id when specifying a content hash')
         if operation_id:
             rows = self.store.rows("SELECT statement_id FROM operations WHERE workspace_id=? AND operation_id=?", [w, operation_id])
             if not rows:
@@ -1217,20 +1264,26 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             statement_id = rows[0]["statement_id"]
         if statement_id:
             return self._page(w, opts, ["statement", statement_id], [self._statement(w, statement_id)])
-        rows = self.store.rows("SELECT file_id FROM source_files WHERE workspace_id=? AND file_id=?", [w, file_id])
+        rows = self.store.rows("SELECT content_hash FROM source_files WHERE workspace_id=? AND file_id=?", [w, file_id])
         if not rows:
             raise AgentError("not_found", "File does not exist in this workspace")
         if not full and (start_line is None or end_line is None):
             raise AgentError("invalid_argument", "Specify start_line/end_line or explicitly request full source")
-        source = self.store.file(file_id)
-        lines = source["raw_content"].splitlines(keepends=True)
+        try:
+            source = self.store.file(file_id, content_hash or None)
+        except ValueError:
+            raise AgentError('not_found', 'Source version is unavailable in this workspace') from None
+        text = self.store.snapshot_content(source) if content_hash else source['raw_content']
+        lines = text.splitlines(keepends=True)
         start, end = (1, len(lines)) if full else (start_line, end_line)
         if type(start) is not int or type(end) is not int or not 1 <= start <= end <= len(lines):
             raise AgentError("invalid_argument", "Line range is outside the source")
         items = [{"file_id": file_id, "source_hash": source["content_hash"], "relative_path": source["relative_path"],
                   "start_line": i + 1, "end_line": min(i + 20, end), "code": "".join(lines[i:min(i + 20, end)])}
                  for i in range(start - 1, end, 20)]
-        return self._page(w, opts, ["source", file_id, start, end], items)
+        digest = source['content_hash']
+        return self._page(w, opts, ['source', file_id, digest, start, end], items,
+                          source_current=digest == rows[0]['content_hash'])
 
     def _search_code(self, w: str, opts: QueryOptions, query: str, include_matches: bool=False) -> dict[str, Any]:
         """Search source metadata or literal code matches when requested.
@@ -1276,6 +1329,11 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         self._workspace(w, write=True)
         if operation == "migration_convert":
             result = self._run_migration_conversion(w, **arguments, progress=progress, cancelled=cancelled)
+        elif operation == "migration_stage_request":
+            result = self._run_migration_stage(w, **arguments, progress=progress, cancelled=cancelled)
+        elif operation == "workspace_example":
+            from dataforge.services import run_sql_example
+            result = run_sql_example(self.store, w, progress=progress, cancelled=cancelled)
         elif operation == "analyze":
             if arguments.get('mode', 'parser') != 'parser' or arguments.get('resume_run_id'):
                 from dataforge.ai_analysis_models import AnalysisRequest
@@ -1291,7 +1349,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                     raise AgentError("invalid_argument", "Selected files must belong to the workspace")
             result = analyze(self.store, w, ids, arguments.get("force", False), progress=progress, cancelled=cancelled)
         elif operation == "ingest":
-            path = self.policy.import_path(arguments["path"])
+            path, files = self._ingest_paths(arguments['path'], arguments.get('files'), arguments.get('source_kind', 'files'))
             extensions = {"." + e.lstrip(".").lower() for e in arguments["extensions"]}
             limits = Limits(max_files=min(100000, max(1, int(self.store.setting(w, "max_files", 10000)))),
                             max_file_bytes=min(100, int(self.store.setting(w, "max_file_mb", 20))) * 1024 * 1024)
@@ -1300,7 +1358,10 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
                            sql_dialect=arguments.get('sql_dialect'))
             report_progress = (lambda report: progress(min(.99, report.discovered / limits.max_files), "Importing")) if progress else None
             with self.store.analysis_lock:
-                if path.is_dir():
+                if files:
+                    report = importer.selected_files(files, extensions, progress=report_progress, cancelled=cancelled,
+                                                     sql_dialect=options['sql_dialect'])
+                elif path.is_dir():
                     report = importer.directory(path, extensions, progress=report_progress, **options)
                 elif path.suffix.lower() == ".zip" and path.stat().st_size <= limits.max_archive_bytes:
                     report = importer.zip(path.read_bytes(), extensions, progress=report_progress, **options)
@@ -1312,8 +1373,28 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
         self.audit(w, operation, "completed")
         return result
 
+    def _workspace_example(self, w, opts):
+        if self.store.files(w):
+            raise AgentError("conflict", "Choose a workspace with no imported sources for the SQL example")
+        return self.jobs.start(w, "workspace_example", lambda p, c: self.run_operation(
+            w, "workspace_example", {}, progress=p, cancelled=c),
+            AgentSettings.from_store(self.store, w).model_dump(), cancellable=True)
+
+    def _ingest_paths(self, path: str, files: list[str] | None, source_kind: str) -> tuple[Path, list[Path]]:
+        target = self.policy.import_path(path)
+        if len(files or []) > 100000:
+            raise AgentError('resource_limit', 'Too many selected paths')
+        if files or (target.is_file() and target.suffix.lower() != '.zip'):
+            if source_kind != 'files':
+                raise AgentError('invalid_path', 'Import a dbt project from a directory or ZIP archive')
+            selected = list(dict.fromkeys([target, *(self.policy.import_path(file) for file in files or [])]))
+            if any(not file.is_file() or file.suffix.lower() == '.zip' for file in selected):
+                raise AgentError('invalid_path', 'A selected-source import accepts regular files only')
+            return target, selected
+        return target, []
+
     def _ingest(self, w: str, opts: QueryOptions, path: str, extensions: list[str], source_kind: str='files',
-                dbt_options: dict | None=None, sql_dialect: str | None=None) -> dict[str, Any]:
+                dbt_options: dict | None=None, sql_dialect: str | None=None, files: list[str] | None=None) -> dict[str, Any]:
         """Validate import inputs and enqueue a background ingestion job.
 
         Args:
@@ -1327,7 +1408,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
 
         Raises:
             AgentError: If the operation is invalid, unauthorized, or unavailable."""
-        self.policy.import_path(path)
+        self._ingest_paths(path, files, source_kind)
         if source_kind not in {'files', 'dbt'}:
             raise AgentError('invalid_argument', 'Select files or dbt source kind')
         if source_kind == 'files' and (not extensions or not {e.lstrip(".").lower() for e in extensions} <= {"sql", "sas", "csv"}):
@@ -1338,7 +1419,7 @@ class AgentService(DbtOperations, ProviderOperations, AIOperations, ReportOperat
             ParsingSettings(dialect=sql_dialect)
         return self.jobs.start(w, "ingest", lambda p: self.run_operation(w, "ingest", {
             "path": path, "extensions": extensions, 'source_kind': source_kind, 'dbt_options': dbt_options,
-            'sql_dialect': sql_dialect}, p), AgentSettings.from_store(self.store, w).model_dump())
+            'sql_dialect': sql_dialect, 'files': files}, p), AgentSettings.from_store(self.store, w).model_dump())
 
     def _analyze(self, w: str, opts: QueryOptions, file_ids: list[str] | None=None, force: bool=False, mode: str='parser', **arguments: Any) -> dict[str, Any]:
         """Enqueue a background analysis job for selected or all workspace files.

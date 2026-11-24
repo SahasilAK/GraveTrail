@@ -1,5 +1,8 @@
 """All access surfaces preserve column identity, coverage and source restrictions."""
 import asyncio
+import base64
+import csv
+import io
 import os
 import sys
 from collections.abc import Iterator
@@ -11,7 +14,7 @@ import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from dataforge.agent.contracts import AgentError
+from dataforge.agent.contracts import AccessPolicy, AgentError
 from dataforge.agent.service import AgentService
 from dataforge.ingestion import Importer
 from dataforge.services import analyze
@@ -31,9 +34,10 @@ def engine(tmp_path: Path) -> Iterator[Any]:
     """
     store = Store(tmp_path / "home")
     workspace = store.create_workspace("Transformation access")
-    Importer(store, workspace).files([("totals.sql", SQL)], {".sql"})
+    schema = b'create table raw.orders (quantity int, price int, active int, notes varchar(25));'
+    Importer(store, workspace).files([('schema.sql', schema), ('totals.sql', SQL)], {'.sql'})
     analyze(store, workspace)
-    service = AgentService(store)
+    service = AgentService(store, AccessPolicy(allow_write=True))
     yield service, store, workspace
     service.close()
     store.close()
@@ -65,12 +69,33 @@ def test_catalog_trace_paging_and_source_gate(engine: Any) -> None:
     detailed = service.call("column_lineage", w, asset="mart.totals", column="total",
                             options={"detail_level": "detailed", "max_chars": 30000})
     assert any(d["evidence"].get("code") for d in detailed["items"])
+
+    result = service.call('columns', w, asset='raw.orders', column_query=' quantity, price ')
+    assert {r['column_name'] for r in result['items']} == {'quantity', 'price'}
+    used = service.call('columns', w, asset='raw.orders', view='used')
+    assert {row['column_name'] for row in used['items']} == {'active', 'price', 'quantity'}
+    unused = service.call('columns', w, asset='raw.orders', view='unused')
+    assert unused['names_available'] and unused['items'] == [{'column_name': 'notes'}]
+
+    def export_rows(kind, selection):
+        artifact = service.call('artifact_create', w, kind=kind, format='csv', selection=selection)
+        content = service.call('artifact_read', w, artifact_id=artifact['artifact_id'])
+        return artifact['artifact_id'], list(csv.DictReader(io.StringIO(base64.b64decode(content['data']).decode())))
+
+    _, columns = export_rows('columns', {'asset': 'raw.orders', 'query': 'price, quantity'})
+    assert {r['column_name'] for r in columns} == {'quantity', 'price'}
+    artifact, trace = export_rows('column-lineage', {'asset': 'mart.totals', 'column': 'total'})
+    assert trace and all(r['column'] == 'total' and r['run_id'] for r in trace)
+    assert any('gross + 1' in r['expression'] for r in trace)
+
     store.set_setting(w, "agent_access", {"allow_source": False})
     standard = service.call("column_lineage", w, asset="mart.totals", column="total",
                             options={"detail_level": "standard"})
     assert all("expression" not in d and "code" not in d["evidence"] for d in standard["items"])
     with pytest.raises(AgentError):
         service.call("column_lineage", w, asset="mart.totals", column="total", options={"detail_level": "detailed"})
+    with pytest.raises(AgentError, match='Source'):
+        service.call('artifact_read', w, artifact_id=artifact)
 
 
 def test_column_tools_through_real_stdio_transport(tmp_path: Path) -> None:

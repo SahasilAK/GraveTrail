@@ -1,13 +1,12 @@
 """Shared lineage controls and selection-driven graph inspection."""
 import json
-from collections import defaultdict
 
 import streamlit as st
 
 from dataforge.column_evidence import load_column_evidence
 from dataforge.column_graph import build_column_scene
 from dataforge.configuration import ParsingSettings
-from dataforge.exports import report_csv
+from dataforge.exports import column_trace_csv
 from dataforge.services import analysis_is_current
 from dataforge.transformations import column_catalog, trace_columns
 from ui.column_graph import column_graph_view, resolve_selection
@@ -215,19 +214,9 @@ def render_column_lineage(store, workspace, asset, *, key="column_lineage"):
             column_graph_view(scene, key=key + "_graph", selection=None)
         st.caption("No returned transformations to inspect. Coverage above explains any unresolved boundary.")
 
-    def export_csv():
-        markers = {k: trace[k] for k in ("workspace_id", "asset_id", "column", "direction", "depth",
-                                         "state", "truncated", "complete", "run_id")}
-        markers["coverage"] = json.dumps(coverage, default=str)
-        paths = defaultdict(list)
-        for path in trace["paths"]:
-            paths[path["derivation_id"]].append(path)
-        return report_csv([{**markers, "paths": json.dumps(paths[step["derivation_id"]], default=str),
-                            **{k: json.dumps(v, default=str) if isinstance(v, (dict, list)) else v
-                               for k, v in step.items()}} for step in steps] or [markers])
     with st.popover("Export trace", icon=":material/download:"):
         st.caption("Exports contain this bounded trace, original expressions, evidence references and coverage markers.")
         st.download_button("Download JSON", lambda: json.dumps(trace, indent=2, default=str),
                            "column_transformations.json", "application/json", on_click="ignore")
-        st.download_button("Download CSV", export_csv,
+        st.download_button("Download CSV", lambda: column_trace_csv(trace),
                            "column_transformations.csv", "text/csv", on_click="ignore")

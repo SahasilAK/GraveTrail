@@ -74,21 +74,21 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `cleanup workspace` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
 | `columns catalog` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `columns lineage` | `ASSET`, `COLUMN` | `--workspace`, `-w` **required**; `--direction`; `--status`; `--help` |
-| `columns usage` | `ASSET` | `--workspace`, `-w` **required**; `--column-query`; `--usage-type`; `--file-id`; `--group-by`; `--help` |
+| `columns usage` | `ASSET` | `--workspace`, `-w` **required**; `--column-query`; `--usage-type`; `--file-id`; `--group-by`; `--view`; `--help` |
 | `dictionary list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
 | `export download` | `ARTIFACT_ID`, `DESTINATION` | `--workspace`, `-w` **required**; `--help` |
-| `export graph` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--scale`; `--background`; `--title`; `--legend`, `--no-legend`; `--output`; `--help` |
+| `export graph` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--scale`; `--background`; `--title`; `--legend`, `--no-legend`; `--output`; `--all-assets`, `--no-all-assets`; `--help` |
 | `export lineage` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--help` |
 | `export paths` | `ASSET` | `--workspace`, `-w` **required**; `--format`; `--direction`; `--max-paths`; `--include-evidence`, `--no-include-evidence`; `--include-source-text`, `--no-include-source-text`; `--help` |
 | `export read` | `RESULT_ID` | `--workspace`, `-w` **required**; `--format`; `--binary`, `--no-binary`; `--offset`; `--length`; `--help` |
-| `export report` | — | `--workspace`, `-w` **required**; `--kind` **required**; `--format`; `--asset`; `--query`; `--before`; `--after`; `--record-id`; `--help` |
-| `export sources` | — | `--workspace`, `-w` **required**; `--asset`; `--file-id` (repeatable); `--direction`; `--help` |
+| `export report` | — | `--workspace`, `-w` **required**; `--kind` **required**; `--format`; `--asset`; `--query`; `--before`; `--after`; `--record-id`; `--column`; `--direction`; `--status`; `--all-assets`, `--no-all-assets`; `--help` |
+| `export sources` | — | `--workspace`, `-w` **required**; `--asset`; `--file-id` (repeatable); `--direction`; `--all-assets`, `--no-all-assets`; `--help` |
 | `history archive` | `PREVIEW` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
 | `history archives` | — | `--workspace`, `-w` **required**; `--help` |
 | `history preview` | — | `--workspace`, `-w` **required**; `--keep-runs`; `--keep-imports`; `--batch-size`; `--help` |
 | `history restore` | `ARCHIVE_ID` | `--workspace`, `-w` **required**; `--confirm`; `--help` |
 | `impact analyze` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
-| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--sql-dialect`; `--background`, `--no-background`; `--source-kind`; `--dbt-mode`; `--artifact-path`; `--include-packages`, `--no-include-packages`; `--help` |
+| `ingest` | `PATH` | `--workspace`, `-w` **required**; `--extensions`; `--background`, `--no-background`; `--source-kind`; `--dbt-mode`; `--artifact-path` (repeatable); `--include-packages`, `--no-include-packages`; `--file` (repeatable); `--sql-dialect`; `--help` |
 | `dbt projects` | — | `--workspace`, `-w` **required**; `--help` |
 | `dbt resources` | — | `--workspace`, `-w` **required**; `--project-id`; `--resource-type`; `--help` |
 | `dbt resource` | `RESOURCE_ID` | `--workspace`, `-w` **required**; `--help` |
@@ -101,10 +101,10 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `lineage analysis-report` | — | `--workspace`, `-w` **required**; `--run-id`; `--help` |
 | `lineage build` | — | `--workspace`, `-w`; `--force`, `--no-force`; `--file-id`; `--background`, `--no-background`; `--mode`; `--max-output-tokens-total`; `--output-share`; `--input-token-limit`; `--output-token-limit`; `--resume-run-id`; `--retry-unknown`, `--no-retry-unknown`; `--help` |
 | `lineage downstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
-| `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--help` |
+| `lineage graph` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--view`; `--node-id`; `--edge-id`; `--all-assets`, `--no-all-assets`; `--help` |
 | `lineage paths` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--max-paths`; `--help` |
 | `lineage preview` | — | `--workspace`, `-w`; `--mode`; `--file-id`; `--max-output-tokens-total`; `--output-share`; `--input-token-limit`; `--output-token-limit`; `--resume-run-id`; `--help` |
-| `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--help` |
+| `lineage steps` | `ASSET` | `--workspace`, `-w` **required**; `--direction`; `--all-assets`, `--no-all-assets`; `--help` |
 | `lineage upstream` | `ASSET` | `--workspace`, `-w` **required**; `--help` |
 | `lineage validate` | — | `--workspace`, `-w` **required**; `--help` |
 | `maintenance backup` | — | `--help` |
@@ -121,21 +121,21 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `migration create` | `NAME`, `SETUP` | `--workspace`, `-w` **required**; `--expected-pin` **required**; `--help` |
 | `migration edit-preview` | `PROJECT_ID`, `ARGUMENTS` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
 | `migration export` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--reviewed`, `--no-reviewed`; `--image-format`; `--workbook`, `--no-workbook`; `--pilot`; `--destination`; `--include-sources`, `--no-include-sources`; `--help` |
-| `migration inspect` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision`; `--view`; `--item`; `--anchor`; `--offset`; `--limit`; `--cursor`; `--help` |
+| `migration inspect` | `PROJECT_ID` | `--workspace`, `-w` **required**; `--revision`; `--view`; `--item`; `--anchor`; `--offset`; `--line`; `--finding`; `--limit`; `--cursor`; `--help` |
 | `migration stage-preview` | `PROJECT_ID`, `SOURCE_ID`, `STAGE` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--feedback`; `--static-reference`, `--no-static-reference`; `--offset`; `--help` |
-| `migration stage-run` | `PROJECT_ID`, `SOURCE_ID`, `STAGE` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--expected-pin` **required**; `--feedback`; `--static-reference`, `--no-static-reference`; `--help` |
+| `migration stage-run` | `PROJECT_ID`, `SOURCE_ID`, `STAGE` | `--workspace`, `-w` **required**; `--revision` **required**; `--profile` **required**; `--expected-pin` **required**; `--feedback`; `--static-reference`, `--no-static-reference`; `--background`, `--no-background`; `--help` |
 | `migration list` | — | `--workspace`, `-w` **required**; `--help` |
 | `migration preview` | `NAME`, `SETUP` | `--workspace`, `-w` **required**; `--help` |
 | `migration targets` | — | `--workspace`, `-w` **required**; `--help` |
 | `providers credentials status` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--help` |
 | `providers get` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--help` |
 | `providers list` | — | `--workspace`, `-w` **required**; `--help` |
-| `providers models` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `providers models` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--draft`; `--credential-prompt`, `--no-credential-prompt`; `--help` |
 | `providers remove` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
 | `providers routing get` | — | `--workspace`, `-w` **required**; `--help` |
 | `providers routing update` | `FILE` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
 | `providers save` | `FILE` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--profile-id`; `--help` |
-| `providers test` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `providers test` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--draft`; `--credential-prompt`, `--no-credential-prompt`; `--help` |
 | `runs compare` | `BEFORE`, `AFTER` | `--workspace`, `-w` **required**; `--help` |
 | `runs get` | `RUN_ID` | `--workspace`, `-w` **required**; `--help` |
 | `runs list` | — | `--workspace`, `-w` **required**; `--help` |
@@ -147,7 +147,7 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `source list` | — | `--workspace`, `-w` **required**; `--query`; `--help` |
 | `source metadata` | `FILE_ID` | `--workspace`, `-w` **required**; `--help` |
 | `source search` | `QUERY` | `--workspace`, `-w` **required**; `--include-matches`, `--no-include-matches`; `--help` |
-| `source show` | — | `--workspace`, `-w` **required**; `--file-id`; `--statement-id`; `--operation-id`; `--start-line`; `--end-line`; `--full`, `--no-full`; `--help` |
+| `source show` | — | `--workspace`, `-w` **required**; `--file-id`; `--statement-id`; `--operation-id`; `--start-line`; `--end-line`; `--full`, `--no-full`; `--content-hash`; `--help` |
 | `staging clean` | `PREVIEW` | `--workspace`, `-w` **required**; `--confirm`; `--name` (repeatable); `--expired`, `--no-expired`; `--help` |
 | `staging preview` | — | `--workspace`, `-w` **required**; `--age-hours`; `--help` |
 | `staging recoveries` | — | `--workspace`, `-w` **required**; `--help` |
@@ -161,6 +161,28 @@ The reference is checked against actual registrations by `tests/test_documentati
 | `workspace reset` | — | `--workspace`, `-w` **required**; `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--file-id` (repeatable); `--run-id`; `--help` |
 | `workspace summary` | — | `--workspace`, `-w` **required**; `--help` |
 | `workspace update` | `NAME` | `--workspace`, `-w` **required**; `--description`; `--expected-revision`; `--help` |
+| `builder apply` | `DOCUMENT` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
+| `builder delete-tables` | `TABLE_IDS...` | `--workspace`, `-w` **required**; `--revision` **required**; `--confirm`; `--help` |
+| `builder export` | — | `--workspace`, `-w` **required**; `--kind`; `--format`; `--work-id`; `--table-id` (repeatable); `--role`; `--output`; `--help` |
+| `builder import-schemas` | `PATHS...` | `--workspace`, `-w` **required**; `--expected-pin` **required**; `--dialect`; `--help` |
+| `builder import-work` | `NAME`, `DOCUMENT` | `--workspace`, `-w` **required**; `--help` |
+| `builder inspect` | — | `--workspace`, `-w` **required**; `--view`; `--work-id`; `--table-id`; `--help` |
+| `builder load-work` | `WORK_ID` | `--workspace`, `-w` **required**; `--revision` **required**; `--help` |
+| `builder preview-delete-tables` | `TABLE_IDS...` | `--workspace`, `-w` **required**; `--help` |
+| `builder preview-schemas` | `PATHS...` | `--workspace`, `-w` **required**; `--dialect`; `--help` |
+| `builder save-work` | — | `--workspace`, `-w` **required**; `--revision` **required**; `--name`; `--work-id`; `--clear`, `--no-clear`; `--help` |
+| `cleanup application` | — | `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--help` |
+| `cleanup cache` | — | `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--help` |
+| `cleanup orphans` | — | `--dry-run`, `--no-dry-run`; `--preview`; `--confirm`; `--backup`, `--no-backup`; `--help` |
+| `lineage analysis-attempt-content` | `RUN_ID`, `ATTEMPT_ID` | `--workspace`, `-w` **required**; `--kind`; `--offset`; `--length`; `--destination`; `--help` |
+| `lineage analysis-attempts` | `RUN_ID` | `--workspace`, `-w` **required**; `--offset`; `--help` |
+| `lineage analysis-runs` | — | `--workspace`, `-w` **required**; `--help` |
+| `providers credentials delete` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--confirm` **required**; `--help` |
+| `providers credentials save` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
+| `providers inspect-model` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--draft`; `--model`; `--credential-prompt`, `--no-credential-prompt`; `--help` |
+| `providers reset-limits` | `PROFILE_ID` | `--workspace`, `-w` **required**; `--expected-revision` **required**; `--help` |
+| `source dialect` | `FILE_ID` | `--workspace`, `-w` **required**; `--dialect`; `--help` |
+| `workspace example` | — | `--workspace`, `-w` **required**; `--help` |
 <!-- cli-commands:end -->
 
 ### Command groups
@@ -201,6 +223,7 @@ Groups organize commands; use `gravetrail GROUP --help` to list their children.
 | `staging` | Local guarded stale staging cleanup/recovery; never automatic on CLI/MCP reads. |
 | `workspace` | List, create and summarize workspaces. |
 | `workspace config` | Safe configuration transfers into a new workspace. |
+| `builder` | Author, save and export workspace lineage designs. |
 <!-- cli-groups:end -->
 
 ### Global options
@@ -322,6 +345,8 @@ Reports: `runs list|get|compare BEFORE AFTER -w ID`, `ingestions list|get -w ID`
 
 Artifacts: `export graph ASSET --format html|json|svg|png`, `export paths ASSET --format csv|json|xlsx`, `export sources --asset ASSET` or repeated --file-id; `source download FILE DESTINATION [--content-hash HASH]`; `export report --kind KIND --format FORMAT` with --asset/--query/--before/--after; `ai results export RECORD`. All take -w ID. `export read ID --binary --offset N --length N` returns base64; `export download ID DESTINATION` reassembles/checks checksum and refuses existing destinations. Source-related creation and every read require source permission; backups are excluded.64MB/artifact,16KiB/chunk before encoding, further response-budget caps.
 
+If a managed download fails before verification, the CLI removes the partial destination so the same path can be retried.
+
 Format allowlist: graph HTML/JSON/SVG/PNG; paths CSV/JSON/XLSX; source-bundle ZIP; original-source raw bytes; inventory/code-search CSV/JSON; dictionary/columns/impact CSV/JSON/HTML; run-comparison/ai-result JSON. Unsupported combinations fail. `lineage paths|steps|graph ASSET -w ID` returns bounded logical dependency data with depth/limit/cycle boundaries; graph --view nodes|edges|tree supports --node-id/--edge-id. `columns usage` supports --column-query/--usage-type/--file-id/--group-by none|file|usage_type. No runtime execution ordering claim.
 
 Column transformation traces use the same scoped stored facts as the UI:
@@ -355,7 +380,7 @@ The response includes revision, counts, warnings, safe filename, MIME type and a
 ID, not workbook bytes. See [Excel workflow and limits](USER_GUIDE.md) for continuation,
 coverage and size/time behavior.
 
-Maintenance parity: `history preview --keep-runs N --keep-imports N --batch-size N -w ID`, `history archives -w ID`, `history archive PREVIEW.json -w ID --confirm NAME`, `history restore ARCHIVE_ID -w ID --confirm NAME`. `staging preview --age-hours 24 -w ID`, `staging clean PREVIEW.json -w ID --confirm NAME [--name UUID.tmp] [--expired]`, `staging recoveries|restore`. Save previews using global --output NEW_FILE; apply consumes that exact preview. Local mutations need --allow-write and unrestricted ownership; archive/clean create a recoverable whole-home backup before removal. General cleanup defaults to backup and refuses --no-backup. Specialized recovery journals remain separate from general undo. `maintenance backups` and `maintenance download BACKUP_ID NEW_DEST` require unrestricted --allow-application-config; backup/restore/checkpoint existing local guards remain. Shared cache/orphan/application apply remains UI-only.
+Maintenance parity: `history preview --keep-runs N --keep-imports N --batch-size N -w ID`, `history archives -w ID`, `history archive PREVIEW.json -w ID --confirm NAME`, `history restore ARCHIVE_ID -w ID --confirm NAME`. `staging preview --age-hours 24 -w ID`, `staging clean PREVIEW.json -w ID --confirm NAME [--name UUID.tmp] [--expired]`, `staging recoveries|restore`. Save previews using global --output NEW_FILE; apply consumes that exact preview. Local mutations need --allow-write and unrestricted ownership; archive/clean create a recoverable whole-home backup before removal. General cleanup defaults to backup and refuses --no-backup. Specialized recovery journals remain separate from general undo. `maintenance backups` and `maintenance download BACKUP_ID NEW_DEST` require unrestricted --allow-application-config. Shared parser cache, orphan blobs, and application reset have guarded local CLI commands under `cleanup`. The browser's live Streamlit memory cache is session-specific.
 
 Application/runtime: `application theme list|get|apply NAME`, `application logging get|update LEVEL`, `runtime info`, `agent inspect -w ID [--tool-name NAME]`, `agent client-config -w ID --client codex|claude --transport stdio|streamable-http`, `agent self-test -w ID`. Application mutations need --allow-write --allow-config-write --allow-application-config with unrestricted workspace scope. Theme path is startup-selected DATAFORGE_THEME_CONFIG or source-checkout .streamlit/config.toml; installed UI selects its home copy. Theme reads report configured/detected state, loaded=null, reload_required=true; never restart another owner. Logging is persisted per home. Self-test runs the actual in-process handler; external transport/client tests remain separate.
 
@@ -396,6 +421,48 @@ Build and preview accept `--output-share` (10–50, default 30 for new runs),
 the same precedence and model clamps as the UI; omitted fields preserve pinned
 resume choices. `--resume-run-id` also retries unresolved work from an explicitly
 incomplete committed run, reusing successes without resetting cumulative spending.
+
+## Source, graph and Builder workflows
+
+Use `workspace example -w WORKSPACE_ID` to import and statically analyze the bundled SQL
+example in a workspace with an empty source inventory. The result supplies the asset ID
+and graph depth used by the Overview page.
+To import individual files, pass the first path to `ingest` and add more paths with
+`--file`. Files must be under an allowed root.
+
+Use `lineage graph` and `lineage steps` with `--all-assets` for a whole-workspace view.
+The same scope is available in `export graph`, `export sources`, and `export report --kind
+lineage-steps`. To export a column trace, use `export report --kind column-lineage --asset
+ASSET --column COLUMN --format json` or use CSV. For a historical source version, supply
+its retained hash to `source show --content-hash HASH`.
+Use `lineage graph --view columns` for final column names or `--view column-links`
+for the column links visible in the selected graph. `columns usage --view used` and
+`--view unused` list column names with the same coverage rules as the Columns page.
+
+Use `lineage analysis-runs` and `lineage analysis-attempts RUN_ID` to find saved AI requests.
+`lineage analysis-attempt-content RUN_ID ATTEMPT_ID --kind input` retrieves the corresponding
+evidence. Use `output`, `decoded`, or `diagnostics` for the other retained views and follow
+`next_offset` for larger results. Use `--destination FILE` to download the retained text to
+a new file. Evidence reads require workspace source access.
+
+Use `builder inspect` to obtain the current revision, table IDs, links, and named work.
+Export editable JSON with `builder export --format json --output DESIGN.json`, edit
+it, and use `builder apply DESIGN.json --revision REVISION` with an allowed import root.
+Use the same document format for table, column, layout, and relationship edits.
+`builder save-work` can update a named snapshot or save and clear the canvas.
+`builder load-work` restores a selected snapshot. Use `builder preview-schemas` before
+`builder import-schemas`; the preview pin binds the files to the current design.
+Use `source dialect FILE_ID --dialect DIALECT` to change a retained SQL file's parsing
+override. Omit `--dialect` to inherit the workspace setting.
+
+Saved credential changes and destructive shared-storage cleanup have local-admin CLI
+routes. Use a preview and the required confirmation for cleanup. Provider tests can use a
+saved profile or an unsaved `--draft` profile file. Use an approved reference or the
+hidden credential prompt when a provider requires a key.
+`providers reset-limits` applies the UI's automatic recommendations to a saved profile
+at the expected revision.
+Clear a profile's default, task, and fallback assignments before removing it.
+Project Lineage has its own task assignment in both the UI and automation.
 
 ## Static dbt migration
 
@@ -444,6 +511,10 @@ adds an offline draft during conversion. Use `change skip_optimization` with `so
 continue without optimization. Inspect `--view workflow --item SOURCE_ID` for the saved diff
 and its pin. Apply it with `change apply_source_draft` and JSON containing `source_id` and
 `expected_pin`. Use `--feedback` on a new conversion pass to iterate on the staged draft.
+Use `stage-run --background` for a cancellable job. Check `jobs status` and preview the next
+part after a partial result. Use `--view lineage_comparison` for missing or extra lineage
+edges, and `--line` or `--finding` in the artifact view to start at the relevant evidence.
+To preview source mapping changes, pass `mapping_csv` or `mapping_path` to `edit-preview`.
 
 Use `migration export PROJECT_ID -w ID --revision REVISION --destination project.zip` for a
 checksummed ZIP at a new local path. Add `--reviewed`, repeatable `--pilot MODEL`,

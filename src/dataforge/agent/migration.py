@@ -28,7 +28,7 @@ SOURCE_ACTIONS = (READS | WRITES) - {"migration_targets", "migration_list", "mig
 
 MigrationView = Literal[
     "summary", "sources", "models", "regions", "findings", "checks", "mappings", "schemas", "lineage",
-    "column_lineage", "original_lineage", "history", "reviews", "comments", "lessons", "ai_attempts", "ai_responses",
+    "column_lineage", "original_lineage", "lineage_comparison", "history", "reviews", "comments", "lessons", "ai_attempts", "ai_responses",
     "validation_runs", "reconciliation_runs", "reconciliation_plan", "reconciliation_template",
     "source_mappings_template", "pilot", "artifact", "workflow",
 ]
@@ -135,13 +135,14 @@ class MigrationOperations:
             raise AgentError("invalid_argument", "Enter a migration project name of up to 160 characters")
         snapshot = self._migration_freeze(w, setup)
         pin = engine.fingerprint([name, snapshot])
-        plan, details = service.preview(snapshot)
+        plan, details = service.preview(snapshot, drafts=False)
         rows = [{"kind": "source", **{key: value for key, value in row.items() if key != "text"}}
                 for row in snapshot["sources"]]
         rows.extend({"kind": "output", "model": model, "name": output["name"], "inputs": output["inputs"],
                      "excluded": output.get("excluded", False), "region": output["region"]}
                     for model, output in plan["outputs"].items())
-        rows.extend({"kind": "finding", **finding} for finding in details["findings"])
+        rows.extend({"kind": "finding", **finding} for finding in details["findings"]
+                    if finding["code"] not in {"missing_output", "upstream"})
         rows.extend({"kind": "admission", **entry} for entry in snapshot.get("upload_report", []))
         return page(current_connections().sanitize(rows), opts, [w, "migration_preview", pin], pin=pin,
                     models=len(plan["outputs"]), sources=len(snapshot["sources"]))
@@ -183,7 +184,10 @@ class MigrationOperations:
                                progress=progress, reconvert=reconvert, plan_only=plan_only)
         return {"project_id": project_id, "revision_id": base["id"], "converter_version": base["plan"]["version"]}
 
-    def _migration_inspect(self, w, opts, project_id, revision_id=None, view="summary", item=None, anchor=None, offset=0):
+    def _migration_inspect(self, w, opts, project_id, revision_id=None, view="summary", item=None, anchor=None, offset=0,
+                           line=None, finding=None):
+        if (line is not None or finding is not None) and (view != "artifact" or offset or line is not None and finding is not None):
+            raise AgentError("invalid_argument", "Choose a line or finding in the artifact view, or continue by character offset")
         if view not in {"summary", "history"}:
             self._workspace(w, source=True)
         project, base = service.load(self.store, w, project_id, revision_id)
@@ -200,7 +204,8 @@ class MigrationOperations:
             return {**metadata, "name": redact(project["name"]),
                     "target": {key: target[key] for key in ("warehouse", "profile", "catalog", "schema")},
                     "converted": bool(plan), "converter_version": plan and plan["version"],
-                    "coverage": details.get("coverage", {}), "eligible": details.get("eligible", False),
+                    "coverage": details.get("coverage", {}), "characters": details.get("characters", {}),
+                    "utf8_bytes": details.get("utf8_bytes", {}), "eligible": details.get("eligible", False),
                     "job_id": assistance.latest_job(self.store, w, project_id), "runtime_equivalence": "not_evaluated"}
         if view == "sources":
             return page(redact(project["snapshot"]["sources"]), opts, identity, **metadata)
@@ -215,7 +220,9 @@ class MigrationOperations:
                     body.update(proposal=proposal, assessment=assessment, pin=pin,
                                 diffs=dict(service.diffs(base, proposal)) if proposal else {})
                 return _payload_reply(opts, body, offset, **metadata)
-            rows = [{"source_id": key, "path": entry["path"], "models": entry["models"], "retained": entry["retained"]}
+            statuses = engine.source_review_status(base)
+            rows = [{"source_id": key, "path": entry["path"], "models": entry["models"], "retained": entry["retained"],
+                     "assessment_status": statuses.get(key)}
                     for key, entry in workflow.sources(project, base).items()]
             metadata["resume_source"] = workflow.resume_source(self.store, w, project, base)
         elif view == "regions":
@@ -256,17 +263,36 @@ class MigrationOperations:
                     if not entry:
                         raise AgentError("not_found", "Choose an artifact from the migration models view")
                     anchor = anchor or "annotated"
+                    first = 1
                     if anchor == "source":
-                        text = service.evidence(self.store, w, project_id, entry["region"])
+                        region = entry["region"]
+                        text = service.evidence(self.store, w, project_id, region)
+                        first = region.get("start_line") or service.review_line_range(
+                            self.store, w, project_id, region, entry["source"])[0]
                     elif anchor == "generated" and entry["file"]:
                         text = entry["file"]["sql"]
                         if engine.digest(text) != entry["file"]["hash"]:
                             raise AgentError("conflict", "Generated artifact failed its integrity check")
                     elif anchor == "annotated":
-                        text = inspection.annotated(entry, redact=current_connections().redact)[0]
+                        text, anchors, _ = inspection.annotated(entry, redact=current_connections().redact)
                     else:
                         raise AgentError("not_found", "That anchor has no evidence in this revision")
-                    return _text_reply(opts, redact(text), offset, artifact=item, anchor=anchor,
+                    if finding is not None:
+                        evidence = next((row for row in entry["findings"] if row["id"] == finding), None)
+                        if not evidence:
+                            raise AgentError("not_found", "Choose a finding for this artifact")
+                        line = (first if anchor == "source" else evidence.get("generated_line")
+                                if anchor == "generated" else anchors[finding])
+                        if line is None:
+                            raise AgentError("not_found", "This finding has no generated line. Use the annotated anchor")
+                    text = redact(text)
+                    if line is not None:
+                        lines = text.splitlines(keepends=True)
+                        if type(line) is not int or not first <= line < first + len(lines):
+                            raise AgentError("invalid_argument", "Choose a line within this artifact anchor")
+                        offset = sum(map(len, lines[:line - first]))
+                    return _text_reply(opts, text, offset, artifact=item, anchor=anchor, first_line=first,
+                                       **({"line": line} if line is not None else {}),
                                        source=entry["region"]["id"], path=redact(entry["path"]), **metadata)
                 rows = [{key: entry[key] for key in ("id", "model", "path", "confidence", "status", "open_notes")}
                         | {"region": entry["region"]["id"], "location": inspection.source_location(entry),
@@ -283,6 +309,9 @@ class MigrationOperations:
                         for relation, fields in schemas.items() for column, fact in fields.items()]
             elif view in {"lineage", "column_lineage"}:
                 rows = details["lineage"]["edges" if view == "lineage" else "columns"]
+            elif view == "lineage_comparison":
+                rows = [{"source": source, "target": target, "status": status}
+                        for status in ("missing", "extra") for source, target in details["lineage"][status]]
             elif view == "original_lineage":
                 snapshot = project["snapshot"]
                 rows = [{"source": source, "target": target} for source, target in
@@ -301,7 +330,8 @@ class MigrationOperations:
                 rows.extend({"source": dependency} for dependency in sorted(inputs))
             else:
                 raise AgentError("invalid_argument", "Choose a valid migration inspection view")
-        if item and view in {"models", "regions", "findings", "checks", "schemas", "lineage", "column_lineage", "comments", "reviews"}:
+        if item and view in {"models", "regions", "findings", "checks", "schemas", "lineage", "column_lineage",
+                             "lineage_comparison", "comments", "reviews"}:
             rows = [row for row in rows if any(row.get(key) == item for key in ("id", "model", "relation", "target", "artifact"))]
         rows = redact(rows)
         return page(rows, opts, [*identity, engine.fingerprint(rows)], **metadata)
@@ -360,6 +390,13 @@ class MigrationOperations:
         project, base = self._migration_current(w, project_id, revision_id)
         args = dict(arguments)
         offset = args.pop("offset", 0)
+        if "mapping_csv" in args or "mapping_path" in args:
+            if set(args) - {"mapping_csv", "mapping_path"} or base["plan"] is None:
+                raise AgentError("invalid_argument", "Preview just a mapping CSV against a planned migration")
+            body = self._migration_upload(args, "mapping_csv", "mapping_path", engine.MAX_ARTIFACT)
+            mappings = service.read_source_mappings(body)
+            return _payload_reply(opts, {"mappings": current_connections().sanitize(mappings)}, offset,
+                                  project_id=project_id, revision_id=revision_id)
         if "proposal" in args or "proposal_path" in args:
             proposal = self._migration_proposal(args)
         else:
@@ -402,7 +439,8 @@ class MigrationOperations:
             result = mutations[operation](*params, **args)
         elif operation in activity:
             item = activity[operation](*params, **args)
-            return {"revision_id": revision_id, "status": "recorded", **({"lesson_id": item} if item else {})}
+            key = "comment_id" if operation == "add_comment" else "lesson_id"
+            return {"revision_id": revision_id, "status": "recorded", key: item}
         elif operation == "skip_optimization":
             workflow.skip_optimization(*params, **args)
             return {"revision_id": revision_id, "status": "skipped"}
@@ -436,7 +474,7 @@ class MigrationOperations:
 
     def _migration_export(self, w, opts, project_id, revision_id, reviewed=False, image_format=None, workbook=False,
                           pilot=None, include_sources=False):
-        data = service.bundle(self.store, w, project_id, revision_id, reviewed,
+        data = service.bundle(self.store, w, project_id, revision_id, reviewed or bool(pilot),
                               image_format=image_format, workbook=workbook, pilot=pilot, include_sources=include_sources)
         return write_artifact(self.store, w, "migration", "zip", data, True,
                               {"project_id": project_id, "revision_id": revision_id}, source_required=True)
@@ -455,8 +493,6 @@ class MigrationOperations:
             prepared = assistance.prepare(self.store, w, project_id, revision_id, profile_id, models, purpose, message,
                                           dependencies=dependencies)
         body = {key: prepared[key] for key in ("recipient", "request", "body", "tokens", "scope", "rules")}
-        if reason := prepared.get("local_reason"):
-            body["local_reason"] = reason
         return _payload_reply(opts, body, offset, pin=prepared["pin"], revision_id=revision_id, project_id=project_id)
 
     def _migration_ai_request(self, w, opts, project_id, revision_id, profile_id, models, purpose, message, expected_pin,
@@ -481,19 +517,56 @@ class MigrationOperations:
             prepared = workflow.preview(self.store, w, project_id, revision_id, profile_id, source_id, stage,
                                         feedback=feedback, static_reference=static_reference)
         body = {key: prepared[key] for key in ("recipient", "request", "body", "tokens", "scope", "rules")}
+        if reason := prepared.get("local_reason"):
+            body["local_reason"] = reason
         return _payload_reply(opts, body, offset, pin=prepared["pin"], revision_id=revision_id,
                               project_id=project_id, source_id=source_id, stage=stage)
 
     def _migration_stage_request(self, w, opts, project_id, revision_id, profile_id, source_id, stage, expected_pin,
-                                 feedback="", static_reference=False):
+                                 feedback="", static_reference=False, background=False):
+        arguments = dict(project_id=project_id, revision_id=revision_id, profile_id=profile_id, source_id=source_id,
+                         stage=stage, expected_pin=expected_pin, feedback=feedback, static_reference=static_reference)
+        if background:
+            self._admit_migration_stage(w, **arguments)
+            job_id = assistance.start_job(self.store, w, project_id, self.jobs,
+                lambda progress, cancelled: self._run_migration_stage(
+                    w, **arguments, progress=progress, cancelled=cancelled),
+                access=self._workspace(w, write=True, source=True).model_dump(), operation="migration_stage_request")
+            return {"job_id": job_id, "status": "queued"}
+        return self._run_migration_stage(w, **arguments)
+
+    def _admit_migration_stage(self, w, project_id, revision_id, profile_id, source_id, stage, expected_pin,
+                               feedback="", static_reference=False, *, detached=False):
+        self._workspace(w, write=True, source=True)
+        with connection_scope(self._migration_provider(w, profile_id, send=False)):
+            prepared = workflow.preview(self.store, w, project_id, revision_id, profile_id, source_id, stage,
+                                        feedback=feedback, static_reference=static_reference)
+            if detached and feedback:
+                profile = get_profile(self.store, w, profile_id)
+                manager = current_connections().for_workspace(self.store.home, w).for_profile(profile_id, profile)
+                with connection_scope(manager):
+                    secret = manager.resolve(profile.key_env) if profile.key_env else ""
+                    if manager.sanitize(feedback, (secret,)) != feedback:
+                        raise AgentError("validation_failed", "Remove credential values from queued migration feedback")
+        if prepared["pin"] != expected_pin:
+            raise AgentError("conflict", "Migration or disclosure changed. Preview this part again")
+        if not prepared.get("local_reason"):
+            authorize_provider(self.store, self.policy, w, prepared["profile"])
+
+    def _run_migration_stage(self, w, project_id, revision_id, profile_id, source_id, stage, expected_pin,
+                             feedback="", static_reference=False, *, progress=None, cancelled=None):
+        self._workspace(w, write=True, source=True)
+        if progress:
+            progress(.2, f"Migration {stage}")
+
         def authorize(profile):
             self._workspace(w, write=True, source=True)
             authorize_provider(self.store, self.policy, w, profile)
 
-        with connection_scope(self._migration_provider(w, profile_id, send=True)):
+        with connection_scope(self._migration_provider(w, profile_id, send=False)):
             result = workflow.run(self.store, w, project_id, revision_id, profile_id, source_id, stage, expected_pin,
                                   feedback=feedback, static_reference=static_reference, transport=self.provider_transport,
-                                  authorize=authorize)
+                                  authorize=authorize, cancelled=cancelled or (lambda: False))
         return {"revision_id": revision_id, "source_id": source_id, "stage": stage,
                 "status": result.get("status") or ("rejected" if result.get("rejected") else "completed"),
                 **{key: result[key] for key in ("part", "next_size") if key in result}}
