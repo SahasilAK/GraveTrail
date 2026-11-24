@@ -330,10 +330,10 @@ request/budget, 3 forbidden, 4 missing/ambiguous identity, 5 busy/timeout,
 
 Up to two jobs may run, one per workspace. Graph queries reject more than 20,000
 assets or 100,000 evidence edges. Journals and exports cap at 1,000 each (exports
-per workspace); archive completed local files when reached. No distributed worker,
-job cancellation or automatic job retry is introduced.
+per workspace). Archive completed local files when reached. Use `jobs cancel` where
+the job supports cooperative cancellation, including guided Migration stages.
 
-Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate all 48 IDs with implemented/policy-restricted status. Follow `next_cursor`. New independent launch flags: `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, `--allow-application-config`; `--allow-admin` is local CLI only and rejected by MCP. None is implied by `--allow-write`.
+Parity discovery: `gravetrail capabilities` / `get_capabilities` enumerate the [capability inventory](CLI_MCP_CAPABILITIES.md) with implemented or policy-restricted status. Follow `next_cursor`. Independent launch flags include `--allow-config-write`, `--allow-llm`, repeatable `--allowed-llm-origin`, `--allowed-credential-ref`, and `--allow-application-config`. `--allow-admin` is local CLI only. Grant each permission separately from `--allow-write`.
 
 Workspace preferences: `settings schema -w ID [--section parsing]`, `settings get parsing -w ID`, `settings update parsing patch.json -w ID --expected-revision REV`. Use the returned settings_revision; stale patches fail with conflict. `workspace update -w ID --name NAME --description TEXT --expected-revision REV`; `workspace config export -w ID` returns a configuration object; `workspace config import config.json` accepts that object (v1/v2). Mutations require write+config; imports require unrestricted scope. Privacy/access widening requires local --allow-admin. No analysis is triggered.
 
@@ -464,7 +464,9 @@ at the expected revision.
 Clear a profile's default, task, and fallback assignments before removing it.
 Project Lineage has its own task assignment in both the UI and automation.
 
-## Static dbt migration
+<span id="static-dbt-migration"></span>
+
+## dbt migration
 
 Watch the [app walkthrough](user-guide/migration.md#watch-the-workflow) to see the same project
 setup, source findings, lineage and pilot that the CLI exposes.
@@ -478,13 +480,14 @@ and revision IDs. The setup file supports the same target and source fields as t
 ```bash
 gravetrail --json migration preview "Sales pilot" setup.json -w WORKSPACE_ID
 gravetrail --json --allow-write migration create "Sales pilot" setup.json -w WORKSPACE_ID --expected-pin SETUP_PIN
-gravetrail --json --allow-write migration convert PROJECT_ID -w WORKSPACE_ID --revision REVISION_ID
+gravetrail --json --allow-write migration convert PROJECT_ID -w WORKSPACE_ID --revision REVISION_ID --plan-only
 gravetrail --json migration inspect PROJECT_ID -w WORKSPACE_ID --view findings
 gravetrail --json migration inspect PROJECT_ID -w WORKSPACE_ID --view artifact --item MODEL --anchor annotated
 ```
 
-Add `--background` to conversion to obtain a job ID for `jobs status --wait` or `jobs cancel`.
-Add `--reconvert` to regenerate a draft from pinned sources. Inspect `history` or use `change ...
+Omit `--plan-only` to run offline static conversion. Add `--background` to obtain a job ID
+for `jobs status --wait` or `jobs cancel`. Add `--reconvert` to regenerate a static draft
+from pinned sources. Inspect `history` or use `change ...
 restore` to return to a prior revision. The inspection views include mappings, schemas, original and
 migrated lineage, validation, reconciliation templates, review comments and lessons. Use `--cursor`
 for result pages and `--offset` for artifact text. Use `--view pilot --item MODEL,OTHER_MODEL` to
@@ -503,18 +506,33 @@ Review the full disclosure, following its offset continuation if needed. Send th
 through `migration ai-request --expected-pin` with launch network, write, origin and credential
 grants. Workspace source and provider privacy settings also apply.
 
-For the guided workflow, use `migration convert --plan-only` when starting the project. Run
+### Guided AI migration
+
+Use `migration convert --plan-only` when starting the project. The returned revision is the
+base for requests and changes. Run
 `migration inspect --view workflow` for source IDs. For each source, preview and run the stages
 `convert`, `validate`, and `optimize` using `migration stage-preview` and `migration stage-run`.
 Pass the same options and the preview's `--expected-pin` for each request. `--static-reference`
-adds an offline draft during conversion. Use `change skip_optimization` with `source_id` to
+adds an offline draft during conversion. Provider dispatch uses the same launch and workspace
+permissions as `ai-request`. For a saved local LM Studio profile:
+
+```bash
+gravetrail --home ./automation-data --json migration stage-preview PROJECT_ID SOURCE_ID convert -w WORKSPACE_ID --revision REVISION_ID --profile PROFILE_ID
+gravetrail --home ./automation-data --json --allow-write --allow-llm --allowed-llm-origin http://127.0.0.1:1997 migration stage-run PROJECT_ID SOURCE_ID convert -w WORKSPACE_ID --revision REVISION_ID --profile PROFILE_ID --expected-pin STAGE_PIN
+```
+
+Use the origin of your saved profile. Add an approved credential reference grant if the profile
+requires one. Use `change skip_optimization` with `source_id` to
 continue without optimization. Inspect `--view workflow --item SOURCE_ID` for the saved diff
 and its pin. Apply it with `change apply_source_draft` and JSON containing `source_id` and
 `expected_pin`. Use `--feedback` on a new conversion pass to iterate on the staged draft.
 Use `stage-run --background` for a cancellable job. Check `jobs status` and preview the next
-part after a partial result. Use `--view lineage_comparison` for missing or extra lineage
+part after a partial result or an interruption. Completed stage parts are saved with the
+project. Use `--view lineage_comparison` for missing or extra lineage
 edges, and `--line` or `--finding` in the artifact view to start at the relevant evidence.
 To preview source mapping changes, pass `mapping_csv` or `mapping_path` to `edit-preview`.
+
+### Export a migration
 
 Use `migration export PROJECT_ID -w ID --revision REVISION --destination project.zip` for a
 checksummed ZIP at a new local path. Add `--reviewed`, repeatable `--pilot MODEL`,

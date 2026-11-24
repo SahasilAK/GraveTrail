@@ -18,6 +18,7 @@
   <a href="https://sahasilak.github.io/GraveTrail/"><strong>Documentation hub</strong></a> ·
   <a href="docs/getting-started/quick-start.md">Quick start</a> ·
   <a href="docs/user-guide/lineage-builder.md">Lineage builder</a> ·
+  <a href="docs/user-guide/migration.md">Migration</a> ·
   <a href="docs/CLI_GUIDE.md">CLI</a> ·
   <a href="docs/MCP_INTEGRATION.md">MCP</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
@@ -35,23 +36,23 @@ depends on it, and which code to investigate before making a change.
 
 <a name="from-scattered-scripts-to-source-evidence"></a>
 
-![GraveTrail Overview with actions to open Lineage Builder, import sources, or run the SQL example](docs/assets/images/gravetrail-overview-start.png)
+![GraveTrail Overview with actions to open Lineage Builder, import sources, run the SQL example, and open Migration](docs/assets/images/gravetrail-overview-start.png)
 
 | From Overview | What you can do |
 | --- | --- |
 | **Open Lineage Builder** | [Design an editable diagram](docs/user-guide/lineage-builder.md) from table schemas and column relationships. |
 | **Import sources** | [Import SQL, SAS or dbt files](docs/user-guide/sources.md), select a SQL source type where applicable, and [analyze the inventory](docs/user-guide/analysis.md). |
 | **Run SQL example** | [Trace a bundled pipeline](docs/getting-started/quick-start.md#2-run-the-sql-example) in an empty workspace. |
+| **Open Migration** | [Convert SQL, SAS or dbt to draft models for Databricks](docs/user-guide/migration.md), review each source and export a dbt project. |
 
-<details>
-<summary><strong>See GraveTrail with the included SQL project</strong></summary>
+## Video demos
 
-![GraveTrail Lineage view showing an expanded table and column links to its neighbors](docs/assets/images/gravetrail-lineage-explorer.png)
+Both demos use the running app and sample data. Select a preview to download its MP4.
 
-*Real application, disposable workspace, repository sample data. Try the
-[interactive lineage example](docs/examples/interactive-lineage.md).*
-
-</details>
+| SQL lineage and transformations | Guided dbt migration to Databricks |
+| --- | --- |
+| [![Download the SQL demo showing table and column lineage](docs/assets/images/gravetrail-lineage-explorer.png)](docs/assets/images/gravetrail-sql-example.mp4?raw=true) | [![Download the migration demo showing the two generated model diffs](docs/assets/images/gravetrail-migration-ai-diff.png)](docs/assets/images/gravetrail-migration-walkthrough.mp4?raw=true) |
+| Trace upstream tables, expand column links, and inspect the SQL expression behind a transformation. [Follow the SQL tutorial](docs/getting-started/quick-start.md#2-run-the-sql-example) · [Explore interactive lineage](docs/examples/interactive-lineage.md) | Convert SQL and SAS, compare drafts against the source, review model diffs, and prepare a pilot ZIP. [Follow the migration walkthrough](docs/user-guide/migration.md#try-a-small-migration) |
 
 ## Follow the questions
 
@@ -82,9 +83,9 @@ shortcuts, safe clearing and sharing.
 
 <a name="know-the-boundaries"></a>
 
-Lineage supports investigation and migration planning. It does not execute a
-migration or guarantee arbitrary code is correct. Dynamic SQL, runtime macros,
-ambiguous names and unsupported syntax can leave explicit gaps.
+Migration can use AI to draft models one source file at a time. GraveTrail retains unresolved
+logic as review findings and saves model edits after an engineer reviews the diff. Generated
+models and their originals are inspected as text. Run dbt and warehouse checks externally.
 
 <a name="choose-local-analysis-or-optional-ai"></a>
 
@@ -104,14 +105,14 @@ static-analysis, HTML-export and documentation-site offline boundaries.
 
 ## Start with the documented version
 
-Use development commit **313587e** to reproduce the walkthroughs and screenshots.
+Use development commit **5d00d91** to follow the guided Migration and CLI/MCP walkthroughs.
 
 Install Python 3.11+, Git and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
-git checkout 313587e3217104dddc9e094a7a78cb79bf1ed64b
+git checkout 5d00d9191a81850d6918b7b365f50f8fb7764b79
 uv sync --locked --extra dev
 uv run gravetrail-ui --home ./.dataforge
 ```

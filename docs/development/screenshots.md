@@ -37,23 +37,25 @@ Review each replaced image and update this table when controls/fixtures change.
 
 Use a fresh **Order migration demo** workspace with the SQL and SAS files from
 [the migration example](../user-guide/migration.md#try-a-small-migration). Open the app on loopback
-and record the application viewport at 1440 × 960 without browser chrome. The capture uses app
-commit `1a5d3c2` for the migration UI.
+and capture the application viewport at 1440 × 960 without browser chrome. Use app commit
+`5d00d91`, **Prepare AI conversion**, and a local provider profile. The walkthrough uses
+`qwen3.5-4b-super-coder` through LM Studio. Request content is limited to the synthetic example.
 
 | Asset under `docs/assets/images/` | Capture the view |
 | --- | --- |
 | `gravetrail-migration-setup.png` | Preflight with both retained files and the Databricks target. |
+| `gravetrail-migration-ai-disclosure.png` | Stage 1 with `orders_pipeline.sql` selected and the disclosure preview ready. |
+| `gravetrail-migration-ai-diff.png` | Stage 4 after source validation and optimization for `orders_pipeline.sql`. Show the two model diffs and proposed revision findings. |
 | `gravetrail-migration-review.png` | `accepted_orders` in **Review**, with **Show pinned source evidence** and **Annotated draft** selected. |
 | `gravetrail-migration-lineage.png` | **Migrated lineage** graph showing the SQL edge and the two SAS drafts. |
 | `gravetrail-migration-validation.png` | The external dbt artifact controls and configured `daily_order_totals` comparison, before importing observations. |
 | `gravetrail-migration-export.png` | **Pilot handoff** prepared for `daily_order_totals`, with `stg_orders` in the included models. |
-| `gravetrail-migration-walkthrough.mp4` | Record preview, conversion, the pinned SAS finding, lineage, comparison setup and pilot bundle preparation in that order. |
+| `gravetrail-migration-walkthrough.mp4` | Show preflight, disclosure, comparison, optimization, diff, pinned SAS evidence, lineage, external validation and pilot preparation in that order. |
 
-Keep the original capture in a disposable folder and record when each view opens. Trim the initial
-blank frames, add short action captions in a margin below the UI, and encode a web-ready H.264 MP4
-with `yuv420p` and `+faststart`. Check each caption against the actual screen and verify the pilot ZIP
-contains both SQL models and the reconciliation template. Use no provider credentials or external
-validation artifacts in these captures.
+Keep captures in a disposable folder. Add short captions in a margin below the UI and encode a
+web-ready H.264 MP4 with `yuv420p` and `+faststart`. Check each caption against the visible screen
+and verify the pilot ZIP contains both SQL models and the reconciliation template. Use no provider
+credentials or external validation artifacts in these captures.
 
 ## Lineage builder canvas
 

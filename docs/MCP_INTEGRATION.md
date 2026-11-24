@@ -388,8 +388,10 @@ and pilot scope that these tools expose.
    Target fields include `format`, `warehouse`, `profile`, `catalog`, `schema`, and `materialization`.
    A setup without an explicit selection or a Builder revision picks supported workspace sources.
    Pass the same name and setup to `create_migration_project` with the returned `pin` as `expected_pin`.
-3. Call `start_migration_conversion` with the current `expected_revision` and use `get_job_status`
-   to wait for the published revision ID. Set `reconvert` to draft again from the pinned snapshot.
+3. Call `start_migration_conversion` with the current `expected_revision` and `plan_only: true`
+   for [guided AI migration](#guided-ai-migration). Use `get_job_status` to wait for the published
+   revision ID. Omit `plan_only` for offline static conversion. Set `reconvert` to regenerate
+   a static draft from the pinned snapshot.
    Use `inspect_migration_revision` to inspect the result, including its scope, findings,
    original and migrated lineage, schemas, reviews, and evidence. Use the `artifact` view with
    an artifact ID in `item` and `anchor` set to `generated`, `source`, or `annotated` to read code.
@@ -420,17 +422,22 @@ and current workspace write, source and privacy permissions. AI suggestions go t
 same patch preview and apply flow as manual edits. Set `options.max_chars` within the workspace's
 cap if the reply needs more room. With AI history enabled, inspect saved replies with `view: "ai_responses"`.
 
-For guided AI migration, use `plan_only: true` with `start_migration_conversion`. Read the source
+### Guided AI migration
+
+After preparing with `plan_only: true`, read the source
 IDs with `inspect_migration_revision` and `view: "workflow"`. Each file goes through `convert`,
 `validate`, and `optimize`. Call `preview_migration_stage` for each disclosure, then pass its
 pin to `run_migration_stage`. Use `static_reference` during conversion to include a static draft.
-Set `background: true` to get a cancellable job. Preview again after a partial stage result.
+Set `background: true` to get a cancellable job. Preview again after a partial stage result
+or an interruption. Completed parts are saved with the project.
 Use `view: "lineage_comparison"` for missing and extra edges. The artifact view accepts a
 line or finding ID for focused evidence. `preview_migration_edit` also accepts `mapping_csv`.
 Use `update_migration_revision` with `skip_optimization` and `source_id` to continue directly to
 review. Inspect the workflow with the source ID in `item` to see the staged diff and apply pin.
 Use `apply_source_draft` with `source_id` and `expected_pin` to apply it. The export's
 `include_sources` option adds the full retained text separately from dbt models.
+
+### Review and external evidence
 
 Run dbt and comparison checks in your controlled environment. Import external evidence through
 `update_migration_revision`. Pass inline evidence as UTF-8 text or use an approved path under a

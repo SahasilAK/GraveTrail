@@ -1,7 +1,7 @@
 # Migration architecture
 
 The Migration page uses the existing workspace Store, job journal, provider connections and
-request budgeting. The migration service has no warehouse client or dbt runtime dependency.
+request sizing. The migration service has no warehouse client or dbt runtime dependency.
 The CLI and MCP adapters call the same services through the workspace agent policy. Artifact
 downloads recheck source access. Provider dispatch additionally requires launch authorization and
 the exact disclosure pin. Setup, edits, validation and export remain revision-bound.
@@ -9,8 +9,9 @@ the exact disclosure pin. Setup, edits, validation and export remain revision-bo
 The guided AI run inventories source regions and dependency bindings without emitting static drafts.
 Each provider conversion covers one retained file and its mapped dbt models. Source comparison
 requires an assessment for each included nontrivial region and saves separate static check results.
-The project checkpoints conversion, comparison and optimization before an engineer applies the
-combined diff. A static draft can be generated as request evidence when the engineer includes it.
+The project checkpoints conversion, comparison and optimization by source file and completed part
+before an engineer applies the combined diff. Changes to upstream drafts can stale a saved source
+comparison. A static draft can be generated as request evidence when the engineer includes it.
 
 `dataforge.migration.engine` plans outputs and source obligations before writing candidates.
 Source-specific rules live in `sources.py`. SQLGlot parses and generates SQL with explicit dialects.
@@ -43,10 +44,11 @@ and approved lesson versions. Workspace cleanup removes the migration rows. Sour
 migration evidence intact, and the existing database backup includes all four tables.
 
 Publication checks the expected revision inside one DuckDB transaction. Provider calls take place
-outside transactions. Each explicitly dispatched physical attempt reserves capacity before sending.
-An unknown outcome keeps its reservation across restarts. The current release uses one attempt per
-explicit dispatch and allows retry of a prepared request within the cumulative project budget.
-No response can publish code directly.
+outside transactions, with one physical attempt per explicit dispatch. Per-request context and
+output limits still apply. Migration has no cumulative request or token quota. When a stage exceeds
+the provider's context, a preview binds to the next bounded set of unfinished items. A truncated
+reply can reduce the next part size. An indivisible oversized part stays unresolved with source
+evidence. A saved attempt and its status are distinct from an accepted change to the project.
 
 Static conversion checkpoints completed model lowering in bounded batches. Retrying the same
 revision rebuilds inventory from the pinned snapshot and reuses completed model SQL and bindings

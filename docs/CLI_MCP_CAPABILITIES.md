@@ -85,15 +85,16 @@ is used for session credentials. Redirects are refused.
 | DBT01 | Offline dbt project/resource catalog and macro impact | `dbt projects`<br>`dbt resources`<br>`dbt resource`<br>`dbt dependencies` | `list_dbt_projects`<br>`list_dbt_resources`<br>`get_dbt_resource`<br>`trace_dbt_dependencies` | Implemented; detailed evidence requires source access |
 | MIG01 | Supported targets and workspace migration projects | `migration targets`<br>`migration list` | `list_migration_targets`<br>`list_migration_projects` | Implemented |
 | MIG02 | Preview and pin ingested sources, analysis selections or Lineage Builder designs | `migration preview`<br>`migration create` | `preview_migration_project`<br>`create_migration_project` | Implemented |
-| MIG03 | Static conversion and reconversion, lineage, revision history and artifact inspection | `migration convert`<br>`migration inspect`<br>`jobs status`<br>`jobs cancel` | `start_migration_conversion`<br>`inspect_migration_revision`<br>`get_job_status`<br>`cancel_job` | Implemented |
+| MIG03 | AI preparation, offline conversion and reconversion, lineage comparison, revision history and line-anchored artifacts | `migration convert`<br>`migration inspect`<br>`jobs status`<br>`jobs cancel` | `start_migration_conversion`<br>`inspect_migration_revision`<br>`get_job_status`<br>`cancel_job` | Implemented |
 | MIG04 | Preview edits and ordered SAS drafts. Apply changes, record reviews and lessons, import external evidence | `migration edit-preview`<br>`migration change` | `preview_migration_edit`<br>`update_migration_revision` | Implemented |
-| MIG05 | Preview an exact AI disclosure, dispatch it explicitly and inspect activity | `migration ai-preview`<br>`migration ai-request`<br>`migration inspect` | `preview_migration_ai`<br>`request_migration_ai`<br>`inspect_migration_revision` | Implemented within source and provider policy |
+| MIG05 | Preview disclosures, dispatch scoped assistance or resumable file-stage jobs, and review staged diffs | `migration ai-preview`<br>`migration ai-request`<br>`migration stage-preview`<br>`migration stage-run`<br>`migration inspect`<br>`jobs status`<br>`jobs cancel` | `preview_migration_ai`<br>`request_migration_ai`<br>`preview_migration_stage`<br>`run_migration_stage`<br>`inspect_migration_revision`<br>`get_job_status`<br>`cancel_job` | Implemented within source and provider policy |
 | MIG06 | Export and download draft, reviewed and pilot ZIPs with optional lineage images and workbook | `migration export`<br>`export download` | `export_migration_bundle`<br>`get_export` | Implemented with source checks at export and download |
 
 Artifacts use managed IDs, home/workspace binding, exact source versions, SHA-256 and
 bounded base64 reads (at most 16 KiB before encoding and the response budget). Files cap at
 64 MiB. Source authorization is checked again on retrieval, including saved exports after
-revocation. CLI downloads create a new destination exclusively and verify the assembled hash.
+revocation. CLI downloads create a new destination exclusively, verify the assembled hash,
+and remove partial downloads if a transfer fails.
 Unsupported kind/format pairs fail; no arbitrary file read/write or backup retrieval MCP tool exists.
 
 Settings/profile patches require `expected_revision`; refresh stale state before retrying.
@@ -144,8 +145,9 @@ traversal. Accepted AI facts remain inferred and do not establish semantic compl
 ## Migration
 
 CLI and MCP open the same workspace-owned projects and immutable revisions as the Migration
-page. Project creation uses the setup preview pin. Conversion and reconversion run as local
-jobs against an expected revision. Edit previews bind patches to a specific revision and
-return the pin required to apply the patch. Conversions and exports use static analysis.
+page. Project creation uses the setup preview pin. Guided stages save progress by file and part
+and require a fresh disclosure pin before each dispatch. Offline conversion and reconversion run
+as local jobs against an expected revision. Edit previews bind patches to a specific revision and
+return the pin required to apply the patch. Inspection and export checks are static.
 Run dbt and warehouse checks externally, then import their evidence into the pinned revision.
 See [MCP migration tools](MCP_INTEGRATION.md#migration-tools) and the [Migration user guide](user-guide/migration.md).

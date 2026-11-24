@@ -29,6 +29,14 @@ completeness and cursors, then request bounded graph/column/report results. Retr
 source evidence only when needed. Start from the [agent workflows](../AGENT_WORKFLOWS.md)
 and [response budget guidance](../TOKEN_OPTIMIZATION.md) for complete examples.
 
+## Automate a workspace workflow
+
+| Task | CLI | MCP |
+| --- | --- | --- |
+| Import selected files, inspect analysis attempts, download evidence | [Source and graph workflows](../CLI_GUIDE.md#source-graph-and-builder-workflows) | [Source, graph and Builder tools](../MCP_INTEGRATION.md#source-graph-and-builder-tools) |
+| Import schemas, edit a design or save a named snapshot | [Builder workflow](../CLI_GUIDE.md#source-graph-and-builder-workflows) | [Builder tools](../MCP_INTEGRATION.md#source-graph-and-builder-tools) |
+| Preview a migration, resume a file stage, review a diff or export a dbt pilot | [Guided AI migration](../CLI_GUIDE.md#guided-ai-migration) | [Guided AI migration](../MCP_INTEGRATION.md#guided-ai-migration) |
+
 One process owns each DuckDB home. Stop the UI before a separate CLI/MCP process opens
 that home, or give automation its own home. Pass an explicit `--home` consistently.
 Read-only is the launch default; write, configuration, network and application grants
@@ -39,6 +47,8 @@ are independent. An agent cannot grant itself broader access.
 Use **Connections & AI → Providers & routing** to create profiles and assign tasks. Use masked
 session credentials or named read-only launch variables. Profile persistence stores
 references, never secret values. Clear session credentials when finished.
+Project Lineage has its own routing assignment. Clear any assignments that use a profile before
+removing it.
 
 Remote requests need privacy permission; full source disclosure has its own control.
 Output must validate against known files, quotes and line ranges before explicit merge.

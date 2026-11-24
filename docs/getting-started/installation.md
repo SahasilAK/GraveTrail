@@ -1,7 +1,7 @@
 # Install the documented version
 
-The walkthroughs use development commit **313587e**. Use this checkout to
-reproduce the controls shown in the screenshots.
+Use development commit **5d00d91** for guided Migration and the documented CLI and MCP
+workflows. The [screenshot recipes](../development/screenshots.md) identify earlier captures.
 
 ## Recommended: locked source checkout
 
@@ -11,14 +11,14 @@ Initial setup normally downloads packages. No AI credentials or dbt installation
 ```sh
 git clone https://github.com/SahasilAK/GraveTrail.git
 cd GraveTrail
-git checkout 313587e3217104dddc9e094a7a78cb79bf1ed64b
+git checkout 5d00d9191a81850d6918b7b365f50f8fb7764b79
 uv sync --locked --extra dev
 uv run gravetrail-ui --home ./.dataforge
 ```
 
 Open [http://127.0.0.1:8501](http://127.0.0.1:8501). Keep the terminal running.
 
-This checkout adds `keyring>=25.7,<26` for optional **Remember on this device** API keys.
+This checkout includes `keyring>=25.7,<26` for optional **Remember on this device** API keys.
 Locked Windows installs include `pywin32-ctypes` and keyring's `jaraco.*` dependencies.
 The frozen build explicitly collects keyring and win32ctypes. Windows Credential Manager
 uses current-user/local-machine persistence; macOS/Linux native stores remain disabled

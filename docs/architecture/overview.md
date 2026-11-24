@@ -111,9 +111,10 @@ claims. Advisory explanations and direct-column advice are not mergeable lineage
 ## One migration project
 
 Migration pins retained source versions or a saved Lineage Builder design in the workspace.
-Static conversion produces a separate dbt draft for Databricks with its own lineage, source
-mappings and review findings. Review and export bind to a specific draft revision. Runtime
-verification happens externally, with results recorded against that revision.
+Guided AI conversion saves a source-by-source draft, comparison, and optional optimization.
+Offline conversion uses deterministic static rules. Each dbt draft has its own lineage,
+source mappings and review findings. Review and export bind to a specific draft revision.
+Runtime verification happens externally, with results recorded against that revision.
 See [migration architecture](migration.md) for storage, validation and export boundaries.
 
 ## Evidence and query meaning

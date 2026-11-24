@@ -50,9 +50,10 @@ Local static analysis. No AI account required. Imported code is never executed.
 
 ## Migrate to dbt on Databricks
 
-Open **Engineering → Migration** to convert retained SQL, SAS or dbt sources into a draft dbt
-project. Inspect generated models beside their original source, review unresolved logic and
-trace dependencies before exporting a pilot. Conversion and inspection run statically.
+Open **Engineering → Migration** to convert retained SQL, SAS or dbt sources for Databricks.
+The guided AI workflow saves progress by source file, compares drafts against the original
+logic and lets an engineer review each diff before applying it. Inspect unresolved source lines,
+trace dependencies and export a dbt pilot. Warehouse checks run separately in your environment.
 
 [Watch the migration walkthrough](user-guide/migration.md#watch-the-workflow){ .md-button }
 
@@ -169,7 +170,7 @@ controls and examples shown here.
   </a>
   <a class="gt-guide-card" href="integrations/">
     <span class="gt-guide-title">CLI and MCP</span>
-    <span class="gt-guide-description">Connect your tools and automate lineage workflows.</span>
+    <span class="gt-guide-description">Automate lineage, design and dbt migration workflows.</span>
     <span class="gt-guide-arrow" aria-hidden="true">→</span>
   </a>
   <a class="gt-guide-card" href="development/">

@@ -5,34 +5,47 @@ from retained sources. **Create migration** on Analysis pins the latest committe
 **Migrate selection** on Lineage starts from the selected asset and includes known upstream
 producers. **Create migration** in Lineage Builder pins the current design and starts a scaffold.
 
-The same workflow is available through [the CLI](../CLI_GUIDE.md#static-dbt-migration) and
-[MCP](../MCP_INTEGRATION.md#migration-tools).
+The guided workflow also runs through [the CLI](../CLI_GUIDE.md#guided-ai-migration) and
+[MCP](../MCP_INTEGRATION.md#guided-ai-migration).
 
 ## Watch the workflow
 
 <figure class="gt-product" markdown>
 
-<video controls playsinline preload="none" poster="../../assets/images/gravetrail-migration-setup.png" style="width: 100%" aria-label="Migration walkthrough from SAS and SQL setup to a Databricks dbt pilot export">
+<video controls playsinline preload="none" poster="../../assets/images/gravetrail-migration-setup.png" style="width: 100%" aria-label="Guided migration from SQL and SAS setup through source comparison, dbt review and export">
   <source src="../../assets/images/gravetrail-migration-walkthrough.mp4" type="video/mp4">
   <a href="../../assets/images/gravetrail-migration-walkthrough.mp4">Download the migration walkthrough</a>
 </video>
 
-<figcaption>Screen recording of the offline static workflow. Follow synthetic orders through a SAS review finding, migrated lineage, external validation setup and a scoped dbt pilot.</figcaption>
+<figcaption>Captioned walkthrough of the guided workflow using synthetic orders. The app reviews two SQL outputs from one file and retains unresolved SAS work for inspection.</figcaption>
 </figure>
 
-[Follow along with the same example](#try-a-small-migration).
+[Follow the walkthrough step by step](#try-a-small-migration). The written instructions cover the same
+controls, including offline conversion as an alternative.
 
 ## Set up a project
 
 Choose dbt and Databricks, confirm the target catalog and schema, and preview the migration.
-Read admission, planned outputs and findings before creating the project. Choose **Prepare AI
-conversion** to map the pinned source files and dependencies. Choose a file and a configured
-provider. A source file can contribute several models. Migration previews one part at a time when
-the whole file or stage exceeds the provider's limits.
+Read admission, planned outputs and findings before creating the project. Databricks is the
+enabled warehouse. Configure a provider in **Connections & AI → Providers & routing**, then choose
+**Prepare AI conversion**. Preparation maps the pinned source files and dependencies locally. In
+**AI conversion**, select a file and provider. A source file can contribute several models.
+Migration previews one part at a time when the whole file or stage exceeds the provider's limits.
+
+<figure class="gt-product" markdown>
+![Migration preflight showing dbt and Databricks with the retained SQL and SAS files](../assets/images/gravetrail-migration-setup.png)
+<figcaption>Preflight inventories two retained files and plans four outputs before any candidates are saved.</figcaption>
+</figure>
 
 ## Run the five migration stages
 
-1. **Convert.** Preview the redacted disclosure, then choose **Start AI conversion**. The request
+<figure class="gt-product" markdown>
+![AI conversion screen with two outputs mapped to one SQL file and the provider disclosure ready to review](../assets/images/gravetrail-migration-ai-disclosure.png)
+<figcaption>The disclosure preview identifies the recipient and the estimated request size before dispatch.</figcaption>
+</figure>
+
+1. **Convert.** Choose **Preview provider disclosure**. Check the recipient and expand
+   **Exact redacted request data** before you choose **Start AI conversion**. The request
    works through the retained file's mapped outputs. For large files, approve and send each part.
    Completed parts are saved. After an interruption, preview the next part to resume. If the provider
    truncates a response, the next preview offers a smaller part. An indivisible part that exceeds
@@ -43,31 +56,42 @@ the whole file or stage exceeds the provider's limits.
    SAS conversion uses statically known columns and input bindings. A literal CSV import needs
    a confirmed staged relation. Supported inline data has an optional typed reference; other
    file I/O and runtime macro bindings remain review items.
-2. **Validate against source.** Preview and run the comparison. Read the AI assessment for each
-   source region and the separate static SQL, dependency and schema checks. A failed check can
-   lower an AI assessment. A planned upstream model can remain pending while you save a downstream
-   draft. Reviewed handoff still requires the complete dependency chain. Runtime equivalence stays unverified.
-3. **Optimize.** Preview optional improvements to the staged SQL. Protected projections,
-   dependencies, materialization and review comments must survive the edit. A rejected optimization
-   leaves the validated draft ready for review. Skip optimization if the draft needs engineer input first.
+2. **Validate against source.** Preview and choose **Run source validation**. Read the AI assessment
+   for each source region and the separate static SQL, dependency and schema checks. A failed check
+   can lower an AI assessment. A planned upstream model can remain pending while you save a
+   downstream draft. Reviewed handoff still requires the complete dependency chain. Runtime
+   equivalence stays unverified.
+3. **Optimize.** Preview and choose **Run optimization**, or **Continue to review without
+   optimization**. Protected projections, dependencies, materialization and review comments must
+   survive the edit. A rejected optimization leaves the validated draft ready for review. Skip
+   optimization if the draft needs engineer input first.
 4. **Review and feedback.** Inspect the combined diff and use **Revise the draft with AI feedback**
    to start another pass. Apply the reviewed diff to save the file's draft, then record engineer
    decisions in **Review**. The project keeps staged SQL and comparison findings even with provider
    chat history disabled. An upstream change marks the saved comparison stale. A file with remaining
    outputs keeps its retry controls. Previously applied sibling drafts remain available.
    Drafts that fail mechanical checks are listed as unresolved outside the applied diff. The
-   verified siblings can still be saved together.
+   siblings that pass the mechanical checks can still be saved together.
 5. **Export.** Choose a draft, reviewed or pilot ZIP. Add a lineage image, a mapping workbook or
    full retained source files. Full source text uses inert `.txt` paths outside the dbt model tree.
 
-**Offline static conversion** remains available in the expansion panel on a new project.
-The recording uses this path.
-
 <figure class="gt-product" markdown>
-![Migration setup with dbt and Databricks selected and the SAS and SQL source files retained](../assets/images/gravetrail-migration-setup.png)
-<figcaption>Preflight inventories the retained files and plans four outputs before any candidates are saved.</figcaption>
+![Stage 4 review showing both generated SQL model diffs and the proposed revision findings](../assets/images/gravetrail-migration-ai-diff.png)
+<figcaption>Applying the stage 4 diff saves a draft against the current revision. Engineer acceptance is recorded separately in Review.</figcaption>
 </figure>
 
+### Resume a file
+
+Reopen the same project and select the in-progress file. Completed parts and stage results are
+saved even with provider history disabled. After an interruption or cancellation, check the file's
+stage, then preview its next disclosure. **Send next part** uses the latest preview. If a required
+upstream draft or materialization setting changes, the app can mark the saved comparison stale.
+Return to **AI conversion**, select the affected file, and follow the displayed stage to refresh
+the comparison. Use a fresh pin whenever the request or revision changes.
+
+### Regenerate an offline draft
+
+**Offline static conversion → Run static conversion** is available on a new project.
 To regenerate the draft after a converter update, open **Scope → Revision history** and choose
 **Reconvert from pinned sources**. The job uses the project's saved source snapshot and target
 profile. SQL edits, schema mappings, scope decisions, validation settings and engineer reviews
@@ -248,13 +272,23 @@ data accepted_orders held_orders;
 run;
 ```
 
-1. Choose Databricks and retain both files. Preview the four outputs and create the project.
-   To follow the recording, expand **Offline static conversion** and choose **Run static conversion**.
-2. In **Review**, inspect `review/accepted_orders.sql.txt` and open **Show pinned source evidence**.
-   Find the note about which branch receives a missing amount.
+1. Preview the four planned outputs and create the project. Choose **Prepare AI conversion**.
+   Select `orders_pipeline.sql`, pick your provider, and preview each request before sending.
+   The walkthrough enables **Include a static conversion as reference**.
+   Run conversion, source validation and optional optimization. Inspect both SQL diffs and
+   choose **Apply reviewed diff**.
+2. Select `legacy_routing.sas` and check **Include a static conversion as reference** if you want
+   the provider to see the local draft. Compare the result with the two original branches. Save the
+   available draft or source comparison findings. In **Review**, choose the `accepted_orders`
+   artifact and open **Show pinned source evidence**. Verify which branch receives a missing amount.
+   The provider's response and the resulting findings can vary. Without a provider, choose
+   **Offline static conversion → Run static conversion** on a new project and continue from **Review**.
 3. In **Lineage**, find the generated edge from `stg_orders` to `daily_order_totals`.
-4. In **Validation**, choose `daily_order_totals`, enter `legacy.daily_order_totals` as the baseline,
-   select `order_id` as the comparison key and `amount` as the keyed value, then save.
+   In **Validation**, choose `daily_order_totals`, enter `legacy.daily_order_totals` as the
+   baseline, select `order_id` as the comparison key and `amount` as the keyed value, then save.
+4. If the app marks the SQL file's comparison stale after saving the checks, [refresh the file](#resume-a-file).
+   In **Review**, inspect each SQL model and use **Record engineer review** to confirm its
+   behavior and address the listed findings. Review `stg_orders` before `daily_order_totals`.
 5. In **Export**, choose **Pilot handoff** and select `daily_order_totals`. Choose **Prepare dbt
    bundle**, then **Download dbt project**. The ZIP includes both SQL models. Its manifest records
    `not_evaluated` for runtime equivalence.

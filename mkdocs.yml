@@ -47,6 +47,8 @@ extra:
     - assets/images/gravetrail-source-evidence.png
     - assets/images/gravetrail-sql-example.mp4
     - assets/images/gravetrail-migration-setup.png
+    - assets/images/gravetrail-migration-ai-disclosure.png
+    - assets/images/gravetrail-migration-ai-diff.png
     - assets/images/gravetrail-migration-review.png
     - assets/images/gravetrail-migration-lineage.png
     - assets/images/gravetrail-migration-validation.png
